@@ -1,0 +1,10 @@
+{
+  "name": "fourth-spark",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "dev:server": "bun run --filter server dev",
+    "dev:web": "bun run --filter web dev"
+  }
+}
