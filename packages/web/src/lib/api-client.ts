@@ -169,7 +169,7 @@ export async function sendMessage(
   content: string,
 ): Promise<void> {
   await apiFetch<void>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/message`,
+    `/api/sessions/${encodeURIComponent(sessionId)}/prompt`,
     {
       method: "POST",
       body: JSON.stringify({ content }),
