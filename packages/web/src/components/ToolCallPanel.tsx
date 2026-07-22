@@ -134,6 +134,130 @@ function describeTool(
   }
 }
 
+function DiffView({ oldStr, newStr }: { oldStr: string; newStr: string }) {
+  const oldLines = oldStr.split("\n")
+  const newLines = newStr.split("\n")
+  return (
+    <div className="grid grid-cols-2 gap-px overflow-x-auto rounded text-xs">
+      <pre className="min-w-0 whitespace-pre-wrap break-words p-1.5 fs-diff-del">
+        {oldLines.map((line, i) => (
+          <div key={i}>
+            <span className="select-none text-red-400/70">− </span>
+            <span className="text-red-400">{line}</span>
+          </div>
+        ))}
+      </pre>
+      <pre className="min-w-0 whitespace-pre-wrap break-words p-1.5 fs-diff-add">
+        {newLines.map((line, i) => (
+          <div key={i}>
+            <span className="select-none text-emerald-400/70">+ </span>
+            <span className="text-emerald-400">{line}</span>
+          </div>
+        ))}
+      </pre>
+    </div>
+  )
+}
+
+const TODO_GLYPHS: Record<string, { glyph: string; color: string }> = {
+  completed: { glyph: "✓", color: "text-emerald-400" },
+  in_progress: { glyph: "◌", color: "text-amber-400" },
+  cancelled: { glyph: "✗", color: "text-fg-5" },
+  pending: { glyph: "○", color: "text-fg-4" },
+}
+
+function TodoView({ todos }: { todos: Array<{ content: string; status: string; priority?: string }> }) {
+  return (
+    <ul className="space-y-0.5 text-xs">
+      {todos.map((todo, i) => {
+        const st = todo.status?.toLowerCase() ?? "pending"
+        const normalized = st === "in-progress" || st === "active" ? "in_progress"
+          : st === "done" || st === "complete" ? "completed"
+          : st === "canceled" ? "cancelled"
+          : st
+        const meta = TODO_GLYPHS[normalized] ?? TODO_GLYPHS.pending
+        const done = normalized === "completed" || normalized === "cancelled"
+        return (
+          <li key={i} className="flex items-start gap-1.5">
+            <span className={clsx("shrink-0 leading-5", meta.color, normalized === "in_progress" && "fs-spin")}>
+              {meta.glyph}
+            </span>
+            <span className={clsx("leading-5", done ? "text-fg-5 line-through" : "text-fg-2")}>
+              {todo.content}
+            </span>
+            {todo.priority && (
+              <span className="ml-auto shrink-0 text-fg-5">{todo.priority}</span>
+            )}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+function renderToolInput(name: string, raw: unknown): React.ReactNode | null {
+  const record = toRecord(raw)
+  if (!record) return null
+  const lower = name.toLowerCase()
+
+  if (lower === "edit" || lower === "patch") {
+    const oldStr = typeof record.oldString === "string" ? record.oldString : ""
+    const newStr = typeof record.newString === "string" ? record.newString : ""
+    if (oldStr || newStr) {
+      return <DiffView oldStr={oldStr} newStr={newStr} />
+    }
+  }
+
+  if (lower === "todowrite" || lower === "write_todos") {
+    const todos = Array.isArray(record.todos) ? record.todos as Array<{ content: string; status: string; priority?: string }> : null
+    if (todos && todos.length > 0) {
+      return <TodoView todos={todos} />
+    }
+  }
+
+  if (lower === "bash" || lower === "shell") {
+    const cmd = firstString(record, ["command", "cmd", "script"])
+    if (cmd) {
+      return (
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words text-fg-2">
+          <span className="select-none text-emerald-400/70">❯ </span>{cmd}
+        </pre>
+      )
+    }
+  }
+
+  if (lower === "read") {
+    return null
+  }
+
+  if (lower === "write") {
+    const content = typeof record.content === "string" ? record.content : null
+    if (content) {
+      const preview = content.length > 500 ? `${content.slice(0, 500)}…` : content
+      return (
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words text-fg-2">
+          {preview}
+        </pre>
+      )
+    }
+  }
+
+  return null
+}
+
+function renderToolOutput(name: string, raw: unknown): React.ReactNode | null {
+  const lower = name.toLowerCase()
+
+  if (lower === "todowrite" || lower === "write_todos") {
+    const list = Array.isArray(raw) ? raw as Array<{ content: string; status: string; priority?: string }> : null
+    if (list && list.length > 0) {
+      return <TodoView todos={list} />
+    }
+  }
+
+  return null
+}
+
 export function ToolCallPanel({ part }: { part: MessagePart }) {
   const status = getToolStatus(part)
   const active = status === "running" || status === "pending"
@@ -149,9 +273,14 @@ export function ToolCallPanel({ part }: { part: MessagePart }) {
     }
   }, [active])
 
-  const { label, arg } = describeTool(getToolName(part), getToolInput(part))
-  const input = formatToolPayload(getToolInput(part))
-  const output = formatToolPayload(getToolOutput(part))
+  const toolName = getToolName(part)
+  const rawInput = getToolInput(part)
+  const { label, arg } = describeTool(toolName, rawInput)
+  const customInput = renderToolInput(toolName, rawInput)
+  const fallbackInput = customInput ? null : formatToolPayload(rawInput)
+  const rawOutput = getToolOutput(part)
+  const customOutput = renderToolOutput(toolName, rawOutput)
+  const output = customOutput ? "" : formatToolPayload(rawOutput)
   const meta = STATUS_META[status]
 
   const outputTooLong = output.length > OUTPUT_TRUNCATE_LIMIT
@@ -186,15 +315,21 @@ export function ToolCallPanel({ part }: { part: MessagePart }) {
       {open && (
         <div className="border-t border-line px-3 py-2">
           <div className={clsx("ml-1 border-l-2 pl-3 font-mono text-xs", meta.accent)}>
-            {input && (
+            {customInput && (
+              <section className="mb-2">{customInput}</section>
+            )}
+            {fallbackInput && (
               <section className="mb-2">
                 <div className="mb-1 text-[10px] uppercase tracking-wider text-fg-5">
                   input
                 </div>
                 <pre className="overflow-x-auto whitespace-pre-wrap break-words text-fg-2">
-                  {input}
+                  {fallbackInput}
                 </pre>
               </section>
+            )}
+            {customOutput && (
+              <section>{customOutput}</section>
             )}
             {output && (
               <section>
@@ -217,7 +352,7 @@ export function ToolCallPanel({ part }: { part: MessagePart }) {
                 )}
               </section>
             )}
-            {!input && !output && (
+            {!customInput && !fallbackInput && !customOutput && !output && (
               <div className="text-fg-5">no parameters</div>
             )}
           </div>

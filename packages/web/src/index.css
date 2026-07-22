@@ -428,3 +428,11 @@ body {
 .fs-blink {
   animation: fs-blink 1.1s steps(1) infinite;
 }
+
+.fs-diff-del {
+  background-color: rgba(248, 113, 113, 0.06);
+}
+
+.fs-diff-add {
+  background-color: rgba(52, 211, 153, 0.06);
+}
