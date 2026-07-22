@@ -7,6 +7,7 @@ import { events } from "./routes/events"
 import { agents } from "./routes/agents"
 import { health } from "./routes/health"
 import { OPENCODE_URL, WORKSPACE_DIR, PORT } from "./lib/config"
+import "./db/index"
 
 const app = new Hono()
 

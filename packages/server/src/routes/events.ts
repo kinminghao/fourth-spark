@@ -3,6 +3,7 @@ import { streamSSE, type SSEStreamingApi } from "hono/streaming"
 import { opencode } from "../lib/opencode"
 import { WORKSPACE_DIR } from "../lib/config"
 import { logger } from "../middleware/logger"
+import { syncSseEvent } from "../db/sync"
 
 export const events = new Hono()
 
@@ -37,6 +38,7 @@ async function forwardBlock(block: string, sessionId: string, stream: SSEStreami
     return
   }
   if (shouldForward(parsed, sessionId)) {
+    syncSseEvent(sessionId, parsed.type ?? "", dataStr)
     await stream.writeSSE({ data: dataStr, event: parsed.type })
   }
 }
