@@ -10,15 +10,15 @@ import {
 const SQUARE: Record<TodoStatus, { glyph: string; color: string }> = {
   completed: { glyph: "■", color: "text-emerald-400" },
   in_progress: { glyph: "■", color: "text-amber-400" },
-  cancelled: { glyph: "■", color: "text-zinc-700" },
-  pending: { glyph: "□", color: "text-zinc-600" },
+  cancelled: { glyph: "■", color: "text-fg-6" },
+  pending: { glyph: "□", color: "text-fg-5" },
 }
 
 const MARK: Record<TodoStatus, { glyph: string; color: string; spin: boolean }> = {
   completed: { glyph: "✓", color: "text-emerald-400", spin: false },
   in_progress: { glyph: "◌", color: "text-amber-400", spin: true },
-  cancelled: { glyph: "✗", color: "text-zinc-600", spin: false },
-  pending: { glyph: "○", color: "text-zinc-500", spin: false },
+  cancelled: { glyph: "✗", color: "text-fg-5", spin: false },
+  pending: { glyph: "○", color: "text-fg-4", spin: false },
 }
 
 function activeLabel(todos: Todo[]): string {
@@ -54,7 +54,7 @@ export function TodoProgress({ todos }: { todos: Todo[] }) {
         onClick={() => setExpanded((value) => !value)}
         className="flex w-full items-center gap-2 text-left font-mono text-xs"
       >
-        <span className="shrink-0 tabular-nums text-zinc-500">
+        <span className="shrink-0 tabular-nums text-fg-4">
           [{completed}/{total}]
         </span>
         <span className="shrink-0 tracking-tight">
@@ -67,10 +67,10 @@ export function TodoProgress({ todos }: { todos: Todo[] }) {
             )
           })}
         </span>
-        <span className="min-w-0 flex-1 truncate text-zinc-300">
+        <span className="min-w-0 flex-1 truncate text-fg-2">
           {activeLabel(todos)}
         </span>
-        <span className="shrink-0 text-zinc-600">{expanded ? "▾" : "▸"}</span>
+        <span className="shrink-0 text-fg-5">{expanded ? "▾" : "▸"}</span>
       </button>
 
       {expanded && (
@@ -90,7 +90,7 @@ export function TodoProgress({ todos }: { todos: Todo[] }) {
                 <span
                   className={clsx(
                     "leading-5",
-                    done ? "text-zinc-600 line-through" : "text-zinc-300",
+                    done ? "text-fg-5 line-through" : "text-fg-2",
                   )}
                 >
                   {todo.content}

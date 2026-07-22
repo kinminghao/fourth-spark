@@ -76,15 +76,15 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
           type="button"
           onClick={onToggleSidebar}
           aria-label="Open sidebar"
-          className="absolute left-3 top-3 rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 md:hidden"
+          className="absolute left-3 top-3 rounded-lg p-2 text-fg-3 hover:bg-elevated md:hidden"
         >
           <Menu className="h-5 w-5" />
         </button>
-        <div className="font-mono text-2xl text-zinc-700">
+        <div className="font-mono text-2xl text-fg-6">
           <span className="text-emerald-500/60">❯</span>
-          <span className="fs-blink text-zinc-500"> ▋</span>
+          <span className="fs-blink text-fg-4"> ▋</span>
         </div>
-        <p className="font-mono text-sm text-zinc-500">
+        <p className="font-mono text-sm text-fg-4">
           select a run or start a new one
         </p>
       </div>
@@ -95,21 +95,21 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-term">
-      <header className="flex items-center gap-3 border-b border-line bg-zinc-950 px-4 py-2.5">
+      <header className="flex items-center gap-3 border-b border-line bg-base px-4 py-2.5">
         <button
           type="button"
           onClick={onToggleSidebar}
           aria-label="Open sidebar"
-          className="-ml-1 rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 md:hidden"
+          className="-ml-1 rounded-lg p-1.5 text-fg-3 hover:bg-elevated md:hidden"
         >
           <Menu className="h-5 w-5" />
         </button>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-sm font-medium text-zinc-100">
+          <h2 className="truncate text-sm font-medium text-fg">
             {session?.title?.trim() || "untitled run"}
           </h2>
           {session?.agent && (
-            <p className="truncate font-mono text-xs text-zinc-500">
+            <p className="truncate font-mono text-xs text-fg-4">
               {session.agent}
             </p>
           )}
@@ -119,7 +119,7 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
           <button
             type="button"
             onClick={() => void abortSession()}
-            className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-xs text-zinc-300 transition-colors hover:border-red-500/50 hover:text-red-400"
+            className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-xs text-fg-2 transition-colors hover:border-red-500/50 hover:text-red-400"
           >
             <Square className="h-3 w-3 fill-current" />
             stop
@@ -130,7 +130,7 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-4">
           {messages.length === 0 ? (
-            <p className="py-10 text-center font-mono text-xs text-zinc-700">
+            <p className="py-10 text-center font-mono text-xs text-fg-6">
               <span className="text-emerald-500/60">❯</span> waiting for input
               <span className="fs-blink"> ▋</span>
             </p>

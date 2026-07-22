@@ -59,8 +59,8 @@ const STATUS_META: Record<
   pending: {
     glyph: "○",
     label: "queued",
-    color: "text-zinc-500",
-    accent: "border-zinc-700",
+    color: "text-fg-4",
+    accent: "border-fg-6",
     spin: false,
   },
 }
@@ -165,13 +165,13 @@ export function ToolCallPanel({ part }: { part: MessagePart }) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-xs transition-colors duration-150 hover:bg-zinc-900/70"
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-xs transition-colors duration-150 hover:bg-surface/70"
       >
         <span className={clsx("shrink-0 leading-none", meta.color)}>
           {open ? "▾" : "▸"}
         </span>
-        <span className="shrink-0 font-medium text-zinc-100">{label}</span>
-        {arg && <span className="truncate text-zinc-400">{arg}</span>}
+        <span className="shrink-0 font-medium text-fg">{label}</span>
+        {arg && <span className="truncate text-fg-3">{arg}</span>}
         <span
           className={clsx(
             "ml-auto flex shrink-0 items-center gap-1.5 leading-none",
@@ -188,20 +188,20 @@ export function ToolCallPanel({ part }: { part: MessagePart }) {
           <div className={clsx("ml-1 border-l-2 pl-3 font-mono text-xs", meta.accent)}>
             {input && (
               <section className="mb-2">
-                <div className="mb-1 text-[10px] uppercase tracking-wider text-zinc-600">
+                <div className="mb-1 text-[10px] uppercase tracking-wider text-fg-5">
                   input
                 </div>
-                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-zinc-300">
+                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-fg-2">
                   {input}
                 </pre>
               </section>
             )}
             {output && (
               <section>
-                <div className="mb-1 text-[10px] uppercase tracking-wider text-zinc-600">
+                <div className="mb-1 text-[10px] uppercase tracking-wider text-fg-5">
                   output
                 </div>
-                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-zinc-300">
+                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-fg-2">
                   {shownOutput}
                 </pre>
                 {outputTooLong && (
@@ -218,7 +218,7 @@ export function ToolCallPanel({ part }: { part: MessagePart }) {
               </section>
             )}
             {!input && !output && (
-              <div className="text-zinc-600">no parameters</div>
+              <div className="text-fg-5">no parameters</div>
             )}
           </div>
         </div>

@@ -61,7 +61,7 @@ export function InputBar() {
       : "enter a command…"
 
   const promptColor = !activeSessionId
-    ? "text-zinc-700"
+    ? "text-fg-6"
     : busy
       ? "text-amber-400 fs-blink"
       : "text-emerald-400"
@@ -73,7 +73,7 @@ export function InputBar() {
           "mx-auto flex max-w-4xl items-start gap-2 border-b pb-1 transition-colors duration-150",
           disabled
             ? "border-transparent"
-            : "border-line focus-within:border-zinc-600",
+            : "border-line focus-within:border-fg-5",
         )}
       >
         <span className={clsx("select-none pt-px font-mono text-sm leading-6", promptColor)}>
@@ -87,19 +87,19 @@ export function InputBar() {
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="flex-1 resize-none bg-transparent font-mono text-sm leading-6 text-zinc-100 placeholder:text-zinc-700 focus:outline-none disabled:cursor-not-allowed"
+          className="flex-1 resize-none bg-transparent font-mono text-sm leading-6 text-fg placeholder:text-fg-6 focus:outline-none disabled:cursor-not-allowed"
         />
         <button
           type="button"
           onClick={submit}
           disabled={disabled || value.trim().length === 0}
           aria-label="Send message"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-zinc-500 transition-colors duration-150 hover:bg-zinc-800 hover:text-emerald-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-fg-4 transition-colors duration-150 hover:bg-elevated hover:text-emerald-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-4"
         >
           <CornerDownLeft className="h-4 w-4" />
         </button>
       </div>
-      <div className="mx-auto mt-1.5 max-w-4xl pl-5 font-mono text-[10px] text-zinc-700">
+      <div className="mx-auto mt-1.5 max-w-4xl pl-5 font-mono text-[10px] text-fg-6">
         ⌘⏎ / ctrl+⏎ to run · shift+⏎ for newline
       </div>
     </div>

@@ -1,29 +1,160 @@
 @import "tailwindcss";
 
 /*
- * Fourth Spark — developer-console dark theme.
+ * Fourth Spark — semantic theme layer.
  * Tailwind v4 CSS-first config; no tailwind.config.js / postcss.config.js.
  *
- * Surface hierarchy: chrome (sidebar/header) sits on zinc-900/zinc-950 and uses
- * the system font; the execution-trace pane (`bg-term`) is the deepest surface
- * and renders in the mono stack so it reads like a terminal.
+ * All structural colors go through --t-* CSS custom properties so surfaces,
+ * text, and borders flip cleanly between light and dark.  Accent colours
+ * (emerald, amber, red, blue …) stay on the Tailwind scale.
  */
 
+/* ── Tailwind v4 design tokens ─────────────────────────────────────────── */
 @theme {
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono:
     "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", ui-monospace,
     SFMono-Regular, Menlo, Consolas, monospace;
-  /* Execution-trace pane — a hair deeper than zinc-950 for a "sunken terminal". */
-  --color-term: #0a0a0c;
-  /* Subtle divider between zinc-800 and zinc-900 (a synthetic "zinc-850"). */
-  --color-line: #202024;
+
+  /* Surfaces */
+  --color-base: var(--t-base);
+  --color-surface: var(--t-surface);
+  --color-elevated: var(--t-elevated);
+  --color-term: var(--t-term);
+
+  /* Borders */
+  --color-line: var(--t-line);
+  --color-line-hard: var(--t-line-hard);
+
+  /* Foreground scale: fg (strongest) → fg-6 (faintest) */
+  --color-fg: var(--t-fg);
+  --color-fg-2: var(--t-fg-2);
+  --color-fg-3: var(--t-fg-3);
+  --color-fg-4: var(--t-fg-4);
+  --color-fg-5: var(--t-fg-5);
+  --color-fg-6: var(--t-fg-6);
 }
 
+/* ── Light palette (default) ───────────────────────────────────────────── */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
+
+  --t-base: #ffffff;
+  --t-surface: #f4f4f5;
+  --t-elevated: #e4e4e7;
+  --t-term: #f9fafb;
+  --t-line: #e4e4e7;
+  --t-line-hard: #d4d4d8;
+
+  --t-fg: #18181b;
+  --t-fg-2: #3f3f46;
+  --t-fg-3: #52525b;
+  --t-fg-4: #71717a;
+  --t-fg-5: #a1a1aa;
+  --t-fg-6: #d4d4d8;
+
+  --t-scrollbar: #d4d4d8;
+  --t-scrollbar-hover: #a1a1aa;
+
+  --t-hl-comment: #8c8fa1;
+  --t-hl-keyword: #ea76cb;
+  --t-hl-string: #df8e1d;
+  --t-hl-number: #179299;
+  --t-hl-attr: #04a5e5;
+  --t-hl-meta: #d20f39;
+  --t-link: #04a5e5;
+
+  --t-heading: #8839ef;
+  --t-strong: #fe640b;
+  --t-emph: #df8e1d;
+  --t-marker: #1e66f5;
+  --t-th: #8839ef;
+  --t-blockquote: #df8e1d;
+  --t-code-inline: #40a02b;
+  --t-hr: #9ca0b0;
 }
 
+/* ── Dark palette — system preference ──────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --t-base: #09090b;
+    --t-surface: #18181b;
+    --t-elevated: #27272a;
+    --t-term: #0a0a0c;
+    --t-line: #202024;
+    --t-line-hard: #27272a;
+
+    --t-fg: #f4f4f5;
+    --t-fg-2: #d4d4d8;
+    --t-fg-3: #a1a1aa;
+    --t-fg-4: #71717a;
+    --t-fg-5: #52525b;
+    --t-fg-6: #3f3f46;
+
+    --t-scrollbar: #3f3f46;
+    --t-scrollbar-hover: #52525b;
+
+    --t-hl-comment: #7f849c;
+    --t-hl-keyword: #f5c2e7;
+    --t-hl-string: #f9e2af;
+    --t-hl-number: #94e2d5;
+    --t-hl-attr: #89dceb;
+    --t-hl-meta: #f38ba8;
+    --t-link: #89dceb;
+
+    --t-heading: #cba6f7;
+    --t-strong: #fab387;
+    --t-emph: #f9e2af;
+    --t-marker: #89b4fa;
+    --t-th: #cba6f7;
+    --t-blockquote: #f9e2af;
+    --t-code-inline: #a6e3a1;
+    --t-hr: #6c7086;
+  }
+}
+
+/* ── Dark palette — explicit override ──────────────────────────────────── */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --t-base: #09090b;
+  --t-surface: #18181b;
+  --t-elevated: #27272a;
+  --t-term: #0a0a0c;
+  --t-line: #202024;
+  --t-line-hard: #27272a;
+
+  --t-fg: #f4f4f5;
+  --t-fg-2: #d4d4d8;
+  --t-fg-3: #a1a1aa;
+  --t-fg-4: #71717a;
+  --t-fg-5: #52525b;
+  --t-fg-6: #3f3f46;
+
+  --t-scrollbar: #3f3f46;
+  --t-scrollbar-hover: #52525b;
+
+  --t-hl-comment: #7f849c;
+  --t-hl-keyword: #f5c2e7;
+  --t-hl-string: #f9e2af;
+  --t-hl-number: #94e2d5;
+  --t-hl-attr: #89dceb;
+  --t-hl-meta: #f38ba8;
+  --t-link: #89dceb;
+
+  --t-heading: #cba6f7;
+  --t-strong: #fab387;
+  --t-emph: #f9e2af;
+  --t-marker: #89b4fa;
+  --t-th: #cba6f7;
+  --t-blockquote: #f9e2af;
+  --t-code-inline: #a6e3a1;
+  --t-hr: #6c7086;
+}
+
+/* ── Base element styles ───────────────────────────────────────────────── */
 html,
 body,
 #root {
@@ -37,14 +168,14 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  background-color: var(--color-zinc-950);
-  color: var(--color-zinc-100);
+  background-color: var(--color-base);
+  color: var(--color-fg);
 }
 
-/* Custom scrollbar — thin, zinc-toned, matches the dark surface. */
+/* ── Scrollbar ─────────────────────────────────────────────────────────── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-zinc-700) transparent;
+  scrollbar-color: var(--t-scrollbar) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -57,17 +188,17 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: var(--color-zinc-700);
+  background-color: var(--t-scrollbar);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: var(--color-zinc-600);
+  background-color: var(--t-scrollbar-hover);
 }
 
-/* Markdown / code rendering inside message bubbles. */
+/* ── Markdown ──────────────────────────────────────────────────────────── */
 .markdown-body {
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -99,8 +230,16 @@ body {
   list-style: decimal;
 }
 
+.markdown-body li::marker {
+  color: var(--t-marker);
+}
+
+.markdown-body strong {
+  color: var(--t-strong);
+}
+
 .markdown-body a {
-  color: var(--color-blue-400);
+  color: var(--t-link);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -112,6 +251,7 @@ body {
   margin: 1rem 0 0.5rem;
   font-weight: 600;
   line-height: 1.3;
+  color: var(--t-heading);
 }
 
 .markdown-body h1 {
@@ -129,8 +269,12 @@ body {
 .markdown-body blockquote {
   margin: 0 0 0.75rem;
   padding-left: 0.75rem;
-  border-left: 3px solid var(--color-zinc-700);
-  color: var(--color-zinc-400);
+  border-left: 3px solid var(--t-blockquote);
+  color: var(--t-blockquote);
+}
+
+.markdown-body em {
+  color: var(--t-emph);
 }
 
 .markdown-body code {
@@ -138,19 +282,18 @@ body {
   font-size: 0.9em;
 }
 
-/* Inline code (not inside a pre block). */
 .markdown-body :not(pre) > code {
-  background-color: var(--color-zinc-800);
+  background-color: var(--color-elevated);
   padding: 0.1rem 0.35rem;
   border-radius: 0.375rem;
-  color: var(--color-zinc-200);
+  color: var(--t-code-inline);
 }
 
 .markdown-body pre {
   margin: 0 0 0.75rem;
   padding: 0.75rem 1rem;
-  background-color: var(--color-zinc-900);
-  border: 1px solid var(--color-zinc-800);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-line-hard);
   border-radius: 0.5rem;
   overflow-x: auto;
 }
@@ -170,26 +313,27 @@ body {
 
 .markdown-body th,
 .markdown-body td {
-  border: 1px solid var(--color-zinc-800);
+  border: 1px solid var(--color-line-hard);
   padding: 0.375rem 0.5rem;
   text-align: left;
 }
 
 .markdown-body th {
-  background-color: var(--color-zinc-900);
+  background-color: var(--color-surface);
   font-weight: 600;
+  color: var(--t-th);
 }
 
 .markdown-body hr {
   border: 0;
-  border-top: 1px solid var(--color-zinc-800);
+  border-top: 1px solid var(--t-hr);
   margin: 1rem 0;
 }
 
-/* rehype-highlight (highlight.js) token colors tuned for the zinc dark theme. */
+/* ── Syntax highlighting ───────────────────────────────────────────────── */
 .hljs-comment,
 .hljs-quote {
-  color: var(--color-zinc-500);
+  color: var(--t-hl-comment);
   font-style: italic;
 }
 
@@ -198,7 +342,7 @@ body {
 .hljs-built_in,
 .hljs-name,
 .hljs-tag {
-  color: var(--color-violet-400);
+  color: var(--t-hl-keyword);
 }
 
 .hljs-string,
@@ -210,26 +354,26 @@ body {
 .hljs-template-variable,
 .hljs-type,
 .hljs-addition {
-  color: var(--color-emerald-400);
+  color: var(--t-hl-string);
 }
 
 .hljs-number,
 .hljs-symbol,
 .hljs-bullet,
 .hljs-link {
-  color: var(--color-amber-400);
+  color: var(--t-hl-number);
 }
 
 .hljs-attr,
 .hljs-variable,
 .hljs-selector-id,
 .hljs-selector-class {
-  color: var(--color-sky-400);
+  color: var(--t-hl-attr);
 }
 
 .hljs-meta,
 .hljs-deletion {
-  color: var(--color-rose-400);
+  color: var(--t-hl-meta);
 }
 
 .hljs-emphasis {
@@ -240,6 +384,7 @@ body {
   font-weight: 700;
 }
 
+/* ── Animations ────────────────────────────────────────────────────────── */
 @keyframes fs-fade-in {
   from {
     opacity: 0;

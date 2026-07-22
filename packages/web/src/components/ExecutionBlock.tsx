@@ -14,7 +14,7 @@ function ThinkingBlock({ text }: { text: string }) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex items-center gap-1.5 font-mono text-xs text-zinc-600 transition-colors hover:text-zinc-400"
+        className="flex items-center gap-1.5 font-mono text-xs text-fg-5 transition-colors hover:text-fg-3"
       >
         {open ? (
           <ChevronDown className="h-3 w-3 shrink-0" />
@@ -25,7 +25,7 @@ function ThinkingBlock({ text }: { text: string }) {
         <span>thinking</span>
       </button>
       {open && (
-        <div className="ml-1.5 mt-1 whitespace-pre-wrap border-l border-line pl-3 text-xs italic leading-relaxed text-zinc-500">
+        <div className="ml-1.5 mt-1 whitespace-pre-wrap border-l border-line pl-3 text-xs italic leading-relaxed text-fg-4">
           {text}
         </div>
       )}
@@ -71,7 +71,7 @@ export function ExecutionBlock({ message }: { message: Message }) {
     return (
       <div className="fs-fade-in flex gap-2 font-mono text-sm">
         <span className="shrink-0 select-none text-emerald-400">❯</span>
-        <span className="min-w-0 whitespace-pre-wrap break-words text-zinc-300">
+        <span className="min-w-0 whitespace-pre-wrap break-words text-fg-2">
           {prompt || "…"}
         </span>
       </div>
@@ -85,18 +85,18 @@ export function ExecutionBlock({ message }: { message: Message }) {
     <div className="fs-fade-in font-mono">
       {(agent || model) && (
         <div className="mb-1 flex items-center gap-2 text-xs">
-          {agent && <span className="text-zinc-400">{agent}</span>}
-          {agent && model && <span className="text-zinc-700">·</span>}
-          {model && <span className="text-zinc-600">{model}</span>}
+          {agent && <span className="text-fg-3">{agent}</span>}
+          {agent && model && <span className="text-fg-6">·</span>}
+          {model && <span className="text-fg-5">{model}</span>}
         </div>
       )}
-      <div className="space-y-2 text-sm text-zinc-100">
+      <div className="space-y-2 text-sm text-fg">
         {renderable.length > 0 ? (
           renderable.map((part, index) => (
             <PartView key={part.id ?? part.callID ?? index} part={part} />
           ))
         ) : (
-          <span className="text-zinc-600">…</span>
+          <span className="text-fg-5">…</span>
         )}
       </div>
     </div>
