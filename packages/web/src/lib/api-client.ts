@@ -186,13 +186,24 @@ export async function abortSession(sessionId: string): Promise<void> {
   )
 }
 
+function normalizeMessage(raw: unknown): Message {
+  const r = raw as Record<string, unknown>
+  const info = r.info as Record<string, unknown> | undefined
+  if (info && typeof info.id === "string") {
+    const parts = Array.isArray(r.parts) ? (r.parts as MessagePart[]) : undefined
+    return { ...(info as unknown as Message), ...(parts ? { parts } : {}) }
+  }
+  return r as unknown as Message
+}
+
 export async function getMessages(sessionId: string): Promise<Message[]> {
-  return unwrapList<Message>(
+  const raw = unwrapList<unknown>(
     await apiFetch<unknown>(
       `/api/sessions/${encodeURIComponent(sessionId)}/messages`,
     ),
     "messages",
   )
+  return raw.map(normalizeMessage)
 }
 
 export async function getTodos(sessionId: string): Promise<Todo[]> {
