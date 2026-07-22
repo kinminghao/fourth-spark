@@ -1,17 +1,17 @@
 import { Hono } from "hono"
 import { opencode, type SessionStatus } from "../lib/opencode"
-import { WORKSPACE_DIR } from "../lib/config"
+import { WORKSPACE_DIR, DEFAULT_VARIANT } from "../lib/config"
 
 export const sessions = new Hono()
 
 // Create a session and immediately send the opening message (fire-and-forget).
 sessions.post("/", async (c) => {
-  const body = await c.req.json<{ message?: string; agent?: string; title?: string }>().catch(() => null)
+  const body = await c.req.json<{ message?: string; agent?: string; model?: string; variant?: string; title?: string }>().catch(() => null)
   if (!body || typeof body.message !== "string" || body.message.length === 0) {
     return c.json({ error: "Body must include a non-empty 'message' string", status: 400 }, 400)
   }
   const session = await opencode.createSession(WORKSPACE_DIR, { agent: body.agent, title: body.title })
-  await opencode.prompt(session.id, WORKSPACE_DIR, body.message, { agent: body.agent })
+  await opencode.prompt(session.id, WORKSPACE_DIR, body.message, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT })
   return c.json({ id: session.id, title: session.title, agent: body.agent }, 201)
 })
 
@@ -30,11 +30,11 @@ sessions.delete("/:id", async (c) => {
 
 // Send a follow-up message to an existing session.
 sessions.post("/:id/prompt", async (c) => {
-  const body = await c.req.json<{ content?: string; agent?: string }>().catch(() => null)
+  const body = await c.req.json<{ content?: string; agent?: string; model?: string; variant?: string }>().catch(() => null)
   if (!body || typeof body.content !== "string" || body.content.length === 0) {
     return c.json({ error: "Body must include a non-empty 'content' string", status: 400 }, 400)
   }
-  await opencode.prompt(c.req.param("id"), WORKSPACE_DIR, body.content, { agent: body.agent })
+  await opencode.prompt(c.req.param("id"), WORKSPACE_DIR, body.content, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT })
   return c.json({ ok: true })
 })
 

@@ -133,16 +133,18 @@ export const opencode = {
     return getJson<Message[]>(`/session/${sessionId}/message`, { directory })
   },
 
-  // Fire-and-forget: OpenCode starts generation and returns immediately.
   prompt(
     sessionId: string,
     directory: string,
     content: string,
-    opts?: { agent?: string },
+    opts?: { agent?: string; model?: string; variant?: string },
   ): Promise<void> {
     return send("POST", `/session/${sessionId}/prompt_async`, { directory }, {
       parts: [{ type: "text", text: content }],
       agent: opts?.agent,
+      model: opts?.model,
+      variant: opts?.variant,
+      messageID: `msg_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
     })
   },
 
