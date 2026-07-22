@@ -1,6 +1,7 @@
 import { useState } from "react"
-import { Check, Circle, CircleDot, Plus, Trash2, X } from "lucide-react"
+import { Check, Circle, CircleDot, Play, Plus, Square, Trash2, X } from "lucide-react"
 import clsx from "clsx"
+import * as api from "../lib/api-client"
 import { useRepoStore } from "../stores/repo-store"
 import { AddRepoModal } from "../components/AddRepoModal"
 
@@ -9,8 +10,23 @@ export function ReposPage() {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const setActiveRepo = useRepoStore((s) => s.setActiveRepo)
   const removeRepo = useRepoStore((s) => s.removeRepo)
+  const loadRepos = useRepoStore((s) => s.loadRepos)
   const [showAdd, setShowAdd] = useState(false)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
+
+  const handleToggle = async (repoId: string, running: boolean) => {
+    setTogglingId(repoId)
+    try {
+      if (running) {
+        await api.stopRepo(repoId)
+      } else {
+        await api.startRepo(repoId)
+      }
+      await loadRepos()
+    } catch {}
+    setTogglingId(null)
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -104,32 +120,54 @@ export function ReposPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {confirmingId === repo.id ? (
-                          <span className="inline-flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => { void removeRepo(repo.id); setConfirmingId(null) }}
-                              className="rounded-md p-1.5 text-red-500 transition-colors hover:bg-red-500/10"
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmingId(null)}
-                              className="rounded-md p-1.5 text-fg-4 transition-colors hover:bg-elevated"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </span>
-                        ) : (
+                        <span className="inline-flex items-center gap-1">
                           <button
                             type="button"
-                            onClick={() => setConfirmingId(repo.id)}
-                            className="rounded-md p-1.5 text-fg-5 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
+                            onClick={() => void handleToggle(repo.id, repo.running)}
+                            disabled={togglingId === repo.id}
+                            title={repo.running ? "停止" : "启动"}
+                            className={clsx(
+                              "rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50",
+                              repo.running
+                                ? "text-amber-600 hover:bg-amber-500/10"
+                                : "text-emerald-600 hover:bg-emerald-500/10",
+                            )}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            {togglingId === repo.id ? (
+                              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                            ) : repo.running ? (
+                              <span className="flex items-center gap-1"><Square className="h-3 w-3 fill-current" />停止</span>
+                            ) : (
+                              <span className="flex items-center gap-1"><Play className="h-3 w-3 fill-current" />启动</span>
+                            )}
                           </button>
-                        )}
+                          {confirmingId === repo.id ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => { void removeRepo(repo.id); setConfirmingId(null) }}
+                                className="rounded-md p-1.5 text-red-500 transition-colors hover:bg-red-500/10"
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmingId(null)}
+                                className="rounded-md p-1.5 text-fg-4 transition-colors hover:bg-elevated"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmingId(repo.id)}
+                              className="rounded-md p-1.5 text-fg-5 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </span>
                       </td>
                     </tr>
                   )
