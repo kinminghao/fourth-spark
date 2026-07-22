@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { WifiOff, X } from "lucide-react"
 import clsx from "clsx"
 import { SessionList } from "./components/SessionList"
-import { ChatView } from "./components/ChatView"
+import { RunView } from "./components/RunView"
 import { useSessionStore } from "./stores/session-store"
 import { useAgentStore } from "./stores/agent-store"
 
@@ -29,7 +29,7 @@ export default function App() {
 
       <aside
         className={clsx(
-          "fixed inset-y-0 left-0 z-40 w-72 transform border-r border-zinc-800 transition-transform duration-200 md:static md:z-auto md:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 w-72 transform border-r border-line transition-transform duration-200 md:static md:z-auto md:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -37,7 +37,7 @@ export default function App() {
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <ChatView onToggleSidebar={() => setSidebarOpen((value) => !value)} />
+        <RunView onToggleSidebar={() => setSidebarOpen((value) => !value)} />
       </main>
 
       {loadError && (
