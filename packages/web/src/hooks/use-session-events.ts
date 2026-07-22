@@ -1,11 +1,14 @@
 /*
- * Subscribes to /api/sessions/:id/events via EventSource and pipes each event
- * into the session store. Cleans up on unmount / session change and performs
- * capped exponential-backoff reconnection when the stream closes unexpectedly.
+ * Subscribes to /api/repos/:repoId/sessions/:id/events via EventSource and
+ * pipes each event into the session store. Cleans up on unmount / session
+ * change and performs capped exponential-backoff reconnection when the stream
+ * closes unexpectedly.
  */
 
 import { useEffect } from "react"
 import { useSessionStore } from "../stores/session-store"
+import { useRepoStore } from "../stores/repo-store"
+import { sessionEventsUrl } from "../lib/api-client"
 import {
   dispatchSseEvent,
   KNOWN_SSE_EVENTS,
@@ -16,8 +19,10 @@ const BASE_RECONNECT_DELAY_MS = 1_000
 const MAX_RECONNECT_DELAY_MS = 10_000
 
 export function useSessionEvents(sessionId: string | null): void {
+  const repoId = useRepoStore((state) => state.activeRepoId)
+
   useEffect(() => {
-    if (!sessionId) {
+    if (!sessionId || !repoId) {
       return
     }
 
@@ -26,7 +31,7 @@ export function useSessionEvents(sessionId: string | null): void {
     let attempts = 0
     let disposed = false
 
-    const url = `/api/sessions/${encodeURIComponent(sessionId)}/events`
+    const url = sessionEventsUrl(repoId, sessionId)
 
     const handle = (name: string) => (event: Event) => {
       if (!(event instanceof MessageEvent)) {
@@ -78,5 +83,5 @@ export function useSessionEvents(sessionId: string | null): void {
       source?.close()
       source = null
     }
-  }, [sessionId])
+  }, [sessionId, repoId])
 }

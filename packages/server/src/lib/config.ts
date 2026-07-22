@@ -1,26 +1,7 @@
-const DEFAULT_OPENCODE_URL = "http://localhost:8080"
 const DEFAULT_FRONTEND_ORIGIN = "http://localhost:5173"
 const DEFAULT_PORT = 3000
 
-// URL of the OpenCode `serve` process this backend proxies to.
-export const OPENCODE_URL = process.env.OPENCODE_URL ?? DEFAULT_OPENCODE_URL
-
-// Workspace directory forwarded as the `directory` query param on every
-// OpenCode call. Resolve to git root so the agent sees the full monorepo,
-// not just packages/server/ where Bun workspace runs the script.
-function resolveWorkspaceDir(): string {
-  if (process.env.WORKSPACE_DIR) return process.env.WORKSPACE_DIR
-  try {
-    const result = Bun.spawnSync(["git", "rev-parse", "--show-toplevel"])
-    const root = result.stdout.toString().trim()
-    if (root) return root
-  } catch {}
-  return process.cwd()
-}
-
-export const WORKSPACE_DIR = resolveWorkspaceDir()
-
-// Port this backend listens on (frontend + Vite dev proxy target).
+// Port this backend listens on.
 export const PORT = Number(process.env.PORT ?? DEFAULT_PORT)
 
 // Allowed browser origin for CORS (the Vite dev server).

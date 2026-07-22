@@ -2,13 +2,13 @@
  * Central Zustand store: session list, per-session messages/todos/status, and
  * the actions that mutate them from both user intent and SSE events.
  *
- * Map-valued slices are replaced with fresh Map instances on every write so
- * Zustand's Object.is comparison detects the change (Zustand v5 requirement).
+ * All API calls are scoped to the active repo from the repo store.
  */
 
 import { create } from "zustand"
 import * as api from "../lib/api-client"
 import type { Message, MessagePart, Session, Todo } from "../lib/api-client"
+import { useRepoStore } from "./repo-store"
 
 export const EMPTY_MESSAGES: readonly Message[] = []
 export const EMPTY_TODOS: readonly Todo[] = []
@@ -29,6 +29,10 @@ function partKey(part: MessagePart): string | undefined {
   return part.id ?? part.callID
 }
 
+function getRepoId(): string | null {
+  return useRepoStore.getState().activeRepoId
+}
+
 interface SessionState {
   sessions: Session[]
   activeSessionId: string | null
@@ -45,6 +49,7 @@ interface SessionState {
   deleteSession: (id: string) => Promise<void>
   sendMessage: (content: string) => Promise<void>
   abortSession: () => Promise<void>
+  clearSessions: () => void
   updateMessage: (sessionId: string, message: Message) => void
   updateMessagePart: (
     sessionId: string,
@@ -66,9 +71,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   sendError: null,
 
   loadSessions: async () => {
+    const repoId = getRepoId()
+    if (!repoId) {
+      set({ sessions: [], loadingSessions: false })
+      return
+    }
     set({ loadingSessions: true, loadError: null })
     try {
-      const sessions = await api.listSessions()
+      const sessions = await api.listSessions(repoId)
       set({ sessions, loadingSessions: false })
     } catch (error) {
       set({
@@ -80,9 +90,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   createSession: async (message, agent) => {
+    const repoId = getRepoId()
+    if (!repoId) return null
     set({ sendError: null })
     try {
-      const session = await api.createSession(message, agent)
+      const session = await api.createSession(repoId, message, agent)
       set((state) => ({
         sessions: [
           session,
@@ -104,11 +116,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   setActiveSession: async (id) => {
+    const repoId = getRepoId()
+    if (!repoId) return
     set({ activeSessionId: id, sendError: null })
     const [messages, todos, status] = await Promise.allSettled([
-      api.getMessages(id),
-      api.getTodos(id),
-      api.getSessionStatus(id),
+      api.getMessages(repoId, id),
+      api.getTodos(repoId, id),
+      api.getSessionStatus(repoId, id),
     ])
     set((state) => {
       const next: Partial<SessionState> = {}
@@ -130,10 +144,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   deleteSession: async (id) => {
-    try {
-      await api.deleteSession(id)
-    } catch {
-      // Best-effort: still drop it locally so the UI stays responsive.
+    const repoId = getRepoId()
+    if (repoId) {
+      try {
+        await api.deleteSession(repoId, id)
+      } catch {
+        // Best-effort.
+      }
     }
     set((state) => ({
       sessions: state.sessions.filter((s) => s.id !== id),
@@ -146,16 +163,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   sendMessage: async (content) => {
+    const repoId = getRepoId()
     const sessionId = get().activeSessionId
-    if (!sessionId) {
-      return
-    }
+    if (!repoId || !sessionId) return
     set((state) => ({
       sendError: null,
       sessionStatuses: mapSet(state.sessionStatuses, sessionId, "busy"),
     }))
     try {
-      await api.sendMessage(sessionId, content)
+      await api.sendMessage(repoId, sessionId, content)
     } catch (error) {
       set((state) => ({
         sendError:
@@ -166,18 +182,29 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   abortSession: async () => {
+    const repoId = getRepoId()
     const sessionId = get().activeSessionId
-    if (!sessionId) {
-      return
-    }
+    if (!repoId || !sessionId) return
     try {
-      await api.abortSession(sessionId)
+      await api.abortSession(repoId, sessionId)
     } catch {
-      // Ignore abort failures; the status event stream is the source of truth.
+      // Ignore abort failures.
     }
     set((state) => ({
       sessionStatuses: mapSet(state.sessionStatuses, sessionId, "idle"),
     }))
+  },
+
+  clearSessions: () => {
+    set({
+      sessions: [],
+      activeSessionId: null,
+      messages: new Map(),
+      todos: new Map(),
+      sessionStatuses: new Map(),
+      loadError: null,
+      sendError: null,
+    })
   },
 
   updateMessage: (sessionId, message) => {

@@ -6,18 +6,32 @@ import { RunView } from "./components/RunView"
 import { useSessionStore } from "./stores/session-store"
 import { useAgentStore } from "./stores/agent-store"
 import { useThemeStore } from "./stores/theme-store"
+import { useRepoStore } from "./stores/repo-store"
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const loadError = useSessionStore((state) => state.loadError)
   const loadSessions = useSessionStore((state) => state.loadSessions)
+  const clearSessions = useSessionStore((state) => state.clearSessions)
+  const activeRepoId = useRepoStore((state) => state.activeRepoId)
 
+  // Bootstrap: load repos first, then sessions + agents for the active repo.
   useEffect(() => {
-    void useSessionStore.getState().loadSessions()
-    void useAgentStore.getState().loadAgents()
+    void useRepoStore.getState().loadRepos()
     return useThemeStore.getState().init()
   }, [])
+
+  // When active repo changes, reload sessions and agents.
+  useEffect(() => {
+    if (activeRepoId) {
+      clearSessions()
+      void loadSessions()
+      void useAgentStore.getState().loadAgents()
+    } else {
+      clearSessions()
+    }
+  }, [activeRepoId, loadSessions, clearSessions])
 
   return (
     <div className="flex h-screen overflow-hidden bg-base text-fg">
@@ -45,13 +59,13 @@ export default function App() {
       {loadError && (
         <div className="fixed left-1/2 top-3 z-50 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-red-500/30 bg-red-950/90 px-3 py-2 text-xs text-red-300 shadow-lg backdrop-blur">
           <WifiOff className="h-3.5 w-3.5 shrink-0" />
-          <span>Cannot reach backend.</span>
+          <span>无法连接后端服务</span>
           <button
             type="button"
             onClick={() => void loadSessions()}
             className="rounded bg-red-500/20 px-1.5 py-0.5 font-medium transition-colors hover:bg-red-500/30"
           >
-            Retry
+            重试
           </button>
           <button
             type="button"

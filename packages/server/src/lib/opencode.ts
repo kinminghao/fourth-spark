@@ -1,5 +1,3 @@
-import { OPENCODE_URL, WORKSPACE_DIR } from "./config"
-
 // ---------------------------------------------------------------------------
 // Types — the frontend-facing contract. OpenCode responses are forwarded
 // verbatim and typed as these shapes (boundary trust: OpenCode is a local,
@@ -57,129 +55,143 @@ export class OpenCodeError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Low-level fetch helpers
+// OpenCode client interface — one instance per repo.
+// ---------------------------------------------------------------------------
+
+export interface OpenCodeClient {
+  readonly baseUrl: string
+  readonly directory: string
+
+  listSessions(): Promise<Session[]>
+  createSession(opts: { agent?: string; title?: string }): Promise<Session>
+  getSession(sessionId: string): Promise<Session>
+  deleteSession(sessionId: string): Promise<void>
+  getMessages(sessionId: string): Promise<Message[]>
+  prompt(sessionId: string, content: string, opts?: { agent?: string; model?: string; variant?: string }): Promise<void>
+  abort(sessionId: string): Promise<void>
+  getTodos(sessionId: string): Promise<Todo[]>
+  getSessionStatus(): Promise<Record<string, SessionStatus>>
+  listAgents(): Promise<Agent[]>
+  eventStream(signal?: AbortSignal): Promise<Response>
+}
+
+// ---------------------------------------------------------------------------
+// Low-level fetch helpers (closed over baseUrl)
 // ---------------------------------------------------------------------------
 
 type Query = Record<string, string | undefined>
 
-function buildUrl(path: string, query?: Query): string {
-  const url = new URL(path, OPENCODE_URL)
-  if (query) {
-    for (const [key, value] of Object.entries(query)) {
-      if (value !== undefined) url.searchParams.set(key, value)
+function makeFetchers(baseUrl: string) {
+  function buildUrl(path: string, query?: Query): string {
+    const url = new URL(path, baseUrl)
+    if (query) {
+      for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined) url.searchParams.set(key, value)
+      }
     }
+    return url.toString()
   }
-  return url.toString()
-}
 
-async function ensureOk(res: Response, method: string, path: string): Promise<void> {
-  if (res.ok) return
-  const body = await res.text().catch(() => "")
-  throw new OpenCodeError(`OpenCode ${method} ${path} responded ${res.status}`, res.status, body)
-}
+  async function ensureOk(res: Response, method: string, path: string): Promise<void> {
+    if (res.ok) return
+    const body = await res.text().catch(() => "")
+    throw new OpenCodeError(`OpenCode ${method} ${path} responded ${res.status}`, res.status, body)
+  }
 
-async function getJson<T>(path: string, query?: Query): Promise<T> {
-  const res = await fetch(buildUrl(path, query), { method: "GET" })
-  await ensureOk(res, "GET", path)
-  const data: T = await res.json()
-  return data
-}
+  async function getJson<T>(path: string, query?: Query): Promise<T> {
+    const res = await fetch(buildUrl(path, query), { method: "GET" })
+    await ensureOk(res, "GET", path)
+    return await res.json() as T
+  }
 
-async function postJson<T>(path: string, query?: Query, body?: unknown): Promise<T> {
-  const res = await fetch(buildUrl(path, query), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
-  })
-  await ensureOk(res, "POST", path)
-  const data: T = await res.json()
-  return data
-}
+  async function postJson<T>(path: string, query?: Query, body?: unknown): Promise<T> {
+    const res = await fetch(buildUrl(path, query), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    })
+    await ensureOk(res, "POST", path)
+    return await res.json() as T
+  }
 
-async function send(method: string, path: string, query?: Query, body?: unknown): Promise<void> {
-  const res = await fetch(buildUrl(path, query), {
-    method,
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  await ensureOk(res, method, path)
+  async function send(method: string, path: string, query?: Query, body?: unknown): Promise<void> {
+    const res = await fetch(buildUrl(path, query), {
+      method,
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    await ensureOk(res, method, path)
+  }
+
+  return { buildUrl, ensureOk, getJson, postJson, send }
 }
 
 // ---------------------------------------------------------------------------
-// OpenCode client — endpoint paths verified against OpenCode v1.18.0.
-// NOTE: the live API uses `/session/{id}/prompt_async` (underscore) and the
-// SSE endpoint is `/event` (not `/event/subscribe`); prompt parts use `text`.
+// Factory — creates one OpenCode client bound to a specific baseUrl + directory.
+// Endpoint paths verified against OpenCode v1.18.0.
 // ---------------------------------------------------------------------------
 
-export const opencode = {
-  listSessions(directory: string): Promise<Session[]> {
-    return getJson<Session[]>("/session", { directory })
-  },
+export function createOpenCodeClient(baseUrl: string, directory: string): OpenCodeClient {
+  const { buildUrl, ensureOk, getJson, postJson, send } = makeFetchers(baseUrl)
 
-  createSession(directory: string, opts: { agent?: string; title?: string }): Promise<Session> {
-    return postJson<Session>("/session", { directory }, { title: opts.title, agent: opts.agent })
-  },
+  return {
+    baseUrl,
+    directory,
 
-  getSession(sessionId: string): Promise<Session> {
-    return getJson<Session>(`/session/${sessionId}`, { directory: WORKSPACE_DIR })
-  },
+    listSessions() {
+      return getJson<Session[]>("/session", { directory })
+    },
 
-  deleteSession(sessionId: string): Promise<void> {
-    return send("DELETE", `/session/${sessionId}`, { directory: WORKSPACE_DIR })
-  },
+    createSession(opts) {
+      return postJson<Session>("/session", { directory }, { title: opts.title, agent: opts.agent })
+    },
 
-  // Forwarded verbatim from OpenCode (each item is `{ info, parts }`).
-  getMessages(sessionId: string, directory: string): Promise<Message[]> {
-    return getJson<Message[]>(`/session/${sessionId}/message`, { directory })
-  },
+    getSession(sessionId) {
+      return getJson<Session>(`/session/${sessionId}`, { directory })
+    },
 
-  prompt(
-    sessionId: string,
-    directory: string,
-    content: string,
-    opts?: { agent?: string; model?: string; variant?: string },
-  ): Promise<void> {
-    return send("POST", `/session/${sessionId}/prompt_async`, { directory }, {
-      parts: [{ type: "text", text: content }],
-      agent: opts?.agent,
-      model: opts?.model,
-      variant: opts?.variant,
-      messageID: `msg_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
-    })
-  },
+    deleteSession(sessionId) {
+      return send("DELETE", `/session/${sessionId}`, { directory })
+    },
 
-  abort(sessionId: string): Promise<void> {
-    return send("POST", `/session/${sessionId}/abort`, { directory: WORKSPACE_DIR })
-  },
+    getMessages(sessionId) {
+      return getJson<Message[]>(`/session/${sessionId}/message`, { directory })
+    },
 
-  getTodos(sessionId: string, directory: string): Promise<Todo[]> {
-    return getJson<Todo[]>(`/session/${sessionId}/todo`, { directory })
-  },
+    prompt(sessionId, content, opts) {
+      return send("POST", `/session/${sessionId}/prompt_async`, { directory }, {
+        parts: [{ type: "text", text: content }],
+        agent: opts?.agent,
+        model: opts?.model,
+        variant: opts?.variant,
+        messageID: `msg_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
+      })
+    },
 
-  getSessionStatus(directory: string): Promise<Record<string, SessionStatus>> {
-    return getJson<Record<string, SessionStatus>>("/session/status", { directory })
-  },
+    abort(sessionId) {
+      return send("POST", `/session/${sessionId}/abort`, { directory })
+    },
 
-  listAgents(): Promise<Agent[]> {
-    return getJson<Agent[]>("/agent", { directory: WORKSPACE_DIR })
-  },
+    getTodos(sessionId) {
+      return getJson<Todo[]>(`/session/${sessionId}/todo`, { directory })
+    },
 
-  // EventSource primitive over OpenCode's global `/event` SSE stream. The
-  // session-scoped proxy in routes/events.ts uses `eventStream` instead for
-  // lifecycle control (abort + filtering); this is the client-level surface.
-  subscribeEvents(directory: string): EventSource {
-    return new EventSource(buildUrl("/event", { directory }))
-  },
+    getSessionStatus() {
+      return getJson<Record<string, SessionStatus>>("/session/status", { directory })
+    },
 
-  // Raw streaming fetch against `/event`, used by the SSE proxy so it can
-  // abort the upstream connection and parse/filter frames itself.
-  async eventStream(directory: string, signal?: AbortSignal): Promise<Response> {
-    const res = await fetch(buildUrl("/event", { directory }), {
-      method: "GET",
-      headers: { Accept: "text/event-stream" },
-      signal,
-    })
-    await ensureOk(res, "GET", "/event")
-    return res
-  },
+    listAgents() {
+      return getJson<Agent[]>("/agent", { directory })
+    },
+
+    async eventStream(signal?) {
+      const res = await fetch(buildUrl("/event", { directory }), {
+        method: "GET",
+        headers: { Accept: "text/event-stream" },
+        signal,
+      })
+      await ensureOk(res, "GET", "/event")
+      return res
+    },
+  }
 }

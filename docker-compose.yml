@@ -16,38 +16,5 @@ services:
       timeout: 3s
       retries: 5
 
-  server:
-    build: .
-    container_name: fourth-spark-server
-    command: bun run --watch packages/server/src/index.ts
-    ports:
-      - "3000:3000"
-    environment:
-      PORT: "3000"
-      OPENCODE_URL: "http://host.docker.internal:8080"
-      WORKSPACE_DIR: "${WORKSPACE_DIR:-.}"
-      FRONTEND_ORIGIN: "http://localhost:5173"
-      DATABASE_URL: "postgresql://fourth_spark:fourth_spark@postgres:5432/fourth_spark"
-    volumes:
-      - ./packages/server/src:/app/packages/server/src
-    depends_on:
-      postgres:
-        condition: service_healthy
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  web:
-    build: .
-    container_name: fourth-spark-web
-    command: bun run --cwd packages/web dev -- --host 0.0.0.0
-    ports:
-      - "5173:5173"
-    environment:
-      VITE_API_TARGET: "http://server:3000"
-    volumes:
-      - ./packages/web/src:/app/packages/web/src
-    depends_on:
-      - server
-
 volumes:
   pgdata:
