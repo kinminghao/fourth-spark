@@ -8,8 +8,17 @@ export const OPENCODE_URL = process.env.OPENCODE_URL ?? DEFAULT_OPENCODE_URL
 // Workspace directory forwarded as the `directory` query param on every
 // OpenCode call. Resolve to git root so the agent sees the full monorepo,
 // not just packages/server/ where Bun workspace runs the script.
-export const WORKSPACE_DIR = process.env.WORKSPACE_DIR
-  ?? (Bun.spawnSync(["git", "rev-parse", "--show-toplevel"]).stdout.toString().trim() || process.cwd())
+function resolveWorkspaceDir(): string {
+  if (process.env.WORKSPACE_DIR) return process.env.WORKSPACE_DIR
+  try {
+    const result = Bun.spawnSync(["git", "rev-parse", "--show-toplevel"])
+    const root = result.stdout.toString().trim()
+    if (root) return root
+  } catch {}
+  return process.cwd()
+}
+
+export const WORKSPACE_DIR = resolveWorkspaceDir()
 
 // Port this backend listens on (frontend + Vite dev proxy target).
 export const PORT = Number(process.env.PORT ?? DEFAULT_PORT)

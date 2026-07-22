@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { opencode, type SessionStatus } from "../lib/opencode"
 import { WORKSPACE_DIR, DEFAULT_VARIANT } from "../lib/config"
+import { syncSessionsList, syncMessagesList } from "../db/sync"
 
 export const sessions = new Hono()
 
@@ -16,7 +17,9 @@ sessions.post("/", async (c) => {
 })
 
 sessions.get("/", async (c) => {
-  return c.json(await opencode.listSessions(WORKSPACE_DIR))
+  const list = await opencode.listSessions(WORKSPACE_DIR)
+  syncSessionsList(list)
+  return c.json(list)
 })
 
 sessions.get("/:id", async (c) => {
@@ -44,7 +47,10 @@ sessions.post("/:id/abort", async (c) => {
 })
 
 sessions.get("/:id/messages", async (c) => {
-  return c.json(await opencode.getMessages(c.req.param("id"), WORKSPACE_DIR))
+  const id = c.req.param("id")
+  const msgs = await opencode.getMessages(id, WORKSPACE_DIR)
+  syncMessagesList(id, msgs)
+  return c.json(msgs)
 })
 
 sessions.get("/:id/todos", async (c) => {
