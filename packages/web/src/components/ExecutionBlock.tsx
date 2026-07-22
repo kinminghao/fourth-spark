@@ -1,6 +1,7 @@
 import { useState } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
+import remarkGfm from "remark-gfm"
 import { Brain, ChevronDown, ChevronRight } from "lucide-react"
 import type { Message, MessagePart } from "../lib/api-client"
 import { classifyPart, getPartText } from "../lib/message-parts"
@@ -42,7 +43,7 @@ function PartView({ part }: { part: MessagePart }) {
       }
       return (
         <div className="markdown-body leading-relaxed">
-          <ReactMarkdown rehypePlugins={[rehypeHighlight]}>{text}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{text}</ReactMarkdown>
         </div>
       )
     }

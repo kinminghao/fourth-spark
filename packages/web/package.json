@@ -8,13 +8,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.513.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "zustand": "^5.0.0",
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
-    "lucide-react": "^0.513.0",
-    "clsx": "^2.1.1"
+    "remark-gfm": "^4.0.1",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
