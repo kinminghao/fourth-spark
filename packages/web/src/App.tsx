@@ -5,6 +5,7 @@ import { SessionList } from "./components/SessionList"
 import { RunView } from "./components/RunView"
 import { useSessionStore } from "./stores/session-store"
 import { useAgentStore } from "./stores/agent-store"
+import { useThemeStore } from "./stores/theme-store"
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -15,10 +16,11 @@ export default function App() {
   useEffect(() => {
     void useSessionStore.getState().loadSessions()
     void useAgentStore.getState().loadAgents()
+    return useThemeStore.getState().init()
   }, [])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
+    <div className="flex h-screen overflow-hidden bg-base text-fg">
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/50 md:hidden"

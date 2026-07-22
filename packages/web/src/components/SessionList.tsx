@@ -1,9 +1,10 @@
 import { useState } from "react"
-import { Check, Plus, Terminal, Trash2, X } from "lucide-react"
+import { Check, Monitor, Moon, Plus, Sun, Terminal, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import type { Session } from "../lib/api-client"
 import { useSessionStore } from "../stores/session-store"
 import { useAgentStore } from "../stores/agent-store"
+import { useThemeStore } from "../stores/theme-store"
 
 function sessionTime(session: Session): number {
   if (typeof session.time?.created === "number") {
@@ -39,7 +40,7 @@ function statusDotClass(status: string | undefined): string {
     case "error":
       return "bg-red-500"
     default:
-      return "bg-zinc-600"
+      return "bg-fg-5"
   }
 }
 
@@ -57,7 +58,9 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
   const deleteSession = useSessionStore((state) => state.deleteSession)
   const agents = useAgentStore((state) => state.agents)
 
-  const ordered = [...sessions].sort((a, b) => sessionTime(b) - sessionTime(a))
+  const ordered = [...sessions]
+    .filter((s) => !s.parentID)
+    .sort((a, b) => sessionTime(b) - sessionTime(a))
 
   const handleCreate = async () => {
     const text = draft.trim()
@@ -75,33 +78,49 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
     onNavigate?.()
   }
 
+  const preference = useThemeStore((state) => state.preference)
+  const cycle = useThemeStore((state) => state.cycle)
+
+  const ThemeIcon = preference === "light" ? Sun : preference === "dark" ? Moon : Monitor
+
   return (
-    <div className="flex h-full flex-col bg-zinc-900">
+    <div className="flex h-full flex-col bg-surface">
       <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="flex items-center gap-2">
           <Terminal className="h-4 w-4 text-emerald-400" />
-          <h1 className="text-sm font-semibold tracking-tight text-zinc-100">
+          <h1 className="text-sm font-semibold tracking-tight text-fg">
             Fourth Spark
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowForm((value) => !value)}
-          aria-label="New run"
-          title="New run"
-          className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-600 text-white transition-colors hover:bg-emerald-500"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={cycle}
+            aria-label={`Theme: ${preference}`}
+            title={`Theme: ${preference}`}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+          >
+            <ThemeIcon className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowForm((value) => !value)}
+            aria-label="New run"
+            title="New run"
+            className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-600 text-white transition-colors hover:bg-emerald-500"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {showForm && (
-        <div className="flex flex-col gap-2 border-b border-line bg-zinc-950/60 p-3">
+        <div className="flex flex-col gap-2 border-b border-line bg-base/60 p-3">
           {agents.length > 0 && (
             <select
               value={agent}
               onChange={(event) => setAgent(event.target.value)}
-              className="w-full rounded-md border border-line bg-zinc-900 px-2 py-1.5 font-mono text-xs text-zinc-200 focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-md border border-line bg-surface px-2 py-1.5 font-mono text-xs text-fg focus:border-emerald-500 focus:outline-none"
             >
               <option value="">default agent</option>
               {agents.map((item) => (
@@ -117,7 +136,7 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
             autoFocus
             onChange={(event) => setDraft(event.target.value)}
             placeholder="what should the agent work on?"
-            className="w-full resize-none rounded-md border border-line bg-zinc-900 px-2 py-1.5 font-mono text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+            className="w-full resize-none rounded-md border border-line bg-surface px-2 py-1.5 font-mono text-xs text-fg placeholder:text-fg-5 focus:border-emerald-500 focus:outline-none"
           />
           <div className="flex justify-end gap-2">
             <button
@@ -126,7 +145,7 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
                 setShowForm(false)
                 setDraft("")
               }}
-              className="rounded-md px-3 py-1.5 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+              className="rounded-md px-3 py-1.5 text-xs text-fg-3 transition-colors hover:bg-elevated hover:text-fg"
             >
               Cancel
             </button>
@@ -134,7 +153,7 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
               type="button"
               onClick={handleCreate}
               disabled={draft.trim().length === 0}
-              className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500"
+              className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6 disabled:text-fg-4"
             >
               Start run
             </button>
@@ -143,14 +162,14 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
       )}
 
       <div className="px-3 pb-1 pt-3">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-600">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-fg-5">
           Runs
         </span>
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-2">
         {ordered.length === 0 ? (
-          <p className="px-2 py-6 text-center font-mono text-xs text-zinc-600">
+          <p className="px-2 py-6 text-center font-mono text-xs text-fg-5">
             no runs yet. start one above.
           </p>
         ) : (
@@ -165,8 +184,8 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
                     className={clsx(
                       "group relative rounded-md border-l-2 transition-colors",
                       isActive
-                        ? "border-emerald-500 bg-zinc-800/80"
-                        : "border-transparent hover:bg-zinc-800/50",
+                        ? "border-emerald-500 bg-elevated/80"
+                        : "border-transparent hover:bg-elevated/50",
                     )}
                   >
                     <button
@@ -181,21 +200,21 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
                             statusDotClass(statuses.get(session.id)),
                           )}
                         />
-                        <span className="min-w-0 truncate font-mono text-xs text-zinc-400">
+                        <span className="min-w-0 truncate font-mono text-xs text-fg-3">
                           {session.agent?.trim() || "default"}
                         </span>
                         {when && (
-                          <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-zinc-600">
+                          <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-fg-5">
                             {when}
                           </span>
                         )}
                       </div>
-                      <div className="mt-0.5 truncate pl-3.5 text-sm text-zinc-300">
+                      <div className="mt-0.5 truncate pl-3.5 text-sm text-fg-2">
                         {session.title?.trim() || "untitled run"}
                       </div>
                     </button>
                     {isConfirming ? (
-                      <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-zinc-900/90 px-0.5">
+                      <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-surface/90 px-0.5">
                         <button
                           type="button"
                           onClick={() => {
@@ -211,7 +230,7 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
                           type="button"
                           onClick={() => setConfirmingId(null)}
                           aria-label="Cancel delete"
-                          className="rounded p-1 text-zinc-400 hover:bg-zinc-700"
+                          className="rounded p-1 text-fg-3 hover:bg-elevated"
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -221,7 +240,7 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
                         type="button"
                         onClick={() => setConfirmingId(session.id)}
                         aria-label="Delete run"
-                        className="absolute right-1.5 top-1.5 rounded p-1 text-zinc-600 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+                        className="absolute right-1.5 top-1.5 rounded p-1 text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
