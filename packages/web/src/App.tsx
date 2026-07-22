@@ -1,28 +1,24 @@
-import { useEffect, useState } from "react"
-import { WifiOff, X } from "lucide-react"
-import clsx from "clsx"
-import { SessionList } from "./components/SessionList"
-import { RunView } from "./components/RunView"
+import { useEffect } from "react"
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
+import { Layout } from "./components/Layout"
+import { ReposPage } from "./pages/ReposPage"
+import { RunPage } from "./pages/RunPage"
+import { SettingsPage } from "./pages/SettingsPage"
+import { useRepoStore } from "./stores/repo-store"
 import { useSessionStore } from "./stores/session-store"
 import { useAgentStore } from "./stores/agent-store"
 import { useThemeStore } from "./stores/theme-store"
-import { useRepoStore } from "./stores/repo-store"
 
 export default function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
+  const loadSessions = useSessionStore((s) => s.loadSessions)
+  const clearSessions = useSessionStore((s) => s.clearSessions)
 
-  const loadError = useSessionStore((state) => state.loadError)
-  const loadSessions = useSessionStore((state) => state.loadSessions)
-  const clearSessions = useSessionStore((state) => state.clearSessions)
-  const activeRepoId = useRepoStore((state) => state.activeRepoId)
-
-  // Bootstrap: load repos first, then sessions + agents for the active repo.
   useEffect(() => {
     void useRepoStore.getState().loadRepos()
     return useThemeStore.getState().init()
   }, [])
 
-  // When active repo changes, reload sessions and agents.
   useEffect(() => {
     if (activeRepoId) {
       clearSessions()
@@ -34,49 +30,15 @@ export default function App() {
   }, [activeRepoId, loadSessions, clearSessions])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-base text-fg">
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/50 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      <aside
-        className={clsx(
-          "fixed inset-y-0 left-0 z-40 w-72 transform border-r border-line transition-transform duration-200 md:static md:z-auto md:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full",
-        )}
-      >
-        <SessionList onNavigate={() => setSidebarOpen(false)} />
-      </aside>
-
-      <main className="flex min-w-0 flex-1 flex-col">
-        <RunView onToggleSidebar={() => setSidebarOpen((value) => !value)} />
-      </main>
-
-      {loadError && (
-        <div className="fixed left-1/2 top-3 z-50 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-red-500/30 bg-red-950/90 px-3 py-2 text-xs text-red-300 shadow-lg backdrop-blur">
-          <WifiOff className="h-3.5 w-3.5 shrink-0" />
-          <span>无法连接后端服务</span>
-          <button
-            type="button"
-            onClick={() => void loadSessions()}
-            className="rounded bg-red-500/20 px-1.5 py-0.5 font-medium transition-colors hover:bg-red-500/30"
-          >
-            重试
-          </button>
-          <button
-            type="button"
-            onClick={() => useSessionStore.setState({ loadError: null })}
-            aria-label="Dismiss"
-            className="rounded p-0.5 hover:bg-red-500/20"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/repos" element={<ReposPage />} />
+          <Route path="/run" element={<RunPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to="/repos" replace />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   )
 }
