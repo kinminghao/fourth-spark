@@ -5,7 +5,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react"
-import { Send } from "lucide-react"
+import { CornerDownLeft } from "lucide-react"
 import clsx from "clsx"
 import { useSessionStore } from "../stores/session-store"
 
@@ -25,7 +25,6 @@ export function InputBar() {
   const busy = status === "busy"
   const disabled = !activeSessionId || busy
 
-  // Auto-resize the textarea between 1 and ~6 rows as content changes.
   useLayoutEffect(() => {
     const element = textareaRef.current
     if (!element) {
@@ -35,7 +34,6 @@ export function InputBar() {
     element.style.height = `${Math.min(element.scrollHeight, MAX_HEIGHT_PX)}px`
   }, [value])
 
-  // Clear the draft when switching sessions.
   useEffect(() => {
     setValue("")
   }, [activeSessionId])
@@ -57,21 +55,30 @@ export function InputBar() {
   }
 
   const placeholder = !activeSessionId
-    ? "Select or create a session"
+    ? "select or start a run"
     : busy
-      ? "Agent is working…"
-      : "Send a message…  (⌘/Ctrl + Enter)"
+      ? "agent is running…"
+      : "enter a command…"
+
+  const promptColor = !activeSessionId
+    ? "text-zinc-700"
+    : busy
+      ? "text-amber-400 fs-blink"
+      : "text-emerald-400"
 
   return (
-    <div className="border-t border-zinc-800 bg-zinc-950 p-3">
+    <div className="border-t border-line bg-term px-4 py-3">
       <div
         className={clsx(
-          "flex items-end gap-2 rounded-xl border bg-zinc-900 px-3 py-2 transition-colors duration-200",
+          "mx-auto flex max-w-4xl items-start gap-2 border-b pb-1 transition-colors duration-150",
           disabled
-            ? "border-zinc-800 opacity-60"
-            : "border-zinc-700 focus-within:border-blue-500",
+            ? "border-transparent"
+            : "border-line focus-within:border-zinc-600",
         )}
       >
+        <span className={clsx("select-none pt-px font-mono text-sm leading-6", promptColor)}>
+          ❯
+        </span>
         <textarea
           ref={textareaRef}
           rows={1}
@@ -80,17 +87,20 @@ export function InputBar() {
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="flex-1 resize-none bg-transparent text-sm leading-6 text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:cursor-not-allowed"
+          className="flex-1 resize-none bg-transparent font-mono text-sm leading-6 text-zinc-100 placeholder:text-zinc-700 focus:outline-none disabled:cursor-not-allowed"
         />
         <button
           type="button"
           onClick={submit}
           disabled={disabled || value.trim().length === 0}
           aria-label="Send message"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white transition-colors duration-200 hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-zinc-500 transition-colors duration-150 hover:bg-zinc-800 hover:text-emerald-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
         >
-          <Send className="h-4 w-4" />
+          <CornerDownLeft className="h-4 w-4" />
         </button>
+      </div>
+      <div className="mx-auto mt-1.5 max-w-4xl pl-5 font-mono text-[10px] text-zinc-700">
+        ⌘⏎ / ctrl+⏎ to run · shift+⏎ for newline
       </div>
     </div>
   )

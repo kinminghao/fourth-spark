@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react"
-import { AlertTriangle, Menu, Sparkles, Square } from "lucide-react"
+import { Fragment, useEffect, useRef } from "react"
+import { AlertTriangle, Menu, Square } from "lucide-react"
 import clsx from "clsx"
 import {
   EMPTY_MESSAGES,
@@ -7,33 +7,38 @@ import {
   useSessionStore,
 } from "../stores/session-store"
 import { useSessionEvents } from "../hooks/use-session-events"
-import { MessageBubble } from "./MessageBubble"
+import { ExecutionBlock } from "./ExecutionBlock"
 import { TodoProgress } from "./TodoProgress"
 import { InputBar } from "./InputBar"
 
+const STATUS_META: Record<
+  string,
+  { glyph: string; label: string; color: string; spin: boolean }
+> = {
+  idle: { glyph: "●", label: "ready", color: "text-emerald-400", spin: false },
+  busy: { glyph: "◌", label: "running", color: "text-amber-400", spin: true },
+  retry: { glyph: "◌", label: "retrying", color: "text-amber-400", spin: true },
+  error: { glyph: "✗", label: "error", color: "text-red-400", spin: false },
+}
+
 function StatusBadge({ status }: { status: string | undefined }) {
-  const config: Record<string, { label: string; dot: string; text: string }> = {
-    idle: { label: "Idle", dot: "bg-emerald-500", text: "text-emerald-400" },
-    busy: { label: "Working", dot: "bg-amber-500", text: "text-amber-400" },
-    retry: { label: "Retrying", dot: "bg-amber-500", text: "text-amber-400" },
-    error: { label: "Error", dot: "bg-red-500", text: "text-red-400" },
-  }
-  const entry = config[status ?? "idle"] ?? config.idle
+  const meta = STATUS_META[status ?? "idle"] ?? STATUS_META.idle
   return (
-    <span className="flex items-center gap-1.5 rounded-full bg-zinc-800 px-2 py-0.5 text-xs">
-      <span
-        className={clsx(
-          "h-1.5 w-1.5 rounded-full",
-          entry.dot,
-          status === "busy" && "animate-pulse",
-        )}
-      />
-      <span className={entry.text}>{entry.label}</span>
+    <span
+      className={clsx(
+        "flex items-center gap-1.5 rounded border border-line px-2 py-0.5 font-mono text-xs",
+        meta.color,
+      )}
+    >
+      <span className={clsx("leading-none", meta.spin && "fs-spin")}>
+        {meta.glyph}
+      </span>
+      <span>{meta.label}</span>
     </span>
   )
 }
 
-export function ChatView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
+export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
   const session = useSessionStore(
     (state) =>
@@ -66,7 +71,7 @@ export function ChatView({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
 
   if (!activeSessionId) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-zinc-950 text-center">
+      <div className="relative flex flex-1 flex-col items-center justify-center gap-3 bg-term text-center">
         <button
           type="button"
           onClick={onToggleSidebar}
@@ -75,8 +80,13 @@ export function ChatView({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
         >
           <Menu className="h-5 w-5" />
         </button>
-        <Sparkles className="h-10 w-10 text-zinc-700" />
-        <p className="text-sm text-zinc-500">Select or create a session</p>
+        <div className="font-mono text-2xl text-zinc-700">
+          <span className="text-emerald-500/60">❯</span>
+          <span className="fs-blink text-zinc-500"> ▋</span>
+        </div>
+        <p className="font-mono text-sm text-zinc-500">
+          select a run or start a new one
+        </p>
       </div>
     )
   }
@@ -84,8 +94,8 @@ export function ChatView({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const busy = status === "busy"
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-zinc-950">
-      <header className="flex items-center gap-3 border-b border-zinc-800 px-4 py-3">
+    <div className="flex flex-1 flex-col overflow-hidden bg-term">
+      <header className="flex items-center gap-3 border-b border-line bg-zinc-950 px-4 py-2.5">
         <button
           type="button"
           onClick={onToggleSidebar}
@@ -96,10 +106,12 @@ export function ChatView({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
         </button>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-medium text-zinc-100">
-            {session?.title?.trim() || "Untitled session"}
+            {session?.title?.trim() || "untitled run"}
           </h2>
           {session?.agent && (
-            <p className="truncate text-xs text-zinc-500">{session.agent}</p>
+            <p className="truncate font-mono text-xs text-zinc-500">
+              {session.agent}
+            </p>
           )}
         </div>
         <StatusBadge status={status} />
@@ -107,23 +119,29 @@ export function ChatView({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
           <button
             type="button"
             onClick={() => void abortSession()}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition-colors hover:border-red-500/50 hover:text-red-400"
+            className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-xs text-zinc-300 transition-colors hover:border-red-500/50 hover:text-red-400"
           >
             <Square className="h-3 w-3 fill-current" />
-            Stop
+            stop
           </button>
         )}
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6">
+        <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-4">
           {messages.length === 0 ? (
-            <p className="py-10 text-center text-xs text-zinc-600">
-              No messages yet.
+            <p className="py-10 text-center font-mono text-xs text-zinc-700">
+              <span className="text-emerald-500/60">❯</span> waiting for input
+              <span className="fs-blink"> ▋</span>
             </p>
           ) : (
-            messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
+            messages.map((message, index) => (
+              <Fragment key={message.id}>
+                {index > 0 && message.role === "user" && (
+                  <div className="border-t border-line/70" />
+                )}
+                <ExecutionBlock message={message} />
+              </Fragment>
             ))
           )}
           {todos.length > 0 && <TodoProgress todos={[...todos]} />}
@@ -131,7 +149,7 @@ export function ChatView({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
       </div>
 
       {sendError && (
-        <div className="flex items-center gap-2 border-t border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-400">
+        <div className="flex items-center gap-2 border-t border-red-500/20 bg-red-500/10 px-4 py-2 font-mono text-xs text-red-400">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">{sendError}</span>
         </div>

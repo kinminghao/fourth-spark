@@ -1,0 +1,43 @@
+读一下项目
+I detect investigation intent — user wants a project overview. My approach: explore project structure directly.
+
+Fourth Spark — 一个 AI Agent 平台的 Web UI，作为 OpenCode 的前端代理层。
+
+架构概览
+┌─────────────┐      ┌──────────────┐      ┌──────────────┐
+│  React SPA  │─────▶│  Hono Server │─────▶│   OpenCode   │
+│  (Vite:5173)│ /api │  (Bun:3000)  │ HTTP │  (serve:8080)│
+└─────────────┘      └──────────────┘      └──────────────┘
+Monorepo (bun workspaces), 两个包：
+
+packages/server — Hono + Bun 后端
+职责：OpenCode HTTP API 的反向代理，不含自有业务逻辑
+路由：
+POST /api/sessions — 创建 session + 立即发送首条消息（fire-and-forget）
+GET/DELETE /api/sessions/:id — CRUD
+POST /:id/prompt — 追加消息
+POST /:id/abort — 中止生成
+GET /:id/messages / /:id/todos / /:id/status — 数据查询
+GET /:id/events — SSE 代理（从 OpenCode 全局 /event 流按 sessionID 过滤转发）
+GET /api/agents — 列出可用 Agent
+GET /api/health — 健康检查（含 OpenCode 可达性探测）
+中间件：CORS（仅放行 5173）、pino 结构化日志、统一错误处理
+配置：环境变量驱动（OPENCODE_URL / WORKSPACE_DIR / PORT / FRONTEND_ORIGIN）
+packages/web — React 19 + Vite + Tailwind v4 前端
+状态管理：Zustand v5（session-store + agent-store）
+实时更新：EventSource SSE → sse-events.ts 分发 → store 更新
+兼容层：message-parts.ts 抹平 OpenCode 原生字段（text/tool/state）与 spec 字段（content/toolName/input/output）的差异
+组件：
+SessionList — 左侧会话列表（创建/选择/删除，带确认）
+ChatView — 主聊天区（消息流 + todo 进度 + 状态徽章 + abort）
+MessageBubble — 消息渲染（Markdown + 代码高亮 + thinking 折叠）
+ToolCallPanel — 工具调用展示（input/output 折叠，状态图标）
+TodoProgress — 进度条 + 折叠列表
+InputBar — 输入框（⌘+Enter 发送，自动高度）
+依赖：react-markdown + rehype-highlight、lucide-react 图标、clsx
+项目状态
+3 个 commit，MVP 阶段
+无测试、无 lint/format 配置、无 CI
+代码质量不错：类型完整、错误处理统一、SSE 断线重连有指数退避
+暗色主题（zinc 色系 + blue 强调色）
+

@@ -1,12 +1,23 @@
 @import "tailwindcss";
 
 /*
- * Fourth Spark — global dark theme.
+ * Fourth Spark — developer-console dark theme.
  * Tailwind v4 CSS-first config; no tailwind.config.js / postcss.config.js.
+ *
+ * Surface hierarchy: chrome (sidebar/header) sits on zinc-900/zinc-950 and uses
+ * the system font; the execution-trace pane (`bg-term`) is the deepest surface
+ * and renders in the mono stack so it reads like a terminal.
  */
 
 @theme {
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:
+    "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", ui-monospace,
+    SFMono-Regular, Menlo, Consolas, monospace;
+  /* Execution-trace pane — a hair deeper than zinc-950 for a "sunken terminal". */
+  --color-term: #0a0a0c;
+  /* Subtle divider between zinc-800 and zinc-900 (a synthetic "zinc-850"). */
+  --color-line: #202024;
 }
 
 :root {
@@ -63,7 +74,7 @@ body {
 }
 
 .markdown-body p {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.6rem;
 }
 
 .markdown-body p:last-child {
@@ -242,4 +253,33 @@ body {
 
 .fs-fade-in {
   animation: fs-fade-in 0.2s ease-out;
+}
+
+@keyframes fs-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.fs-spin {
+  display: inline-block;
+  animation: fs-spin 1.1s linear infinite;
+}
+
+@keyframes fs-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  95% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.fs-blink {
+  animation: fs-blink 1.1s steps(1) infinite;
 }
