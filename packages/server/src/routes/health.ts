@@ -1,16 +1,28 @@
 import { Hono } from "hono"
-import { OPENCODE_URL, WORKSPACE_DIR } from "../lib/config"
+import { processManager } from "../lib/process-manager"
 
 export const health = new Hono()
 
+// GET /api/health — reports backend liveness.
+health.get("/", async (c) => {
+  return c.json({ status: "ok" })
+})
+
+// GET /api/repos/:repoId/health — reports whether the repo's opencode is reachable.
+export const repoHealth = new Hono()
+
 const PROBE_TIMEOUT_MS = 1500
 
-// GET /api/health — reports backend liveness and whether OpenCode is reachable.
-// Never throws: an unreachable OpenCode still returns 200 with reachable=false.
-health.get("/", async (c) => {
+repoHealth.get("/", async (c) => {
+  const repoId = c.req.param("repoId")
+  const client = processManager.getClient(repoId)
+  if (!client) {
+    return c.json({ status: "not_running", repoId })
+  }
+
   let reachable = false
   try {
-    const res = await fetch(new URL("/agent", OPENCODE_URL), {
+    const res = await fetch(new URL("/agent", client.baseUrl), {
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     })
     reachable = res.ok
@@ -20,7 +32,8 @@ health.get("/", async (c) => {
 
   return c.json({
     status: "ok",
-    opencode: { url: OPENCODE_URL, reachable },
-    workspace: WORKSPACE_DIR,
+    repoId,
+    opencode: { url: client.baseUrl, reachable },
+    workspace: client.directory,
   })
 })

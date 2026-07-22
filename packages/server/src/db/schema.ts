@@ -1,4 +1,17 @@
-import { pgTable, text, real, bigint, integer, jsonb, timestamp, primaryKey, index } from "drizzle-orm/pg-core"
+import { pgTable, text, real, bigint, integer, jsonb, timestamp, primaryKey, index, uniqueIndex } from "drizzle-orm/pg-core"
+
+export const repos = pgTable("repos", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  gitUrl: text("git_url").notNull(),
+  localPath: text("local_path").notNull(),
+  port: integer("port"),
+  status: text("status").notNull().default("inactive"),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+}, (t) => [
+  uniqueIndex("repos_local_path_idx").on(t.localPath),
+])
 
 export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),

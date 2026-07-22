@@ -5,8 +5,10 @@ import { onError } from "./middleware/errors"
 import { sessions } from "./routes/sessions"
 import { events } from "./routes/events"
 import { agents } from "./routes/agents"
-import { health } from "./routes/health"
-import { OPENCODE_URL, WORKSPACE_DIR, PORT } from "./lib/config"
+import { health, repoHealth } from "./routes/health"
+import { repoRoutes } from "./routes/repos"
+import { PORT } from "./lib/config"
+import { processManager } from "./lib/process-manager"
 import "./db/index"
 
 const app = new Hono()
@@ -15,19 +17,50 @@ app.use("*", corsMiddleware)
 app.use("*", requestLogger)
 app.onError(onError)
 
-// Session CRUD/prompt/status routes and the session-scoped SSE proxy share the
-// same base path (events.ts owns `/:id/events`).
-app.route("/api/sessions", sessions)
-app.route("/api/sessions", events)
-app.route("/api/agents", agents)
+// ---------------------------------------------------------------------------
+// Global routes
+// ---------------------------------------------------------------------------
+app.route("/api/repos", repoRoutes)
 app.route("/api/health", health)
+
+// ---------------------------------------------------------------------------
+// Per-repo routes — all nested under /api/repos/:repoId/
+// ---------------------------------------------------------------------------
+const repoScoped = new Hono()
+
+// Sessions + events share the sessions base path (events owns /:id/events).
+repoScoped.route("/sessions", sessions)
+repoScoped.route("/sessions", events)
+repoScoped.route("/agents", agents)
+repoScoped.route("/health", repoHealth)
+
+app.route("/api/repos/:repoId", repoScoped)
 
 app.get("/", (c) => c.json({ name: "fourth-spark server", status: "ok" }))
 
-logger.info(
-  { port: PORT, opencodeUrl: OPENCODE_URL, workspace: WORKSPACE_DIR },
-  "fourth-spark server starting",
-)
+// ---------------------------------------------------------------------------
+// Startup — spawn opencode for all configured repos
+// ---------------------------------------------------------------------------
+logger.info({ port: PORT }, "fourth-spark server starting")
+
+processManager.startAll().then(() => {
+  logger.info("all repos initialized")
+}).catch((err) => {
+  logger.error({ err }, "failed to initialize repos")
+})
+
+// Graceful shutdown
+process.on("SIGINT", async () => {
+  logger.info("shutting down — stopping all opencode processes")
+  await processManager.stopAll()
+  process.exit(0)
+})
+
+process.on("SIGTERM", async () => {
+  logger.info("shutting down — stopping all opencode processes")
+  await processManager.stopAll()
+  process.exit(0)
+})
 
 // Bun serves the default export. `idleTimeout: 0` disables the socket idle
 // timeout so long-lived SSE connections are not dropped.

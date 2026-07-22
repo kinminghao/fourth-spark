@@ -1,13 +1,22 @@
 /*
  * API client for the Fourth Spark backend (mounted under /api/*, proxied by Vite).
  *
- * The backend returns OpenCode-shaped data. Types here carry the fields named in
- * the frontend spec PLUS the optional OpenCode-native fields, so rendering stays
- * correct whether the server sends `content` or `text`, `toolName` or `tool`, a
- * flat `input`/`output` or a nested `state`. Normalization lives in message-parts.ts.
+ * All session/agent calls are scoped to a repo via /api/repos/:repoId/*.
  */
 
 export type SessionStatusValue = "idle" | "busy" | "retry"
+
+export interface Repo {
+  id: string
+  name: string
+  gitUrl: string
+  localPath: string
+  port: number | null
+  status: string
+  running: boolean
+  createdAt: number
+  updatedAt: number
+}
 
 export interface Session {
   id: string
@@ -140,48 +149,95 @@ function unwrapList<T>(payload: unknown, ...keys: string[]): T[] {
   return []
 }
 
-export async function listSessions(): Promise<Session[]> {
-  return unwrapList<Session>(await apiFetch<unknown>("/api/sessions"), "sessions")
+// ---------------------------------------------------------------------------
+// Repo API — /api/repos
+// ---------------------------------------------------------------------------
+
+export async function listRepos(): Promise<Repo[]> {
+  return unwrapList<Repo>(await apiFetch<unknown>("/api/repos"), "repos")
+}
+
+export async function createRepo(name: string, gitUrl: string, localPath: string): Promise<Repo> {
+  return apiFetch<Repo>("/api/repos", {
+    method: "POST",
+    body: JSON.stringify({ name, gitUrl, localPath }),
+  })
+}
+
+export interface RepoResolveResult {
+  name: string
+  gitUrl: string
+  localPath: string
+}
+
+export async function resolveRepo(localPath: string): Promise<RepoResolveResult> {
+  return apiFetch<RepoResolveResult>("/api/repos/resolve", {
+    method: "POST",
+    body: JSON.stringify({ localPath }),
+  })
+}
+
+export async function deleteRepo(id: string): Promise<void> {
+  await apiFetch<void>(`/api/repos/${encodeURIComponent(id)}`, { method: "DELETE" })
+}
+
+export async function startRepo(id: string): Promise<void> {
+  await apiFetch<void>(`/api/repos/${encodeURIComponent(id)}/start`, { method: "POST" })
+}
+
+export async function stopRepo(id: string): Promise<void> {
+  await apiFetch<void>(`/api/repos/${encodeURIComponent(id)}/stop`, { method: "POST" })
+}
+
+// ---------------------------------------------------------------------------
+// Repo-scoped helpers
+// ---------------------------------------------------------------------------
+
+function repoBase(repoId: string): string {
+  return `/api/repos/${encodeURIComponent(repoId)}`
+}
+
+// ---------------------------------------------------------------------------
+// Session API — /api/repos/:repoId/sessions
+// ---------------------------------------------------------------------------
+
+export async function listSessions(repoId: string): Promise<Session[]> {
+  return unwrapList<Session>(await apiFetch<unknown>(`${repoBase(repoId)}/sessions`), "sessions")
 }
 
 export async function createSession(
+  repoId: string,
   message: string,
   agent?: string,
   model?: string,
   variant?: string,
 ): Promise<Session> {
-  return apiFetch<Session>("/api/sessions", {
+  return apiFetch<Session>(`${repoBase(repoId)}/sessions`, {
     method: "POST",
     body: JSON.stringify({ message, agent, model, variant }),
   })
 }
 
-export async function getSession(id: string): Promise<Session> {
-  return apiFetch<Session>(`/api/sessions/${encodeURIComponent(id)}`)
+export async function getSession(repoId: string, id: string): Promise<Session> {
+  return apiFetch<Session>(`${repoBase(repoId)}/sessions/${encodeURIComponent(id)}`)
 }
 
-export async function deleteSession(id: string): Promise<void> {
-  await apiFetch<void>(`/api/sessions/${encodeURIComponent(id)}`, {
+export async function deleteSession(repoId: string, id: string): Promise<void> {
+  await apiFetch<void>(`${repoBase(repoId)}/sessions/${encodeURIComponent(id)}`, {
     method: "DELETE",
   })
 }
 
-export async function sendMessage(
-  sessionId: string,
-  content: string,
-): Promise<void> {
+export async function sendMessage(repoId: string, sessionId: string, content: string): Promise<void> {
   await apiFetch<void>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/prompt`,
-    {
-      method: "POST",
-      body: JSON.stringify({ content }),
-    },
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/prompt`,
+    { method: "POST", body: JSON.stringify({ content }) },
   )
 }
 
-export async function abortSession(sessionId: string): Promise<void> {
+export async function abortSession(repoId: string, sessionId: string): Promise<void> {
   await apiFetch<void>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/abort`,
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/abort`,
     { method: "POST" },
   )
 }
@@ -196,33 +252,39 @@ function normalizeMessage(raw: unknown): Message {
   return r as unknown as Message
 }
 
-export async function getMessages(sessionId: string): Promise<Message[]> {
+export async function getMessages(repoId: string, sessionId: string): Promise<Message[]> {
   const raw = unwrapList<unknown>(
-    await apiFetch<unknown>(
-      `/api/sessions/${encodeURIComponent(sessionId)}/messages`,
-    ),
+    await apiFetch<unknown>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/messages`),
     "messages",
   )
   return raw.map(normalizeMessage)
 }
 
-export async function getTodos(sessionId: string): Promise<Todo[]> {
+export async function getTodos(repoId: string, sessionId: string): Promise<Todo[]> {
   return unwrapList<Todo>(
-    await apiFetch<unknown>(
-      `/api/sessions/${encodeURIComponent(sessionId)}/todos`,
-    ),
+    await apiFetch<unknown>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/todos`),
     "todos",
   )
 }
 
-export async function getSessionStatus(
-  sessionId: string,
-): Promise<SessionStatus> {
+export async function getSessionStatus(repoId: string, sessionId: string): Promise<SessionStatus> {
   return apiFetch<SessionStatus>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/status`,
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/status`,
   )
 }
 
-export async function listAgents(): Promise<Agent[]> {
-  return unwrapList<Agent>(await apiFetch<unknown>("/api/agents"), "agents")
+// ---------------------------------------------------------------------------
+// Agent API — /api/repos/:repoId/agents
+// ---------------------------------------------------------------------------
+
+export async function listAgents(repoId: string): Promise<Agent[]> {
+  return unwrapList<Agent>(await apiFetch<unknown>(`${repoBase(repoId)}/agents`), "agents")
+}
+
+// ---------------------------------------------------------------------------
+// SSE URL builder — used by useSessionEvents hook
+// ---------------------------------------------------------------------------
+
+export function sessionEventsUrl(repoId: string, sessionId: string): string {
+  return `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/events`
 }

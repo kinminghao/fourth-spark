@@ -1,12 +1,26 @@
 # Fourth Spark: OpenCode V1 API Migration Guide
 
-## Background
+> **⚠️ ARCHIVED — 2026-07-22**
+>
+> 本文档的前提已被证伪。经实际验证：
+>
+> 1. **V1 Workspace API (`/v1/workspaces/*`) 在当前 OpenCode v1.18.0 中不存在。** 该 API 仅出现在 charmbracelet/crush（opencode 的继任项目）开发分支源码中，从未正式发布。
+> 2. **OpenCode 内置 Web UI (port 8000) 和 legacy API (`/session/*`) 走的是同一套代码路径。** 之前观察到的产出质量差异实际原因是 `variant: "max"` 参数缺失和 `WORKSPACE_DIR` 配置错误，已在 commit `e97befc` 中修复。
+> 3. 本文档中的端点映射、请求体格式等信息来源于 crush 未发布源码，**不适用于当前版本**。
+>
+> **保留本文档仅供参考**：当 crush/opencode 正式发布 V1 API 后，可作为迁移的起点重新评估。在此之前，继续使用 legacy API 即可。
 
-Fourth Spark currently uses the **legacy OpenCode API** (`/session/*`, `/event`, `/agent`), which maps to an older code path in the OpenCode server. The built-in Web UI (port 8000) uses the **V1 Workspace API** (`/v1/workspaces/*`), which goes through the full workspace pipeline — including agent initialization, skill loading, LSP/MCP context, and permission management.
+---
 
-This difference explains why the same agent + model produces noticeably less detailed output when called via Fourth Spark compared to the built-in Web UI: the legacy path likely skips parts of the workspace-level context injection that the V1 path performs.
+## Background (原始内容，前提已失效)
 
-**Goal**: Migrate Fourth Spark's server proxy from the legacy API to the V1 Workspace API.
+Fourth Spark currently uses the **legacy OpenCode API** (`/session/*`, `/event`, `/agent`), which maps to an older code path in the OpenCode server. ~~The built-in Web UI (port 8000) uses the **V1 Workspace API** (`/v1/workspaces/*`), which goes through the full workspace pipeline — including agent initialization, skill loading, LSP/MCP context, and permission management.~~
+
+~~This difference explains why the same agent + model produces noticeably less detailed output when called via Fourth Spark compared to the built-in Web UI: the legacy path likely skips parts of the workspace-level context injection that the V1 path performs.~~
+
+**实际原因**: 产出质量差异是 `variant` / `WORKSPACE_DIR` 参数问题，与 API 版本无关。已修复。
+
+~~**Goal**: Migrate Fourth Spark's server proxy from the legacy API to the V1 Workspace API.~~
 
 ---
 

@@ -1,7 +1,6 @@
 import { Hono } from "hono"
 import { streamSSE, type SSEStreamingApi } from "hono/streaming"
-import { opencode } from "../lib/opencode"
-import { WORKSPACE_DIR } from "../lib/config"
+import { processManager } from "../lib/process-manager"
 import { logger } from "../middleware/logger"
 import { syncSseEvent } from "../db/sync"
 
@@ -43,10 +42,11 @@ async function forwardBlock(block: string, sessionId: string, stream: SSEStreami
   }
 }
 
-// GET /api/sessions/:id/events — session-scoped SSE proxy over OpenCode's
-// global `/event` stream.
+// GET /api/repos/:repoId/sessions/:id/events — session-scoped SSE proxy.
 events.get("/:id/events", (c) => {
+  const repoId = c.req.param("repoId")
   const sessionId = c.req.param("id")
+  const client = processManager.requireClient(repoId)
 
   return streamSSE(c, async (stream) => {
     const controller = new AbortController()
@@ -58,9 +58,9 @@ events.get("/:id/events", (c) => {
 
     let upstream: Response
     try {
-      upstream = await opencode.eventStream(WORKSPACE_DIR, controller.signal)
+      upstream = await client.eventStream(controller.signal)
     } catch (err) {
-      logger.error({ err, sessionId }, "SSE proxy failed to connect to OpenCode")
+      logger.error({ err, sessionId, repoId }, "SSE proxy failed to connect to OpenCode")
       await stream.writeSSE({ event: "error", data: JSON.stringify({ error: "OpenCode event stream unavailable" }) })
       return
     }
@@ -95,7 +95,7 @@ events.get("/:id/events", (c) => {
         }
       }
     } catch (err) {
-      if (!closed) logger.error({ err, sessionId }, "SSE proxy stream error")
+      if (!closed) logger.error({ err, sessionId, repoId }, "SSE proxy stream error")
     } finally {
       clearInterval(heartbeat)
       controller.abort()

@@ -1,9 +1,10 @@
 import { Hono } from "hono"
-import { opencode } from "../lib/opencode"
+import { processManager } from "../lib/process-manager"
 
 export const agents = new Hono()
 
-// GET /api/agents — list agents available in the workspace.
+// GET /api/repos/:repoId/agents — list agents available in the workspace.
 agents.get("/", async (c) => {
-  return c.json(await opencode.listAgents())
+  const client = processManager.requireClient(c.req.param("repoId"))
+  return c.json(await client.listAgents())
 })
