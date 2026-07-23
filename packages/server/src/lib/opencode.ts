@@ -171,7 +171,6 @@ export function createOpenCodeClient(baseUrl: string, directory: string): OpenCo
         agent: opts?.agent,
         model,
         variant: opts?.variant,
-        messageID: `msg_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
       })
     },
 
