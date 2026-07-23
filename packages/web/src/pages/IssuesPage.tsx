@@ -2,6 +2,7 @@ import { useState, type KeyboardEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   ExternalLink,
+  GitBranch,
   Play,
   Plus,
   RefreshCw,
@@ -219,6 +220,18 @@ function IssueDetail({ issue }: { issue: Issue }) {
               源站
             </a>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              useIssueStore.getState().enterMatchMode(issue.id)
+              useSessionStore.setState({ activeSessionId: null })
+              navigate("/run")
+            }}
+            className="flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 text-xs text-fg-3 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            匹配子任务
+          </button>
           <button
             type="button"
             onClick={handleStart}
