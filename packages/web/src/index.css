@@ -39,6 +39,10 @@
 :root {
   color-scheme: light;
 
+  /* iOS Dynamic Island / notch / home indicator safe areas */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
   --t-base: #ffffff;
   --t-surface: #f4f4f5;
   --t-elevated: #e4e4e7;
@@ -158,7 +162,8 @@
 html,
 body,
 #root {
-  height: 100%;
+  height: 100vh;
+  height: 100dvh;
 }
 
 body {

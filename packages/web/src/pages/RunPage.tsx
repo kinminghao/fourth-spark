@@ -380,11 +380,26 @@ function SessionPanel() {
 }
 
 export function RunPage() {
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   return (
     <div className="flex min-h-0 flex-1">
-      <SessionPanel />
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <div
+        className={clsx(
+          "fixed bottom-0 left-0 top-0 z-50 flex shrink-0 pt-[var(--safe-top)] pb-[var(--safe-bottom)] transition-transform md:static md:z-auto md:translate-x-0 md:pt-0 md:pb-0 md:transition-none",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <SessionPanel />
+      </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <RunView />
+        <RunView onToggleSidebar={() => setSidebarOpen((v) => !v)} />
       </div>
     </div>
   )
