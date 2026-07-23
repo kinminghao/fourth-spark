@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, Trash2, X } from "lucide-react"
+import { Check, Copy, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import type { Session } from "../lib/api-client"
 import { useSessionStore } from "../stores/session-store"
@@ -86,9 +86,22 @@ function SessionPanel() {
                         <button type="button" onClick={() => setConfirmingId(null)} className="rounded p-1 text-fg-3 hover:bg-elevated"><X className="h-3.5 w-3.5" /></button>
                       </span>
                     ) : (
-                      <button type="button" onClick={() => setConfirmingId(session.id)} className="absolute right-1.5 top-1.5 rounded p-1 text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      <span className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const json = JSON.stringify({ id: session.id, name: session.title?.trim() || "" }, null, 2)
+                            void navigator.clipboard.writeText(json)
+                          }}
+                          title="复制 Session JSON"
+                          className="rounded p-1 text-fg-5 hover:text-fg-2"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                        <button type="button" onClick={() => setConfirmingId(session.id)} className="rounded p-1 text-fg-5 hover:text-red-400">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
                     )}
                   </div>
                 </li>
