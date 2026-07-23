@@ -128,7 +128,9 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
     async addDependency(issueNumber, dependsOnNumber) {
       if (platform === "github") return
       await request<unknown>("POST", `/issues/${issueNumber}/dependencies`, {
-        dependsOn: [dependsOnNumber],
+        owner,
+        repo,
+        index: dependsOnNumber,
       })
     },
 
