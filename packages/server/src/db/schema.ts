@@ -13,9 +13,26 @@ export const repos = pgTable("repos", {
   uniqueIndex("repos_local_path_idx").on(t.localPath),
 ])
 
+export const issues = pgTable("issues", {
+  id: text("id").primaryKey(),
+  repoId: text("repo_id").notNull().references(() => repos.id, { onDelete: "cascade" }),
+  number: integer("number").notNull(),
+  title: text("title").notNull(),
+  body: text("body"),
+  state: text("state").notNull().default("open"),
+  labels: jsonb("labels").$type<Array<{ id: number; name: string; color: string }>>(),
+  htmlUrl: text("html_url"),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+}, (t) => [
+  uniqueIndex("issues_repo_number_idx").on(t.repoId, t.number),
+  index("issues_repo_state_idx").on(t.repoId, t.state),
+])
+
 export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   parentId: text("parent_id"),
+  issueId: text("issue_id").references(() => issues.id, { onDelete: "set null" }),
   title: text("title").notNull().default(""),
   agent: text("agent"),
   model: jsonb("model").$type<{ providerID?: string; modelID?: string; variant?: string }>(),
@@ -32,6 +49,7 @@ export const sessions = pgTable("sessions", {
 }, (t) => [
   index("sessions_user_idx").on(t.userId),
   index("sessions_time_created_idx").on(t.timeCreated),
+  index("sessions_issue_idx").on(t.issueId),
 ])
 
 export const messages = pgTable("messages", {
@@ -60,6 +78,24 @@ export const parts = pgTable("parts", {
 }, (t) => [
   index("parts_message_idx").on(t.messageId),
   index("parts_session_idx").on(t.sessionId),
+])
+
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+})
+
+export const gitHosts = pgTable("git_hosts", {
+  id: text("id").primaryKey(),
+  host: text("host").notNull(),
+  platform: text("platform").notNull().default("gitea"),
+  name: text("name").notNull(),
+  token: text("token").notNull(),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+}, (t) => [
+  uniqueIndex("git_hosts_host_idx").on(t.host),
 ])
 
 export const todos = pgTable("todos", {
