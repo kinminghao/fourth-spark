@@ -51,11 +51,12 @@ const MAX_NEW_HEIGHT_PX = 144
 
 function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const [draft, setDraft] = useState("")
-  const [agent, setAgent] = useState("Sisyphus")
+  const [agent, setAgent] = useState("")
   const [model, setModel] = useState("")
   const [variant, setVariant] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const createSession = useSessionStore((state) => state.createSession)
+  const sendError = useSessionStore((state) => state.sendError)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
   const agents = useAgentStore((state) => state.agents)
 
@@ -139,9 +140,11 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
                 onChange={(e) => setAgent(e.target.value)}
                 className="rounded border border-line bg-surface px-2 py-1 font-mono text-xs text-fg focus:border-fg-5 focus:outline-none"
               >
-                {agents.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
+                <option value="">默认</option>
+                {agents.map((a) => {
+                  const val = a.id || a.name
+                  return <option key={val} value={val}>{a.name}</option>
+                })}
               </select>
             </label>
             <label className="flex min-w-0 flex-1 items-center gap-1.5 font-mono text-[11px] text-fg-4">
@@ -170,6 +173,12 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
         <div className="mt-2 text-center font-mono text-[10px] text-fg-6">
           ⌘⏎ / ctrl+⏎ 开始运行
         </div>
+
+        {sendError && (
+          <div className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2 font-mono text-xs text-red-400">
+            {sendError}
+          </div>
+        )}
       </div>
     </div>
   )
