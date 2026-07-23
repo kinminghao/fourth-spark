@@ -5,6 +5,9 @@ import { onError } from "./middleware/errors"
 import { sessions } from "./routes/sessions"
 import { events } from "./routes/events"
 import { agents } from "./routes/agents"
+import { issueRoutes } from "./routes/issues"
+import { settingsRoutes } from "./routes/settings"
+import { gitHostRoutes } from "./routes/git-hosts"
 import { health, repoHealth } from "./routes/health"
 import { repoRoutes } from "./routes/repos"
 import { PORT } from "./lib/config"
@@ -21,6 +24,8 @@ app.onError(onError)
 // Global routes
 // ---------------------------------------------------------------------------
 app.route("/api/repos", repoRoutes)
+app.route("/api/settings", settingsRoutes)
+app.route("/api/git-hosts", gitHostRoutes)
 app.route("/api/health", health)
 
 // ---------------------------------------------------------------------------
@@ -32,6 +37,7 @@ const repoScoped = new Hono()
 repoScoped.route("/sessions", sessions)
 repoScoped.route("/sessions", events)
 repoScoped.route("/agents", agents)
+repoScoped.route("/issues", issueRoutes)
 repoScoped.route("/health", repoHealth)
 
 app.route("/api/repos/:repoId", repoScoped)
