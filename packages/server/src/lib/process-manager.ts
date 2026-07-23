@@ -2,6 +2,7 @@ import { type Subprocess } from "bun"
 import { eq } from "drizzle-orm"
 import { db } from "../db/index"
 import { repos } from "../db/schema"
+import { syncSessionsList, syncMessagesList } from "../db/sync"
 import { createOpenCodeClient, type OpenCodeClient } from "./opencode"
 import { logger } from "../middleware/logger"
 
@@ -95,12 +96,31 @@ async function spawnOpenCode(repoId: string, localPath: string, port: number): P
 
   logger.info({ repoId, port }, "opencode serve ready")
 
-  // Persist the assigned port and mark active.
   await db.update(repos).set({ port, status: "active", updatedAt: Date.now() }).where(eq(repos.id, repoId))
 
   const entry: ManagedRepo = { id: repoId, localPath, port, process: proc, client }
   managed.set(repoId, entry)
+
+  initialSync(client, repoId).catch((err) => {
+    logger.error({ err, repoId }, "initial session sync failed")
+  })
+
   return entry
+}
+
+async function initialSync(client: OpenCodeClient, repoId: string): Promise<void> {
+  logger.info({ repoId }, "starting initial session sync")
+  const sessionList = await client.listSessions()
+  syncSessionsList(sessionList)
+  for (const session of sessionList) {
+    try {
+      const msgs = await client.getMessages(session.id)
+      syncMessagesList(session.id, msgs)
+    } catch (err) {
+      logger.warn({ err, repoId, sessionId: session.id }, "skipping message sync for session")
+    }
+  }
+  logger.info({ repoId, count: sessionList.length }, "initial session sync complete")
 }
 
 // ---------------------------------------------------------------------------

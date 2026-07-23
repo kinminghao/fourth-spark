@@ -134,18 +134,35 @@ async function ensureMessage(sessionId: string, messageId: string): Promise<void
   }).onConflictDoNothing()
 }
 
+// ---------------------------------------------------------------------------
+// Fire-and-forget with retry — wraps an async fn, retries up to `maxRetries`
+// times on failure with a 1 s delay between attempts.
+// ---------------------------------------------------------------------------
+
+function fireWithRetry(fn: () => Promise<void>, ctx: Record<string, unknown>, maxRetries = 2): void {
+  const attempt = (remaining: number): void => {
+    fn().catch((err) => {
+      if (remaining > 0) {
+        setTimeout(() => attempt(remaining - 1), 1_000)
+      } else {
+        logger.error({ err, ...ctx }, "sync failed after retries")
+      }
+    })
+  }
+  attempt(maxRetries)
+}
+
 export function syncSessionsList(items: unknown[]): void {
-  const run = async () => {
+  fireWithRetry(async () => {
     for (const item of items) {
       const r = asRecord(item)
       if (r && typeof r.id === "string") await upsertSession(r)
     }
-  }
-  run().catch((err) => logger.error({ err }, "sync sessions list failed"))
+  }, { op: "syncSessionsList" })
 }
 
 export function syncMessagesList(sessionId: string, items: unknown[]): void {
-  const run = async () => {
+  fireWithRetry(async () => {
     await ensureSession(sessionId)
     for (const item of items) {
       const r = asRecord(item)
@@ -165,8 +182,7 @@ export function syncMessagesList(sessionId: string, items: unknown[]): void {
         }
       }
     }
-  }
-  run().catch((err) => logger.error({ err, sessionId }, "sync messages list failed"))
+  }, { op: "syncMessagesList", sessionId })
 }
 
 export function syncSseEvent(sessionId: string, eventName: string, raw: string): void {
@@ -181,7 +197,7 @@ export function syncSseEvent(sessionId: string, eventName: string, raw: string):
   const props = getProps(data)
   if (!props) return
 
-  const run = async () => {
+  fireWithRetry(async () => {
     switch (type) {
       case "session.updated": {
         await upsertSession(props)
@@ -220,9 +236,5 @@ export function syncSseEvent(sessionId: string, eventName: string, raw: string):
         break
       }
     }
-  }
-
-  run().catch((err) => {
-    logger.error({ err, type, sessionId }, "sync write failed")
-  })
+  }, { op: "syncSseEvent", type, sessionId })
 }
