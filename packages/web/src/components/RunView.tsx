@@ -221,7 +221,7 @@ function IssueHeader({ issue }: { issue: { number: number; title: string; state:
   )
 }
 
-function IssueMatchView() {
+function IssueMatchView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const parentId = useIssueStore((s) => s.matchingParentId)
   const candidateId = useIssueStore((s) => s.matchingCandidateId)
   const parent = useIssueStore((s) => s.issues.find((i) => i.id === parentId))
@@ -242,6 +242,14 @@ function IssueMatchView() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-term">
       <header className="flex items-center gap-3 border-b border-line bg-base px-4 py-2.5">
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          aria-label="Open sidebar"
+          className="-ml-1 rounded-lg p-1.5 text-fg-3 hover:bg-elevated md:hidden"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
         <span className="text-xs font-medium text-fg-4">匹配子任务</span>
         <span className="font-mono text-xs text-fg-3">父: #{parent.number}</span>
         <div className="flex-1" />
@@ -255,8 +263,8 @@ function IssueMatchView() {
         </button>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <div className="flex flex-1 flex-col overflow-hidden border-r border-line">
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-b border-line md:border-b-0 md:border-r">
           <div className="border-b border-line/60 px-4 py-2.5">
             <IssueHeader issue={parent} />
           </div>
@@ -265,7 +273,7 @@ function IssueMatchView() {
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {candidate ? (
             <>
               <div className="border-b border-line/60 px-4 py-2.5">
@@ -338,7 +346,7 @@ function IssuePreview({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
           </div>
           <h2 className="mt-0.5 truncate text-sm font-medium text-fg">{issue.title}</h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {issue.htmlUrl && (
             <a
               href={issue.htmlUrl}
@@ -419,7 +427,7 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const matchingParentId = useIssueStore((state) => state.matchingParentId)
 
   if (!activeSessionId) {
-    if (matchingParentId) return <IssueMatchView />
+    if (matchingParentId) return <IssueMatchView onToggleSidebar={onToggleSidebar} />
     if (previewIssueId) return <IssuePreview onToggleSidebar={onToggleSidebar} />
     return <NewSessionInput onToggleSidebar={onToggleSidebar} />
   }

@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import {
+  ChevronLeft,
   ExternalLink,
   GitBranch,
   Play,
@@ -172,7 +173,7 @@ function IssueRow({
 /*  Detail panel (right side)                                         */
 /* ------------------------------------------------------------------ */
 
-function IssueDetail({ issue }: { issue: Issue }) {
+function IssueDetail({ issue, onBack }: { issue: Issue; onBack?: () => void }) {
   const navigate = useNavigate()
 
   const handleStart = () => {
@@ -185,7 +186,15 @@ function IssueDetail({ issue }: { issue: Issue }) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* header */}
-      <header className="flex items-center gap-3 border-b border-line px-6 py-4">
+      <header className="flex items-center gap-3 border-b border-line px-4 py-4 md:px-6">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="返回列表"
+          className="-ml-1 shrink-0 rounded-md p-1.5 text-fg-3 transition-colors hover:bg-elevated hover:text-fg md:hidden"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span
@@ -216,7 +225,7 @@ function IssueDetail({ issue }: { issue: Issue }) {
           </h2>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {issue.htmlUrl && (
             <a
               href={issue.htmlUrl}
@@ -316,7 +325,12 @@ export function IssuesPage() {
   return (
     <div className="flex min-h-0 flex-1">
       {/* ---- left: issue list ---- */}
-      <div className="flex w-[28%] shrink-0 flex-col border-r border-line bg-surface">
+      <div
+        className={clsx(
+          "w-full shrink-0 flex-col border-r border-line bg-surface md:w-[28%]",
+          selectedId ? "hidden md:flex" : "flex",
+        )}
+      >
         {/* header */}
         <div className="flex items-center justify-between border-b border-line px-3 py-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">
@@ -454,9 +468,14 @@ export function IssuesPage() {
       </div>
 
       {/* ---- right: detail ---- */}
-      <div className="flex min-w-0 flex-1 flex-col bg-term">
+      <div
+        className={clsx(
+          "min-w-0 flex-1 flex-col bg-term md:flex",
+          selectedId ? "flex" : "hidden",
+        )}
+      >
         {selectedIssue ? (
-          <IssueDetail issue={selectedIssue} />
+          <IssueDetail issue={selectedIssue} onBack={() => setSelectedId(null)} />
         ) : (
           <div className="flex flex-1 items-center justify-center">
             <p className="font-mono text-xs text-fg-5">

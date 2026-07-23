@@ -138,7 +138,7 @@ function DiffView({ oldStr, newStr }: { oldStr: string; newStr: string }) {
   const oldLines = oldStr.split("\n")
   const newLines = newStr.split("\n")
   return (
-    <div className="grid grid-cols-2 gap-px overflow-x-auto rounded text-xs">
+    <div className="grid grid-cols-1 gap-px overflow-x-auto rounded text-xs md:grid-cols-2">
       <pre className="min-w-0 whitespace-pre-wrap break-words p-1.5 fs-diff-del">
         {oldLines.map((line, i) => (
           <div key={i}>

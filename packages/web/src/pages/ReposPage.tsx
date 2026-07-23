@@ -31,18 +31,18 @@ export function ReposPage() {
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="mx-auto max-w-4xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <div className="min-w-0">
             <h1 className="text-lg font-semibold text-fg">仓库管理</h1>
             <p className="mt-0.5 text-sm text-fg-4">管理代码仓库，每个仓库对应一个独立的 Agent 运行环境</p>
           </div>
           <button
             type="button"
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 md:px-4"
           >
             <Plus className="h-4 w-4" />
-            添加仓库
+            <span className="hidden md:inline">添加仓库</span>
           </button>
         </div>
 
@@ -62,7 +62,8 @@ export function ReposPage() {
             </button>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-line">
+          <>
+          <div className="hidden overflow-hidden rounded-xl border border-line md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line bg-surface">
@@ -175,6 +176,110 @@ export function ReposPage() {
               </tbody>
             </table>
           </div>
+
+          {/* mobile card list */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {repos.map((repo) => {
+              const isActive = repo.id === activeRepoId
+              return (
+                <div
+                  key={repo.id}
+                  className={clsx(
+                    "rounded-xl border p-4 transition-colors",
+                    isActive ? "border-blue-500/40 bg-blue-500/5" : "border-line",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveRepo(repo.id)}
+                      className="flex min-w-0 items-center gap-2 text-left"
+                    >
+                      {isActive ? (
+                        <CircleDot className="h-4 w-4 shrink-0 text-blue-500" />
+                      ) : (
+                        <Circle className="h-4 w-4 shrink-0 text-fg-5" />
+                      )}
+                      <span className={clsx("truncate font-medium", isActive ? "text-fg" : "text-fg-2")}>
+                        {repo.name}
+                      </span>
+                    </button>
+                    <span
+                      className={clsx(
+                        "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
+                        repo.running
+                          ? "bg-emerald-500/10 text-emerald-600"
+                          : "bg-fg-6/30 text-fg-4",
+                      )}
+                    >
+                      <span className={clsx("h-1.5 w-1.5 rounded-full", repo.running ? "bg-emerald-500" : "bg-fg-5")} />
+                      {repo.running ? "运行中" : "已停止"}
+                    </span>
+                  </div>
+
+                  <dl className="mt-3 space-y-1 font-mono text-xs text-fg-4">
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 text-fg-5">Git</dt>
+                      <dd className="min-w-0 truncate">{repo.gitUrl}</dd>
+                    </div>
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 text-fg-5">路径</dt>
+                      <dd className="min-w-0 truncate">{repo.localPath}</dd>
+                    </div>
+                  </dl>
+
+                  <div className="mt-3 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleToggle(repo.id, repo.running)}
+                      disabled={togglingId === repo.id}
+                      className={clsx(
+                        "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md border text-xs font-medium transition-colors disabled:opacity-50",
+                        repo.running
+                          ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
+                          : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10",
+                      )}
+                    >
+                      {togglingId === repo.id ? (
+                        <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      ) : repo.running ? (
+                        <><Square className="h-3 w-3 fill-current" />停止</>
+                      ) : (
+                        <><Play className="h-3 w-3 fill-current" />启动</>
+                      )}
+                    </button>
+                    {confirmingId === repo.id ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => { void removeRepo(repo.id); setConfirmingId(null) }}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-500/30 text-red-500 transition-colors hover:bg-red-500/10"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingId(null)}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:bg-elevated"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingId(repo.id)}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line text-fg-5 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          </>
         )}
 
         <p className="mt-3 text-xs text-fg-5">{repos.length} 个仓库</p>
