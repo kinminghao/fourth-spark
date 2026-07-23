@@ -44,6 +44,8 @@ export function useSessionEvents(sessionId: string | null): void {
       dispatchSseEvent(name, data, sessionId, useSessionStore.getState())
     }
 
+    void useSessionStore.getState().refreshSessionData(sessionId)
+
     const connect = () => {
       if (disposed) {
         return
@@ -51,7 +53,6 @@ export function useSessionEvents(sessionId: string | null): void {
       source = new EventSource(url)
       source.onopen = () => {
         attempts = 0
-        void useSessionStore.getState().refreshSessionData(sessionId)
       }
       source.onmessage = handle("message")
       for (const name of KNOWN_SSE_EVENTS) {
