@@ -52,8 +52,8 @@ const MAX_NEW_HEIGHT_PX = 144
 function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const [draft, setDraft] = useState("")
   const [agent, setAgent] = useState("Sisyphus")
-  const [model, setModel] = useState("claude-sonnet-4-6")
-  const [variant, setVariant] = useState("max")
+  const [model, setModel] = useState("")
+  const [variant, setVariant] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const createSession = useSessionStore((state) => state.createSession)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
