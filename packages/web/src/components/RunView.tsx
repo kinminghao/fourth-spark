@@ -15,6 +15,7 @@ import {
 } from "../stores/session-store"
 import { useRepoStore } from "../stores/repo-store"
 import { useAgentStore } from "../stores/agent-store"
+import { useIssueStore } from "../stores/issue-store"
 import { useSessionEvents } from "../hooks/use-session-events"
 import { ExecutionBlock } from "./ExecutionBlock"
 import { TodoProgress } from "./TodoProgress"
@@ -52,18 +53,25 @@ const MAX_NEW_HEIGHT_PX = 144
 function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const [draft, setDraft] = useState("")
   const [agent, setAgent] = useState("")
-  const [model, setModel] = useState("")
-  const [variant, setVariant] = useState("")
+  const [issueId, setIssueId] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const createSession = useSessionStore((state) => state.createSession)
   const sendError = useSessionStore((state) => state.sendError)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
   const agents = useAgentStore((state) => state.agents)
+  const issues = useIssueStore((state) => state.issues)
+  const selectedIssueId = useIssueStore((state) => state.selectedIssueId)
+
+  useEffect(() => {
+    if (selectedIssueId) {
+      setIssueId(selectedIssueId)
+      useIssueStore.getState().setSelectedIssue(null)
+    }
+  }, [selectedIssueId])
 
   useEffect(() => {
     if (agent || agents.length === 0) return
-    const build = agents.find((a) => (a.id || a.name) === "build")
-    const pick = build ?? agents[0]
+    const pick = agents[0]
     if (pick) setAgent(pick.id || pick.name)
   }, [agents, agent])
 
@@ -78,12 +86,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     const text = draft.trim()
     if (!text || !activeRepoId) return
     setDraft("")
-    void createSession(
-      text,
-      agent || undefined,
-      model.trim() || undefined,
-      variant.trim() || undefined,
-    )
+    void createSession(text, agent || undefined, undefined, undefined, issueId || undefined)
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -154,26 +157,21 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
                 })}
               </select>
             </label>
-            <label className="flex min-w-0 flex-1 items-center gap-1.5 font-mono text-[11px] text-fg-4">
-              <span className="shrink-0">Model</span>
-              <input
-                type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="claude-sonnet-4-6"
-                className="min-w-0 flex-1 rounded border border-line bg-surface px-2 py-1 font-mono text-xs text-fg placeholder:text-fg-6 focus:border-fg-5 focus:outline-none"
-              />
-            </label>
-            <label className="flex items-center gap-1.5 font-mono text-[11px] text-fg-4">
-              <span className="shrink-0">Variant</span>
-              <input
-                type="text"
-                value={variant}
-                onChange={(e) => setVariant(e.target.value)}
-                placeholder="max"
-                className="w-16 rounded border border-line bg-surface px-2 py-1 font-mono text-xs text-fg placeholder:text-fg-6 focus:border-fg-5 focus:outline-none"
-              />
-            </label>
+            {issues.length > 0 && (
+              <label className="flex min-w-0 flex-1 items-center gap-1.5 font-mono text-[11px] text-fg-4">
+                <span className="shrink-0">Issue</span>
+                <select
+                  value={issueId}
+                  onChange={(e) => setIssueId(e.target.value)}
+                  className="min-w-0 flex-1 truncate rounded border border-line bg-surface px-2 py-1 font-mono text-xs text-fg focus:border-fg-5 focus:outline-none"
+                >
+                  <option value="">无</option>
+                  {issues.map((issue) => (
+                    <option key={issue.id} value={issue.id}>#{issue.number} {issue.title}</option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
         </div>
 
