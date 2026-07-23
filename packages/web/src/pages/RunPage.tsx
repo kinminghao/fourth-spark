@@ -225,7 +225,7 @@ function SessionPanel() {
                     <button
                       type="button"
                       onClick={() => {
-                        useIssueStore.getState().setSelectedIssue(issue.id)
+                        useIssueStore.getState().setPreviewIssue(issue.id)
                         useSessionStore.setState({ activeSessionId: null })
                       }}
                       className="group flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-elevated/50"
