@@ -397,3 +397,43 @@ export async function updateGitHost(id: string, updates: { host?: string; name?:
 export async function deleteGitHost(id: string): Promise<void> {
   await apiFetch<void>(`/api/git-hosts/${encodeURIComponent(id)}`, { method: "DELETE" })
 }
+
+// ---------------------------------------------------------------------------
+// Usage API — /api/usage (Claude subscription quota)
+// ---------------------------------------------------------------------------
+
+export interface UsageWindow {
+  utilization: number
+  resets_at?: string
+}
+
+export interface ScopedUsageWindow extends UsageWindow {
+  label: string
+}
+
+export interface UsageResponse {
+  five_hour?: UsageWindow | null
+  seven_day?: UsageWindow | null
+  seven_day_sonnet?: UsageWindow | null
+  seven_day_opus?: UsageWindow | null
+  scoped?: ScopedUsageWindow[]
+}
+
+export interface AccountUsage {
+  id: string
+  label: string
+  active: boolean
+  excluded: boolean
+  usage?: UsageResponse
+  error?: string
+  needsReauth?: boolean
+}
+
+export interface UsageResult {
+  activeId?: string
+  accounts: AccountUsage[]
+}
+
+export async function fetchUsage(): Promise<UsageResult> {
+  return apiFetch<UsageResult>("/api/usage")
+}
