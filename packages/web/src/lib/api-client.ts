@@ -31,6 +31,7 @@ export interface Session {
 export interface Issue {
   id: string
   repoId: string
+  parentId?: string
   number: number
   title: string
   body?: string
@@ -317,6 +318,13 @@ export async function createIssue(repoId: string, title: string, body?: string):
   return apiFetch<Issue>(`${repoBase(repoId)}/issues`, {
     method: "POST",
     body: JSON.stringify({ title, body }),
+  })
+}
+
+export async function linkChildIssue(repoId: string, parentNumber: number, childNumber: number): Promise<void> {
+  await apiFetch<void>(`${repoBase(repoId)}/issues/${parentNumber}/children`, {
+    method: "POST",
+    body: JSON.stringify({ childNumber }),
   })
 }
 

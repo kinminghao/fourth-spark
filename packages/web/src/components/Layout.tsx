@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom"
-import { Box, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
+import { Box, CircleDot, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
 import clsx from "clsx"
 import { useThemeStore } from "../stores/theme-store"
 import { useRepoStore } from "../stores/repo-store"
@@ -7,6 +7,7 @@ import { useRepoStore } from "../stores/repo-store"
 const NAV_ITEMS = [
   { to: "/repos", icon: Box, label: "仓库管理" },
   { to: "/run", icon: Play, label: "运行面板" },
+  { to: "/issues", icon: CircleDot, label: "Issues" },
   { to: "/settings", icon: Settings, label: "设置" },
 ]
 
