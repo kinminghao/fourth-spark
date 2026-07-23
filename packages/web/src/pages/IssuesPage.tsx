@@ -16,11 +16,19 @@ import { useRepoStore } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
 
 type StateFilter = "open" | "closed" | "all"
+type TypeFilter = "all" | "epic" | "task" | "stray"
 
-const FILTERS: { key: StateFilter; label: string }[] = [
+const STATE_FILTERS: { key: StateFilter; label: string }[] = [
   { key: "open", label: "开放" },
   { key: "closed", label: "已关闭" },
   { key: "all", label: "全部" },
+]
+
+const TYPE_FILTERS: { key: TypeFilter; label: string }[] = [
+  { key: "all", label: "全部" },
+  { key: "epic", label: "Epic" },
+  { key: "task", label: "任务" },
+  { key: "stray", label: "游离" },
 ]
 
 /* ------------------------------------------------------------------ */
@@ -268,7 +276,8 @@ function IssueDetail({ issue }: { issue: Issue }) {
 /* ------------------------------------------------------------------ */
 
 export function IssuesPage() {
-  const [filter, setFilter] = useState<StateFilter>("open")
+  const [stateFilter, setStateFilter] = useState<StateFilter>("open")
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all")
   const [creating, setCreating] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
@@ -278,7 +287,6 @@ export function IssuesPage() {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const sessions = useSessionStore((s) => s.sessions)
 
-  // session count per issue (top-level only)
   const sessionCounts = new Map<string, number>()
   for (const s of sessions) {
     if (s.issueId && !s.parentID) {
@@ -286,10 +294,22 @@ export function IssuesPage() {
     }
   }
 
-  const filtered =
-    filter === "all" ? issues : issues.filter((i) => i.state === filter)
+  const childIssueIds = new Set(issues.filter((i) => i.parentId).map((i) => i.parentId!))
+
+  function issueType(i: { parentId?: string; id: string }): "epic" | "task" | "stray" {
+    if (i.parentId) return "task"
+    if (childIssueIds.has(i.id)) return "epic"
+    return "stray"
+  }
+
+  const afterState = stateFilter === "all" ? issues : issues.filter((i) => i.state === stateFilter)
+  const filtered = typeFilter === "all" ? afterState : afterState.filter((i) => issueType(i) === typeFilter)
+
   const openCount = issues.filter((i) => i.state === "open").length
   const closedCount = issues.filter((i) => i.state === "closed").length
+  const epicCount = afterState.filter((i) => issueType(i) === "epic").length
+  const taskCount = afterState.filter((i) => issueType(i) === "task").length
+  const strayCount = afterState.filter((i) => issueType(i) === "stray").length
 
   const selectedIssue = issues.find((i) => i.id === selectedId) ?? null
 
@@ -337,7 +357,7 @@ export function IssuesPage() {
 
         {/* filter tabs */}
         <div className="flex border-b border-line">
-          {FILTERS.map(({ key, label }) => {
+          {STATE_FILTERS.map(({ key, label }) => {
             const count =
               key === "open"
                 ? openCount
@@ -348,10 +368,10 @@ export function IssuesPage() {
               <button
                 key={key}
                 type="button"
-                onClick={() => setFilter(key)}
+                onClick={() => setStateFilter(key)}
                 className={clsx(
                   "flex flex-1 items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors",
-                  filter === key
+                  stateFilter === key
                     ? "border-b-2 border-blue-500 text-blue-500"
                     : "text-fg-4 hover:text-fg-2",
                 )}
@@ -360,9 +380,44 @@ export function IssuesPage() {
                 <span
                   className={clsx(
                     "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
-                    filter === key
+                    stateFilter === key
                       ? "bg-blue-500/10 text-blue-500"
                       : "bg-elevated text-fg-5",
+                  )}
+                >
+                  {count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex border-b border-line">
+          {TYPE_FILTERS.map(({ key, label }) => {
+            const count =
+              key === "epic" ? epicCount
+                : key === "task" ? taskCount
+                : key === "stray" ? strayCount
+                : afterState.length
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTypeFilter(key)}
+                className={clsx(
+                  "flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[10px] font-medium transition-colors",
+                  typeFilter === key
+                    ? "border-b-2 border-emerald-500 text-emerald-500"
+                    : "text-fg-5 hover:text-fg-3",
+                )}
+              >
+                {label}
+                <span
+                  className={clsx(
+                    "rounded-full px-1.5 py-0.5 font-mono text-[9px]",
+                    typeFilter === key
+                      ? "bg-emerald-500/10 text-emerald-500"
+                      : "bg-elevated text-fg-6",
                   )}
                 >
                   {count}
