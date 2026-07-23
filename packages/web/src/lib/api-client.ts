@@ -228,10 +228,10 @@ export async function deleteSession(repoId: string, id: string): Promise<void> {
   })
 }
 
-export async function sendMessage(repoId: string, sessionId: string, content: string): Promise<void> {
+export async function sendMessage(repoId: string, sessionId: string, content: string, agent?: string): Promise<void> {
   await apiFetch<void>(
     `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/prompt`,
-    { method: "POST", body: JSON.stringify({ content }) },
+    { method: "POST", body: JSON.stringify({ content, agent }) },
   )
 }
 
