@@ -8,7 +8,9 @@ interface IssueState {
   loaded: boolean
   syncing: boolean
   selectedIssueId: string | null
+  previewIssueId: string | null
   setSelectedIssue: (id: string | null) => void
+  setPreviewIssue: (id: string | null) => void
   loadIssues: () => Promise<void>
   syncIssues: () => Promise<void>
   createIssue: (title: string, body?: string) => Promise<Issue | null>
@@ -19,7 +21,9 @@ export const useIssueStore = create<IssueState>((set) => ({
   loaded: false,
   syncing: false,
   selectedIssueId: null,
+  previewIssueId: null,
   setSelectedIssue: (id) => set({ selectedIssueId: id }),
+  setPreviewIssue: (id) => set({ previewIssueId: id }),
 
   loadIssues: async () => {
     const repoId = useRepoStore.getState().activeRepoId
