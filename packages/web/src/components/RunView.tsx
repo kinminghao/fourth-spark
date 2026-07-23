@@ -62,8 +62,8 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
 
   useEffect(() => {
     if (agent || agents.length === 0) return
-    const sisyphus = agents.find((a) => (a.id || a.name).toLowerCase().startsWith("sisyphus"))
-    const pick = sisyphus ?? agents[0]
+    const build = agents.find((a) => (a.id || a.name) === "build")
+    const pick = build ?? agents[0]
     if (pick) setAgent(pick.id || pick.name)
   }, [agents, agent])
 
