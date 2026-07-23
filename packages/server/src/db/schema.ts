@@ -16,6 +16,7 @@ export const repos = pgTable("repos", {
 export const issues = pgTable("issues", {
   id: text("id").primaryKey(),
   repoId: text("repo_id").notNull().references(() => repos.id, { onDelete: "cascade" }),
+  parentId: text("parent_id"),
   number: integer("number").notNull(),
   title: text("title").notNull(),
   body: text("body"),
@@ -27,6 +28,7 @@ export const issues = pgTable("issues", {
 }, (t) => [
   uniqueIndex("issues_repo_number_idx").on(t.repoId, t.number),
   index("issues_repo_state_idx").on(t.repoId, t.state),
+  index("issues_parent_idx").on(t.parentId),
 ])
 
 export const sessions = pgTable("sessions", {
