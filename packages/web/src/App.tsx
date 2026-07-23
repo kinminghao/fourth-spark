@@ -7,6 +7,7 @@ import { SettingsPage } from "./pages/SettingsPage"
 import { useRepoStore } from "./stores/repo-store"
 import { useSessionStore } from "./stores/session-store"
 import { useAgentStore } from "./stores/agent-store"
+import { useIssueStore } from "./stores/issue-store"
 import { useThemeStore } from "./stores/theme-store"
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
       clearSessions()
       void loadSessions()
       void useAgentStore.getState().loadAgents()
+      void useIssueStore.getState().loadIssues()
     } else {
       clearSessions()
     }
