@@ -135,7 +135,7 @@ function IssueRow({
             >
               #{issue.number}
             </span>
-            <span className="min-w-0 truncate text-sm font-medium text-fg-2">
+            <span className="min-w-0 text-sm font-medium text-fg-2">
               {issue.title}
             </span>
           </div>
