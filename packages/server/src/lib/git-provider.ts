@@ -49,6 +49,8 @@ export interface GitIssueClient {
   getIssue(number: number): Promise<GitIssue>
   createIssue(input: CreateIssueInput): Promise<GitIssue>
   updateIssue(number: number, input: UpdateIssueInput): Promise<GitIssue>
+  addDependency(issueNumber: number, dependsOnNumber: number): Promise<void>
+  createComment(issueNumber: number, body: string): Promise<void>
 }
 
 class GitApiError extends Error {
@@ -121,6 +123,17 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
 
     updateIssue(number, input) {
       return request<GitIssue>("PATCH", `/issues/${number}`, input)
+    },
+
+    async addDependency(issueNumber, dependsOnNumber) {
+      if (platform === "github") return
+      await request<unknown>("POST", `/issues/${issueNumber}/dependencies`, {
+        dependsOn: [dependsOnNumber],
+      })
+    },
+
+    async createComment(issueNumber, body) {
+      await request<unknown>("POST", `/issues/${issueNumber}/comments`, { body })
     },
   }
 }

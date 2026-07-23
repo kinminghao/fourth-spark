@@ -90,6 +90,40 @@ issueRoutes.post("/", async (c) => {
   return c.json(values, 201)
 })
 
+issueRoutes.post("/:number/children", async (c) => {
+  const repoId = c.req.param("repoId")!
+  const parentNumber = Number(c.req.param("number"))
+  if (!Number.isFinite(parentNumber)) return c.json({ error: "invalid issue number" }, 400)
+
+  const body = await c.req.json<{ childNumber?: number }>().catch(() => null)
+  if (!body?.childNumber) return c.json({ error: "childNumber is required" }, 400)
+
+  const parentId = issueId(repoId, parentNumber)
+  const childId = issueId(repoId, body.childNumber)
+
+  const [parent] = await db.select().from(issues).where(eq(issues.id, parentId))
+  const [child] = await db.select().from(issues).where(eq(issues.id, childId))
+  if (!parent || !child) return c.json({ error: "parent or child issue not found in DB" }, 404)
+
+  await db.update(issues).set({ parentId }).where(eq(issues.id, childId))
+
+  const ctx = await getRepoGitClient(repoId)
+  if (ctx) {
+    try {
+      await ctx.client.addDependency(parentNumber, body.childNumber)
+    } catch (err) {
+      logger.warn({ err, parentNumber, childNumber: body.childNumber }, "failed to add dependency on git host")
+    }
+    try {
+      await ctx.client.createComment(body.childNumber, `已关联为 #${parentNumber} 的子任务`)
+    } catch (err) {
+      logger.warn({ err, childNumber: body.childNumber }, "failed to create comment on git host")
+    }
+  }
+
+  return c.json({ ok: true, parentId, childId })
+})
+
 issueRoutes.patch("/:number", async (c) => {
   const repoId = c.req.param("repoId")!
   const number = Number(c.req.param("number"))
