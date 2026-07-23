@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { Layout } from "./components/Layout"
 import { ReposPage } from "./pages/ReposPage"
 import { RunPage } from "./pages/RunPage"
+import { IssuesPage } from "./pages/IssuesPage"
 import { SettingsPage } from "./pages/SettingsPage"
 import { useRepoStore } from "./stores/repo-store"
 import { useSessionStore } from "./stores/session-store"
@@ -37,6 +38,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route path="/repos" element={<ReposPage />} />
           <Route path="/run" element={<RunPage />} />
+          <Route path="/issues" element={<IssuesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/repos" replace />} />
         </Route>
