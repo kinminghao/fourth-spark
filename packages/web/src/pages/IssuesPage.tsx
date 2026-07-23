@@ -1,11 +1,11 @@
-import { useState } from "react"
+import { useState, type KeyboardEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   ExternalLink,
   GitBranch,
   Play,
+  Plus,
   RefreshCw,
-  X,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -31,6 +31,70 @@ const TYPE_FILTERS: { key: TypeFilter; label: string }[] = [
   { key: "stray", label: "游离" },
 ]
 
+/* ------------------------------------------------------------------ */
+/*  Create-issue inline form                                          */
+/* ------------------------------------------------------------------ */
+
+function CreateForm({ onDone }: { onDone: () => void }) {
+  const [title, setTitle] = useState("")
+  const [body, setBody] = useState("")
+  const [busy, setBusy] = useState(false)
+  const createIssue = useIssueStore((s) => s.createIssue)
+
+  const submit = async () => {
+    if (!title.trim() || busy) return
+    setBusy(true)
+    await createIssue(title.trim(), body.trim() || undefined)
+    setBusy(false)
+    onDone()
+  }
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault()
+      void submit()
+    }
+  }
+
+  return (
+    <div className="border-b border-line px-3 py-3">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="Issue 标题"
+        autoFocus
+        className="w-full rounded-md border border-line bg-base px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-6 focus:border-fg-5 focus:outline-none"
+      />
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="描述（可选）  ⌘⏎ 创建"
+        rows={3}
+        className="mt-2 w-full resize-none rounded-md border border-line bg-base px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-6 focus:border-fg-5 focus:outline-none"
+      />
+      <div className="mt-2 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onDone}
+          className="rounded-md px-2.5 py-1 text-xs text-fg-4 transition-colors hover:text-fg-2"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={!title.trim() || busy}
+          className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
+        >
+          创建
+        </button>
+      </div>
+    </div>
+  )
+}
 
 /* ------------------------------------------------------------------ */
 /*  Issue row in the list                                             */
@@ -108,7 +172,7 @@ function IssueRow({
 /*  Detail panel (right side)                                         */
 /* ------------------------------------------------------------------ */
 
-function IssueDetail({ issue, onClose }: { issue: Issue; onClose: () => void }) {
+function IssueDetail({ issue }: { issue: Issue }) {
   const navigate = useNavigate()
 
   const handleStart = () => {
@@ -122,13 +186,6 @@ function IssueDetail({ issue, onClose }: { issue: Issue; onClose: () => void }) 
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* header */}
       <header className="flex items-center gap-3 border-b border-line px-6 py-4">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-lg p-1.5 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
-        >
-          <X className="h-4 w-4" />
-        </button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span
@@ -221,6 +278,7 @@ function IssueDetail({ issue, onClose }: { issue: Issue; onClose: () => void }) 
 export function IssuesPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("open")
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all")
+  const [creating, setCreating] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const issues = useIssueStore((s) => s.issues)
@@ -257,30 +315,45 @@ export function IssuesPage() {
 
   return (
     <div className="flex min-h-0 flex-1">
-      {/* ---- left: issue list (full width when nothing selected) ---- */}
-      <div className={clsx(
-        "flex shrink-0 flex-col border-r border-line bg-surface",
-        selectedIssue ? "w-80" : "flex-1",
-      )}>
+      {/* ---- left: issue list ---- */}
+      <div className="flex w-80 shrink-0 flex-col border-r border-line bg-surface">
         {/* header */}
         <div className="flex items-center justify-between border-b border-line px-3 py-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">
             Issues
           </span>
           {activeRepoId && (
-            <button
-              type="button"
-              onClick={() => void syncIssues()}
-              disabled={syncing}
-              title="同步 Issues"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"
-            >
-              <RefreshCw
-                className={clsx("h-3.5 w-3.5", syncing && "animate-spin")}
-              />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => void syncIssues()}
+                disabled={syncing}
+                title="同步 Issues"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"
+              >
+                <RefreshCw
+                  className={clsx("h-3.5 w-3.5", syncing && "animate-spin")}
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreating((v) => !v)}
+                title="新建 Issue"
+                className={clsx(
+                  "flex h-7 w-7 items-center justify-center rounded-md transition-colors",
+                  creating
+                    ? "bg-blue-600 text-white"
+                    : "text-fg-4 hover:bg-elevated hover:text-fg-2",
+                )}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
           )}
         </div>
+
+        {/* create form */}
+        {creating && <CreateForm onDone={() => setCreating(false)} />}
 
         {/* filter tabs */}
         <div className="flex border-b border-line">
@@ -380,11 +453,22 @@ export function IssuesPage() {
         </div>
       </div>
 
-      {selectedIssue && (
-        <div className="flex min-w-0 flex-1 flex-col bg-term">
-          <IssueDetail issue={selectedIssue} onClose={() => setSelectedId(null)} />
-        </div>
-      )}
+      {/* ---- right: detail ---- */}
+      <div className="flex min-w-0 flex-1 flex-col bg-term">
+        {selectedIssue ? (
+          <IssueDetail issue={selectedIssue} />
+        ) : (
+          <div className="flex flex-1 items-center justify-center">
+            <p className="font-mono text-xs text-fg-5">
+              {!activeRepoId
+                ? "请先选择一个仓库"
+                : issues.length === 0
+                  ? "点击 ↻ 同步 Issues 后选择查看"
+                  : "← 选择一个 Issue 查看详情"}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
