@@ -15,6 +15,13 @@ interface AgentState {
   loadAgents: () => Promise<void>
 }
 
+const ALLOWED_AGENTS = ["sisyphus", "prometheus", "atlas"]
+
+function isAllowed(agent: Agent): boolean {
+  const name = (agent.name || agent.id || "").toLowerCase()
+  return ALLOWED_AGENTS.some((key) => name.startsWith(key))
+}
+
 export const useAgentStore = create<AgentState>((set) => ({
   agents: [],
   loaded: false,
@@ -25,11 +32,9 @@ export const useAgentStore = create<AgentState>((set) => ({
       return
     }
     try {
-      const agents = await api.listAgents(repoId)
-      set({ agents, loaded: true })
+      const all = await api.listAgents(repoId)
+      set({ agents: all.filter(isAllowed), loaded: true })
     } catch {
-      // Agents are optional; without them the New Session form just omits the
-      // dropdown and the backend picks its default agent.
       set({ loaded: true })
     }
   },
