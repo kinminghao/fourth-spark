@@ -16,7 +16,7 @@ sessions.post("/", async (c) => {
   }
   const session = await client.createSession({ agent: body.agent, title: body.title })
   await client.prompt(session.id, body.message, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT })
-  return c.json({ id: session.id, title: session.title, agent: body.agent }, 201)
+  return c.json({ ...session, agent: body.agent }, 201)
 })
 
 sessions.get("/", async (c) => {
