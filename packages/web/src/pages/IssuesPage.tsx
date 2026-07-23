@@ -127,7 +127,7 @@ function IssueRow({
           <div className="flex items-center gap-1.5">
             <span
               className={clsx(
-                "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium",
+                "shrink-0 rounded px-1.5 py-0.5 font-mono text-xs font-medium",
                 issue.state === "open"
                   ? "bg-emerald-500/15 text-emerald-400"
                   : "bg-purple-500/15 text-purple-400",
@@ -135,7 +135,7 @@ function IssueRow({
             >
               #{issue.number}
             </span>
-            <span className="min-w-0 truncate text-xs font-medium text-fg-2">
+            <span className="min-w-0 truncate text-sm font-medium text-fg-2">
               {issue.title}
             </span>
           </div>
@@ -145,7 +145,7 @@ function IssueRow({
               {issue.labels.map((l) => (
                 <span
                   key={l.id}
-                  className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                  className="rounded px-1.5 py-0.5 text-[11px] font-medium"
                   style={{
                     backgroundColor: `#${l.color}20`,
                     color: `#${l.color}`,
