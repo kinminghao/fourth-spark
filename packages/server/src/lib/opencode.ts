@@ -159,10 +159,17 @@ export function createOpenCodeClient(baseUrl: string, directory: string): OpenCo
     },
 
     prompt(sessionId, content, opts) {
+      let model: { modelID: string; providerID: string } | undefined
+      if (opts?.model) {
+        const slash = opts.model.indexOf("/")
+        model = slash > 0
+          ? { providerID: opts.model.slice(0, slash), modelID: opts.model.slice(slash + 1) }
+          : { providerID: "anthropic", modelID: opts.model }
+      }
       return send("POST", `/session/${sessionId}/prompt_async`, { directory }, {
         parts: [{ type: "text", text: content }],
         agent: opts?.agent,
-        model: opts?.model,
+        model,
         variant: opts?.variant,
         messageID: `msg_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
       })
