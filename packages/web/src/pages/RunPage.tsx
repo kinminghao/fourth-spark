@@ -1,9 +1,8 @@
 import { useState } from "react"
-import { Check, Plus, Trash2, X } from "lucide-react"
+import { Check, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import type { Session } from "../lib/api-client"
 import { useSessionStore } from "../stores/session-store"
-import { useAgentStore } from "../stores/agent-store"
 import { useRepoStore } from "../stores/repo-store"
 import { RunView } from "../components/RunView"
 
@@ -37,91 +36,30 @@ function statusDotClass(status: string | undefined): string {
 }
 
 function SessionPanel() {
-  const [showForm, setShowForm] = useState(false)
-  const [draft, setDraft] = useState("")
-  const [agent, setAgent] = useState("")
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
 
   const sessions = useSessionStore((s) => s.sessions)
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
   const statuses = useSessionStore((s) => s.sessionStatuses)
-  const createSession = useSessionStore((s) => s.createSession)
   const setActiveSession = useSessionStore((s) => s.setActiveSession)
   const deleteSession = useSessionStore((s) => s.deleteSession)
-  const agents = useAgentStore((s) => s.agents)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
 
   const ordered = [...sessions]
     .filter((s) => !s.parentID)
     .sort((a, b) => sessionTime(b) - sessionTime(a))
 
-  const handleCreate = async () => {
-    const text = draft.trim()
-    if (!text) return
-    setDraft("")
-    setShowForm(false)
-    await createSession(text, agent || undefined)
-  }
-
   return (
     <div className="flex h-full w-72 shrink-0 flex-col border-r border-line bg-surface">
       <div className="flex items-center justify-between border-b border-line px-3 py-3">
         <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">运行记录</span>
-        {activeRepoId && (
-          <button
-            type="button"
-            onClick={() => setShowForm((v) => !v)}
-            title="新建运行"
-            className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white transition-colors hover:bg-blue-500"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        )}
       </div>
-
-      {showForm && activeRepoId && (
-        <div className="flex flex-col gap-2 border-b border-line bg-base/60 p-3">
-          {agents.length > 0 && (
-            <select
-              value={agent}
-              onChange={(e) => setAgent(e.target.value)}
-              className="w-full rounded-md border border-line bg-surface px-2 py-1.5 font-mono text-xs text-fg focus:border-blue-500 focus:outline-none"
-            >
-              <option value="">默认 Agent</option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </select>
-          )}
-          <textarea
-            value={draft}
-            rows={3}
-            autoFocus
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="让 Agent 做什么？"
-            className="w-full resize-none rounded-md border border-line bg-surface px-2 py-1.5 font-mono text-xs text-fg placeholder:text-fg-5 focus:border-blue-500 focus:outline-none"
-          />
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => { setShowForm(false); setDraft("") }} className="rounded-md px-3 py-1.5 text-xs text-fg-3 hover:bg-elevated hover:text-fg">
-              取消
-            </button>
-            <button
-              type="button"
-              onClick={handleCreate}
-              disabled={draft.trim().length === 0}
-              className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-fg-6 disabled:text-fg-4"
-            >
-              开始运行
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="flex-1 overflow-y-auto px-2 py-2">
         {!activeRepoId ? (
           <p className="px-2 py-6 text-center font-mono text-xs text-fg-5">请先选择一个仓库</p>
         ) : ordered.length === 0 ? (
-          <p className="px-2 py-6 text-center font-mono text-xs text-fg-5">暂无运行记录，点击上方开始</p>
+          <p className="px-2 py-6 text-center font-mono text-xs text-fg-5">暂无运行记录，在右侧输入开始</p>
         ) : (
           <ul className="space-y-0.5">
             {ordered.map((session) => {
