@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, Copy, Trash2, X } from "lucide-react"
+import { Check, Copy, Plus, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import type { Session } from "../lib/api-client"
 import { useSessionStore } from "../stores/session-store"
@@ -53,6 +53,16 @@ function SessionPanel() {
     <div className="flex h-full w-72 shrink-0 flex-col border-r border-line bg-surface">
       <div className="flex items-center justify-between border-b border-line px-3 py-3">
         <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">运行记录</span>
+        {activeRepoId && (
+          <button
+            type="button"
+            onClick={() => useSessionStore.setState({ activeSessionId: null })}
+            title="新建运行"
+            className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white transition-colors hover:bg-blue-500"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-2">
