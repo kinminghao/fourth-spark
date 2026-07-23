@@ -44,7 +44,7 @@ interface SessionState {
   sendError: string | null
 
   loadSessions: () => Promise<void>
-  createSession: (message: string, agent?: string) => Promise<Session | null>
+  createSession: (message: string, agent?: string, model?: string, variant?: string) => Promise<Session | null>
   setActiveSession: (id: string) => Promise<void>
   deleteSession: (id: string) => Promise<void>
   sendMessage: (content: string) => Promise<void>
@@ -89,12 +89,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  createSession: async (message, agent) => {
+  createSession: async (message, agent, model, variant) => {
     const repoId = getRepoId()
     if (!repoId) return null
     set({ sendError: null })
     try {
-      const session = await api.createSession(repoId, message, agent)
+      const session = await api.createSession(repoId, message, agent, model, variant)
       set((state) => ({
         sessions: [
           session,
