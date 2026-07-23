@@ -60,6 +60,13 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
   const agents = useAgentStore((state) => state.agents)
 
+  useEffect(() => {
+    if (agent || agents.length === 0) return
+    const sisyphus = agents.find((a) => (a.id || a.name).toLowerCase().startsWith("sisyphus"))
+    const pick = sisyphus ?? agents[0]
+    if (pick) setAgent(pick.id || pick.name)
+  }, [agents, agent])
+
   useLayoutEffect(() => {
     const el = textareaRef.current
     if (!el) return
