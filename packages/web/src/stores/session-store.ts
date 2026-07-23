@@ -172,12 +172,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const repoId = getRepoId()
     const sessionId = get().activeSessionId
     if (!repoId || !sessionId) return
+    const session = get().sessions.find((s) => s.id === sessionId)
     set((state) => ({
       sendError: null,
       sessionStatuses: mapSet(state.sessionStatuses, sessionId, "busy"),
     }))
     try {
-      await api.sendMessage(repoId, sessionId, content)
+      await api.sendMessage(repoId, sessionId, content, session?.agent)
     } catch (error) {
       set((state) => ({
         sendError:
