@@ -46,6 +46,7 @@ interface SessionState {
   loadSessions: () => Promise<void>
   createSession: (message: string, agent?: string, model?: string, variant?: string) => Promise<Session | null>
   setActiveSession: (id: string) => Promise<void>
+  refreshSessionData: (id: string) => Promise<void>
   deleteSession: (id: string) => Promise<void>
   sendMessage: (content: string) => Promise<void>
   abortSession: () => Promise<void>
@@ -104,7 +105,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         messages: mapSet(state.messages, session.id, []),
         sessionStatuses: mapSet(state.sessionStatuses, session.id, "busy"),
       }))
-      void get().setActiveSession(session.id)
       return session
     } catch (error) {
       set({
@@ -119,6 +119,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const repoId = getRepoId()
     if (!repoId) return
     set({ activeSessionId: id, sendError: null })
+    await get().refreshSessionData(id)
+  },
+
+  refreshSessionData: async (id) => {
+    const repoId = getRepoId()
+    if (!repoId) return
     const [messages, todos, status] = await Promise.allSettled([
       api.getMessages(repoId, id),
       api.getTodos(repoId, id),
