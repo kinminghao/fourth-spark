@@ -316,7 +316,7 @@ export function IssuesPage() {
   return (
     <div className="flex min-h-0 flex-1">
       {/* ---- left: issue list ---- */}
-      <div className="flex w-1/3 shrink-0 flex-col border-r border-line bg-surface">
+      <div className="flex w-[28%] shrink-0 flex-col border-r border-line bg-surface">
         {/* header */}
         <div className="flex items-center justify-between border-b border-line px-3 py-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">
