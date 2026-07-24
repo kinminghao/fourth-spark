@@ -52,6 +52,17 @@ export interface GitComment {
   updated_at: string
 }
 
+export interface GitPullRequest {
+  number: number
+  title: string
+  body: string
+  state: string
+  html_url: string
+  user: { login: string; avatar_url: string }
+  created_at: string
+  updated_at: string
+}
+
 export interface GitIssueClient {
   listIssues(opts?: { state?: "open" | "closed" | "all"; page?: number; limit?: number }): Promise<GitIssue[]>
   getIssue(number: number): Promise<GitIssue>
@@ -60,6 +71,8 @@ export interface GitIssueClient {
   addDependency(issueNumber: number, dependsOnNumber: number): Promise<void>
   createComment(issueNumber: number, body: string): Promise<void>
   listComments(issueNumber: number): Promise<GitComment[]>
+  listIssuePullRequests(issueNumber: number): Promise<GitPullRequest[]>
+  mergePullRequest(prNumber: number): Promise<void>
 }
 
 class GitApiError extends Error {
@@ -149,6 +162,50 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
 
     async listComments(issueNumber) {
       return request<GitComment[]>("GET", `/issues/${issueNumber}/comments?per_page=100`)
+    },
+
+    async mergePullRequest(prNumber) {
+      if (platform === "github") {
+        await request<unknown>("PUT", `/pulls/${prNumber}/merge`, { merge_method: "merge" })
+      } else {
+        await request<unknown>("POST", `/pulls/${prNumber}/merge`, { Do: "merge" })
+      }
+    },
+
+    async listIssuePullRequests(issueNumber) {
+      try {
+        // Use timeline API to find cross-referenced PRs
+        // Gitea: ref_issue field; GitHub: source.issue field
+        const events = await request<Record<string, unknown>[]>(
+          "GET",
+          `/issues/${issueNumber}/timeline`,
+        )
+        const prMap = new Map<number, GitPullRequest>()
+        for (const event of events) {
+          const ref =
+            (event.ref_issue as Record<string, unknown> | undefined) ??
+            ((event.source as Record<string, unknown> | undefined)?.issue as
+              | Record<string, unknown>
+              | undefined)
+          if (!ref?.pull_request) continue
+          const num = ref.number as number
+          if (prMap.has(num)) continue
+          const user = (ref.user as { login?: string; avatar_url?: string } | undefined) ?? {}
+          prMap.set(num, {
+            number: num,
+            title: (ref.title as string) ?? "",
+            body: (ref.body as string) ?? "",
+            state: (ref.state as string) ?? "open",
+            html_url: (ref.html_url as string) ?? "",
+            user: { login: user.login ?? "", avatar_url: user.avatar_url ?? "" },
+            created_at: (ref.created_at as string) ?? "",
+            updated_at: (ref.updated_at as string) ?? "",
+          })
+        }
+        return [...prMap.values()]
+      } catch {
+        return []
+      }
     },
   }
 }

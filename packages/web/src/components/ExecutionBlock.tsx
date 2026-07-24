@@ -4,7 +4,8 @@ import rehypeHighlight from "rehype-highlight"
 import remarkGfm from "remark-gfm"
 import { Brain, ChevronDown, ChevronRight } from "lucide-react"
 import type { Message, MessagePart } from "../lib/api-client"
-import { classifyPart, getPartText } from "../lib/message-parts"
+import { classifyPart, getPartText, isQuestionTool } from "../lib/message-parts"
+import { QuestionPanel } from "./QuestionPanel"
 import { ToolCallPanel } from "./ToolCallPanel"
 
 function ThinkingBlock({ text }: { text: string }) {
@@ -55,6 +56,7 @@ function PartView({ part }: { part: MessagePart }) {
       return <ThinkingBlock text={text} />
     }
     case "tool":
+      if (isQuestionTool(part)) return <QuestionPanel part={part} />
       return <ToolCallPanel part={part} />
     default:
       return null

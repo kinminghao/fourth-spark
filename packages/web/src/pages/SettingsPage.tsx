@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { Check, Eye, EyeOff, GitBranch, Plus, RefreshCw, Trash2, X, Zap } from "lucide-react"
+import { AlertTriangle, Ban, Check, Clock, Eye, EyeOff, Gauge, GitBranch, Loader2, Plus, RefreshCw, Trash2, User, Users, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
 import type { AccountUsage, GitHost, UsageResult, UsageWindow } from "../lib/api-client"
@@ -31,44 +31,92 @@ function UsageBar({ label, window: w }: { label: string; window: UsageWindow | n
   if (!w) return null
   const pct = Math.round(w.utilization)
   const reset = formatReset(w.resets_at)
+  const danger = pct >= 90
+  const warn = pct >= 70
   return (
-    <div className="space-y-1">
-      <div className="flex items-baseline justify-between">
-        <span className="text-xs font-medium text-fg-3">{label}</span>
-        <div className="flex items-baseline gap-2">
-          <span className={clsx("text-xs font-semibold", pct >= 90 ? "text-red-400" : pct >= 70 ? "text-amber-400" : "text-fg-2")}>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="min-w-0 truncate text-xs font-medium text-fg-3">{label}</span>
+        <div className="flex shrink-0 items-center gap-2">
+          {reset && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-elevated px-1.5 py-0.5 text-[10px] font-medium text-fg-4 tabular-nums">
+              <Clock className="h-2.5 w-2.5" />
+              {reset}
+            </span>
+          )}
+          <span
+            className={clsx(
+              "text-sm font-bold leading-none tabular-nums",
+              danger ? "text-red-400" : warn ? "text-amber-400" : "text-fg",
+            )}
+          >
             {pct}%
           </span>
-          {reset && <span className="text-[10px] text-fg-5">{reset}</span>}
         </div>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-elevated">
-        <div className={clsx("h-full rounded-full transition-all", barColor(pct))} style={{ width: `${Math.min(pct, 100)}%` }} />
+      <div className="h-2.5 overflow-hidden rounded-full bg-elevated ring-1 ring-inset ring-line/60">
+        <div
+          className={clsx(
+            "h-full rounded-full transition-all duration-500 ease-out",
+            barColor(pct),
+            danger ? "shadow-sm shadow-red-500/50" : warn ? "shadow-sm shadow-amber-500/40" : null,
+          )}
+          style={{ width: `${Math.min(pct, 100)}%` }}
+        />
       </div>
     </div>
   )
 }
 
 function AccountCard({ account }: { account: AccountUsage }) {
+  const active = account.active
   return (
-    <div className="rounded-lg border border-line bg-base px-4 py-3">
-      <div className="flex items-center gap-2">
-        <span className="min-w-0 truncate text-sm font-medium text-fg">{account.label}</span>
-        {account.active && (
-          <span className="shrink-0 rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-500">当前</span>
+    <div
+      className={clsx(
+        "relative overflow-hidden rounded-xl border bg-base p-4 shadow-sm transition-colors",
+        active ? "border-blue-500/30 ring-1 ring-inset ring-blue-500/20" : "border-line",
+      )}
+    >
+      {active && <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-blue-500" />}
+
+      <div className="flex items-center gap-2.5">
+        <div
+          className={clsx(
+            "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+            active ? "bg-blue-500/15 text-blue-500" : "bg-elevated text-fg-4",
+          )}
+        >
+          <User className="h-3.5 w-3.5" />
+        </div>
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">{account.label}</span>
+
+        {active && (
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-semibold text-blue-500">
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shadow-sm shadow-blue-500/60" />
+            当前
+          </span>
         )}
         {account.excluded && (
-          <span className="shrink-0 rounded bg-elevated px-1.5 py-0.5 text-[10px] text-fg-5">不自动切</span>
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-elevated px-2 py-0.5 text-[10px] font-medium text-fg-5">
+            <Ban className="h-2.5 w-2.5" />
+            不自动切
+          </span>
         )}
         {account.needsReauth && (
-          <span className="shrink-0 rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] text-red-400">需重新登录</span>
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-medium text-red-400">
+            <AlertTriangle className="h-2.5 w-2.5" />
+            需重新登录
+          </span>
         )}
       </div>
 
       {account.error && !account.usage ? (
-        <p className="mt-2 text-xs text-red-400">{account.error}</p>
+        <div className="mt-3 flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 break-words">{account.error}</span>
+        </div>
       ) : account.usage ? (
-        <div className="mt-3 space-y-2.5">
+        <div className="mt-4 space-y-3">
           <UsageBar label="5 小时窗口" window={account.usage.five_hour} />
           <UsageBar label="7 天窗口" window={account.usage.seven_day} />
           {account.usage.scoped?.map((s) => (
@@ -97,30 +145,48 @@ function UsageSection() {
 
   return (
     <section className="rounded-xl border border-line bg-surface p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-fg">Claude 订阅额度</h2>
-          <p className="mt-1 text-xs text-fg-4">各账号的 Pro/Max 订阅窗口用量，数据实时从 Anthropic 获取。</p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-500">
+            <Gauge className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-fg">Claude 订阅额度</h2>
+            <p className="mt-0.5 text-xs text-fg-4">各账号的 Pro/Max 订阅窗口用量，数据实时从 Anthropic 获取。</p>
+          </div>
         </div>
         <button
           type="button"
           onClick={load}
           disabled={loading}
-          className="rounded-md p-1.5 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"
+          className="shrink-0 rounded-md p-1.5 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"
         >
           <RefreshCw className={clsx("h-4 w-4", loading && "fs-spin")} />
         </button>
       </div>
 
-      <div className="mt-4 space-y-2">
+      <div className="mt-4 space-y-2.5">
         {loading && !data ? (
-          <p className="py-4 text-center font-mono text-xs text-fg-5">加载中…</p>
+          <div className="flex flex-col items-center gap-2.5 py-10 text-fg-5">
+            <Loader2 className="h-5 w-5 fs-spin" />
+            <p className="text-xs">加载中…</p>
+          </div>
         ) : error && !data ? (
-          <p className="py-4 text-center text-xs text-red-400">{error}</p>
+          <div className="flex flex-col items-center gap-2.5 py-10 text-red-400">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <p className="max-w-xs text-center text-xs leading-relaxed">{error}</p>
+          </div>
         ) : data && data.accounts.length === 0 ? (
-          <p className="py-4 text-center text-xs text-fg-5">
-            未找到账号。请在 OpenCode TUI 中通过 claude-accounts-usage 插件登录。
-          </p>
+          <div className="flex flex-col items-center gap-2.5 py-10 text-fg-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-elevated text-fg-4">
+              <Users className="h-5 w-5" />
+            </div>
+            <p className="max-w-xs text-center text-xs leading-relaxed">
+              未找到账号。请在 OpenCode TUI 中通过 claude-accounts-usage 插件登录。
+            </p>
+          </div>
         ) : data ? (
           data.accounts.map((a) => <AccountCard key={a.id} account={a} />)
         ) : null}

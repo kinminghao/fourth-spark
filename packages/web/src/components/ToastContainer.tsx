@@ -114,7 +114,17 @@ export function ToastContainer() {
                 <p className="min-w-0 flex-1 text-sm leading-snug break-words text-fg">
                   {t.message}
                 </p>
-                {!t.exiting && (
+                {t.persistent && !t.exiting && (
+                  <button
+                    type="button"
+                    aria-label="关闭"
+                    onClick={(e) => { e.stopPropagation(); removeToast(t.id) }}
+                    className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-fg-4 transition-colors hover:bg-fg/10 hover:text-fg"
+                  >
+                    ✕
+                  </button>
+                )}
+                {!t.exiting && !t.persistent && (
                   <span
                     aria-hidden
                     className={`absolute bottom-0 left-0 h-0.5 w-full origin-left ${cfg.bar}`}

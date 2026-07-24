@@ -8,8 +8,31 @@
 import { create } from "zustand"
 import * as api from "../lib/api-client"
 import type { Message, MessagePart, Session, Todo } from "../lib/api-client"
+import { isQuestionTool, isQuestionPending } from "../lib/message-parts"
 import { useRepoStore } from "./repo-store"
 import { useToastStore } from "./toast-store"
+
+function questionToastId(sessionId: string): string {
+  return `question-${sessionId}`
+}
+
+function fireQuestionToast(sessionId: string, sessions: Session[]): void {
+  const session = sessions.find((s) => s.id === sessionId)
+  const label = session?.title || sessionId.slice(-8)
+  useToastStore.getState().addToast(
+    `${label} — 等待回复`,
+    "warning",
+    sessionId,
+    { id: questionToastId(sessionId), persistent: true },
+  )
+}
+
+function hasAnyPendingQuestion(msgs: Message[]): boolean {
+  for (const m of msgs) {
+    if (m.parts?.some((p) => isQuestionTool(p) && isQuestionPending(p))) return true
+  }
+  return false
+}
 
 export const EMPTY_MESSAGES: readonly Message[] = []
 export const EMPTY_TODOS: readonly Todo[] = []
@@ -148,6 +171,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
       return next
     })
+    if (messages.status === "fulfilled" && hasAnyPendingQuestion(messages.value)) {
+      fireQuestionToast(id, get().sessions)
+    }
   },
 
   deleteSession: async (id) => {
@@ -231,6 +257,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
       return { messages: mapSet(state.messages, sessionId, next) }
     })
+    if (message.parts?.some((p) => isQuestionTool(p) && isQuestionPending(p))) {
+      fireQuestionToast(sessionId, get().sessions)
+    }
   },
 
   updateMessagePart: (sessionId, messageId, part) => {
@@ -255,6 +284,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
       return { messages: mapSet(state.messages, sessionId, next) }
     })
+    if (isQuestionTool(part) && isQuestionPending(part)) {
+      fireQuestionToast(sessionId, get().sessions)
+    }
   },
 
   updateTodos: (sessionId, todos) => {
@@ -267,7 +299,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const session = get().sessions.find((s) => s.id === sessionId)
       const label = session?.title || sessionId.slice(-8)
       if (status === "idle" && prev !== undefined && prev !== "idle") {
+        useToastStore.getState().removeToast(questionToastId(sessionId))
         useToastStore.getState().addToast(`${label} — 完成`, "success", sessionId)
+        // Session just finished — fetch final messages/todos via REST to cover
+        // any SSE events lost during the stream close race.
+        void get().refreshSessionData(sessionId)
       } else if (status === "busy" && (prev === undefined || prev === "idle")) {
         useToastStore.getState().addToast(`${label} — 开始运行`, "info", sessionId)
       } else if (status === "retry") {

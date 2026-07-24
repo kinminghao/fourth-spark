@@ -218,6 +218,44 @@ issueRoutes.get("/attachments/:uuid", async (c) => {
   return new Response(upstream.body, { status: 200, headers })
 })
 
+issueRoutes.get("/:number/pulls", async (c) => {
+  const repoId = c.req.param("repoId")!
+  const number = Number(c.req.param("number"))
+  if (!Number.isFinite(number)) return c.json({ error: "invalid issue number" }, 400)
+
+  const ctx = await getRepoGitClient(repoId)
+  if (!ctx) return c.json([])
+
+  const prs = await ctx.client.listIssuePullRequests(number)
+  for (const pr of prs) {
+    pr.body = rewriteAttachmentUrls(pr.body, repoId) ?? ""
+  }
+  return c.json(prs)
+})
+
+issueRoutes.post("/:number/pulls/:prNumber/merge", async (c) => {
+  const repoId = c.req.param("repoId")!
+  const number = Number(c.req.param("number"))
+  const prNumber = Number(c.req.param("prNumber"))
+  if (!Number.isFinite(number) || !Number.isFinite(prNumber))
+    return c.json({ error: "invalid number" }, 400)
+
+  const ctx = await getRepoGitClient(repoId)
+  if (!ctx) return c.json({ error: "Repo not found or git host not configured" }, 400)
+
+  await ctx.client.mergePullRequest(prNumber)
+
+  const body = await c.req.json<{ closeIssue?: boolean }>().catch(() => null)
+  if (body?.closeIssue) {
+    const gi = await ctx.client.updateIssue(number, { state: "closed" })
+    const values = issueToDb(repoId, gi)
+    const { id: _, createdAt: __, ...updateSet } = values
+    await db.insert(issues).values(values).onConflictDoUpdate({ target: issues.id, set: updateSet })
+  }
+
+  return c.json({ ok: true })
+})
+
 issueRoutes.patch("/:number", async (c) => {
   const repoId = c.req.param("repoId")!
   const number = Number(c.req.param("number"))
