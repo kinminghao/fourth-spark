@@ -7,9 +7,26 @@ import {
 } from "react"
 import { CornerDownLeft } from "lucide-react"
 import clsx from "clsx"
-import { useSessionStore } from "../stores/session-store"
+import { useSessionStore, EMPTY_MESSAGES } from "../stores/session-store"
+import { classifyPart, isQuestionPending } from "../lib/message-parts"
 
-const MAX_HEIGHT_PX = 144
+const MAX_HEIGHT_PX = 200
+
+function useHasPendingQuestion(): boolean {
+  return useSessionStore((state) => {
+    const id = state.activeSessionId
+    if (!id) return false
+    const msgs = state.messages.get(id) ?? EMPTY_MESSAGES
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const parts = msgs[i].parts
+      if (!parts) continue
+      for (const part of parts) {
+        if (classifyPart(part) === "tool" && isQuestionPending(part)) return true
+      }
+    }
+    return false
+  })
+}
 
 export function InputBar() {
   const [value, setValue] = useState("")
@@ -21,8 +38,9 @@ export function InputBar() {
     return id ? state.sessionStatuses.get(id) : undefined
   })
   const sendMessage = useSessionStore((state) => state.sendMessage)
+  const hasPendingQuestion = useHasPendingQuestion()
 
-  const busy = status === "busy"
+  const busy = status === "busy" && !hasPendingQuestion
   const disabled = !activeSessionId || busy
 
   useLayoutEffect(() => {
@@ -58,22 +76,26 @@ export function InputBar() {
     ? "select or start a run"
     : busy
       ? "agent is running…"
-      : "enter a command…"
+      : hasPendingQuestion
+        ? "输入回复，或点击上方选项…"
+        : "enter a command…"
 
   const promptColor = !activeSessionId
     ? "text-fg-6"
     : busy
       ? "text-amber-400 fs-blink"
-      : "text-emerald-400"
+      : hasPendingQuestion
+        ? "text-blue-400"
+        : "text-emerald-400"
 
   return (
-    <div className="border-t border-line bg-term px-4 py-3">
+    <div className="border-t border-line bg-term px-4 py-4">
       <div
         className={clsx(
-          "mx-auto flex max-w-4xl items-start gap-2 border-b pb-1 transition-colors duration-150",
+          "mx-auto flex max-w-4xl items-start gap-2 rounded-lg border px-3 py-2 transition-colors duration-150",
           disabled
-            ? "border-transparent"
-            : "border-line focus-within:border-fg-5",
+            ? "border-line"
+            : "border-fg-5 focus-within:border-fg-4",
         )}
       >
         <span className={clsx("select-none pt-px font-mono text-sm leading-6", promptColor)}>
@@ -81,7 +103,7 @@ export function InputBar() {
         </span>
         <textarea
           ref={textareaRef}
-          rows={1}
+          rows={2}
           value={value}
           disabled={disabled}
           onChange={(event) => setValue(event.target.value)}

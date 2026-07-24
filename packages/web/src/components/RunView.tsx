@@ -6,7 +6,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react"
-import { AlertTriangle, Check, CornerDownLeft, ExternalLink, GitBranch, Menu, Play, Square, X } from "lucide-react"
+import { AlertTriangle, ArrowLeft, Check, CornerDownLeft, ExternalLink, GitBranch, Menu, Play, Square, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
@@ -446,6 +446,16 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
           <Menu className="h-5 w-5" />
         </button>
         <div className="min-w-0 flex-1">
+          {session?.parentID && (
+            <button
+              type="button"
+              onClick={() => void useSessionStore.getState().setActiveSession(session.parentID!)}
+              className="mb-0.5 flex items-center gap-1 text-[11px] text-fg-4 transition-colors hover:text-blue-400"
+            >
+              <ArrowLeft className="h-3 w-3" />
+              返回父会话
+            </button>
+          )}
           <h2 className="truncate text-sm font-medium text-fg">
             {session?.title?.trim() || "untitled run"}
           </h2>

@@ -213,7 +213,7 @@ function SessionPanel() {
     )
 
     return (
-      <div className="flex h-full w-72 shrink-0 flex-col border-r border-line bg-surface">
+      <div className="flex h-full w-80 shrink-0 flex-col border-r border-line bg-surface">
         <div className="border-b border-line px-3 py-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">选择子任务</span>
           {parent && <p className="mt-0.5 truncate font-mono text-[10px] text-fg-5">父: #{parent.number} {parent.title}</p>}
@@ -252,7 +252,7 @@ function SessionPanel() {
   const hasIssueGroups = sessionsByIssue.size > 0
 
   return (
-    <div className="flex h-full w-72 shrink-0 flex-col border-r border-line bg-surface">
+    <div className="flex h-full w-80 shrink-0 flex-col border-r border-line bg-surface">
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center justify-between border-b border-line px-3 py-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">运行记录</span>

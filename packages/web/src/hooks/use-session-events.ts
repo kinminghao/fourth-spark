@@ -65,6 +65,9 @@ export function useSessionEvents(sessionId: string | null): void {
         if (source.readyState === EventSource.CLOSED) {
           source.close()
           source = null
+          // Stream closed — fetch latest state via REST to cover any
+          // final events lost during the close.
+          void useSessionStore.getState().refreshSessionData(sessionId)
           const delay = Math.min(
             BASE_RECONNECT_DELAY_MS * 2 ** attempts,
             MAX_RECONNECT_DELAY_MS,

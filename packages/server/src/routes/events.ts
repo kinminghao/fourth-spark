@@ -94,6 +94,12 @@ events.get("/:id/events", (c) => {
           boundary = buffer.indexOf(SSE_DELIMITER)
         }
       }
+      // Flush any trailing bytes held by the streaming TextDecoder and
+      // process the remaining buffer (last SSE block without trailing \n\n).
+      buffer += decoder.decode()
+      if (buffer.trim()) {
+        await forwardBlock(buffer, sessionId, stream)
+      }
     } catch (err) {
       if (!closed) logger.error({ err, sessionId, repoId }, "SSE proxy stream error")
     } finally {

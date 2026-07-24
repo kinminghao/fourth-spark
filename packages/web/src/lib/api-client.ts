@@ -347,6 +347,35 @@ export async function updateIssue(
   })
 }
 
+export interface PullRequest {
+  number: number
+  title: string
+  body: string
+  state: string
+  html_url: string
+  user: { login: string; avatar_url: string }
+  created_at: string
+  updated_at: string
+}
+
+export async function listIssuePullRequests(repoId: string, issueNumber: number): Promise<PullRequest[]> {
+  return unwrapList<PullRequest>(
+    await apiFetch<unknown>(`${repoBase(repoId)}/issues/${issueNumber}/pulls`),
+  )
+}
+
+export async function mergePullRequest(
+  repoId: string,
+  issueNumber: number,
+  prNumber: number,
+  closeIssue = false,
+): Promise<void> {
+  await apiFetch<void>(
+    `${repoBase(repoId)}/issues/${issueNumber}/pulls/${prNumber}/merge`,
+    { method: "POST", body: JSON.stringify({ closeIssue }) },
+  )
+}
+
 export async function listIssueComments(repoId: string, issueNumber: number): Promise<IssueComment[]> {
   return apiFetch<IssueComment[]>(`${repoBase(repoId)}/issues/${issueNumber}/comments`)
 }

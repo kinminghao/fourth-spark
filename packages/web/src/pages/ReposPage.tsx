@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, Circle, CircleDot, Play, Plus, Square, Trash2, X } from "lucide-react"
+import { Check, Circle, CircleDot, Copy, Play, Plus, Square, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
 import { useRepoStore } from "../stores/repo-store"
@@ -71,6 +71,7 @@ export function ReposPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-4">Git 地址</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-4">本地路径</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-4">状态</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-4">直连链接</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-fg-4">操作</th>
                 </tr>
               </thead>
@@ -119,6 +120,30 @@ export function ReposPage() {
                           <span className={clsx("h-1.5 w-1.5 rounded-full", repo.running ? "bg-emerald-500" : "bg-fg-5")} />
                           {repo.running ? "运行中" : "已停止"}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {repo.running && repo.port ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <a
+                              href={`http://127.0.0.1:${repo.port}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-xs text-blue-500 hover:underline"
+                            >
+                              127.0.0.1:{repo.port}
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => void navigator.clipboard.writeText(`http://127.0.0.1:${repo.port}`)}
+                              title="复制链接"
+                              className="rounded p-0.5 text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-fg-5">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="inline-flex items-center gap-1">
@@ -226,6 +251,29 @@ export function ReposPage() {
                       <dt className="shrink-0 text-fg-5">路径</dt>
                       <dd className="min-w-0 truncate">{repo.localPath}</dd>
                     </div>
+                    {repo.running && repo.port && (
+                      <div className="flex items-center gap-2">
+                        <dt className="shrink-0 text-fg-5">直连</dt>
+                        <dd className="flex min-w-0 items-center gap-1.5">
+                          <a
+                            href={`http://127.0.0.1:${repo.port}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="truncate text-blue-500 hover:underline"
+                          >
+                            127.0.0.1:{repo.port}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => void navigator.clipboard.writeText(`http://127.0.0.1:${repo.port}`)}
+                            title="复制链接"
+                            className="shrink-0 rounded p-0.5 text-fg-5 transition-colors hover:text-fg-3"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </dd>
+                      </div>
+                    )}
                   </dl>
 
                   <div className="mt-3 flex items-center gap-2">

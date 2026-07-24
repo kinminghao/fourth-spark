@@ -6,17 +6,21 @@ import {
   CircleDot,
   ExternalLink,
   GitBranch,
+  GitMerge,
+  GitPullRequest,
   Network,
+  PanelRight,
   Play,
   Plus,
   RefreshCw,
+  X,
   XCircle,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import rehypeRaw from "rehype-raw"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
-import { type Issue, type IssueComment, type Session, listIssueComments } from "../lib/api-client"
+import { type Issue, type IssueComment, type PullRequest, type Session, listIssueComments, listIssuePullRequests, mergePullRequest } from "../lib/api-client"
 import { useIssueStore } from "../stores/issue-store"
 import { useRepoStore } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
@@ -180,12 +184,16 @@ function IssueRow({
 /*  Detail panel (right side)                                         */
 /* ------------------------------------------------------------------ */
 
-function IssueDetail({ issue, onBack }: { issue: Issue; onBack?: () => void }) {
+function IssueDetail({ issue, onBack, onToggleSidebar }: { issue: Issue; onBack?: () => void; onToggleSidebar?: () => void }) {
   const navigate = useNavigate()
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const [comments, setComments] = useState<IssueComment[]>([])
   const [loadingComments, setLoadingComments] = useState(false)
+  const [linkedPRs, setLinkedPRs] = useState<PullRequest[]>([])
+  const [activePRIdx, setActivePRIdx] = useState(0)
+  const [merging, setMerging] = useState(false)
   const [togglingState, setTogglingState] = useState(false)
+  const [detailTab, setDetailTab] = useState<"issue" | "pr">("issue")
   const updateIssueState = useIssueStore((s) => s.updateIssueState)
 
   useEffect(() => {
@@ -196,6 +204,34 @@ function IssueDetail({ issue, onBack }: { issue: Issue; onBack?: () => void }) {
       .catch(() => setComments([]))
       .finally(() => setLoadingComments(false))
   }, [activeRepoId, issue.number])
+
+  useEffect(() => {
+    if (!activeRepoId) return
+    listIssuePullRequests(activeRepoId, issue.number)
+      .then(setLinkedPRs)
+      .catch(() => setLinkedPRs([]))
+  }, [activeRepoId, issue.number])
+
+  useEffect(() => {
+    setDetailTab("issue")
+    setActivePRIdx(0)
+  }, [issue.id])
+
+  const pr = linkedPRs[activePRIdx] ?? linkedPRs[0]
+
+  const handleMerge = async (closeIssue: boolean) => {
+    if (merging || !activeRepoId || !pr) return
+    setMerging(true)
+    try {
+      await mergePullRequest(activeRepoId, issue.number, pr.number, closeIssue)
+      if (closeIssue) await updateIssueState(issue.number, "closed")
+      const refreshed = await listIssuePullRequests(activeRepoId, issue.number)
+      setLinkedPRs(refreshed)
+      if (activePRIdx >= refreshed.length) setActivePRIdx(Math.max(0, refreshed.length - 1))
+    } finally {
+      setMerging(false)
+    }
+  }
 
   const handleStart = () => {
     useIssueStore.getState().setSelectedIssue(issue.id)
@@ -211,46 +247,48 @@ function IssueDetail({ issue, onBack }: { issue: Issue; onBack?: () => void }) {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <header className="flex items-center gap-3 border-b border-line px-4 py-4 md:px-6">
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label="返回列表"
-          className="-ml-1 shrink-0 rounded-md p-1.5 text-fg-3 transition-colors hover:bg-elevated hover:text-fg md:hidden"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span
-              className={clsx(
-                "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
-                issue.state === "open"
-                  ? "bg-emerald-500/15 text-emerald-400"
-                  : "bg-purple-500/15 text-purple-400",
-              )}
-            >
-              #{issue.number} {issue.state}
-            </span>
-            {issue.labels?.map((l) => (
+      <header className="flex flex-col gap-2 border-b border-line px-4 py-3 md:flex-row md:items-center md:gap-3 md:px-6">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="返回列表"
+            className="-ml-1 shrink-0 rounded-md p-1.5 text-fg-3 transition-colors hover:bg-elevated hover:text-fg md:hidden"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
               <span
-                key={l.id}
-                className="rounded px-1.5 py-0.5 text-[10px] font-medium"
-                style={{
-                  backgroundColor: `#${l.color}20`,
-                  color: `#${l.color}`,
-                }}
+                className={clsx(
+                  "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
+                  issue.state === "open"
+                    ? "bg-emerald-500/15 text-emerald-400"
+                    : "bg-purple-500/15 text-purple-400",
+                )}
               >
-                {l.name}
+                #{issue.number} {issue.state}
               </span>
-            ))}
+              {issue.labels?.map((l) => (
+                <span
+                  key={l.id}
+                  className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                  style={{
+                    backgroundColor: `#${l.color}20`,
+                    color: `#${l.color}`,
+                  }}
+                >
+                  {l.name}
+                </span>
+              ))}
+            </div>
+            <h2 className="mt-1 text-base font-semibold text-fg">
+              {issue.title}
+            </h2>
           </div>
-          <h2 className="mt-1 text-base font-semibold text-fg">
-            {issue.title}
-          </h2>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {issue.htmlUrl && (
             <a
               href={issue.htmlUrl}
@@ -309,54 +347,190 @@ function IssueDetail({ issue, onBack }: { issue: Issue; onBack?: () => void }) {
             <Play className="h-3.5 w-3.5 fill-current" />
             开始处理
           </button>
+          {onToggleSidebar && (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              title="面板"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-2"
+            >
+              <PanelRight className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-6 py-6">
-          {issue.body ? (
-            <div className="markdown-body leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                {issue.body}
-              </ReactMarkdown>
-            </div>
-          ) : (
-            <p className="py-10 text-center font-mono text-xs text-fg-5">
-              该 Issue 没有描述内容
-            </p>
-          )}
+      {/* Tab bar: Issue / PR */}
+      {linkedPRs.length > 0 && (
+        <div className="flex shrink-0 items-center border-b border-line bg-surface">
+          <button
+            type="button"
+            onClick={() => setDetailTab("issue")}
+            className={clsx(
+              "flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-medium transition-colors",
+              detailTab === "issue"
+                ? "border-blue-500 text-fg"
+                : "border-transparent text-fg-4 hover:text-fg-2",
+            )}
+          >
+            <CircleDot className="h-3.5 w-3.5" />
+            Issue
+          </button>
+          <button
+            type="button"
+            onClick={() => setDetailTab("pr")}
+            className={clsx(
+              "flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-medium transition-colors",
+              detailTab === "pr"
+                ? "border-blue-500 text-fg"
+                : "border-transparent text-fg-4 hover:text-fg-2",
+            )}
+          >
+            <GitPullRequest className="h-3.5 w-3.5" />
+            PR
+            <span className={clsx(
+              "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+              detailTab === "pr" ? "bg-blue-500/10 text-blue-500" : "bg-elevated text-fg-5",
+            )}>
+              {linkedPRs.length}
+            </span>
+          </button>
+        </div>
+      )}
 
-          {loadingComments ? (
-            <p className="mt-8 text-center font-mono text-xs text-fg-6">加载评论…</p>
-          ) : comments.length > 0 && (
-            <div className="mt-8 border-t border-line pt-6">
-              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-fg-4">
-                评论 ({comments.length})
-              </h3>
-              <div className="space-y-4">
-                {comments.map((c) => (
-                  <div key={c.id} className="rounded-lg border border-line bg-elevated/40 px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <img
-                        src={c.user.avatar_url}
-                        alt={c.user.login}
-                        className="h-5 w-5 rounded-full"
-                      />
-                      <span className="text-xs font-semibold text-fg-2">{c.user.login}</span>
-                      <span className="text-[10px] text-fg-6">{fmtDate(c.created_at)}</span>
+      {/* Tab content */}
+      {(detailTab === "issue" || linkedPRs.length === 0) ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
+            {issue.body ? (
+              <div className="markdown-body leading-relaxed">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                  {issue.body}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <p className="py-10 text-center font-mono text-xs text-fg-5">
+                该 Issue 没有描述内容
+              </p>
+            )}
+
+            {loadingComments ? (
+              <p className="mt-8 text-center font-mono text-xs text-fg-6">加载评论…</p>
+            ) : comments.length > 0 && (
+              <div className="mt-8 border-t border-line pt-6">
+                <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-fg-4">
+                  评论 ({comments.length})
+                </h3>
+                <div className="space-y-4">
+                  {comments.map((c) => (
+                    <div key={c.id} className="rounded-lg border border-line bg-elevated/40 px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={c.user.avatar_url}
+                          alt={c.user.login}
+                          className="h-5 w-5 rounded-full"
+                        />
+                        <span className="text-xs font-semibold text-fg-2">{c.user.login}</span>
+                        <span className="text-[10px] text-fg-6">{fmtDate(c.created_at)}</span>
+                      </div>
+                      <div className="markdown-body mt-2 text-sm leading-relaxed text-fg-3">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                          {c.body}
+                        </ReactMarkdown>
+                      </div>
                     </div>
-                    <div className="markdown-body mt-2 text-sm leading-relaxed text-fg-3">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                        {c.body}
-                      </ReactMarkdown>
-                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {/* PR sub-tabs (multiple PRs) + action buttons */}
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-0">
+            {linkedPRs.length > 1 && linkedPRs.map((p, idx) => (
+              <button
+                key={p.number}
+                type="button"
+                onClick={() => setActivePRIdx(idx)}
+                className={clsx(
+                  "flex items-center gap-1.5 border-b-2 px-2.5 py-2.5 text-xs font-medium transition-colors",
+                  idx === activePRIdx
+                    ? "border-blue-500 text-fg"
+                    : "border-transparent text-fg-4 hover:text-fg-2",
+                )}
+              >
+                <span className="font-mono text-[10px]">#{p.number}</span>
+                <span className="max-w-[140px] truncate">{p.title}</span>
+              </button>
+            ))}
+            <div className={clsx("flex items-center gap-2", linkedPRs.length > 1 && "ml-auto")}>
+              {pr?.html_url && (
+                <a
+                  href={pr.html_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 rounded-md border border-line px-2 py-1.5 font-mono text-[11px] text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  <span className="hidden sm:inline">查看</span>
+                </a>
+              )}
+              <button
+                type="button"
+                disabled={merging}
+                onClick={() => void handleMerge(false)}
+                className="flex items-center gap-1.5 rounded-md border border-emerald-500/30 px-2.5 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:border-emerald-500/60 hover:bg-emerald-500/10 disabled:opacity-40"
+              >
+                <GitMerge className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">合入</span>
+              </button>
+              <button
+                type="button"
+                disabled={merging}
+                onClick={() => void handleMerge(true)}
+                className="flex items-center gap-1.5 rounded-md border border-blue-500/30 px-2.5 py-1.5 text-xs font-medium text-blue-400 transition-colors hover:border-blue-500/60 hover:bg-blue-500/10 disabled:opacity-40"
+              >
+                <GitMerge className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">合入并关闭</span>
+              </button>
+            </div>
+          </div>
+
+          {/* PR body */}
+          {pr && (
+            <div className="flex-1 overflow-y-auto">
+              <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
+                <div className="mb-3 flex items-center gap-2">
+                  <span
+                    className={clsx(
+                      "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
+                      pr.state === "open"
+                        ? "bg-emerald-500/15 text-emerald-400"
+                        : "bg-purple-500/15 text-purple-400",
+                    )}
+                  >
+                    #{pr.number} {pr.state}
+                  </span>
+                  <span className="text-sm font-semibold text-fg">{pr.title}</span>
+                </div>
+                {pr.body ? (
+                  <div className="markdown-body leading-relaxed">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                      {pr.body}
+                    </ReactMarkdown>
                   </div>
-                ))}
+                ) : (
+                  <p className="py-6 text-center font-mono text-xs text-fg-5">
+                    该 PR 没有描述内容
+                  </p>
+                )}
               </div>
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -578,7 +752,7 @@ function IssueTreeSidebar({
   const pct = total === 0 ? 0 : Math.round((closed / total) * 100)
 
   return (
-    <div className="flex w-[240px] shrink-0 flex-col border-l border-line bg-surface">
+    <div className="flex w-full flex-col">
       {/* Top half: subtask tree */}
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center gap-1.5 border-b border-line px-3 py-3">
@@ -627,7 +801,7 @@ function IssueSessionSidebar({
   onSessionSelect: (sessionId: string) => void
 }) {
   return (
-    <div className="flex w-[240px] shrink-0 flex-col border-l border-line bg-surface">
+    <div className="flex w-full flex-col">
       <SidebarSessionList sessions={sessions} onSelect={onSessionSelect} />
     </div>
   )
@@ -643,6 +817,7 @@ export function IssuesPage() {
   const [creating, setCreating] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [treeRootId, setTreeRootId] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const issues = useIssueStore((s) => s.issues)
   const syncing = useIssueStore((s) => s.syncing)
@@ -713,7 +888,7 @@ export function IssuesPage() {
       {/* ---- left: issue list ---- */}
       <div
         className={clsx(
-          "w-full shrink-0 flex-col border-r border-line bg-surface md:w-[28%]",
+          "w-full shrink-0 flex-col border-r border-line bg-surface md:w-80",
           selectedId ? "hidden md:flex" : "flex",
         )}
       >
@@ -874,34 +1049,64 @@ export function IssuesPage() {
         </div>
       </div>
 
-      {/* ---- right: detail + optional tree sidebar ---- */}
+      {/* ---- right: detail + overlay sidebar ---- */}
       <div
         className={clsx(
-          "min-w-0 flex-1 flex-row bg-term md:flex",
+          "relative min-w-0 flex-1 flex-col bg-term md:flex",
           selectedId ? "flex" : "hidden",
         )}
       >
         {selectedIssue ? (
           <>
-            <IssueDetail issue={selectedIssue} onBack={() => { setSelectedId(null); setTreeRootId(null) }} />
-            {treeRootId ? (() => {
-              const rootIssue = issues.find((i) => i.id === treeRootId)
-              if (!rootIssue) return null
-              return (
-                <IssueTreeSidebar
-                  rootIssue={rootIssue}
-                  childrenMap={childrenMap}
-                  currentId={selectedId}
-                  onSelect={setSelectedId}
-                  sessions={selectedIssueSessions}
-                  onSessionSelect={handleSessionSelect}
+            <IssueDetail
+              issue={selectedIssue}
+              onBack={() => { setSelectedId(null); setTreeRootId(null); setSidebarOpen(false) }}
+              onToggleSidebar={() => setSidebarOpen((v) => !v)}
+            />
+
+            {/* Sidebar overlay panel */}
+            {sidebarOpen && (
+              <>
+                <div
+                  className="absolute inset-0 z-10 bg-black/30"
+                  onClick={() => setSidebarOpen(false)}
                 />
-              )
-            })() : (
-              <IssueSessionSidebar
-                sessions={selectedIssueSessions}
-                onSessionSelect={handleSessionSelect}
-              />
+                <div className="absolute right-0 top-0 bottom-0 z-20 flex w-[280px] flex-col border-l border-line bg-surface shadow-xl">
+                  <div className="flex shrink-0 items-center justify-between border-b border-line px-3 py-2.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-4">
+                      {treeRootId ? "子任务树 & 运行记录" : "运行记录"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSidebarOpen(false)}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    {treeRootId ? (() => {
+                      const rootIssue = issues.find((i) => i.id === treeRootId)
+                      if (!rootIssue) return null
+                      return (
+                        <IssueTreeSidebar
+                          rootIssue={rootIssue}
+                          childrenMap={childrenMap}
+                          currentId={selectedId}
+                          onSelect={setSelectedId}
+                          sessions={selectedIssueSessions}
+                          onSessionSelect={handleSessionSelect}
+                        />
+                      )
+                    })() : (
+                      <IssueSessionSidebar
+                        sessions={selectedIssueSessions}
+                        onSessionSelect={handleSessionSelect}
+                      />
+                    )}
+                  </div>
+                </div>
+              </>
             )}
           </>
         ) : (

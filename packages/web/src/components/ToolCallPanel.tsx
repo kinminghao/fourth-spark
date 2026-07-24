@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react"
+import { ArrowRight, ChevronRight } from "lucide-react"
 import clsx from "clsx"
 import type { MessagePart } from "../lib/api-client"
 import {
+  extractTaskSessionId,
   formatToolPayload,
   getToolInput,
   getToolName,
@@ -9,6 +11,7 @@ import {
   getToolStatus,
   type ToolStatus,
 } from "../lib/message-parts"
+import { useSessionStore } from "../stores/session-store"
 
 const OUTPUT_TRUNCATE_LIMIT = 2000
 
@@ -29,6 +32,8 @@ const TOOL_LABELS: Record<string, string> = {
   agent: "Task",
   todowrite: "Todo",
   write_todos: "Todo",
+  question: "Question",
+  mcp_question: "Question",
 }
 
 const STATUS_META: Record<
@@ -195,6 +200,108 @@ function TodoView({ todos }: { todos: Array<{ content: string; status: string; p
   )
 }
 
+const CATEGORY_COLORS: Record<string, string> = {
+  "visual-engineering": "bg-purple-500/15 text-purple-400",
+  quick: "bg-emerald-500/15 text-emerald-400",
+  deep: "bg-blue-500/15 text-blue-400",
+  ultrabrain: "bg-amber-500/15 text-amber-400",
+  artistry: "bg-pink-500/15 text-pink-400",
+  writing: "bg-cyan-500/15 text-cyan-400",
+  "unspecified-low": "bg-elevated text-fg-4",
+  "unspecified-high": "bg-elevated text-fg-3",
+}
+
+const SUBAGENT_COLORS: Record<string, string> = {
+  explore: "bg-teal-500/15 text-teal-400",
+  librarian: "bg-indigo-500/15 text-indigo-400",
+  oracle: "bg-amber-500/15 text-amber-400",
+  metis: "bg-rose-500/15 text-rose-400",
+  momus: "bg-orange-500/15 text-orange-400",
+}
+
+function TaskInputView({ record }: { record: Record<string, unknown> }) {
+  const [promptOpen, setPromptOpen] = useState(false)
+
+  const category = typeof record.category === "string" ? record.category : null
+  const subagentType = typeof record.subagent_type === "string" ? record.subagent_type : null
+  const description = firstString(record, ["description", "title"])
+  const prompt = typeof record.prompt === "string" ? record.prompt : null
+  const skills = Array.isArray(record.load_skills) ? record.load_skills.filter((s): s is string => typeof s === "string") : []
+  const bg = typeof record.run_in_background === "boolean" ? record.run_in_background : false
+  const taskId = typeof record.task_id === "string" ? record.task_id : null
+
+  const typeLabel = category ?? subagentType
+  const typeColor = (category && CATEGORY_COLORS[category]) ?? (subagentType && SUBAGENT_COLORS[subagentType]) ?? "bg-elevated text-fg-3"
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {typeLabel && (
+          <span className={clsx("rounded px-1.5 py-0.5 text-[10px] font-medium", typeColor)}>
+            {typeLabel}
+          </span>
+        )}
+        {skills.map((s) => (
+          <span key={s} className="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-fg-4">{s}</span>
+        ))}
+        {bg && (
+          <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-fg-5">bg</span>
+        )}
+        {taskId && (
+          <span className="rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5" title={taskId}>
+            ↩ {taskId.slice(0, 16)}…
+          </span>
+        )}
+      </div>
+
+      {description && (
+        <p className="text-xs text-fg-2">{description}</p>
+      )}
+
+      {prompt && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setPromptOpen((v) => !v)}
+            className="flex items-center gap-1 text-[10px] text-fg-4 transition-colors hover:text-fg-2"
+          >
+            <ChevronRight className={clsx("h-3 w-3 transition-transform", promptOpen && "rotate-90")} />
+            Prompt
+            <span className="text-fg-5">({prompt.length} chars)</span>
+          </button>
+          {promptOpen && (
+            <pre className="mt-1 max-h-60 overflow-y-auto whitespace-pre-wrap break-words rounded bg-elevated/50 p-2 text-[11px] leading-relaxed text-fg-3">
+              {prompt}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TaskSessionLink({ part }: { part: MessagePart }) {
+  const sessionId = extractTaskSessionId(part)
+  const setActiveSession = useSessionStore((s) => s.setActiveSession)
+
+  if (!sessionId) return null
+
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        void setActiveSession(sessionId)
+      }}
+      className="mt-2 flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-xs text-blue-400 transition-colors hover:border-blue-500/50 hover:bg-blue-500/10"
+    >
+      <span className="truncate text-fg-5">{sessionId.slice(0, 20)}…</span>
+      <ArrowRight className="h-3 w-3 shrink-0" />
+      <span className="shrink-0">查看子会话</span>
+    </button>
+  )
+}
+
 function renderToolInput(name: string, raw: unknown): React.ReactNode | null {
   const record = toRecord(raw)
   if (!record) return null
@@ -224,6 +331,10 @@ function renderToolInput(name: string, raw: unknown): React.ReactNode | null {
         </pre>
       )
     }
+  }
+
+  if (lower === "task" || lower === "agent") {
+    return <TaskInputView record={record} />
   }
 
   if (lower === "read") {
@@ -274,6 +385,8 @@ export function ToolCallPanel({ part }: { part: MessagePart }) {
   }, [active])
 
   const toolName = getToolName(part)
+  const lower = toolName.toLowerCase()
+  const isTask = lower === "task" || lower === "agent"
   const rawInput = getToolInput(part)
   const { label, arg } = describeTool(toolName, rawInput)
   const customInput = renderToolInput(toolName, rawInput)
@@ -328,6 +441,7 @@ export function ToolCallPanel({ part }: { part: MessagePart }) {
                 </pre>
               </section>
             )}
+            {isTask && <TaskSessionLink part={part} />}
             {customOutput && (
               <section>{customOutput}</section>
             )}

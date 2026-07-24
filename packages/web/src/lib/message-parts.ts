@@ -112,3 +112,81 @@ export function countCompletedTodos(todos: readonly Todo[]): number {
   return todos.filter((todo) => normalizeTodoStatus(todo.status) === "completed")
     .length
 }
+
+export interface QuestionOption {
+  label: string
+  description?: string
+}
+
+export interface QuestionData {
+  question: string
+  header?: string
+  options: QuestionOption[]
+  multiple?: boolean
+}
+
+export function isQuestionTool(part: MessagePart): boolean {
+  const name = getToolName(part).toLowerCase()
+  return name === "question" || name === "mcp_question"
+}
+
+export function getQuestions(part: MessagePart): QuestionData[] | null {
+  const input = getToolInput(part)
+  if (!input || typeof input !== "object") return null
+  const record = input as Record<string, unknown>
+  if (Array.isArray(record.questions)) {
+    return record.questions as QuestionData[]
+  }
+  return null
+}
+
+export function isQuestionPending(part: MessagePart): boolean {
+  if (!isQuestionTool(part)) return false
+  const status = getToolStatus(part)
+  return status === "pending" || status === "running"
+}
+
+const SESSION_ID_RE = /\bses_[a-zA-Z0-9]+/
+
+/**
+ * Extract the sub-session ID spawned by a task/agent tool call.
+ * Checks three sources in priority order:
+ *   1. input.task_id — continuation session
+ *   2. state.metadata.session_id — opencode metadata
+ *   3. output text — regex match for ses_xxx pattern
+ */
+export function extractTaskSessionId(part: MessagePart): string | null {
+  // 1. input.task_id (continuation)
+  const input = getToolInput(part)
+  if (input && typeof input === "object") {
+    const record = input as Record<string, unknown>
+    if (typeof record.task_id === "string" && record.task_id.startsWith("ses_")) {
+      return record.task_id
+    }
+  }
+
+  // 2. state.metadata.session_id
+  const meta = part.state?.metadata
+  if (meta) {
+    const sid = meta.session_id ?? meta.sessionId
+    if (typeof sid === "string" && sid.startsWith("ses_")) {
+      return sid
+    }
+  }
+
+  // 3. output text — regex fallback
+  const output = getToolOutput(part)
+  if (typeof output === "string") {
+    const match = SESSION_ID_RE.exec(output)
+    if (match) return match[0]
+  }
+  if (output && typeof output === "object") {
+    const rec = output as Record<string, unknown>
+    const sid = rec.session_id ?? rec.sessionId ?? rec.task_id
+    if (typeof sid === "string" && sid.startsWith("ses_")) {
+      return sid
+    }
+  }
+
+  return null
+}
