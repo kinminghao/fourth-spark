@@ -44,6 +44,14 @@ export interface UpdateIssueInput {
   state?: "open" | "closed"
 }
 
+export interface GitComment {
+  id: number
+  body: string
+  user: { login: string; avatar_url: string }
+  created_at: string
+  updated_at: string
+}
+
 export interface GitIssueClient {
   listIssues(opts?: { state?: "open" | "closed" | "all"; page?: number; limit?: number }): Promise<GitIssue[]>
   getIssue(number: number): Promise<GitIssue>
@@ -51,6 +59,7 @@ export interface GitIssueClient {
   updateIssue(number: number, input: UpdateIssueInput): Promise<GitIssue>
   addDependency(issueNumber: number, dependsOnNumber: number): Promise<void>
   createComment(issueNumber: number, body: string): Promise<void>
+  listComments(issueNumber: number): Promise<GitComment[]>
 }
 
 class GitApiError extends Error {
@@ -136,6 +145,10 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
 
     async createComment(issueNumber, body) {
       await request<unknown>("POST", `/issues/${issueNumber}/comments`, { body })
+    },
+
+    async listComments(issueNumber) {
+      return request<GitComment[]>("GET", `/issues/${issueNumber}/comments?per_page=100`)
     },
   }
 }

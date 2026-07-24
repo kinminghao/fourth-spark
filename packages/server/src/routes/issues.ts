@@ -1,15 +1,36 @@
 import { Hono } from "hono"
-import { eq, and, desc } from "drizzle-orm"
+import { eq, and, desc, asc } from "drizzle-orm"
 import { db } from "../db/index"
-import { issues, repos } from "../db/schema"
+import { issues, issueComments, repos } from "../db/schema"
 import { parseGitUrl } from "../lib/git-url"
-import { createGitIssueClient, getHostInfo, type GitIssue } from "../lib/git-provider"
+import { createGitIssueClient, getHostInfo, type GitIssue, type GitComment } from "../lib/git-provider"
 import { logger } from "../middleware/logger"
 
 export const issueRoutes = new Hono()
 
+function rewriteAttachmentUrls(text: string | null | undefined, repoId: string): string | null {
+  if (!text) return text ?? null
+  const proxyBase = `/api/repos/${repoId}/issues/attachments`
+  return text
+    .replace(/src="\/?(attachments\/)/g, `src="${proxyBase}/`)
+    .replace(/\]\(\/?(attachments\/)/g, `](${proxyBase}/`)
+}
+
 function issueId(repoId: string, number: number): string {
   return `${repoId}_${number}`
+}
+
+function commentToDb(repoId: string, issueNum: number, gc: GitComment) {
+  return {
+    id: `${repoId}_c${gc.id}`,
+    issueId: issueId(repoId, issueNum),
+    repoId,
+    authorLogin: gc.user.login,
+    authorAvatar: gc.user.avatar_url ?? null,
+    body: gc.body,
+    createdAt: new Date(gc.created_at).getTime(),
+    updatedAt: new Date(gc.updated_at).getTime(),
+  }
 }
 
 function issueToDb(repoId: string, gi: GitIssue) {
@@ -44,6 +65,11 @@ issueRoutes.get("/", async (c) => {
   const rows = state === "all"
     ? await db.select().from(issues).where(eq(issues.repoId, repoId)).orderBy(desc(issues.updatedAt))
     : await db.select().from(issues).where(and(eq(issues.repoId, repoId), eq(issues.state, state))).orderBy(desc(issues.updatedAt))
+
+  for (const row of rows) {
+    row.body = rewriteAttachmentUrls(row.body, repoId)
+  }
+
   return c.json(rows)
 })
 
@@ -71,8 +97,24 @@ issueRoutes.post("/sync", async (c) => {
     page++
   }
 
-  logger.info({ repoId, total, state }, "issue sync complete")
-  return c.json({ synced: total })
+  const allIssues = await db.select({ number: issues.number }).from(issues).where(eq(issues.repoId, repoId))
+  let totalComments = 0
+  for (const row of allIssues) {
+    try {
+      const comments = await ctx.client.listComments(row.number)
+      for (const gc of comments) {
+        const values = commentToDb(repoId, row.number, gc)
+        const { id: _, createdAt: __, ...updateSet } = values
+        await db.insert(issueComments).values(values).onConflictDoUpdate({ target: issueComments.id, set: updateSet })
+      }
+      totalComments += comments.length
+    } catch (err) {
+      logger.warn({ err, repoId, issueNumber: row.number }, "failed to sync comments for issue")
+    }
+  }
+
+  logger.info({ repoId, total, totalComments, state }, "issue sync complete")
+  return c.json({ synced: total, comments: totalComments })
 })
 
 issueRoutes.post("/", async (c) => {
@@ -122,6 +164,58 @@ issueRoutes.post("/:number/children", async (c) => {
   }
 
   return c.json({ ok: true, parentId, childId })
+})
+
+issueRoutes.get("/:number/comments", async (c) => {
+  const repoId = c.req.param("repoId")!
+  const number = Number(c.req.param("number"))
+  if (!Number.isFinite(number)) return c.json({ error: "invalid issue number" }, 400)
+
+  const iid = issueId(repoId, number)
+  const rows = await db.select().from(issueComments).where(eq(issueComments.issueId, iid)).orderBy(asc(issueComments.createdAt))
+
+  if (rows.length > 0) {
+    const mapped = rows.map((r) => ({
+      id: r.id,
+      body: rewriteAttachmentUrls(r.body, repoId) ?? "",
+      user: { login: r.authorLogin, avatar_url: r.authorAvatar ?? "" },
+      created_at: new Date(r.createdAt).toISOString(),
+      updated_at: new Date(r.updatedAt).toISOString(),
+    }))
+    return c.json(mapped)
+  }
+
+  const ctx = await getRepoGitClient(repoId)
+  if (!ctx) return c.json([])
+
+  const comments = await ctx.client.listComments(number)
+  const rewritten = comments.map((c) => ({ ...c, body: rewriteAttachmentUrls(c.body, repoId) ?? "" }))
+  return c.json(rewritten)
+})
+
+issueRoutes.get("/attachments/:uuid", async (c) => {
+  const repoId = c.req.param("repoId")!
+  const uuid = c.req.param("uuid")!
+
+  const [repo] = await db.select().from(repos).where(eq(repos.id, repoId))
+  if (!repo) return c.json({ error: "repo not found" }, 404)
+  const remote = parseGitUrl(repo.gitUrl)
+  if (!remote) return c.json({ error: "invalid git url" }, 400)
+  const info = await getHostInfo(remote.host)
+  if (!info) return c.json({ error: "git host not configured" }, 400)
+
+  const upstream = await fetch(`https://${remote.host}/attachments/${uuid}`, {
+    headers: { Authorization: `token ${info.token}` },
+  })
+  if (!upstream.ok) return c.body(null, upstream.status as 404)
+
+  const headers = new Headers()
+  for (const key of ["content-type", "content-length", "cache-control", "etag", "last-modified"]) {
+    const val = upstream.headers.get(key)
+    if (val) headers.set(key, val)
+  }
+
+  return new Response(upstream.body, { status: 200, headers })
 })
 
 issueRoutes.patch("/:number", async (c) => {

@@ -441,3 +441,34 @@ body {
 .fs-diff-add {
   background-color: rgba(52, 211, 153, 0.06);
 }
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(1rem) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(1rem) scale(0.97);
+  }
+}
+
+@keyframes toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}

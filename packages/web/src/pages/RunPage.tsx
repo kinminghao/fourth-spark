@@ -145,6 +145,8 @@ function SessionPanel() {
 
   for (const s of topLevel) {
     if (s.issueId && issueMap.has(s.issueId)) {
+      const issue = issueMap.get(s.issueId)!
+      if (issue.state === "closed") continue
       const list = sessionsByIssue.get(s.issueId) ?? []
       list.push(s)
       sessionsByIssue.set(s.issueId, list)
@@ -153,8 +155,9 @@ function SessionPanel() {
     }
   }
 
-  const childrenOf = new Map<string, typeof issues>()
-  const rootIssues = issues.filter((i) => {
+  const openIssues = issues.filter((i) => i.state === "open")
+  const childrenOf = new Map<string, typeof openIssues>()
+  const rootIssues = openIssues.filter((i) => {
     if (i.parentId) {
       const list = childrenOf.get(i.parentId) ?? []
       list.push(i)

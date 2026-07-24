@@ -9,6 +9,7 @@ import { create } from "zustand"
 import * as api from "../lib/api-client"
 import type { Message, MessagePart, Session, Todo } from "../lib/api-client"
 import { useRepoStore } from "./repo-store"
+import { useToastStore } from "./toast-store"
 
 export const EMPTY_MESSAGES: readonly Message[] = []
 export const EMPTY_TODOS: readonly Todo[] = []
@@ -103,8 +104,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         ],
         activeSessionId: session.id,
         messages: mapSet(state.messages, session.id, []),
-        sessionStatuses: mapSet(state.sessionStatuses, session.id, "busy"),
       }))
+      get().setSessionStatus(session.id, "busy")
       return session
     } catch (error) {
       set({
@@ -173,18 +174,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const sessionId = get().activeSessionId
     if (!repoId || !sessionId) return
     const session = get().sessions.find((s) => s.id === sessionId)
-    set((state) => ({
-      sendError: null,
-      sessionStatuses: mapSet(state.sessionStatuses, sessionId, "busy"),
-    }))
+    set({ sendError: null })
+    get().setSessionStatus(sessionId, "busy")
     try {
       await api.sendMessage(repoId, sessionId, content, session?.agent)
     } catch (error) {
-      set((state) => ({
+      set({
         sendError:
           error instanceof Error ? error.message : "Failed to send message",
-        sessionStatuses: mapSet(state.sessionStatuses, sessionId, "idle"),
-      }))
+      })
+      get().setSessionStatus(sessionId, "idle")
     }
   },
 
@@ -197,9 +196,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     } catch {
       // Ignore abort failures.
     }
-    set((state) => ({
-      sessionStatuses: mapSet(state.sessionStatuses, sessionId, "idle"),
-    }))
+    get().setSessionStatus(sessionId, "idle")
   },
 
   clearSessions: () => {
@@ -265,6 +262,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   setSessionStatus: (sessionId, status) => {
+    const prev = get().sessionStatuses.get(sessionId)
+    if (prev !== status) {
+      const session = get().sessions.find((s) => s.id === sessionId)
+      const label = session?.title || sessionId.slice(-8)
+      if (status === "idle" && prev !== undefined && prev !== "idle") {
+        useToastStore.getState().addToast(`${label} — 完成`, "success", sessionId)
+      } else if (status === "busy" && (prev === undefined || prev === "idle")) {
+        useToastStore.getState().addToast(`${label} — 开始运行`, "info", sessionId)
+      } else if (status === "retry") {
+        useToastStore.getState().addToast(`${label} — 进入重试`, "warning", sessionId)
+      }
+    }
     set((state) => ({
       sessionStatuses: mapSet(state.sessionStatuses, sessionId, status),
     }))

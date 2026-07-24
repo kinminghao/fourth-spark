@@ -10,11 +10,14 @@ import { useSessionStore } from "./stores/session-store"
 import { useAgentStore } from "./stores/agent-store"
 import { useIssueStore } from "./stores/issue-store"
 import { useThemeStore } from "./stores/theme-store"
+import { ToastContainer } from "./components/ToastContainer"
+import { useGlobalStatusPoll } from "./hooks/use-global-status-poll"
 
 export default function App() {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const loadSessions = useSessionStore((s) => s.loadSessions)
   const clearSessions = useSessionStore((s) => s.clearSessions)
+  useGlobalStatusPoll()
 
   useEffect(() => {
     void useRepoStore.getState().loadRepos()
@@ -43,6 +46,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/repos" replace />} />
         </Route>
       </Routes>
+      <ToastContainer />
     </BrowserRouter>
   )
 }

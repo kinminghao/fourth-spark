@@ -127,6 +127,10 @@ function extractStatus(data: unknown): string | null {
   if (typeof record?.status === "string") {
     return record.status
   }
+  const statusObj = asRecord(record?.status)
+  if (typeof statusObj?.type === "string") {
+    return statusObj.type
+  }
   if (typeof record?.type === "string") {
     return record.type
   }
