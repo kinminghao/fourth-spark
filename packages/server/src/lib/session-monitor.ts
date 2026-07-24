@@ -2,18 +2,22 @@ import { autoSwitch, getActiveId, isUsageLimit, clearCooldown } from "./account-
 import type { OpenCodeClient, SessionStatus } from "./opencode"
 import { notify } from "./notify"
 import { logger } from "../middleware/logger"
+import { DEFAULT_VARIANT } from "./config"
 
 const POLL_INTERVAL_MS = 3_000
 const RECENT_SWITCH_GUARD_MS = 5_000
 const REPROMPT_SETTLE_MS = 1_500
+const MAX_AUTO_CONTINUES = 5
+const DEDUP_COOLDOWN_MS = 30_000
 
 type ManagedEntry = {
   repoId: string
   client: OpenCodeClient
 }
 
-const handled = new Set<string>()
+const handled = new Map<string, number>()
 const repromptInFlight = new Set<string>()
+const autoContinueCounts = new Map<string, number>()
 const prevStatuses = new Map<string, string>()
 let lastSwitchAt = 0
 let timer: ReturnType<typeof setInterval> | undefined
@@ -35,9 +39,15 @@ function emitTransition(sessionId: string, from: string, to: string): void {
 }
 
 function dedup(key: string): boolean {
-  if (handled.has(key)) return false
-  handled.add(key)
-  if (handled.size > 2000) handled.clear()
+  const ts = handled.get(key)
+  if (ts && Date.now() - ts < DEDUP_COOLDOWN_MS) return false
+  handled.set(key, Date.now())
+  if (handled.size > 500) {
+    const cutoff = Date.now() - 10 * 60_000
+    for (const [k, v] of handled) {
+      if (v < cutoff) handled.delete(k)
+    }
+  }
   return true
 }
 
@@ -67,6 +77,38 @@ async function getLastUserPrompt(
     logger.warn({ err, sessionId }, "failed to retrieve last user prompt")
   }
   return undefined
+}
+
+async function detectTruncation(client: OpenCodeClient, sessionId: string): Promise<boolean> {
+  const count = autoContinueCounts.get(sessionId) ?? 0
+  if (count >= MAX_AUTO_CONTINUES) {
+    logger.info({ sessionId, count }, "auto-continue limit reached, skipping")
+    return false
+  }
+  try {
+    const todos = await client.getTodos(sessionId)
+    return todos.some((t) => t.status === "in_progress" || t.status === "pending")
+  } catch {
+    return false
+  }
+}
+
+async function autoContinueSession(client: OpenCodeClient, sessionId: string): Promise<void> {
+  const count = (autoContinueCounts.get(sessionId) ?? 0) + 1
+  autoContinueCounts.set(sessionId, count)
+  const sid = sessionId.slice(-8)
+  try {
+    const last = await getLastUserPrompt(client, sessionId)
+    await client.prompt(sessionId, "continue", {
+      agent: last?.agent,
+      model: last?.model,
+      variant: DEFAULT_VARIANT,
+    })
+    logger.info({ sessionId, count, max: MAX_AUTO_CONTINUES }, "auto-continued truncated session")
+    notify("自动续发", `[${sid}] 检测到响应截断，已自动继续 (${count}/${MAX_AUTO_CONTINUES})`)
+  } catch (err) {
+    logger.warn({ err, sessionId }, "auto-continue prompt failed")
+  }
 }
 
 async function repromptSession(client: OpenCodeClient, sessionId: string): Promise<void> {
@@ -117,18 +159,35 @@ async function pollOnce(): Promise<void> {
         prevStatuses.set(sessionId, "idle")
         emitTransition(sessionId, prev, "idle")
         clearCooldown(await getActiveId() ?? "")
+        autoContinueCounts.delete(sessionId)
       }
     }
 
     for (const [sessionId, status] of Object.entries(statuses)) {
       const prev = prevStatuses.get(sessionId)
       prevStatuses.set(sessionId, status.type)
-      if (prev && prev !== status.type) emitTransition(sessionId, prev, status.type)
 
       if (status.type === "idle") {
         clearCooldown(await getActiveId() ?? "")
+
+        // Truncation auto-continue: if session was busy and is now idle with
+        // incomplete todos, the model response was likely truncated by
+        // max_output_tokens.  Send "continue" to let the agent resume.
+        if (prev === "busy") {
+          const shouldContinue = await detectTruncation(client, sessionId)
+          if (shouldContinue) {
+            await autoContinueSession(client, sessionId)
+            continue
+          }
+        }
+
+        if (prev && prev !== status.type) emitTransition(sessionId, prev, status.type)
+        autoContinueCounts.delete(sessionId)
         continue
       }
+
+      if (prev && prev !== status.type) emitTransition(sessionId, prev, status.type)
+
       if (status.type !== "retry") continue
 
       const message = (status as { message?: string }).message ?? ""
@@ -187,6 +246,7 @@ export const sessionMonitor = {
       timer = undefined
     }
     entries.length = 0
+    autoContinueCounts.clear()
     logger.info("session monitor stopped")
   },
 }
