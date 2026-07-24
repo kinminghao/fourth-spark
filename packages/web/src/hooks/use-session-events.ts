@@ -8,7 +8,7 @@
 import { useEffect } from "react"
 import { useSessionStore } from "../stores/session-store"
 import { useRepoStore } from "../stores/repo-store"
-import { sessionEventsUrl } from "../lib/api-client"
+import { sessionEventsUrl, getSessionStatus } from "../lib/api-client"
 import {
   dispatchSseEvent,
   KNOWN_SSE_EVENTS,
@@ -77,8 +77,20 @@ export function useSessionEvents(sessionId: string | null): void {
 
     connect()
 
+    const statusPoll = setInterval(async () => {
+      if (disposed) return
+      try {
+        const status = await getSessionStatus(repoId, sessionId)
+        if (status?.type) {
+          useSessionStore.getState().setSessionStatus(sessionId, status.type)
+        }
+      } catch {
+      }
+    }, 5_000)
+
     return () => {
       disposed = true
+      clearInterval(statusPoll)
       if (reconnectTimer) {
         clearTimeout(reconnectTimer)
       }

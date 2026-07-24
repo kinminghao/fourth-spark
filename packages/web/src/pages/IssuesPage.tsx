@@ -1,17 +1,22 @@
-import { useState, type KeyboardEvent } from "react"
+import { useEffect, useState, type KeyboardEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import {
+  Activity,
   ChevronLeft,
+  CircleDot,
   ExternalLink,
   GitBranch,
+  Network,
   Play,
   Plus,
   RefreshCw,
+  XCircle,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
+import rehypeRaw from "rehype-raw"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
-import type { Issue } from "../lib/api-client"
+import { type Issue, type IssueComment, type Session, listIssueComments } from "../lib/api-client"
 import { useIssueStore } from "../stores/issue-store"
 import { useRepoStore } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
@@ -25,12 +30,7 @@ const STATE_FILTERS: { key: StateFilter; label: string }[] = [
   { key: "all", label: "全部" },
 ]
 
-const TYPE_FILTERS: { key: TypeFilter; label: string }[] = [
-  { key: "all", label: "全部" },
-  { key: "epic", label: "Epic" },
-  { key: "task", label: "任务" },
-  { key: "stray", label: "游离" },
-]
+
 
 /* ------------------------------------------------------------------ */
 /*  Create-issue inline form                                          */
@@ -105,11 +105,13 @@ function IssueRow({
   issue,
   sessionCount,
   isActive,
+  isEpic,
   onSelect,
 }: {
   issue: Issue
   sessionCount: number
   isActive: boolean
+  isEpic?: boolean
   onSelect: () => void
 }) {
   return (
@@ -136,6 +138,11 @@ function IssueRow({
             >
               #{issue.number}
             </span>
+            {isEpic && (
+              <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide bg-amber-400/12 text-amber-400">
+                EPIC
+              </span>
+            )}
             <span className="min-w-0 text-sm font-medium text-fg-2">
               {issue.title}
             </span>
@@ -175,6 +182,20 @@ function IssueRow({
 
 function IssueDetail({ issue, onBack }: { issue: Issue; onBack?: () => void }) {
   const navigate = useNavigate()
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
+  const [comments, setComments] = useState<IssueComment[]>([])
+  const [loadingComments, setLoadingComments] = useState(false)
+  const [togglingState, setTogglingState] = useState(false)
+  const updateIssueState = useIssueStore((s) => s.updateIssueState)
+
+  useEffect(() => {
+    if (!activeRepoId) return
+    setLoadingComments(true)
+    listIssueComments(activeRepoId, issue.number)
+      .then(setComments)
+      .catch(() => setComments([]))
+      .finally(() => setLoadingComments(false))
+  }, [activeRepoId, issue.number])
 
   const handleStart = () => {
     useIssueStore.getState().setSelectedIssue(issue.id)
@@ -183,9 +204,13 @@ function IssueDetail({ issue, onBack }: { issue: Issue; onBack?: () => void }) {
     navigate("/run")
   }
 
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso)
+    return d.toLocaleDateString("zh-CN", { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
+  }
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {/* header */}
       <header className="flex items-center gap-3 border-b border-line px-4 py-4 md:px-6">
         <button
           type="button"
@@ -251,6 +276,33 @@ function IssueDetail({ issue, onBack }: { issue: Issue; onBack?: () => void }) {
           </button>
           <button
             type="button"
+            disabled={togglingState}
+            onClick={async () => {
+              setTogglingState(true)
+              await updateIssueState(issue.number, issue.state === "open" ? "closed" : "open")
+              setTogglingState(false)
+            }}
+            className={clsx(
+              "flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors disabled:opacity-40",
+              issue.state === "open"
+                ? "border-red-500/30 text-red-400 hover:border-red-500/60 hover:bg-red-500/10"
+                : "border-emerald-500/30 text-emerald-400 hover:border-emerald-500/60 hover:bg-emerald-500/10",
+            )}
+          >
+            {issue.state === "open" ? (
+              <>
+                <XCircle className="h-3.5 w-3.5" />
+                关闭
+              </>
+            ) : (
+              <>
+                <CircleDot className="h-3.5 w-3.5" />
+                重新打开
+              </>
+            )}
+          </button>
+          <button
+            type="button"
             onClick={handleStart}
             className="flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-blue-500"
           >
@@ -260,12 +312,11 @@ function IssueDetail({ issue, onBack }: { issue: Issue; onBack?: () => void }) {
         </div>
       </header>
 
-      {/* body */}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-6 py-6">
           {issue.body ? (
             <div className="markdown-body leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
                 {issue.body}
               </ReactMarkdown>
             </div>
@@ -274,8 +325,310 @@ function IssueDetail({ issue, onBack }: { issue: Issue; onBack?: () => void }) {
               该 Issue 没有描述内容
             </p>
           )}
+
+          {loadingComments ? (
+            <p className="mt-8 text-center font-mono text-xs text-fg-6">加载评论…</p>
+          ) : comments.length > 0 && (
+            <div className="mt-8 border-t border-line pt-6">
+              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-fg-4">
+                评论 ({comments.length})
+              </h3>
+              <div className="space-y-4">
+                {comments.map((c) => (
+                  <div key={c.id} className="rounded-lg border border-line bg-elevated/40 px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={c.user.avatar_url}
+                        alt={c.user.login}
+                        className="h-5 w-5 rounded-full"
+                      />
+                      <span className="text-xs font-semibold text-fg-2">{c.user.login}</span>
+                      <span className="text-[10px] text-fg-6">{fmtDate(c.created_at)}</span>
+                    </div>
+                    <div className="markdown-body mt-2 text-sm leading-relaxed text-fg-3">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                        {c.body}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tree sidebar for epics                                            */
+/* ------------------------------------------------------------------ */
+
+function TreeNode({
+  issue,
+  childrenMap,
+  currentId,
+  onSelect,
+  depth,
+}: {
+  issue: Issue
+  childrenMap: Map<string, Issue[]>
+  currentId: string | null
+  onSelect: (id: string) => void
+  depth: number
+}) {
+  const children = childrenMap.get(issue.id) ?? []
+  const isCurrent = issue.id === currentId
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => onSelect(issue.id)}
+        className={clsx(
+          "group flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+          isCurrent
+            ? "bg-blue-500/10 text-blue-400"
+            : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
+        )}
+        style={{ paddingLeft: `${depth * 18 + 8}px` }}
+      >
+        <span
+          className={clsx(
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            issue.state === "open" ? "bg-emerald-400" : "bg-purple-400",
+          )}
+        />
+        <span className="shrink-0 font-mono text-[10px] text-fg-6">
+          #{issue.number}
+        </span>
+        <span className="min-w-0 truncate">{issue.title}</span>
+      </button>
+
+      {children.length > 0 && (
+        <div className="relative">
+          <div
+            className="absolute top-0 bottom-3 w-px bg-line"
+            style={{ left: `${depth * 18 + 16}px` }}
+          />
+          {children.map((child) => (
+            <TreeNode
+              key={child.id}
+              issue={child}
+              childrenMap={childrenMap}
+              currentId={currentId}
+              onSelect={onSelect}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function countDescendants(
+  rootId: string,
+  childrenMap: Map<string, Issue[]>,
+): { total: number; closed: number } {
+  let total = 0
+  let closed = 0
+  const stack = childrenMap.get(rootId) ?? []
+  for (let i = 0; i < stack.length; i++) {
+    const c = stack[i]
+    total++
+    if (c.state === "closed") closed++
+    const grandchildren = childrenMap.get(c.id)
+    if (grandchildren) stack.push(...grandchildren)
+  }
+  return { total, closed }
+}
+
+function formatSessionTime(session: Session): string {
+  const raw = typeof session.time?.created === "number"
+    ? session.time.created
+    : session.createdAt
+      ? Date.parse(session.createdAt)
+      : 0
+  if (!raw || Number.isNaN(raw)) return ""
+  const ms = raw < 1_000_000_000_000 ? raw * 1000 : raw
+  const date = new Date(ms)
+  const sameDay = date.toDateString() === new Date().toDateString()
+  return sameDay
+    ? date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+    : date.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+}
+
+function SidebarSessionItem({ session, onSelect }: { session: Session; onSelect: () => void }) {
+  const when = formatSessionTime(session)
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="block w-full rounded-md border-l-2 border-transparent px-2.5 py-2 text-left transition-colors hover:bg-elevated/50"
+      >
+        <div className="flex items-center gap-2">
+          <span className="min-w-0 truncate font-mono text-xs text-fg-3">{session.agent?.trim() || "默认"}</span>
+          {when && <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-fg-5">{when}</span>}
+        </div>
+        <div className="mt-0.5 truncate text-sm text-fg-2">{session.title?.trim() || "未命名运行"}</div>
+      </button>
+    </li>
+  )
+}
+
+function SidebarSessionList({
+  sessions,
+  onSelect,
+}: {
+  sessions: Session[]
+  onSelect: (sessionId: string) => void
+}) {
+  const issues = useIssueStore((s) => s.issues)
+  const issueMap = new Map(issues.map((i) => [i.id, i]))
+
+  const grouped = new Map<string, Session[]>()
+  const unlinked: Session[] = []
+  for (const s of sessions) {
+    if (s.issueId && issueMap.has(s.issueId)) {
+      const list = grouped.get(s.issueId) ?? []
+      list.push(s)
+      grouped.set(s.issueId, list)
+    } else {
+      unlinked.push(s)
+    }
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col border-t border-line">
+      <div className="flex items-center gap-1.5 border-b border-line px-3 py-3">
+        <Activity className="h-3.5 w-3.5 text-fg-5" />
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-4">
+          运行记录
+        </span>
+        <span className="ml-auto rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">
+          {sessions.length}
+        </span>
+      </div>
+      <div className="flex-1 overflow-y-auto px-2 py-2">
+        {sessions.length === 0 ? (
+          <p className="px-2 py-4 text-center font-mono text-[10px] text-fg-6">暂无运行记录</p>
+        ) : (
+          <div className="space-y-3">
+            {[...grouped.entries()].map(([gid, list]) => {
+              const issue = issueMap.get(gid)!
+              return (
+                <div key={gid}>
+                  <div className="mb-1 flex items-center gap-1.5 px-1">
+                    <span className={clsx(
+                      "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium",
+                      issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
+                    )}>
+                      #{issue.number}
+                    </span>
+                    <span className="min-w-0 truncate text-xs font-medium text-fg-3">{issue.title}</span>
+                  </div>
+                  <ul className="space-y-0.5">
+                    {list.map((s) => (
+                      <SidebarSessionItem key={s.id} session={s} onSelect={() => onSelect(s.id)} />
+                    ))}
+                  </ul>
+                </div>
+              )
+            })}
+            {unlinked.length > 0 && (
+              <div>
+                {grouped.size > 0 && (
+                  <div className="mb-1 px-1">
+                    <span className="text-xs font-medium text-fg-5">未关联 Issue</span>
+                  </div>
+                )}
+                <ul className="space-y-0.5">
+                  {unlinked.map((s) => (
+                    <SidebarSessionItem key={s.id} session={s} onSelect={() => onSelect(s.id)} />
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function IssueTreeSidebar({
+  rootIssue,
+  childrenMap,
+  currentId,
+  onSelect,
+  sessions,
+  onSessionSelect,
+}: {
+  rootIssue: Issue
+  childrenMap: Map<string, Issue[]>
+  currentId: string | null
+  onSelect: (id: string) => void
+  sessions: Session[]
+  onSessionSelect: (sessionId: string) => void
+}) {
+  const { total, closed } = countDescendants(rootIssue.id, childrenMap)
+  const pct = total === 0 ? 0 : Math.round((closed / total) * 100)
+
+  return (
+    <div className="flex w-[240px] shrink-0 flex-col border-l border-line bg-surface">
+      {/* Top half: subtask tree */}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex items-center gap-1.5 border-b border-line px-3 py-3">
+          <Network className="h-3.5 w-3.5 text-fg-5" />
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-4">
+            子任务树
+          </span>
+        </div>
+
+        {total > 0 && (
+          <div className="border-b border-line px-3 py-2">
+            <div className="h-1 overflow-hidden rounded-full bg-elevated">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-blue-500 transition-all"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="mt-1 font-mono text-[10px] text-fg-6">
+              {closed} / {total} completed
+            </p>
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto py-2">
+          <TreeNode
+            issue={rootIssue}
+            childrenMap={childrenMap}
+            currentId={currentId}
+            onSelect={onSelect}
+            depth={0}
+          />
+        </div>
+      </div>
+
+      {/* Bottom half: sessions */}
+      <SidebarSessionList sessions={sessions} onSelect={onSessionSelect} />
+    </div>
+  )
+}
+
+function IssueSessionSidebar({
+  sessions,
+  onSessionSelect,
+}: {
+  sessions: Session[]
+  onSessionSelect: (sessionId: string) => void
+}) {
+  return (
+    <div className="flex w-[240px] shrink-0 flex-col border-l border-line bg-surface">
+      <SidebarSessionList sessions={sessions} onSelect={onSessionSelect} />
     </div>
   )
 }
@@ -286,9 +639,10 @@ function IssueDetail({ issue, onBack }: { issue: Issue; onBack?: () => void }) {
 
 export function IssuesPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("open")
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all")
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("epic")
   const [creating, setCreating] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [treeRootId, setTreeRootId] = useState<string | null>(null)
 
   const issues = useIssueStore((s) => s.issues)
   const syncing = useIssueStore((s) => s.syncing)
@@ -304,6 +658,15 @@ export function IssuesPage() {
   }
 
   const childIssueIds = new Set(issues.filter((i) => i.parentId).map((i) => i.parentId!))
+
+  const childrenMap = new Map<string, Issue[]>()
+  for (const i of issues) {
+    if (i.parentId) {
+      const siblings = childrenMap.get(i.parentId)
+      if (siblings) siblings.push(i)
+      else childrenMap.set(i.parentId, [i])
+    }
+  }
 
   function issueType(i: { parentId?: string; id: string }): "epic" | "task" | "stray" {
     if (i.parentId) return "task"
@@ -321,6 +684,29 @@ export function IssuesPage() {
   const strayCount = afterState.filter((i) => issueType(i) === "stray").length
 
   const selectedIssue = issues.find((i) => i.id === selectedId) ?? null
+  const navigate = useNavigate()
+
+  const selectedIssueIds = new Set<string>()
+  if (selectedId) {
+    selectedIssueIds.add(selectedId)
+    if (treeRootId) {
+      selectedIssueIds.add(treeRootId)
+      const stack = [...(childrenMap.get(treeRootId) ?? [])]
+      for (let idx = 0; idx < stack.length; idx++) {
+        selectedIssueIds.add(stack[idx].id)
+        const grandchildren = childrenMap.get(stack[idx].id)
+        if (grandchildren) stack.push(...grandchildren)
+      }
+    }
+  }
+  const selectedIssueSessions = sessions.filter(
+    (s) => s.issueId && selectedIssueIds.has(s.issueId) && !s.parentID,
+  )
+
+  const handleSessionSelect = (sessionId: string) => {
+    useSessionStore.setState({ activeSessionId: sessionId })
+    navigate("/run")
+  }
 
   return (
     <div className="flex min-h-0 flex-1">
@@ -406,39 +792,56 @@ export function IssuesPage() {
           })}
         </div>
 
-        <div className="flex border-b border-line">
-          {TYPE_FILTERS.map(({ key, label }) => {
-            const count =
-              key === "epic" ? epicCount
-                : key === "task" ? taskCount
-                : key === "stray" ? strayCount
-                : afterState.length
+        <div className="flex items-center gap-1.5 border-b border-line px-3 py-2">
+          {(["epic", "stray"] as const).map((key) => {
+            const label = key === "epic" ? "Epic" : "游离"
+            const count = key === "epic" ? epicCount : strayCount
+            const active = typeFilter === key
             return (
               <button
                 key={key}
                 type="button"
-                onClick={() => setTypeFilter(key)}
+                onClick={() => setTypeFilter(active ? "all" : key)}
                 className={clsx(
-                  "flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[10px] font-medium transition-colors",
-                  typeFilter === key
-                    ? "border-b-2 border-emerald-500 text-emerald-500"
-                    : "text-fg-5 hover:text-fg-3",
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors",
+                  active
+                    ? key === "epic"
+                      ? "bg-amber-400/15 text-amber-400"
+                      : "bg-sky-400/15 text-sky-400"
+                    : "bg-elevated/60 text-fg-5 hover:bg-elevated hover:text-fg-3",
                 )}
               >
                 {label}
-                <span
-                  className={clsx(
-                    "rounded-full px-1.5 py-0.5 font-mono text-[9px]",
-                    typeFilter === key
-                      ? "bg-emerald-500/10 text-emerald-500"
-                      : "bg-elevated text-fg-6",
-                  )}
-                >
+                <span className={clsx(
+                  "rounded-full px-1.5 py-0.5 font-mono text-[10px] font-medium",
+                  active ? "opacity-70" : "text-fg-6",
+                )}>
                   {count}
                 </span>
               </button>
             )
           })}
+          <div className="ml-auto flex items-center gap-1">
+            {(["all", "task"] as const).map((key) => {
+              const label = key === "all" ? "全部" : "任务"
+              const count = key === "all" ? afterState.length : taskCount
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setTypeFilter(key)}
+                  className={clsx(
+                    "rounded px-1.5 py-0.5 font-mono text-[10px] transition-colors",
+                    typeFilter === key
+                      ? "bg-fg-6/20 text-fg-3"
+                      : "text-fg-6 hover:text-fg-4",
+                  )}
+                >
+                  {label} {count}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* list */}
@@ -459,7 +862,11 @@ export function IssuesPage() {
                   issue={issue}
                   sessionCount={sessionCounts.get(issue.id) ?? 0}
                   isActive={selectedId === issue.id}
-                  onSelect={() => setSelectedId(issue.id)}
+                  isEpic={issueType(issue) === "epic"}
+                  onSelect={() => {
+                    setSelectedId(issue.id)
+                    setTreeRootId(issueType(issue) === "epic" ? issue.id : null)
+                  }}
                 />
               ))}
             </ul>
@@ -467,15 +874,36 @@ export function IssuesPage() {
         </div>
       </div>
 
-      {/* ---- right: detail ---- */}
+      {/* ---- right: detail + optional tree sidebar ---- */}
       <div
         className={clsx(
-          "min-w-0 flex-1 flex-col bg-term md:flex",
+          "min-w-0 flex-1 flex-row bg-term md:flex",
           selectedId ? "flex" : "hidden",
         )}
       >
         {selectedIssue ? (
-          <IssueDetail issue={selectedIssue} onBack={() => setSelectedId(null)} />
+          <>
+            <IssueDetail issue={selectedIssue} onBack={() => { setSelectedId(null); setTreeRootId(null) }} />
+            {treeRootId ? (() => {
+              const rootIssue = issues.find((i) => i.id === treeRootId)
+              if (!rootIssue) return null
+              return (
+                <IssueTreeSidebar
+                  rootIssue={rootIssue}
+                  childrenMap={childrenMap}
+                  currentId={selectedId}
+                  onSelect={setSelectedId}
+                  sessions={selectedIssueSessions}
+                  onSessionSelect={handleSessionSelect}
+                />
+              )
+            })() : (
+              <IssueSessionSidebar
+                sessions={selectedIssueSessions}
+                onSessionSelect={handleSessionSelect}
+              />
+            )}
+          </>
         ) : (
           <div className="flex flex-1 items-center justify-center">
             <p className="font-mono text-xs text-fg-5">

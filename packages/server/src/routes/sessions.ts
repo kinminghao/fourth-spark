@@ -1,15 +1,51 @@
 import { Hono } from "hono"
-import { eq } from "drizzle-orm"
+import { eq, asc, inArray } from "drizzle-orm"
 import { processManager } from "../lib/process-manager"
 import { DEFAULT_VARIANT } from "../lib/config"
 import { syncSessionsList, syncMessagesList } from "../db/sync"
 import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFromDB, getTodosFromDB } from "../db/query"
 import { db } from "../db/index"
-import { sessions as sessionsTable } from "../db/schema"
+import { sessions as sessionsTable, issues, issueComments } from "../db/schema"
 import { logger } from "../middleware/logger"
 import type { SessionStatus } from "../lib/opencode"
 
 export const sessions = new Hono()
+
+function stripMedia(text: string): string {
+  return text
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, "")
+    .replace(/<img[^>]*>/gi, "")
+    .replace(/<a[^>]+href="[^"]*attachments[^"]*"[^>]*>.*?<\/a>/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
+async function buildIssueContext(issueId: string): Promise<string | null> {
+  const [issue] = await db.select().from(issues).where(eq(issues.id, issueId))
+  if (!issue) return null
+
+  const parts: string[] = [`[Issue #${issue.number}] ${issue.title}`]
+
+  if (issue.body) {
+    const cleaned = stripMedia(issue.body)
+    if (cleaned) parts.push(cleaned)
+  }
+
+  const comments = await db.select().from(issueComments)
+    .where(eq(issueComments.issueId, issueId))
+    .orderBy(asc(issueComments.createdAt))
+
+  if (comments.length > 0) {
+    const commentLines = comments.map((c) => {
+      const date = new Date(c.createdAt).toISOString().slice(0, 10)
+      const cleaned = stripMedia(c.body)
+      return `**${c.authorLogin}** (${date}):\n${cleaned}`
+    })
+    parts.push(`### Comments\n\n${commentLines.join("\n\n")}`)
+  }
+
+  return parts.join("\n\n")
+}
 
 sessions.post("/", async (c) => {
   const repoId = c.req.param("repoId")
@@ -18,11 +54,29 @@ sessions.post("/", async (c) => {
   if (!body || typeof body.message !== "string" || body.message.length === 0) {
     return c.json({ error: "Body must include a non-empty 'message' string", status: 400 }, 400)
   }
-  const session = await client.createSession({ agent: body.agent, title: body.title })
+
+  let prompt = body.message
   if (body.issueId) {
-    await db.update(sessionsTable).set({ issueId: body.issueId }).where(eq(sessionsTable.id, session.id)).catch(() => {})
+    const context = await buildIssueContext(body.issueId)
+    if (context) {
+      prompt = `${context}\n\n---\n\n${prompt}`
+    }
   }
-  await client.prompt(session.id, body.message, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT })
+
+  const session = await client.createSession({ agent: body.agent, title: body.title })
+  const now = Date.now()
+  await db.insert(sessionsTable).values({
+    id: session.id,
+    title: session.title ?? body.title ?? "",
+    issueId: body.issueId ?? null,
+    agent: body.agent ?? null,
+    timeCreated: now,
+    timeUpdated: now,
+  }).onConflictDoUpdate({
+    target: sessionsTable.id,
+    set: { issueId: body.issueId ?? null, timeUpdated: now },
+  })
+  await client.prompt(session.id, prompt, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT })
   return c.json({ ...session, agent: body.agent, issueId: body.issueId ?? null }, 201)
 })
 
@@ -33,7 +87,12 @@ sessions.get("/", async (c) => {
     try {
       const list = await client.listSessions()
       syncSessionsList(list)
-      return c.json(list)
+      const ids = list.map((s) => s.id)
+      const issueRows = ids.length > 0
+        ? await db.select({ id: sessionsTable.id, issueId: sessionsTable.issueId }).from(sessionsTable).where(inArray(sessionsTable.id, ids))
+        : []
+      const issueMap = new Map(issueRows.map((r) => [r.id, r.issueId]))
+      return c.json(list.map((s) => ({ ...s, issueId: issueMap.get(s.id) ?? null })))
     } catch (err) {
       logger.warn({ err, repoId }, "opencode unavailable for listSessions, falling back to DB")
     }

@@ -328,6 +328,29 @@ export async function linkChildIssue(repoId: string, parentNumber: number, child
   })
 }
 
+export interface IssueComment {
+  id: number
+  body: string
+  user: { login: string; avatar_url: string }
+  created_at: string
+  updated_at: string
+}
+
+export async function updateIssue(
+  repoId: string,
+  issueNumber: number,
+  updates: { title?: string; body?: string; state?: "open" | "closed" },
+): Promise<Issue> {
+  return apiFetch<Issue>(`${repoBase(repoId)}/issues/${issueNumber}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  })
+}
+
+export async function listIssueComments(repoId: string, issueNumber: number): Promise<IssueComment[]> {
+  return apiFetch<IssueComment[]>(`${repoBase(repoId)}/issues/${issueNumber}/comments`)
+}
+
 export async function updateSessionIssue(repoId: string, sessionId: string, issueId: string | null): Promise<void> {
   await apiFetch<void>(
     `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`,

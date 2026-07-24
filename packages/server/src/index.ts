@@ -47,27 +47,35 @@ app.route("/api/repos/:repoId", repoScoped)
 app.get("/", (c) => c.json({ name: "fourth-spark server", status: "ok" }))
 
 // ---------------------------------------------------------------------------
-// Startup — spawn opencode for all configured repos
+// Startup — clean orphans from previous runs, then spawn opencode for all repos
 // ---------------------------------------------------------------------------
 logger.info({ port: PORT }, "fourth-spark server starting")
 
-processManager.startAll().then(() => {
+processManager.cleanupOrphans().then(() => {
+  return processManager.startAll()
+}).then(() => {
   logger.info("all repos initialized")
 }).catch((err) => {
   logger.error({ err }, "failed to initialize repos")
 })
 
-// Graceful shutdown
-process.on("SIGINT", async () => {
-  logger.info("shutting down — stopping all opencode processes")
+// ---------------------------------------------------------------------------
+// Graceful shutdown — covers SIGINT (Ctrl-C), SIGTERM (kill), SIGHUP (bun --watch)
+// ---------------------------------------------------------------------------
+async function gracefulShutdown(signal: string) {
+  logger.info({ signal }, "shutting down — stopping all opencode processes")
   await processManager.stopAll()
   process.exit(0)
-})
+}
 
-process.on("SIGTERM", async () => {
-  logger.info("shutting down — stopping all opencode processes")
-  await processManager.stopAll()
-  process.exit(0)
+process.on("SIGINT", () => gracefulShutdown("SIGINT"))
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"))
+process.on("SIGHUP", () => gracefulShutdown("SIGHUP"))
+
+// Last-resort synchronous kill — if async handlers didn't finish in time
+// and the process is being forcefully terminated.
+process.on("exit", () => {
+  processManager.killAllSync()
 })
 
 // Bun serves the default export. `idleTimeout: 0` disables the socket idle

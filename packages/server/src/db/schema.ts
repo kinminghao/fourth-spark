@@ -100,6 +100,20 @@ export const gitHosts = pgTable("git_hosts", {
   uniqueIndex("git_hosts_host_idx").on(t.host),
 ])
 
+export const issueComments = pgTable("issue_comments", {
+  id: text("id").primaryKey(),
+  issueId: text("issue_id").notNull().references(() => issues.id, { onDelete: "cascade" }),
+  repoId: text("repo_id").notNull().references(() => repos.id, { onDelete: "cascade" }),
+  authorLogin: text("author_login").notNull(),
+  authorAvatar: text("author_avatar"),
+  body: text("body").notNull(),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+}, (t) => [
+  index("issue_comments_issue_idx").on(t.issueId),
+  index("issue_comments_repo_idx").on(t.repoId),
+])
+
 export const todos = pgTable("todos", {
   sessionId: text("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
   position: integer("position").notNull(),

@@ -17,6 +17,7 @@ interface IssueState {
   exitMatchMode: () => void
   setMatchCandidate: (id: string | null) => void
   linkChild: (parentNumber: number, childNumber: number) => Promise<boolean>
+  updateIssueState: (issueNumber: number, state: "open" | "closed") => Promise<boolean>
   loadIssues: () => Promise<void>
   syncIssues: () => Promise<void>
   createIssue: (title: string, body?: string) => Promise<Issue | null>
@@ -50,6 +51,20 @@ export const useIssueStore = create<IssueState>((set, get) => ({
           matchingCandidateId: null,
         }))
       }
+      return true
+    } catch {
+      return false
+    }
+  },
+
+  updateIssueState: async (issueNumber, state) => {
+    const repoId = useRepoStore.getState().activeRepoId
+    if (!repoId) return false
+    try {
+      const updated = await api.updateIssue(repoId, issueNumber, { state })
+      set((s) => ({
+        issues: s.issues.map((i) => i.number === issueNumber ? { ...i, state: updated.state } : i),
+      }))
       return true
     } catch {
       return false
