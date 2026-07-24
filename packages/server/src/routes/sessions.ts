@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { eq, asc, inArray } from "drizzle-orm"
+import { eq, asc, desc, inArray } from "drizzle-orm"
 import { processManager } from "../lib/process-manager"
 import { DEFAULT_VARIANT } from "../lib/config"
 import { syncSessionsList, syncMessagesList } from "../db/sync"
@@ -20,31 +20,67 @@ function stripMedia(text: string): string {
     .trim()
 }
 
-async function buildIssueContext(issueId: string): Promise<string | null> {
-  const [issue] = await db.select().from(issues).where(eq(issues.id, issueId))
-  if (!issue) return null
+const MAX_ANCESTOR_DEPTH = 10
+const MAX_ANCESTOR_COMMENTS = 5
 
-  const parts: string[] = [`[Issue #${issue.number}] ${issue.title}`]
+async function collectAncestorChain(issueId: string) {
+  const chain: (typeof issues.$inferSelect)[] = []
+  const visited = new Set<string>()
+  let currentId: string | null = issueId
 
-  if (issue.body) {
-    const cleaned = stripMedia(issue.body)
-    if (cleaned) parts.push(cleaned)
+  while (currentId && chain.length < MAX_ANCESTOR_DEPTH) {
+    if (visited.has(currentId)) break
+    visited.add(currentId)
+    const [issue] = await db.select().from(issues).where(eq(issues.id, currentId))
+    if (!issue) break
+    chain.push(issue)
+    currentId = issue.parentId
   }
 
-  const comments = await db.select().from(issueComments)
-    .where(eq(issueComments.issueId, issueId))
+  return chain.reverse()
+}
+
+async function buildIssueContext(issueId: string): Promise<string | null> {
+  const chain = await collectAncestorChain(issueId)
+  if (chain.length === 0) return null
+
+  const allIds = chain.map((i) => i.id)
+  const allComments = await db.select().from(issueComments)
+    .where(inArray(issueComments.issueId, allIds))
     .orderBy(asc(issueComments.createdAt))
 
-  if (comments.length > 0) {
-    const commentLines = comments.map((c) => {
-      const date = new Date(c.createdAt).toISOString().slice(0, 10)
-      const cleaned = stripMedia(c.body)
-      return `**${c.authorLogin}** (${date}):\n${cleaned}`
-    })
-    parts.push(`### Comments\n\n${commentLines.join("\n\n")}`)
-  }
+  const commentMap = Map.groupBy(allComments, (c) => c.issueId)
 
-  return parts.join("\n\n")
+  const sections = chain.map((issue, i) => {
+    const isLeaf = i === chain.length - 1
+    const header = isLeaf
+      ? `## 当前 Issue: [#${issue.number}] ${issue.title}`
+      : `## 上级 Issue (Level ${i}): [#${issue.number}] ${issue.title}`
+
+    const parts = [header]
+
+    if (issue.body) {
+      const cleaned = stripMedia(issue.body)
+      if (cleaned) parts.push(cleaned)
+    }
+
+    let comments = commentMap.get(issue.id) ?? []
+    if (!isLeaf && comments.length > MAX_ANCESTOR_COMMENTS) {
+      comments = comments.slice(-MAX_ANCESTOR_COMMENTS)
+    }
+    if (comments.length > 0) {
+      const lines = comments.map((c) => {
+        const date = new Date(c.createdAt).toISOString().slice(0, 10)
+        const cleaned = stripMedia(c.body)
+        return `**${c.authorLogin}** (${date}):\n${cleaned}`
+      })
+      parts.push(`### Comments\n\n${lines.join("\n\n")}`)
+    }
+
+    return parts.join("\n\n")
+  })
+
+  return sections.join("\n\n---\n\n")
 }
 
 sessions.post("/", async (c) => {
