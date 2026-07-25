@@ -8,6 +8,16 @@ import { existsSync } from "node:fs"
 
 export const repoRoutes = new Hono()
 
+function getBranch(localPath: string): string | null {
+  try {
+    const result = Bun.spawnSync(["git", "rev-parse", "--abbrev-ref", "HEAD"], { cwd: localPath })
+    const branch = result.stdout.toString().trim()
+    return branch || null
+  } catch {
+    return null
+  }
+}
+
 // POST /api/repos/resolve — read .git directory to extract repo name and remote URL.
 repoRoutes.post("/resolve", async (c) => {
   const body = await c.req.json<{ localPath?: string }>().catch(() => null)
@@ -87,6 +97,7 @@ repoRoutes.get("/", async (c) => {
   const result = all.map((r) => ({
     ...r,
     running: processManager.isRunning(r.id),
+    branch: getBranch(r.localPath),
   }))
   return c.json(result)
 })
@@ -95,7 +106,7 @@ repoRoutes.get("/", async (c) => {
 repoRoutes.get("/:id", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
-  return c.json({ ...repo, running: processManager.isRunning(repo.id) })
+  return c.json({ ...repo, running: processManager.isRunning(repo.id), branch: getBranch(repo.localPath) })
 })
 
 // DELETE /api/repos/:id — stop the opencode process and remove the repo.
