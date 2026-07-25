@@ -8,6 +8,7 @@ const POLL_INTERVAL_MS = 3_000
 const RECENT_SWITCH_GUARD_MS = 5_000
 const REPROMPT_SETTLE_MS = 1_500
 const MAX_AUTO_CONTINUES = 5
+const MAX_EMPTY_RETRIES = 2
 const DEDUP_COOLDOWN_MS = 30_000
 
 type ManagedEntry = {
@@ -18,6 +19,7 @@ type ManagedEntry = {
 const handled = new Map<string, number>()
 const repromptInFlight = new Set<string>()
 const autoContinueCounts = new Map<string, number>()
+const emptyRetryCounts = new Map<string, number>()
 const prevStatuses = new Map<string, string>()
 let lastSwitchAt = 0
 let timer: ReturnType<typeof setInterval> | undefined
@@ -77,6 +79,50 @@ async function getLastUserPrompt(
     logger.warn({ err, sessionId }, "failed to retrieve last user prompt")
   }
   return undefined
+}
+
+async function detectEmptyResponse(client: OpenCodeClient, sessionId: string): Promise<boolean> {
+  const count = emptyRetryCounts.get(sessionId) ?? 0
+  if (count >= MAX_EMPTY_RETRIES) {
+    logger.info({ sessionId, count }, "empty-response retry limit reached, skipping")
+    return false
+  }
+  try {
+    const messages = await client.getMessages(sessionId)
+    if (messages.length === 0) return false
+
+    const lastMsg = messages[messages.length - 1]
+    if (lastMsg.role !== "assistant") return false
+
+    const parts = lastMsg.parts ?? []
+    const hasVisibleContent = parts.some((p) => {
+      if (p.type === "thinking") return false
+      if (p.type === "text") return (p.content ?? "").trim().length > 0
+      return true
+    })
+
+    return !hasVisibleContent
+  } catch {
+    return false
+  }
+}
+
+async function autoRetryEmptyResponse(client: OpenCodeClient, sessionId: string): Promise<void> {
+  const count = (emptyRetryCounts.get(sessionId) ?? 0) + 1
+  emptyRetryCounts.set(sessionId, count)
+  const sid = sessionId.slice(-8)
+  try {
+    const last = await getLastUserPrompt(client, sessionId)
+    await client.prompt(sessionId, "continue", {
+      agent: last?.agent,
+      model: last?.model,
+      variant: DEFAULT_VARIANT,
+    })
+    logger.info({ sessionId, count, max: MAX_EMPTY_RETRIES }, "auto-retried empty response")
+    notify("自动重试", `[${sid}] 检测到空响应，已自动重试 (${count}/${MAX_EMPTY_RETRIES})`)
+  } catch (err) {
+    logger.warn({ err, sessionId }, "empty-response retry failed")
+  }
 }
 
 async function detectTruncation(client: OpenCodeClient, sessionId: string): Promise<boolean> {
@@ -160,6 +206,7 @@ async function pollOnce(): Promise<void> {
         emitTransition(sessionId, prev, "idle")
         clearCooldown(await getActiveId() ?? "")
         autoContinueCounts.delete(sessionId)
+        emptyRetryCounts.delete(sessionId)
       }
     }
 
@@ -179,10 +226,17 @@ async function pollOnce(): Promise<void> {
             await autoContinueSession(client, sessionId)
             continue
           }
+
+          const isEmpty = await detectEmptyResponse(client, sessionId)
+          if (isEmpty) {
+            await autoRetryEmptyResponse(client, sessionId)
+            continue
+          }
         }
 
         if (prev && prev !== status.type) emitTransition(sessionId, prev, status.type)
         autoContinueCounts.delete(sessionId)
+        emptyRetryCounts.delete(sessionId)
         continue
       }
 
@@ -247,6 +301,7 @@ export const sessionMonitor = {
     }
     entries.length = 0
     autoContinueCounts.clear()
+    emptyRetryCounts.clear()
     logger.info("session monitor stopped")
   },
 }
