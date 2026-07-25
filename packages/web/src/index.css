@@ -309,9 +309,53 @@ body {
   color: inherit;
 }
 
-.markdown-body table {
-  width: 100%;
+/* ── Table wrapper (MarkdownTable component) ──────────────────────────── */
+.md-table-wrap {
+  position: relative;
   margin: 0 0 0.75rem;
+}
+
+.md-table-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.375rem;
+  padding: 0.175rem 0.5rem;
+  border: 1px solid var(--color-line);
+  border-radius: 0.25rem;
+  background: var(--color-surface);
+  color: var(--t-fg-5, #71717a);
+  font-size: 0.7rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.md-table-toggle:hover {
+  color: var(--t-fg-3, #a1a1aa);
+  border-color: var(--color-line-hard);
+}
+
+.md-table-scroll {
+  overflow-x: auto;
+}
+
+/* ── Fit mode: table constrained to container ─────────────────────────── */
+.md-table-fit table {
+  width: 100%;
+  table-layout: auto;
+}
+
+/* ── Wide mode: table uses natural content width ──────────────────────── */
+.md-table-wide table {
+  width: max-content;
+  min-width: 100%;
+}
+.md-table-wide .md-table-scroll {
+  max-width: calc(100vw - 4rem);
+}
+
+/* ── Shared table styles ──────────────────────────────────────────────── */
+.markdown-body table {
   border-collapse: collapse;
   font-size: 0.95em;
 }
@@ -319,8 +363,13 @@ body {
 .markdown-body th,
 .markdown-body td {
   border: 1px solid var(--color-line-hard);
-  padding: 0.375rem 0.5rem;
+  padding: 0.5rem 0.75rem;
   text-align: left;
+  white-space: nowrap;
+}
+.md-table-fit td {
+  white-space: normal;
+  word-break: break-word;
 }
 
 .markdown-body th {
