@@ -388,6 +388,32 @@ export async function updateSessionIssue(repoId: string, sessionId: string, issu
 }
 
 // ---------------------------------------------------------------------------
+// AGENTS.md API — global + repo-scoped
+// ---------------------------------------------------------------------------
+
+export async function getGlobalAgentsMd(): Promise<{ content: string }> {
+  return apiFetch<{ content: string }>("/api/agents-md")
+}
+
+export async function updateGlobalAgentsMd(content: string): Promise<void> {
+  await apiFetch<void>("/api/agents-md", {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  })
+}
+
+export async function getRepoAgentsMd(repoId: string): Promise<{ content: string }> {
+  return apiFetch<{ content: string }>(`/api/repos/${encodeURIComponent(repoId)}/agents-md`)
+}
+
+export async function updateRepoAgentsMd(repoId: string, content: string): Promise<void> {
+  await apiFetch<void>(`/api/repos/${encodeURIComponent(repoId)}/agents-md`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  })
+}
+
+// ---------------------------------------------------------------------------
 // SSE URL builder — used by useSessionEvents hook
 // ---------------------------------------------------------------------------
 
