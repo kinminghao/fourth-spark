@@ -63,6 +63,13 @@ export interface GitPullRequest {
   updated_at: string
 }
 
+export interface CreatePullRequestInput {
+  title: string
+  body?: string
+  head: string
+  base: string
+}
+
 export interface GitIssueClient {
   listIssues(opts?: { state?: "open" | "closed" | "all"; page?: number; limit?: number }): Promise<GitIssue[]>
   getIssue(number: number): Promise<GitIssue>
@@ -71,6 +78,7 @@ export interface GitIssueClient {
   addDependency(issueNumber: number, dependsOnNumber: number): Promise<void>
   createComment(issueNumber: number, body: string): Promise<void>
   listComments(issueNumber: number): Promise<GitComment[]>
+  createPullRequest(input: CreatePullRequestInput): Promise<GitPullRequest>
   listIssuePullRequests(issueNumber: number): Promise<GitPullRequest[]>
   mergePullRequest(prNumber: number): Promise<void>
 }
@@ -162,6 +170,16 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
 
     async listComments(issueNumber) {
       return request<GitComment[]>("GET", `/issues/${issueNumber}/comments?per_page=100`)
+    },
+
+    async createPullRequest(input) {
+      const payload: Record<string, unknown> = {
+        title: input.title,
+        head: input.head,
+        base: input.base,
+      }
+      if (input.body !== undefined) payload.body = input.body
+      return request<GitPullRequest>("POST", platform === "github" ? "/pulls" : "/pulls", payload)
     },
 
     async mergePullRequest(prNumber) {
