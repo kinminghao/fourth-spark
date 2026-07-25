@@ -15,6 +15,7 @@ import {
   EMPTY_TODOS,
   useSessionStore,
 } from "../stores/session-store"
+import type { Message as ApiMessage, Session } from "../lib/api-client"
 import { useRepoStore } from "../stores/repo-store"
 import { useAgentStore } from "../stores/agent-store"
 import { useIssueStore } from "../stores/issue-store"
@@ -47,6 +48,90 @@ function StatusBadge({ status }: { status: string | undefined }) {
       </span>
       <span>{meta.label}</span>
     </span>
+  )
+}
+
+const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+  "claude-opus-4": 1_000_000,
+  "claude-sonnet-4": 1_000_000,
+  "claude-sonnet-5": 1_000_000,
+  "claude-opus-5": 1_000_000,
+  "claude-3-7-sonnet": 200_000,
+  "claude-3-5-sonnet": 200_000,
+  "claude-3-5-haiku": 200_000,
+  "claude-3-opus": 200_000,
+  "claude-3-sonnet": 200_000,
+  "claude-3-haiku": 200_000,
+}
+const DEFAULT_CONTEXT_LIMIT = 1_000_000
+
+function getContextLimit(modelID?: string): number {
+  if (!modelID) return DEFAULT_CONTEXT_LIMIT
+  for (const [prefix, limit] of Object.entries(MODEL_CONTEXT_LIMITS)) {
+    if (modelID.startsWith(prefix)) return limit
+  }
+  return DEFAULT_CONTEXT_LIMIT
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return String(n)
+}
+
+function formatCost(cost: number): string {
+  if (cost >= 1) return `$${cost.toFixed(2)}`
+  if (cost >= 0.01) return `$${cost.toFixed(3)}`
+  if (cost > 0) return `$${cost.toFixed(4)}`
+  return "$0"
+}
+
+function getLastAssistantTokens(messages: readonly ApiMessage[]) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m.role === "assistant" && m.tokens) {
+      const t = m.tokens
+      if (t.cache && (t.cache.read > 0 || t.cache.write > 0)) return t
+      if (t.input > 0 || t.output > 0) return t
+    }
+  }
+  return null
+}
+
+function ContextInfo({ session, messages }: { session: Session | null; messages: readonly ApiMessage[] }) {
+  const lastTokens = getLastAssistantTokens(messages)
+  const cost = session?.cost ?? 0
+  if (!lastTokens && !cost) return null
+
+  const contextLength = lastTokens
+    ? lastTokens.input + (lastTokens.cache?.read ?? 0) + (lastTokens.cache?.write ?? 0)
+    : 0
+  const contextLimit = getContextLimit(session?.model?.modelID)
+  const percentage = contextLength > 0 ? Math.min(Math.round((contextLength / contextLimit) * 100), 999) : 0
+
+  const percentColor =
+    percentage >= 80
+      ? "text-red-400"
+      : percentage >= 50
+        ? "text-amber-400"
+        : "text-fg-5"
+
+  return (
+    <div className="flex items-center gap-2 font-mono text-[11px] text-fg-5">
+      {contextLength > 0 && (
+        <>
+          <span title={`当前上下文 = cache_read + cache_write + input (最近一次请求)`}>
+            {formatTokens(contextLength)}
+          </span>
+          <span className="text-fg-6">·</span>
+          <span className={percentColor} title={`上下文占比 (${formatTokens(contextLimit)} 窗口)`}>
+            {percentage}%
+          </span>
+          <span className="text-fg-6">·</span>
+        </>
+      )}
+      <span title="会话累计费用">{formatCost(cost)}</span>
+    </div>
   )
 }
 
@@ -144,7 +229,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
             </button>
           </div>
 
-          <div className="flex items-center gap-3 border-t border-line/60 px-4 py-2">
+          <div className="flex flex-col gap-2 border-t border-line/60 px-4 py-2 sm:flex-row sm:items-center sm:gap-3">
             <label className="flex items-center gap-1.5 font-mono text-[11px] text-fg-4">
               <span className="shrink-0">Agent</span>
               <select
@@ -464,6 +549,7 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
               {session.agent}
             </p>
           )}
+          <ContextInfo session={session} messages={messages} />
         </div>
         <StatusBadge status={status} />
         {busy && (
