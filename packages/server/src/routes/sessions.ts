@@ -140,15 +140,21 @@ sessions.get("/", async (c) => {
 
 sessions.get("/:id", async (c) => {
   const repoId = c.req.param("repoId")
+  const sessionId = c.req.param("id")
   const client = processManager.getClient(repoId)
   if (client) {
     try {
-      return c.json(await client.getSession(c.req.param("id")))
+      const live = await client.getSession(sessionId)
+      const dbSession = await getSessionFromDB(sessionId)
+      if (dbSession) {
+        return c.json({ ...live, cost: dbSession.cost, tokens: dbSession.tokens, model: dbSession.model })
+      }
+      return c.json(live)
     } catch (err) {
       logger.warn({ err, repoId }, "opencode unavailable for getSession, falling back to DB")
     }
   }
-  const session = await getSessionFromDB(c.req.param("id"))
+  const session = await getSessionFromDB(sessionId)
   if (!session) return c.json({ error: "Session not found", status: 404 }, 404)
   return c.json(session)
 })

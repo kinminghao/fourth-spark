@@ -18,6 +18,13 @@ export interface Repo {
   updatedAt: number
 }
 
+export interface SessionTokens {
+  input: number
+  output: number
+  reasoning: number
+  cache: { read: number; write: number }
+}
+
 export interface Session {
   id: string
   title?: string
@@ -26,6 +33,9 @@ export interface Session {
   createdAt?: string
   time?: { created?: number; updated?: number }
   parentID?: string
+  cost?: number
+  tokens?: SessionTokens
+  model?: { providerID?: string; modelID?: string; variant?: string }
 }
 
 export interface Issue {
@@ -72,6 +82,7 @@ export interface Message {
   role: string
   parts?: MessagePart[]
   info?: { agent?: string; modelID?: string; providerID?: string }
+  tokens?: SessionTokens
   // OpenCode-native compatibility fields.
   sessionID?: string
   time?: { created?: number; completed?: number }

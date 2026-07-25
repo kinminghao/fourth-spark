@@ -6,7 +6,7 @@
  * Either way we resolve a canonical event name and pull typed data out of it.
  */
 
-import type { Message, MessagePart, Todo } from "./api-client"
+import type { Message, MessagePart, Session, Todo } from "./api-client"
 
 export const KNOWN_SSE_EVENTS = [
   "message.updated",
@@ -29,6 +29,7 @@ export interface SseDispatchTarget {
   ) => void
   updateTodos: (sessionId: string, todos: Todo[]) => void
   setSessionStatus: (sessionId: string, status: string) => void
+  updateSessionInfo: (info: Partial<Session> & { id: string }) => void
 }
 
 export function parseEventData(raw: unknown): unknown {
@@ -118,6 +119,47 @@ function extractTodos(data: unknown): Todo[] {
   return []
 }
 
+function num(v: unknown): number {
+  return typeof v === "number" ? v : 0
+}
+
+function extractSessionInfo(data: unknown): (Partial<Session> & { id: string }) | null {
+  const props = asRecord(getProps(data))
+  if (!props || typeof props.id !== "string") return null
+
+  const info: Partial<Session> & { id: string } = { id: props.id as string }
+  if (typeof props.title === "string") info.title = props.title
+  if (typeof props.agent === "string") info.agent = props.agent
+  if (typeof props.cost === "number") info.cost = props.cost
+
+  const tokensNested = asRecord(props.tokens)
+  const hasFlat = typeof props.tokens_input === "number" || typeof props.tokens_output === "number"
+
+  if (tokensNested || hasFlat) {
+    const cache = tokensNested ? asRecord(tokensNested.cache) : null
+    info.tokens = {
+      input: num(tokensNested?.input) || num(props.tokens_input),
+      output: num(tokensNested?.output) || num(props.tokens_output),
+      reasoning: num(tokensNested?.reasoning) || num(props.tokens_reasoning),
+      cache: {
+        read: num(cache?.read) || num(props.tokens_cache_read),
+        write: num(cache?.write) || num(props.tokens_cache_write),
+      },
+    }
+  }
+
+  const model = asRecord(props.model)
+  if (model) {
+    info.model = {
+      providerID: typeof model.providerID === "string" ? model.providerID : undefined,
+      modelID: typeof model.modelID === "string" ? model.modelID : undefined,
+      variant: typeof model.variant === "string" ? model.variant : undefined,
+    }
+  }
+
+  return info
+}
+
 function extractStatus(data: unknown): string | null {
   const props = getProps(data)
   if (typeof props === "string") {
@@ -145,11 +187,17 @@ export function dispatchSseEvent(
 ): void {
   const resolved = name === "message" || name === "" ? readType(data) ?? name : name
   switch (resolved) {
-    case "message.updated":
-    case "session.updated": {
+    case "message.updated": {
       const message = extractMessage(data)
       if (message) {
         target.updateMessage(sessionId, message)
+      }
+      break
+    }
+    case "session.updated": {
+      const sessionInfo = extractSessionInfo(data)
+      if (sessionInfo) {
+        target.updateSessionInfo(sessionInfo)
       }
       break
     }

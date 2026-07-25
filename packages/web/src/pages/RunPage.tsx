@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Check, ChevronRight, Copy, Plus, RefreshCw, Search, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import type { Session } from "../lib/api-client"
@@ -8,6 +8,7 @@ import { useIssueStore } from "../stores/issue-store"
 import { RunView } from "../components/RunView"
 
 function sessionTime(session: Session): number {
+  if (typeof session.time?.updated === "number") return session.time.updated
   if (typeof session.time?.created === "number") return session.time.created
   if (session.createdAt) {
     const parsed = Date.parse(session.createdAt)
@@ -25,6 +26,23 @@ function formatWhen(session: Session): string {
   return sameDay
     ? date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
     : date.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+}
+
+function copyText(text: string) {
+  if (navigator.clipboard) {
+    void navigator.clipboard.writeText(text).catch(() => fallbackCopy(text))
+  } else {
+    fallbackCopy(text)
+  }
+}
+function fallbackCopy(text: string) {
+  const ta = document.createElement("textarea")
+  ta.value = text
+  ta.style.cssText = "position:fixed;opacity:0"
+  document.body.appendChild(ta)
+  ta.select()
+  document.execCommand("copy")
+  document.body.removeChild(ta)
 }
 
 function statusDotClass(status: string | undefined): string {
@@ -46,13 +64,93 @@ function SessionItem({
   status: string | undefined
 }) {
   const when = formatWhen(session)
+
+  /* ---- iOS-style swipe-to-reveal (mobile) ---- */
+  const REVEAL_W = 96
+  const [swipeX, setSwipeX] = useState(0)
+  const [snap, setSnap] = useState(false)
+  const touch = useRef({ x0: 0, y0: 0, base: 0, dir: null as "h" | "v" | null, on: false })
+
+  const onTS = (e: React.TouchEvent) => {
+    const t = e.touches[0]
+    touch.current = { x0: t.clientX, y0: t.clientY, base: swipeX, dir: null, on: true }
+    setSnap(false)
+  }
+  const onTM = (e: React.TouchEvent) => {
+    const c = touch.current
+    if (!c.on) return
+    const dx = e.touches[0].clientX - c.x0
+    const dy = e.touches[0].clientY - c.y0
+    if (!c.dir) {
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) c.dir = Math.abs(dx) > Math.abs(dy) ? "h" : "v"
+      return
+    }
+    if (c.dir === "v") return
+    setSwipeX(Math.max(-REVEAL_W, Math.min(0, c.base + dx)))
+  }
+  const onTE = () => {
+    touch.current.on = false
+    setSnap(true)
+    setSwipeX((p) => (p < -REVEAL_W / 2 ? -REVEAL_W : 0))
+  }
+  const closeSwipe = () => { setSnap(true); setSwipeX(0) }
+
   return (
-    <li>
-      <div className={clsx(
-        "group relative rounded-md border-l-2 transition-colors",
-        isActive ? "border-blue-500 bg-elevated/80" : "border-transparent hover:bg-elevated/50",
-      )}>
-        <button type="button" onClick={onSelect} className="block w-full px-2.5 py-2 text-left">
+    <li className="relative overflow-hidden rounded-md">
+      {/* Swipe action buttons (mobile, behind content) */}
+      <div
+        className="absolute right-0 top-0 bottom-0 flex md:hidden"
+        style={swipeX < 0 ? { zIndex: 10 } : undefined}
+      >
+        {isConfirming ? (
+          <>
+            <button type="button" onClick={() => { onDelete(); closeSwipe() }} className="flex w-12 items-center justify-center bg-red-500 text-white active:bg-red-600">
+              <Check className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => { onCancelConfirm(); closeSwipe() }} className="flex w-12 items-center justify-center bg-neutral-500 text-white active:bg-neutral-600">
+              <X className="h-4 w-4" />
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                copyText(JSON.stringify({ id: session.id, name: session.title?.trim() || "" }, null, 2))
+                closeSwipe()
+              }}
+              className="flex w-12 items-center justify-center bg-blue-500 text-white active:bg-blue-600"
+            >
+              <Copy className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => onConfirm()} className="flex w-12 items-center justify-center bg-red-500 text-white active:bg-red-600">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Slideable content */}
+      <div
+        className={clsx(
+          "group relative rounded-md border-l-2",
+          isActive ? "border-blue-500 bg-elevated" : "border-transparent bg-surface hover:bg-elevated/50",
+          snap && "transition-transform duration-200 ease-out",
+        )}
+        style={{
+          ...(swipeX !== 0 ? { transform: `translateX(${swipeX}px)` } : {}),
+          ...(swipeX === -REVEAL_W ? { pointerEvents: "none" as const } : {}),
+        }}
+        onTouchStart={onTS}
+        onTouchMove={onTM}
+        onTouchEnd={onTE}
+      >
+        <button
+          type="button"
+          onClick={() => { onSelect(); closeSwipe() }}
+          className="block w-full px-2.5 py-2 text-left"
+          style={swipeX === -REVEAL_W ? { pointerEvents: "auto" } : undefined}
+        >
           <div className="flex items-center gap-2">
             <span className={clsx("h-1.5 w-1.5 shrink-0 rounded-full", statusDotClass(status))} />
             <span className="min-w-0 truncate font-mono text-xs text-fg-3">{session.agent?.trim() || "默认"}</span>
@@ -60,18 +158,19 @@ function SessionItem({
           </div>
           <div className="mt-0.5 truncate pl-3.5 text-sm text-fg-2">{session.title?.trim() || "未命名运行"}</div>
         </button>
+
+        {/* Desktop hover buttons */}
         {isConfirming ? (
-          <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-surface/90 px-0.5">
+          <span className="absolute right-1.5 top-1.5 hidden items-center gap-1 rounded bg-surface/90 px-0.5 md:flex">
             <button type="button" onClick={onDelete} className="rounded p-1 text-red-400 hover:bg-red-500/10"><Check className="h-3.5 w-3.5" /></button>
             <button type="button" onClick={onCancelConfirm} className="rounded p-1 text-fg-3 hover:bg-elevated"><X className="h-3.5 w-3.5" /></button>
           </span>
         ) : (
-          <span className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          <span className="absolute right-1.5 top-1.5 hidden items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 md:flex">
             <button
               type="button"
               onClick={() => {
-                const json = JSON.stringify({ id: session.id, name: session.title?.trim() || "" }, null, 2)
-                void navigator.clipboard.writeText(json)
+                copyText(JSON.stringify({ id: session.id, name: session.title?.trim() || "" }, null, 2))
               }}
               title="复制 Session JSON"
               className="rounded p-1 text-fg-5 hover:text-fg-2"
@@ -118,7 +217,7 @@ function IssueRow({ issue, indent, selected, badge, onClick }: {
   )
 }
 
-function SessionPanel() {
+function SessionPanel({ onClose }: { onClose?: () => void }) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -187,7 +286,7 @@ function SessionPanel() {
           isActive={session.id === activeSessionId}
           isConfirming={confirmingId === session.id}
           status={statuses.get(session.id)}
-          onSelect={() => void setActiveSession(session.id)}
+          onSelect={() => { void setActiveSession(session.id); onClose?.() }}
           onDelete={() => { void deleteSession(session.id); setConfirmingId(null) }}
           onConfirm={() => setConfirmingId(session.id)}
           onCancelConfirm={() => setConfirmingId(null)}
@@ -203,6 +302,7 @@ function SessionPanel() {
       useIssueStore.getState().setPreviewIssue(issueId)
       useSessionStore.setState({ activeSessionId: null })
     }
+    onClose?.()
   }
 
   if (matchingParentId) {
@@ -259,7 +359,7 @@ function SessionPanel() {
           {activeRepoId && (
             <button
               type="button"
-              onClick={() => useSessionStore.setState({ activeSessionId: null })}
+              onClick={() => { useSessionStore.setState({ activeSessionId: null }); onClose?.() }}
               title="新建运行"
               className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white transition-colors hover:bg-blue-500"
             >
@@ -399,7 +499,7 @@ export function RunPage() {
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <SessionPanel />
+        <SessionPanel onClose={() => setSidebarOpen(false)} />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <RunView onToggleSidebar={() => setSidebarOpen((v) => !v)} />
