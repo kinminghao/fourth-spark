@@ -11,6 +11,7 @@ import { gitHostRoutes } from "./routes/git-hosts"
 import { health, repoHealth } from "./routes/health"
 import { repoRoutes } from "./routes/repos"
 import { usageRoutes } from "./routes/usage"
+import { globalAgentsMd, repoAgentsMd } from "./routes/agents-md"
 import { PORT } from "./lib/config"
 import { processManager } from "./lib/process-manager"
 import "./db/index"
@@ -29,6 +30,8 @@ app.route("/api/settings", settingsRoutes)
 app.route("/api/git-hosts", gitHostRoutes)
 app.route("/api/health", health)
 app.route("/api/usage", usageRoutes)
+app.route("/api/agents-md", globalAgentsMd)
+app.route("/api/repos", repoAgentsMd)
 
 // ---------------------------------------------------------------------------
 // Per-repo routes — all nested under /api/repos/:repoId/
