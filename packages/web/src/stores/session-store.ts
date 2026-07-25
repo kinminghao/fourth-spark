@@ -83,6 +83,7 @@ interface SessionState {
   ) => void
   updateTodos: (sessionId: string, todos: Todo[]) => void
   setSessionStatus: (sessionId: string, status: string) => void
+  updateSessionInfo: (info: Partial<Session> & { id: string }) => void
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -149,10 +150,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   refreshSessionData: async (id) => {
     const repoId = getRepoId()
     if (!repoId) return
-    const [messages, todos, status] = await Promise.allSettled([
+    const [messages, todos, status, sessionInfo] = await Promise.allSettled([
       api.getMessages(repoId, id),
       api.getTodos(repoId, id),
       api.getSessionStatus(repoId, id),
+      api.getSession(repoId, id),
     ])
     set((state) => {
       const next: Partial<SessionState> = {}
@@ -167,6 +169,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           state.sessionStatuses,
           id,
           status.value.type,
+        )
+      }
+      if (sessionInfo.status === "fulfilled") {
+        const fresh = sessionInfo.value
+        next.sessions = state.sessions.map((s) =>
+          s.id === id ? { ...s, ...fresh } : s,
         )
       }
       return next
@@ -291,6 +299,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   updateTodos: (sessionId, todos) => {
     set((state) => ({ todos: mapSet(state.todos, sessionId, todos) }))
+  },
+
+  updateSessionInfo: (info) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === info.id ? { ...s, ...info } : s,
+      ),
+    }))
   },
 
   setSessionStatus: (sessionId, status) => {
