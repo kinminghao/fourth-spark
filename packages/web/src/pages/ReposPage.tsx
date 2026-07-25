@@ -1,9 +1,10 @@
 import { useState } from "react"
-import { Check, Circle, CircleDot, Copy, Play, Plus, Square, Trash2, X } from "lucide-react"
+import { Check, Circle, CircleDot, Copy, FileText, Play, Plus, Square, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
 import { useRepoStore } from "../stores/repo-store"
 import { AddRepoModal } from "../components/AddRepoModal"
+import { AgentsMdModal } from "../components/AgentsMdModal"
 
 export function ReposPage() {
   const repos = useRepoStore((s) => s.repos)
@@ -14,6 +15,7 @@ export function ReposPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [agentsMdRepo, setAgentsMdRepo] = useState<{ id: string; name: string } | null>(null)
 
   const handleToggle = async (repoId: string, running: boolean) => {
     setTogglingId(repoId)
@@ -149,6 +151,14 @@ export function ReposPage() {
                         <span className="inline-flex items-center gap-1">
                           <button
                             type="button"
+                            onClick={() => setAgentsMdRepo({ id: repo.id, name: repo.name })}
+                            title="配置 AGENTS.md"
+                            className="rounded-md px-2 py-1 text-xs font-medium text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+                          >
+                            <span className="flex items-center gap-1"><FileText className="h-3 w-3" />配置</span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => void handleToggle(repo.id, repo.running)}
                             disabled={togglingId === repo.id}
                             title={repo.running ? "停止" : "启动"}
@@ -279,6 +289,13 @@ export function ReposPage() {
                   <div className="mt-3 flex items-center gap-2">
                     <button
                       type="button"
+                      onClick={() => setAgentsMdRepo({ id: repo.id, name: repo.name })}
+                      className="flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-line px-2.5 text-xs font-medium text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+                    >
+                      <FileText className="h-3 w-3" />配置
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => void handleToggle(repo.id, repo.running)}
                       disabled={togglingId === repo.id}
                       className={clsx(
@@ -334,6 +351,13 @@ export function ReposPage() {
       </div>
 
       {showAdd && <AddRepoModal onClose={() => setShowAdd(false)} />}
+      {agentsMdRepo && (
+        <AgentsMdModal
+          repoId={agentsMdRepo.id}
+          repoName={agentsMdRepo.name}
+          onClose={() => setAgentsMdRepo(null)}
+        />
+      )}
     </div>
   )
 }
