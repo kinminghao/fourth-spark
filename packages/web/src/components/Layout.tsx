@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom"
-import { Box, CircleDot, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
+import { Box, CircleDot, GitBranch, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
 import clsx from "clsx"
 import { useThemeStore } from "../stores/theme-store"
 import { useRepoStore } from "../stores/repo-store"
@@ -29,15 +29,26 @@ function Header() {
 
         <div className="flex items-center gap-3">
           {repos.length > 0 && (
-            <select
-              value={activeRepoId ?? ""}
-              onChange={(e) => setActiveRepo(e.target.value || null)}
-              className="rounded-md border border-line bg-base px-2.5 py-1 text-xs text-fg-2 focus:border-blue-500 focus:outline-none"
-            >
-              {repos.map((r) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={activeRepoId ?? ""}
+                onChange={(e) => setActiveRepo(e.target.value || null)}
+                className="rounded-md border border-line bg-base px-2.5 py-1 text-xs text-fg-2 focus:border-blue-500 focus:outline-none"
+              >
+                {repos.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+              {(() => {
+                const activeRepo = repos.find((r) => r.id === activeRepoId)
+                return activeRepo?.branch ? (
+                  <span className="flex items-center gap-1 rounded-md bg-elevated px-2 py-1 text-xs text-fg-3">
+                    <GitBranch className="h-3 w-3" />
+                    {activeRepo.branch}
+                  </span>
+                ) : null
+              })()}
+            </div>
           )}
           <button
             type="button"

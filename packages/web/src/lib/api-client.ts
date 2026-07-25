@@ -14,6 +14,7 @@ export interface Repo {
   port: number | null
   status: string
   running: boolean
+  branch: string | null
   createdAt: number
   updatedAt: number
 }
