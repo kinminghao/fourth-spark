@@ -8,6 +8,7 @@ import { syncSessionsList, syncMessagesList } from "../db/sync"
 import { createOpenCodeClient, type OpenCodeClient } from "./opencode"
 import { sessionMonitor } from "./session-monitor"
 import { logger } from "../middleware/logger"
+import { PORT } from "./config"
 
 // ---------------------------------------------------------------------------
 // Port allocation
@@ -130,6 +131,57 @@ async function cleanupOrphans(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// OpenCode MCP config injection — writes our MCP server entry into the repo's
+// opencode.json so the agent can call Git platform tools automatically.
+// ---------------------------------------------------------------------------
+
+const MCP_SERVER_KEY = "fourth-spark-git"
+
+function injectMcpConfig(localPath: string, repoId: string): void {
+  const configPath = join(localPath, "opencode.json")
+  let config: Record<string, unknown> = {}
+  try {
+    if (existsSync(configPath)) {
+      config = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>
+    }
+  } catch {
+    // corrupt or missing — start fresh
+  }
+
+  const mcp = (config.mcp ?? {}) as Record<string, unknown>
+  mcp[MCP_SERVER_KEY] = {
+    type: "remote",
+    url: `http://127.0.0.1:${PORT}/api/repos/${repoId}/mcp`,
+  }
+  config.mcp = mcp
+  writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n")
+  logger.info({ repoId, configPath }, "injected MCP config into opencode.json")
+}
+
+function removeMcpConfig(localPath: string): void {
+  const configPath = join(localPath, "opencode.json")
+  try {
+    if (!existsSync(configPath)) return
+    const config = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>
+    const mcp = config.mcp as Record<string, unknown> | undefined
+    if (!mcp?.[MCP_SERVER_KEY]) return
+
+    delete mcp[MCP_SERVER_KEY]
+    if (Object.keys(mcp).length === 0) delete config.mcp
+
+    // If config is effectively empty (only $schema or nothing), remove the file
+    const meaningful = Object.keys(config).filter((k) => k !== "$schema")
+    if (meaningful.length === 0) {
+      unlinkSync(configPath)
+    } else {
+      writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n")
+    }
+  } catch {
+    // best-effort cleanup
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -184,6 +236,8 @@ async function waitForReady(port: number, timeoutMs = 30_000): Promise<boolean> 
 
 async function spawnOpenCode(repoId: string, localPath: string, port: number): Promise<ManagedRepo> {
   logger.info({ repoId, localPath, port }, "spawning opencode serve")
+
+  injectMcpConfig(localPath, repoId)
 
   const proc = Bun.spawn(["opencode", "serve", "--port", String(port), "--hostname", "127.0.0.1"], {
     cwd: localPath,
@@ -273,6 +327,7 @@ export const processManager = {
     entry.process.kill()
     managed.delete(repoId)
     writePidFile()
+    removeMcpConfig(entry.localPath)
     await db.update(repos).set({ port: null, status: "inactive", updatedAt: Date.now() }).where(eq(repos.id, repoId))
   },
 

@@ -12,6 +12,7 @@ import { health, repoHealth } from "./routes/health"
 import { repoRoutes } from "./routes/repos"
 import { usageRoutes } from "./routes/usage"
 import { globalAgentsMd, repoAgentsMd } from "./routes/agents-md"
+import { mcpRoute } from "./routes/mcp"
 import { PORT } from "./lib/config"
 import { processManager } from "./lib/process-manager"
 import "./db/index"
@@ -43,6 +44,7 @@ repoScoped.route("/sessions", sessions)
 repoScoped.route("/sessions", events)
 repoScoped.route("/agents", agents)
 repoScoped.route("/issues", issueRoutes)
+repoScoped.route("/mcp", mcpRoute)
 repoScoped.route("/health", repoHealth)
 
 app.route("/api/repos/:repoId", repoScoped)
