@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm"
 import { Brain, ChevronDown, ChevronRight } from "lucide-react"
 import type { Message, MessagePart } from "../lib/api-client"
 import { classifyPart, getPartText, isQuestionTool } from "../lib/message-parts"
+import { MarkdownTable } from "./MarkdownTable"
 import { QuestionPanel } from "./QuestionPanel"
 import { ToolCallPanel } from "./ToolCallPanel"
 
@@ -44,7 +45,7 @@ function PartView({ part }: { part: MessagePart }) {
       }
       return (
         <div className="markdown-body leading-relaxed">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{text}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={{ table: MarkdownTable }}>{text}</ReactMarkdown>
         </div>
       )
     }
