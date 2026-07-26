@@ -125,6 +125,15 @@ async function autoRetryEmptyResponse(client: OpenCodeClient, sessionId: string)
   }
 }
 
+async function hasIncompleteTodos(client: OpenCodeClient, sessionId: string): Promise<boolean> {
+  try {
+    const todos = await client.getTodos(sessionId)
+    return todos.some((t) => t.status === "in_progress" || t.status === "pending")
+  } catch {
+    return false
+  }
+}
+
 async function detectTruncation(client: OpenCodeClient, sessionId: string): Promise<boolean> {
   const count = autoContinueCounts.get(sessionId) ?? 0
   if (count >= MAX_AUTO_CONTINUES) {
@@ -218,10 +227,15 @@ async function pollOnce(): Promise<void> {
             await autoRetryEmptyResponse(client, sessionId)
             continue
           }
-        }
 
-        autoContinueCounts.delete(sessionId)
-        emptyRetryCounts.delete(sessionId)
+          if (!hasIncompleteTodos(client, sessionId)) {
+            autoContinueCounts.delete(sessionId)
+            emptyRetryCounts.delete(sessionId)
+          }
+        } else {
+          autoContinueCounts.delete(sessionId)
+          emptyRetryCounts.delete(sessionId)
+        }
       }
     }
 
@@ -232,9 +246,6 @@ async function pollOnce(): Promise<void> {
       if (status.type === "idle") {
         clearCooldown(await getActiveId() ?? "")
 
-        // Truncation auto-continue: if session was busy and is now idle with
-        // incomplete todos, the model response was likely truncated by
-        // max_output_tokens.  Send "continue" to let the agent resume.
         if (prev === "busy") {
           const shouldContinue = await detectTruncation(client, sessionId)
           if (shouldContinue) {
@@ -247,11 +258,17 @@ async function pollOnce(): Promise<void> {
             await autoRetryEmptyResponse(client, sessionId)
             continue
           }
+
+          if (!hasIncompleteTodos(client, sessionId)) {
+            autoContinueCounts.delete(sessionId)
+            emptyRetryCounts.delete(sessionId)
+          }
+        } else {
+          autoContinueCounts.delete(sessionId)
+          emptyRetryCounts.delete(sessionId)
         }
 
         if (prev && prev !== status.type) emitTransition(sessionId, prev, status.type)
-        autoContinueCounts.delete(sessionId)
-        emptyRetryCounts.delete(sessionId)
         continue
       }
 
