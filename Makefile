@@ -1,4 +1,7 @@
-.PHONY: dev dev-server dev-web db db-stop db-push status stop stop-opencode logs clean
+.PHONY: install dev dev-server dev-web db db-stop db-push db-generate db-migrate db-studio setup status stop stop-opencode logs clean
+
+install:
+	bun install
 
 dev: db
 	@echo "Starting server + web..."
@@ -21,6 +24,18 @@ db-stop:
 
 db-push:
 	cd packages/server && bunx drizzle-kit push
+
+db-generate:
+	cd packages/server && bunx drizzle-kit generate
+
+db-migrate:
+	cd packages/server && bunx drizzle-kit migrate
+
+db-studio:
+	cd packages/server && bunx drizzle-kit studio
+
+setup: install db db-push
+	@echo "Setup complete. Run 'make dev' to start."
 
 status:
 	@echo "=== PostgreSQL ==="
