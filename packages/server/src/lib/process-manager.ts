@@ -1,6 +1,6 @@
 import { type Subprocess } from "bun"
 import { eq } from "drizzle-orm"
-import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync, openSync } from "node:fs"
 import { join } from "node:path"
 import { db } from "../db/index"
 import { repos } from "../db/schema"
@@ -87,10 +87,53 @@ function killPid(pid: number): boolean {
   }
 }
 
+async function isProcessAlive(pid: number): Promise<boolean> {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function adoptOrphans(): Promise<Map<string, PidRecord>> {
+  const adopted = new Map<string, PidRecord>()
+  const oldRecords = readPidFile()
+  if (oldRecords.length === 0) return adopted
+
+  for (const record of oldRecords) {
+    const alive = await isProcessAlive(record.pid)
+    if (!alive) {
+      logger.info({ pid: record.pid, repoId: record.repoId }, "orphan process already dead, skipping")
+      continue
+    }
+    try {
+      const res = await fetch(`http://127.0.0.1:${record.port}/agent`, {
+        signal: AbortSignal.timeout(2000),
+      })
+      if (res.ok) {
+        adopted.set(record.repoId, record)
+        logger.info({ pid: record.pid, port: record.port, repoId: record.repoId }, "adopted live orphan process")
+      } else {
+        killPid(record.pid)
+        logger.info({ pid: record.pid, repoId: record.repoId }, "orphan not responding, killed")
+      }
+    } catch {
+      killPid(record.pid)
+      logger.info({ pid: record.pid, repoId: record.repoId }, "orphan unreachable, killed")
+    }
+  }
+
+  if (adopted.size > 0) {
+    logger.info({ count: adopted.size }, "adopted live opencode processes from previous run")
+  }
+
+  return adopted
+}
+
 async function cleanupOrphans(): Promise<void> {
   let needsWait = false
 
-  // Phase 1: Kill PIDs from our PID file (targeted, reliable)
   const oldRecords = readPidFile()
   if (oldRecords.length > 0) {
     logger.info({ count: oldRecords.length }, "cleaning up tracked orphan processes from PID file")
@@ -103,8 +146,6 @@ async function cleanupOrphans(): Promise<void> {
     clearPidFile()
   }
 
-  // Phase 2: Scan OS for any stray `opencode serve` processes in our port range.
-  // Catches orphans from runs before PID tracking was added.
   try {
     const result = Bun.spawnSync(["pgrep", "-f", "opencode serve --port"])
     const output = result.stdout.toString().trim()
@@ -124,7 +165,6 @@ async function cleanupOrphans(): Promise<void> {
     // pgrep not available — non-fatal
   }
 
-  // Give killed processes time to release ports
   if (needsWait) {
     await new Promise((r) => setTimeout(r, 1500))
   }
@@ -239,12 +279,32 @@ async function spawnOpenCode(repoId: string, localPath: string, port: number): P
 
   injectMcpConfig(localPath, repoId)
 
-  const proc = Bun.spawn(["opencode", "serve", "--port", String(port), "--hostname", "127.0.0.1"], {
+  const logFile = join(PID_DIR, `opencode-${repoId.slice(0, 8)}.log`)
+  const logFd = openSync(logFile, "a")
+  logger.info({ repoId, logFile }, "opencode debug log enabled")
+
+  const proxyPort = 9999
+  const proc = Bun.spawn([
+    "opencode", "serve",
+    "--port", String(port),
+    "--hostname", "127.0.0.1",
+    "--print-logs",
+    "--log-level", "DEBUG",
+  ], {
     cwd: localPath,
-    stdout: "ignore",
-    stderr: "ignore",
-    env: { ...process.env, PORT: String(port) },
+    stdout: logFd,
+    stderr: logFd,
+    detached: true,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
+      HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
+      NO_PROXY: "127.0.0.1,localhost",
+      NODE_TLS_REJECT_UNAUTHORIZED: "0",
+    },
   })
+  proc.unref()
 
   const baseUrl = `http://127.0.0.1:${port}`
   const client = createOpenCodeClient(baseUrl, localPath)
@@ -294,17 +354,28 @@ export const processManager = {
   cleanupOrphans,
 
   /** Start opencode for a single repo. Idempotent + concurrent-safe. */
-  async start(repoId: string, localPath: string): Promise<OpenCodeClient> {
-    // Fast path: already running
+  async start(repoId: string, localPath: string, adopted?: Map<string, PidRecord>): Promise<OpenCodeClient> {
     const existing = managed.get(repoId)
     if (existing) return existing.client
 
-    // Concurrent-safe: if another call is already starting this repo, coalesce
     const inflight = startingLocks.get(repoId)
     if (inflight) return inflight
 
     const promise = (async () => {
       try {
+        const record = adopted?.get(repoId)
+        if (record) {
+          const baseUrl = `http://127.0.0.1:${record.port}`
+          const client = createOpenCodeClient(baseUrl, localPath)
+          const fakeProc = { pid: record.pid, kill: () => killPid(record.pid) } as unknown as Subprocess
+          const entry: ManagedRepo = { id: repoId, localPath, port: record.port, process: fakeProc, client }
+          managed.set(repoId, entry)
+          writePidFile()
+          logger.info({ repoId, port: record.port, pid: record.pid }, "reusing adopted opencode process")
+          sessionMonitor.register(repoId, client)
+          return client
+        }
+
         const port = await allocatePort()
         const entry = await spawnOpenCode(repoId, localPath, port)
         sessionMonitor.register(repoId, entry.client)
@@ -352,11 +423,12 @@ export const processManager = {
 
   /** Start all repos from the database. Called once on server boot. */
   async startAll(): Promise<void> {
+    const adopted = await adoptOrphans()
     const allRepos = await db.select().from(repos)
-    logger.info({ count: allRepos.length }, "starting opencode for all repos")
+    logger.info({ count: allRepos.length, adopted: adopted.size }, "starting opencode for all repos")
     for (const repo of allRepos) {
       try {
-        await this.start(repo.id, repo.localPath)
+        await this.start(repo.id, repo.localPath, adopted)
       } catch (err) {
         logger.error({ err, repoId: repo.id, localPath: repo.localPath }, "failed to start opencode for repo")
         await db.update(repos).set({ status: "error", updatedAt: Date.now() }).where(eq(repos.id, repo.id))

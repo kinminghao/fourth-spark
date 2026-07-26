@@ -12,6 +12,8 @@ import { health, repoHealth } from "./routes/health"
 import { repoRoutes } from "./routes/repos"
 import { usageRoutes } from "./routes/usage"
 import { globalAgentsMd, repoAgentsMd } from "./routes/agents-md"
+import { globalCustomAgents, repoCustomAgents } from "./routes/custom-agents"
+import { modelRoutes } from "./routes/models"
 import { mcpRoute } from "./routes/mcp"
 import { PORT } from "./lib/config"
 import { processManager } from "./lib/process-manager"
@@ -32,6 +34,7 @@ app.route("/api/git-hosts", gitHostRoutes)
 app.route("/api/health", health)
 app.route("/api/usage", usageRoutes)
 app.route("/api/agents-md", globalAgentsMd)
+app.route("/api/custom-agents", globalCustomAgents)
 app.route("/api/repos", repoAgentsMd)
 
 // ---------------------------------------------------------------------------
@@ -43,6 +46,8 @@ const repoScoped = new Hono()
 repoScoped.route("/sessions", sessions)
 repoScoped.route("/sessions", events)
 repoScoped.route("/agents", agents)
+repoScoped.route("/custom-agents", repoCustomAgents)
+repoScoped.route("/models", modelRoutes)
 repoScoped.route("/issues", issueRoutes)
 repoScoped.route("/mcp", mcpRoute)
 repoScoped.route("/health", repoHealth)
@@ -56,9 +61,7 @@ app.get("/", (c) => c.json({ name: "fourth-spark server", status: "ok" }))
 // ---------------------------------------------------------------------------
 logger.info({ port: PORT }, "fourth-spark server starting")
 
-processManager.cleanupOrphans().then(() => {
-  return processManager.startAll()
-}).then(() => {
+processManager.startAll().then(() => {
   logger.info("all repos initialized")
 }).catch((err) => {
   logger.error({ err }, "failed to initialize repos")
@@ -75,12 +78,9 @@ async function gracefulShutdown(signal: string) {
 
 process.on("SIGINT", () => gracefulShutdown("SIGINT"))
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"))
-process.on("SIGHUP", () => gracefulShutdown("SIGHUP"))
-
-// Last-resort synchronous kill — if async handlers didn't finish in time
-// and the process is being forcefully terminated.
-process.on("exit", () => {
-  processManager.killAllSync()
+process.on("SIGHUP", () => {
+  logger.info("SIGHUP received (bun --watch) — keeping opencode processes alive")
+  process.exit(0)
 })
 
 // Bun serves the default export. `idleTimeout: 0` disables the socket idle
