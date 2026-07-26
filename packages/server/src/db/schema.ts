@@ -31,10 +31,45 @@ export const issues = pgTable("issues", {
   index("issues_parent_idx").on(t.parentId),
 ])
 
+export const promptFragments = pgTable("prompt_fragments", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  content: text("content").notNull().default(""),
+  repoId: text("repo_id").references(() => repos.id, { onDelete: "cascade" }),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+}, (t) => [
+  index("prompt_fragments_repo_idx").on(t.repoId),
+])
+
+export const customAgents = pgTable("custom_agents", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  baseAgent: text("base_agent").notNull(),
+  model: text("model"),
+  systemPrompt: text("system_prompt").notNull().default(""),
+  repoId: text("repo_id").references(() => repos.id, { onDelete: "cascade" }),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+}, (t) => [
+  index("custom_agents_repo_idx").on(t.repoId),
+])
+
+export const customAgentFragments = pgTable("custom_agent_fragments", {
+  customAgentId: text("custom_agent_id").notNull().references(() => customAgents.id, { onDelete: "cascade" }),
+  fragmentId: text("fragment_id").notNull().references(() => promptFragments.id, { onDelete: "cascade" }),
+  position: integer("position").notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.customAgentId, t.fragmentId] }),
+])
+
 export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   parentId: text("parent_id"),
   issueId: text("issue_id").references(() => issues.id, { onDelete: "set null" }),
+  customAgentId: text("custom_agent_id").references(() => customAgents.id, { onDelete: "set null" }),
   title: text("title").notNull().default(""),
   agent: text("agent"),
   model: jsonb("model").$type<{ providerID?: string; modelID?: string; variant?: string }>(),
@@ -52,6 +87,7 @@ export const sessions = pgTable("sessions", {
   index("sessions_user_idx").on(t.userId),
   index("sessions_time_created_idx").on(t.timeCreated),
   index("sessions_issue_idx").on(t.issueId),
+  index("sessions_custom_agent_idx").on(t.customAgentId),
 ])
 
 export const messages = pgTable("messages", {

@@ -1,14 +1,25 @@
 import { useCallback, useEffect, useState } from "react"
-import { AlertTriangle, Ban, Check, Clock, Eye, EyeOff, FileText, Gauge, GitBranch, Loader2, Plus, RefreshCw, Save, Trash2, User, Users, X, Zap } from "lucide-react"
+import { AlertTriangle, Ban, Bot, Check, Clock, Edit3, Eye, EyeOff, FileText, Gauge, GitBranch, Loader2, Plus, RefreshCw, Save, Trash2, User, Users, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
-import type { AccountUsage, GitHost, UsageResult, UsageWindow } from "../lib/api-client"
+import type { AccountUsage, CustomAgent, GitHost, PromptFragment, UsageResult, UsageWindow } from "../lib/api-client"
 
-type Tab = "usage" | "git" | "agents"
+let usageCache: { data: UsageResult; fetchedAt: number } | null = null
+
+function formatElapsed(ts: number): string {
+  const ms = Date.now() - ts
+  const m = Math.floor(ms / 60_000)
+  if (m < 1) return "刚刚"
+  if (m < 60) return `${m} 分钟前`
+  return `${Math.floor(m / 60)} 小时前`
+}
+
+type Tab = "usage" | "git" | "custom-agents" | "agents"
 
 const TABS: { id: Tab; label: string; icon: typeof Zap }[] = [
   { id: "usage", label: "订阅额度", icon: Zap },
   { id: "git", label: "Git 源站", icon: GitBranch },
+  { id: "custom-agents", label: "Custom Agents", icon: Bot },
   { id: "agents", label: "AGENTS.md", icon: FileText },
 ]
 
@@ -69,7 +80,7 @@ function UsageBar({ label, window: w }: { label: string; window: UsageWindow | n
   )
 }
 
-function AccountCard({ account }: { account: AccountUsage }) {
+function AccountCard({ account, onSwitch, switching }: { account: AccountUsage; onSwitch?: (id: string) => void; switching?: boolean }) {
   const active = account.active
   return (
     <div
@@ -96,6 +107,17 @@ function AccountCard({ account }: { account: AccountUsage }) {
             <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shadow-sm shadow-blue-500/60" />
             当前
           </span>
+        )}
+        {!active && onSwitch && (
+          <button
+            type="button"
+            onClick={() => onSwitch(account.id)}
+            disabled={switching}
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[10px] font-medium text-fg-4 transition-colors hover:border-blue-500/50 hover:text-blue-500 disabled:opacity-40"
+          >
+            {switching && <Loader2 className="h-2.5 w-2.5 fs-spin" />}
+            切换
+          </button>
         )}
         {account.excluded && (
           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-elevated px-2 py-0.5 text-[10px] font-medium text-fg-5">
@@ -130,19 +152,46 @@ function AccountCard({ account }: { account: AccountUsage }) {
 }
 
 function UsageSection() {
-  const [data, setData] = useState<UsageResult | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<UsageResult | null>(usageCache?.data ?? null)
+  const [loading, setLoading] = useState(!usageCache)
   const [error, setError] = useState<string | null>(null)
+  const [switchingId, setSwitchingId] = useState<string | null>(null)
+  const [cachedAt, setCachedAt] = useState<number | null>(usageCache?.fetchedAt ?? null)
+  const [, setTick] = useState(0)
+
+  const applyResult = useCallback((r: UsageResult) => {
+    const now = Date.now()
+    usageCache = { data: r, fetchedAt: now }
+    setData(r)
+    setCachedAt(now)
+  }, [])
 
   const load = useCallback(() => {
     setLoading(true)
     setError(null)
     api.fetchUsage()
-      .then((r) => { setData(r); setLoading(false) })
+      .then((r) => { applyResult(r); setLoading(false) })
       .catch((e) => { setError(e instanceof Error ? e.message : String(e)); setLoading(false) })
+  }, [applyResult])
+
+  useEffect(() => {
+    if (!usageCache) load()
+  }, [load])
+
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000)
+    return () => clearInterval(id)
   }, [])
 
-  useEffect(load, [load])
+  const handleSwitch = useCallback((accountId: string) => {
+    setSwitchingId(accountId)
+    api.switchUsageAccount(accountId)
+      .then((r) => { applyResult(r); setSwitchingId(null) })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : String(e))
+        setSwitchingId(null)
+      })
+  }, [applyResult])
 
   return (
     <section className="rounded-xl border border-line bg-surface p-5">
@@ -153,17 +202,22 @@ function UsageSection() {
           </div>
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-fg">Claude 订阅额度</h2>
-            <p className="mt-0.5 text-xs text-fg-4">各账号的 Pro/Max 订阅窗口用量，数据实时从 Anthropic 获取。</p>
+            <p className="mt-0.5 text-xs text-fg-4">各账号的 Pro/Max 订阅窗口用量。</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={load}
-          disabled={loading}
-          className="shrink-0 rounded-md p-1.5 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"
-        >
-          <RefreshCw className={clsx("h-4 w-4", loading && "fs-spin")} />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {cachedAt && (
+            <span className="text-[10px] tabular-nums text-fg-5">{formatElapsed(cachedAt)}</span>
+          )}
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="rounded-md p-1.5 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"
+          >
+            <RefreshCw className={clsx("h-4 w-4", loading && "fs-spin")} />
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 space-y-2.5">
@@ -189,7 +243,9 @@ function UsageSection() {
             </p>
           </div>
         ) : data ? (
-          data.accounts.map((a) => <AccountCard key={a.id} account={a} />)
+          data.accounts.map((a) => (
+            <AccountCard key={a.id} account={a} onSwitch={handleSwitch} switching={switchingId === a.id} />
+          ))
         ) : null}
       </div>
     </section>
@@ -461,6 +517,353 @@ function GitHostSection() {
   )
 }
 
+const BASE_AGENTS = ["sisyphus", "prometheus", "atlas"]
+
+function CustomAgentRow({ agent, onEdit, onDelete }: { agent: CustomAgent; onEdit: () => void; onDelete: () => void }) {
+  const [confirming, setConfirming] = useState(false)
+
+  return (
+    <div className="group flex items-center gap-3 rounded-lg border border-line bg-base px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-fg">{agent.name}</span>
+          <span className="rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-4">{agent.baseAgent}</span>
+          {agent.model && (
+            <span className="rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">{agent.model}</span>
+          )}
+          {agent.repoId && (
+            <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">repo</span>
+          )}
+        </div>
+        {agent.systemPrompt && (
+          <p className="mt-0.5 truncate font-mono text-xs text-fg-5">{agent.systemPrompt}</p>
+        )}
+      </div>
+      <div className="flex items-center gap-1">
+        {confirming ? (
+          <>
+            <button type="button" onClick={onDelete} className="rounded p-1.5 text-red-400 hover:bg-red-500/10">
+              <Check className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => setConfirming(false)} className="rounded p-1.5 text-fg-4 hover:bg-elevated">
+              <X className="h-4 w-4" />
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" onClick={onEdit} className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100">
+              <Edit3 className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => setConfirming(true)} className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
+  initial?: CustomAgent
+  availableFragments: PromptFragment[]
+  onSave: (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; fragmentIds?: string[] }) => Promise<void>
+  onCancel: () => void
+}) {
+  const [name, setName] = useState(initial?.name ?? "")
+  const [baseAgent, setBaseAgent] = useState(initial?.baseAgent ?? "sisyphus")
+  const [model, setModel] = useState(initial?.model ?? "")
+  const [systemPrompt, setSystemPrompt] = useState(initial?.systemPrompt ?? "")
+  const [selectedIds, setSelectedIds] = useState<string[]>(initial?.fragments.map((f) => f.id) ?? [])
+  const [showPreview, setShowPreview] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const toggleFragment = (id: string) => {
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+  }
+
+  const moveFragment = (idx: number, dir: -1 | 1) => {
+    const target = idx + dir
+    if (target < 0 || target >= selectedIds.length) return
+    setSelectedIds((prev) => {
+      const next = [...prev]
+      ;[next[idx], next[target]] = [next[target], next[idx]]
+      return next
+    })
+  }
+
+  const preview = [...selectedIds.map((id) => availableFragments.find((f) => f.id === id)?.content).filter(Boolean), systemPrompt].filter(Boolean).join("\n\n---\n\n")
+
+  const submit = async () => {
+    if (!name.trim() || !baseAgent) return
+    setSaving(true)
+    try {
+      await onSave({ name: name.trim(), baseAgent, model: model.trim() || undefined, systemPrompt, fragmentIds: selectedIds })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-line bg-base p-4">
+      <div className="flex gap-3">
+        <label className="flex-1">
+          <span className="text-xs font-medium text-fg-3">名称</span>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="代码审查员"
+            className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+        </label>
+        <label className="w-36">
+          <span className="text-xs font-medium text-fg-3">Base Agent</span>
+          <select value={baseAgent} onChange={(e) => setBaseAgent(e.target.value)}
+            className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg focus:border-blue-500 focus:outline-none">
+            {BASE_AGENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </label>
+      </div>
+      <label className="block">
+        <span className="text-xs font-medium text-fg-3">模型（可选，如 anthropic/claude-sonnet-4-6）</span>
+        <input type="text" value={model} onChange={(e) => setModel(e.target.value)} placeholder="留空使用默认模型"
+          className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-1.5 font-mono text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+      </label>
+
+      {availableFragments.length > 0 && (
+        <div>
+          <span className="text-xs font-medium text-fg-3">提示词片段</span>
+          <div className="mt-1 space-y-1">
+            {selectedIds.map((id, idx) => {
+              const frag = availableFragments.find((f) => f.id === id)
+              if (!frag) return null
+              return (
+                <div key={id} className="flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1">
+                  <div className="flex flex-col">
+                    <button type="button" onClick={() => moveFragment(idx, -1)} disabled={idx === 0}
+                      className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▲</button>
+                    <button type="button" onClick={() => moveFragment(idx, 1)} disabled={idx === selectedIds.length - 1}
+                      className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▼</button>
+                  </div>
+                  <span className="flex-1 truncate text-xs text-fg">{frag.name}</span>
+                  <button type="button" onClick={() => toggleFragment(id)} className="text-fg-5 hover:text-red-400">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )
+            })}
+            {availableFragments.filter((f) => !selectedIds.includes(f.id)).length > 0 && (
+              <select
+                value=""
+                onChange={(e) => { if (e.target.value) toggleFragment(e.target.value) }}
+                className="w-full rounded border border-dashed border-line bg-surface px-2 py-1 text-xs text-fg-4 focus:border-blue-500 focus:outline-none"
+              >
+                <option value="">+ 添加片段…</option>
+                {availableFragments.filter((f) => !selectedIds.includes(f.id)).map((f) => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+      )}
+
+      <label className="block">
+        <span className="text-xs font-medium text-fg-3">补充指令（systemPrompt）</span>
+        <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={3}
+          placeholder="agent 级别的补充指令，拼接在 fragments 之后…"
+          className="mt-1 w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+      </label>
+
+      {(selectedIds.length > 0 || systemPrompt) && (
+        <div>
+          <button type="button" onClick={() => setShowPreview(!showPreview)}
+            className="flex items-center gap-1 text-xs font-medium text-fg-4 hover:text-fg-3">
+            <span>{showPreview ? "▾" : "▸"}</span> 预览最终提示词
+          </button>
+          {showPreview && (
+            <pre className="mt-1 max-h-48 overflow-auto rounded border border-line bg-elevated px-3 py-2 font-mono text-xs leading-relaxed text-fg-4">
+              {preview || "(空)"}
+            </pre>
+          )}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 pt-1">
+        <button type="button" onClick={onCancel} className="rounded-md px-3 py-1.5 text-xs text-fg-4 hover:bg-elevated">取消</button>
+        <button type="button" onClick={() => void submit()} disabled={saving || !name.trim()}
+          className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40">
+          {saving ? "保存中…" : initial ? "更新" : "创建"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function FragmentRow({ fragment, onEdit, onDelete }: { fragment: PromptFragment; onEdit: () => void; onDelete: () => void }) {
+  const [confirming, setConfirming] = useState(false)
+  return (
+    <div className="group flex items-center gap-3 rounded-lg border border-line bg-base px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <span className="text-xs font-medium text-fg">{fragment.name}</span>
+        {fragment.content && <p className="mt-0.5 truncate font-mono text-[11px] text-fg-5">{fragment.content}</p>}
+      </div>
+      <div className="flex items-center gap-1">
+        {confirming ? (
+          <>
+            <button type="button" onClick={onDelete} className="rounded p-1 text-red-400 hover:bg-red-500/10"><Check className="h-3.5 w-3.5" /></button>
+            <button type="button" onClick={() => setConfirming(false)} className="rounded p-1 text-fg-4 hover:bg-elevated"><X className="h-3.5 w-3.5" /></button>
+          </>
+        ) : (
+          <>
+            <button type="button" onClick={onEdit} className="rounded p-1 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100"><Edit3 className="h-3.5 w-3.5" /></button>
+            <button type="button" onClick={() => setConfirming(true)} className="rounded p-1 text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FragmentForm({ initial, onSave, onCancel }: {
+  initial?: PromptFragment
+  onSave: (data: { name: string; content: string }) => Promise<void>
+  onCancel: () => void
+}) {
+  const [name, setName] = useState(initial?.name ?? "")
+  const [content, setContent] = useState(initial?.content ?? "")
+  const [saving, setSaving] = useState(false)
+
+  const submit = async () => {
+    if (!name.trim()) return
+    setSaving(true)
+    try { await onSave({ name: name.trim(), content }) } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-line bg-base p-3">
+      <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="片段名称"
+        className="w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+      <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3} placeholder="提示词内容…"
+        className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className="rounded-md px-3 py-1 text-xs text-fg-4 hover:bg-elevated">取消</button>
+        <button type="button" onClick={() => void submit()} disabled={saving || !name.trim()}
+          className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-40">
+          {saving ? "保存中…" : initial ? "更新" : "创建"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function CustomAgentsSection() {
+  const [agents, setAgents] = useState<CustomAgent[]>([])
+  const [fragments, setFragments] = useState<PromptFragment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showAgentForm, setShowAgentForm] = useState(false)
+  const [editingAgent, setEditingAgent] = useState<CustomAgent | null>(null)
+  const [showFragForm, setShowFragForm] = useState(false)
+  const [editingFrag, setEditingFrag] = useState<PromptFragment | null>(null)
+
+  const load = () => {
+    Promise.all([api.listGlobalCustomAgents(), api.listGlobalFragments()])
+      .then(([a, f]) => { setAgents(a); setFragments(f); setLoading(false) })
+      .catch(() => setLoading(false))
+  }
+
+  useEffect(load, [])
+
+  const handleCreateAgent = async (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; fragmentIds?: string[] }) => {
+    await api.createGlobalCustomAgent(data)
+    setShowAgentForm(false)
+    load()
+  }
+
+  const handleUpdateAgent = async (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; fragmentIds?: string[] }) => {
+    if (!editingAgent) return
+    await api.updateCustomAgent(editingAgent.id, data)
+    setEditingAgent(null)
+    load()
+  }
+
+  const handleDeleteAgent = async (id: string) => {
+    await api.deleteCustomAgent(id)
+    setAgents((prev) => prev.filter((a) => a.id !== id))
+  }
+
+  const handleCreateFrag = async (data: { name: string; content: string }) => {
+    await api.createGlobalFragment(data)
+    setShowFragForm(false)
+    load()
+  }
+
+  const handleUpdateFrag = async (data: { name: string; content: string }) => {
+    if (!editingFrag) return
+    await api.updateFragment(editingFrag.id, data)
+    setEditingFrag(null)
+    load()
+  }
+
+  const handleDeleteFrag = async (id: string) => {
+    await api.deleteFragment(id)
+    setFragments((prev) => prev.filter((f) => f.id !== id))
+  }
+
+  if (loading) {
+    return (
+      <section className="rounded-xl border border-line bg-surface p-5">
+        <p className="py-4 text-center font-mono text-xs text-fg-5">加载中…</p>
+      </section>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-xl border border-line bg-surface p-5">
+        <h2 className="text-sm font-semibold text-fg">提示词片段</h2>
+        <p className="mt-1 text-xs text-fg-4">可复用的提示词模块，可在多个 Custom Agent 间共享。</p>
+        <div className="mt-3 space-y-1.5">
+          {fragments.map((f) =>
+            editingFrag?.id === f.id ? (
+              <FragmentForm key={f.id} initial={f} onSave={handleUpdateFrag} onCancel={() => setEditingFrag(null)} />
+            ) : (
+              <FragmentRow key={f.id} fragment={f} onEdit={() => setEditingFrag(f)} onDelete={() => void handleDeleteFrag(f.id)} />
+            ),
+          )}
+          {showFragForm ? (
+            <FragmentForm onSave={handleCreateFrag} onCancel={() => setShowFragForm(false)} />
+          ) : (
+            <button type="button" onClick={() => setShowFragForm(true)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3">
+              <Plus className="h-3.5 w-3.5" /> 添加片段
+            </button>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-line bg-surface p-5">
+        <h2 className="text-sm font-semibold text-fg">Custom Agents</h2>
+        <p className="mt-1 text-xs text-fg-4">组合 base agent + 模型 + 提示词片段 + 补充指令。创建 Session 时选择即可。</p>
+        <div className="mt-3 space-y-2">
+          {agents.map((a) =>
+            editingAgent?.id === a.id ? (
+              <CustomAgentForm key={a.id} initial={a} availableFragments={fragments} onSave={handleUpdateAgent} onCancel={() => setEditingAgent(null)} />
+            ) : (
+              <CustomAgentRow key={a.id} agent={a} onEdit={() => setEditingAgent(a)} onDelete={() => void handleDeleteAgent(a.id)} />
+            ),
+          )}
+          {showAgentForm ? (
+            <CustomAgentForm availableFragments={fragments} onSave={handleCreateAgent} onCancel={() => setShowAgentForm(false)} />
+          ) : (
+            <button type="button" onClick={() => setShowAgentForm(true)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3">
+              <Plus className="h-3.5 w-3.5" /> 添加 Custom Agent
+            </button>
+          )}
+        </div>
+        <p className="mt-4 text-[11px] text-fg-5">全局 Agent 对所有仓库可见。</p>
+      </section>
+    </div>
+  )
+}
+
 export function SettingsPage() {
   const [tab, setTab] = useState<Tab>("usage")
 
@@ -492,6 +895,7 @@ export function SettingsPage() {
         <div className="mt-4">
           {tab === "usage" && <UsageSection />}
           {tab === "git" && <GitHostSection />}
+          {tab === "custom-agents" && <CustomAgentsSection />}
           {tab === "agents" && <AgentsMdSection />}
         </div>
       </div>

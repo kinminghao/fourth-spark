@@ -5,7 +5,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react"
-import { CornerDownLeft } from "lucide-react"
+import { ArrowUp } from "lucide-react"
 import clsx from "clsx"
 import { useSessionStore, EMPTY_MESSAGES } from "../stores/session-store"
 import { classifyPart, isQuestionPending } from "../lib/message-parts"
@@ -116,9 +116,9 @@ export function InputBar() {
           onClick={submit}
           disabled={disabled || value.trim().length === 0}
           aria-label="Send message"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-fg-4 transition-colors duration-150 hover:bg-elevated hover:text-emerald-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-4"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white transition-colors duration-150 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6/30 disabled:text-fg-5"
         >
-          <CornerDownLeft className="h-4 w-4" />
+          <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
         </button>
       </div>
       <div className="mx-auto mt-1.5 max-w-4xl pl-5 font-mono text-[10px] text-fg-6">

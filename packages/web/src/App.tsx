@@ -7,7 +7,7 @@ import { IssuesPage } from "./pages/IssuesPage"
 import { SettingsPage } from "./pages/SettingsPage"
 import { useRepoStore } from "./stores/repo-store"
 import { useSessionStore } from "./stores/session-store"
-import { useAgentStore } from "./stores/agent-store"
+import { useCustomAgentStore } from "./stores/custom-agent-store"
 import { useIssueStore } from "./stores/issue-store"
 import { useThemeStore } from "./stores/theme-store"
 import { ToastContainer } from "./components/ToastContainer"
@@ -28,7 +28,7 @@ export default function App() {
     if (activeRepoId) {
       clearSessions()
       void loadSessions()
-      void useAgentStore.getState().loadAgents()
+      void useCustomAgentStore.getState().loadAgents()
       void useIssueStore.getState().loadIssues()
     } else {
       clearSessions()

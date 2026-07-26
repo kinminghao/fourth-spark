@@ -40,6 +40,24 @@ export type Agent = {
   description?: string
 }
 
+export type ProviderModel = {
+  id: string
+  name?: string
+  status?: string
+  capabilities?: {
+    toolcall?: boolean
+    output?: { text?: boolean; image?: boolean }
+  }
+  cost?: { input?: number; output?: number }
+  limit?: { context?: number }
+}
+
+export type Provider = {
+  id: string
+  name?: string
+  models?: ProviderModel[]
+}
+
 export type SessionStatus = { type: "idle" | "busy" | "retry" }
 
 export class OpenCodeError extends Error {
@@ -72,6 +90,7 @@ export interface OpenCodeClient {
   getTodos(sessionId: string): Promise<Todo[]>
   getSessionStatus(): Promise<Record<string, SessionStatus>>
   listAgents(): Promise<Agent[]>
+  getProviders(): Promise<Provider[]>
   eventStream(signal?: AbortSignal): Promise<Response>
 }
 
@@ -188,6 +207,10 @@ export function createOpenCodeClient(baseUrl: string, directory: string): OpenCo
 
     listAgents() {
       return getJson<Agent[]>("/agent", { directory })
+    },
+
+    getProviders() {
+      return getJson<Provider[]>("/provider", { directory })
     },
 
     async eventStream(signal?) {

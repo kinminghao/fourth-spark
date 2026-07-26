@@ -5,7 +5,7 @@ import { DEFAULT_VARIANT } from "../lib/config"
 import { syncSessionsList, syncMessagesList } from "../db/sync"
 import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFromDB, getTodosFromDB } from "../db/query"
 import { db } from "../db/index"
-import { sessions as sessionsTable, issues, issueComments } from "../db/schema"
+import { sessions as sessionsTable, issues, issueComments, customAgents, customAgentFragments, promptFragments } from "../db/schema"
 import { logger } from "../middleware/logger"
 import type { SessionStatus } from "../lib/opencode"
 
@@ -86,34 +86,61 @@ async function buildIssueContext(issueId: string): Promise<string | null> {
 sessions.post("/", async (c) => {
   const repoId = c.req.param("repoId")
   const client = processManager.requireClient(repoId)
-  const body = await c.req.json<{ message?: string; agent?: string; model?: string; variant?: string; title?: string; issueId?: string }>().catch(() => null)
+  const body = await c.req.json<{ message?: string; agent?: string; model?: string; variant?: string; title?: string; issueId?: string; customAgentId?: string }>().catch(() => null)
   if (!body || typeof body.message !== "string" || body.message.length === 0) {
     return c.json({ error: "Body must include a non-empty 'message' string", status: 400 }, 400)
   }
 
-  let prompt = body.message
-  if (body.issueId) {
-    const context = await buildIssueContext(body.issueId)
-    if (context) {
-      prompt = `${context}\n\n---\n\n${prompt}`
+  let agent = body.agent
+  let model = body.model
+  let systemPrompt: string | undefined
+  let customAgentId: string | null = null
+
+  if (body.customAgentId) {
+    const [ca] = await db.select().from(customAgents).where(eq(customAgents.id, body.customAgentId))
+    if (ca) {
+      customAgentId = ca.id
+      agent = ca.baseAgent
+      if (ca.model) model = ca.model
+      if (ca.systemPrompt) systemPrompt = ca.systemPrompt
     }
   }
 
-  const session = await client.createSession({ agent: body.agent, title: body.title })
+  const parts: string[] = []
+  if (customAgentId) {
+    const frags = await db.select({ content: promptFragments.content })
+      .from(customAgentFragments)
+      .innerJoin(promptFragments, eq(customAgentFragments.fragmentId, promptFragments.id))
+      .where(eq(customAgentFragments.customAgentId, customAgentId))
+      .orderBy(asc(customAgentFragments.position))
+    for (const f of frags) {
+      if (f.content) parts.push(f.content)
+    }
+  }
+  if (systemPrompt) parts.push(systemPrompt)
+  if (body.issueId) {
+    const context = await buildIssueContext(body.issueId)
+    if (context) parts.push(context)
+  }
+  parts.push(body.message)
+  const prompt = parts.join("\n\n---\n\n")
+
+  const session = await client.createSession({ agent, title: body.title })
   const now = Date.now()
   await db.insert(sessionsTable).values({
     id: session.id,
     title: session.title ?? body.title ?? "",
     issueId: body.issueId ?? null,
-    agent: body.agent ?? null,
+    customAgentId,
+    agent: agent ?? null,
     timeCreated: now,
     timeUpdated: now,
   }).onConflictDoUpdate({
     target: sessionsTable.id,
-    set: { issueId: body.issueId ?? null, timeUpdated: now },
+    set: { issueId: body.issueId ?? null, customAgentId, timeUpdated: now },
   })
-  await client.prompt(session.id, prompt, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT })
-  return c.json({ ...session, agent: body.agent, issueId: body.issueId ?? null }, 201)
+  await client.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT })
+  return c.json({ ...session, agent, issueId: body.issueId ?? null, customAgentId }, 201)
 })
 
 sessions.get("/", async (c) => {

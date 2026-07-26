@@ -8,7 +8,7 @@
  *   https://api.anthropic.com/api/oauth/usage  → subscription utilization
  */
 
-import { readFile } from "node:fs/promises"
+import { readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { logger } from "../middleware/logger"
@@ -261,6 +261,20 @@ async function resolveAccess(
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+export async function switchAccount(accountId: string): Promise<void> {
+  const data = await readJson<AccountsFile>(ACCOUNTS_PATH)
+  if (!data || !Array.isArray(data.accounts)) {
+    throw new Error("claude-accounts.json not found or invalid")
+  }
+  const found = data.accounts.some((a: StoredAccount) => a.id === accountId)
+  if (!found) {
+    throw new Error(`account ${accountId} not found`)
+  }
+  data.activeId = accountId
+  await writeFile(ACCOUNTS_PATH, JSON.stringify(data, null, 2) + "\n", "utf8")
+  logger.info({ accountId }, "claude-usage: switched active account")
+}
 
 export async function collectUsage(): Promise<UsageResult> {
   const file = await loadAccounts()

@@ -6,7 +6,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react"
-import { AlertTriangle, ArrowLeft, Check, CornerDownLeft, ExternalLink, GitBranch, Menu, Play, Square, X } from "lucide-react"
+import { AlertTriangle, ArrowLeft, ArrowUp, Check, ExternalLink, GitBranch, Menu, Play, Square, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
@@ -18,7 +18,7 @@ import {
 } from "../stores/session-store"
 import type { Message as ApiMessage, Session } from "../lib/api-client"
 import { useRepoStore } from "../stores/repo-store"
-import { useAgentStore } from "../stores/agent-store"
+import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useIssueStore } from "../stores/issue-store"
 import { useSessionEvents } from "../hooks/use-session-events"
 import { ExecutionBlock } from "./ExecutionBlock"
@@ -140,13 +140,13 @@ const MAX_NEW_HEIGHT_PX = 144
 
 function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const [draft, setDraft] = useState("")
-  const [agent, setAgent] = useState("")
+  const [customAgentId, setCustomAgentId] = useState("")
   const [issueId, setIssueId] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const createSession = useSessionStore((state) => state.createSession)
   const sendError = useSessionStore((state) => state.sendError)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
-  const agents = useAgentStore((state) => state.agents)
+  const customAgents = useCustomAgentStore((state) => state.agents)
   const issues = useIssueStore((state) => state.issues)
   const selectedIssueId = useIssueStore((state) => state.selectedIssueId)
 
@@ -156,12 +156,6 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
       useIssueStore.getState().setSelectedIssue(null)
     }
   }, [selectedIssueId])
-
-  useEffect(() => {
-    if (agent || agents.length === 0) return
-    const pick = agents[0]
-    if (pick) setAgent(pick.id || pick.name)
-  }, [agents, agent])
 
   useLayoutEffect(() => {
     const el = textareaRef.current
@@ -174,7 +168,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     const text = draft.trim()
     if (!text || !activeRepoId) return
     setDraft("")
-    void createSession(text, agent || undefined, undefined, undefined, issueId || undefined)
+    void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined)
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -224,9 +218,9 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
               onClick={submit}
               disabled={!activeRepoId || draft.trim().length === 0}
               aria-label="Start run"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-fg-4 transition-colors duration-150 hover:bg-elevated hover:text-emerald-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-4"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white transition-colors duration-150 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6/30 disabled:text-fg-5"
             >
-              <CornerDownLeft className="h-4 w-4" />
+              <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
             </button>
           </div>
 
@@ -234,15 +228,14 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
             <label className="flex items-center gap-1.5 font-mono text-[11px] text-fg-4">
               <span className="shrink-0">Agent</span>
               <select
-                value={agent}
-                onChange={(e) => setAgent(e.target.value)}
+                value={customAgentId}
+                onChange={(e) => setCustomAgentId(e.target.value)}
                 className="rounded border border-line bg-surface px-2 py-1 font-mono text-xs text-fg focus:border-fg-5 focus:outline-none"
               >
                 <option value="">默认</option>
-                {agents.map((a) => {
-                  const val = a.id || a.name
-                  return <option key={val} value={val}>{a.name}</option>
-                })}
+                {customAgents.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
               </select>
             </label>
             {issues.length > 0 && (
