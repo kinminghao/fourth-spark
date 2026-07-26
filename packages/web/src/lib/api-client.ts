@@ -109,6 +109,48 @@ export interface SessionStatus {
   type: SessionStatusValue
 }
 
+export interface PromptFragment {
+  id: string
+  name: string
+  content: string
+  repoId: string | null
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+}
+
+export interface PromptFragment {
+  id: string
+  name: string
+  content: string
+  repoId: string | null
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+}
+
+export interface CustomAgent {
+  id: string
+  name: string
+  baseAgent: string
+  model: string | null
+  systemPrompt: string
+  fragments: Array<{ id: string; name: string; content: string }>
+  repoId: string | null
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+}
+
+export interface ModelInfo {
+  id: string
+  name: string
+  providerID: string
+  providerName: string
+  cost?: { input?: number; output?: number }
+  contextLimit?: number
+}
+
 export class ApiError extends Error {
   readonly status: number
   constructor(message: string, status: number) {
@@ -238,10 +280,11 @@ export async function createSession(
   model?: string,
   variant?: string,
   issueId?: string,
+  customAgentId?: string,
 ): Promise<Session> {
   return apiFetch<Session>(`${repoBase(repoId)}/sessions`, {
     method: "POST",
-    body: JSON.stringify({ message, agent, model, variant, issueId }),
+    body: JSON.stringify({ message, agent, model, variant, issueId, customAgentId }),
   })
 }
 
@@ -306,6 +349,66 @@ export async function getSessionStatus(repoId: string, sessionId: string): Promi
 
 export async function listAgents(repoId: string): Promise<Agent[]> {
   return unwrapList<Agent>(await apiFetch<unknown>(`${repoBase(repoId)}/agents`), "agents")
+}
+
+// ---------------------------------------------------------------------------
+// Custom Agent API
+// ---------------------------------------------------------------------------
+
+export async function listGlobalCustomAgents(): Promise<CustomAgent[]> {
+  return unwrapList<CustomAgent>(await apiFetch<unknown>("/api/custom-agents"))
+}
+
+export async function createGlobalCustomAgent(data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; fragmentIds?: string[] }): Promise<CustomAgent> {
+  return apiFetch<CustomAgent>("/api/custom-agents", { method: "POST", body: JSON.stringify(data) })
+}
+
+export async function updateCustomAgent(id: string, data: { name?: string; baseAgent?: string; model?: string | null; systemPrompt?: string; fragmentIds?: string[] }): Promise<CustomAgent> {
+  return apiFetch<CustomAgent>(`/api/custom-agents/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) })
+}
+
+export async function deleteCustomAgent(id: string): Promise<void> {
+  await apiFetch<void>(`/api/custom-agents/${encodeURIComponent(id)}`, { method: "DELETE" })
+}
+
+export async function listRepoCustomAgents(repoId: string): Promise<CustomAgent[]> {
+  return unwrapList<CustomAgent>(await apiFetch<unknown>(`${repoBase(repoId)}/custom-agents`))
+}
+
+export async function createRepoCustomAgent(repoId: string, data: { name: string; baseAgent: string; model?: string; systemPrompt?: string }): Promise<CustomAgent> {
+  return apiFetch<CustomAgent>(`${repoBase(repoId)}/custom-agents`, { method: "POST", body: JSON.stringify(data) })
+}
+
+// ---------------------------------------------------------------------------
+// Model API — /api/repos/:repoId/models
+// ---------------------------------------------------------------------------
+
+export async function listModels(repoId: string): Promise<ModelInfo[]> {
+  return unwrapList<ModelInfo>(await apiFetch<unknown>(`${repoBase(repoId)}/models`))
+}
+
+// ---------------------------------------------------------------------------
+// Prompt Fragment API
+// ---------------------------------------------------------------------------
+
+export async function listGlobalFragments(): Promise<PromptFragment[]> {
+  return unwrapList<PromptFragment>(await apiFetch<unknown>("/api/prompt-fragments"))
+}
+
+export async function createGlobalFragment(data: { name: string; content?: string }): Promise<PromptFragment> {
+  return apiFetch<PromptFragment>("/api/prompt-fragments", { method: "POST", body: JSON.stringify(data) })
+}
+
+export async function updateFragment(id: string, data: { name?: string; content?: string }): Promise<PromptFragment> {
+  return apiFetch<PromptFragment>(`/api/prompt-fragments/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) })
+}
+
+export async function deleteFragment(id: string): Promise<void> {
+  await apiFetch<void>(`/api/prompt-fragments/${encodeURIComponent(id)}`, { method: "DELETE" })
+}
+
+export async function listRepoFragments(repoId: string): Promise<PromptFragment[]> {
+  return unwrapList<PromptFragment>(await apiFetch<unknown>(`${repoBase(repoId)}/prompt-fragments`))
 }
 
 // ---------------------------------------------------------------------------
@@ -526,4 +629,11 @@ export interface UsageResult {
 
 export async function fetchUsage(): Promise<UsageResult> {
   return apiFetch<UsageResult>("/api/usage")
+}
+
+export async function switchUsageAccount(accountId: string): Promise<UsageResult> {
+  return apiFetch<UsageResult>("/api/usage/switch", {
+    method: "POST",
+    body: JSON.stringify({ accountId }),
+  })
 }

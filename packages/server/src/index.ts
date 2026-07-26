@@ -13,6 +13,7 @@ import { repoRoutes } from "./routes/repos"
 import { usageRoutes } from "./routes/usage"
 import { globalAgentsMd, repoAgentsMd } from "./routes/agents-md"
 import { globalCustomAgents, repoCustomAgents } from "./routes/custom-agents"
+import { globalFragments, repoFragments } from "./routes/prompt-fragments"
 import { modelRoutes } from "./routes/models"
 import { mcpRoute } from "./routes/mcp"
 import { PORT } from "./lib/config"
@@ -35,6 +36,7 @@ app.route("/api/health", health)
 app.route("/api/usage", usageRoutes)
 app.route("/api/agents-md", globalAgentsMd)
 app.route("/api/custom-agents", globalCustomAgents)
+app.route("/api/prompt-fragments", globalFragments)
 app.route("/api/repos", repoAgentsMd)
 
 // ---------------------------------------------------------------------------
@@ -47,6 +49,7 @@ repoScoped.route("/sessions", sessions)
 repoScoped.route("/sessions", events)
 repoScoped.route("/agents", agents)
 repoScoped.route("/custom-agents", repoCustomAgents)
+repoScoped.route("/prompt-fragments", repoFragments)
 repoScoped.route("/models", modelRoutes)
 repoScoped.route("/issues", issueRoutes)
 repoScoped.route("/mcp", mcpRoute)
