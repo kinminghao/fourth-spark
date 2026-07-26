@@ -15,6 +15,13 @@
       "when": 1784735504613,
       "tag": "0001_add-repos-table",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785051553506,
+      "tag": "0002_tearful_gorilla_man",
+      "breakpoints": true
     }
   ]
 }
