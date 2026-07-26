@@ -96,10 +96,24 @@ async function isProcessAlive(pid: number): Promise<boolean> {
   }
 }
 
+async function verifyOpenCodeIdentity(port: number, expectedDir: string): Promise<boolean> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/session?directory=${encodeURIComponent(expectedDir)}`, {
+      signal: AbortSignal.timeout(2000),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
 async function adoptOrphans(): Promise<Map<string, PidRecord>> {
   const adopted = new Map<string, PidRecord>()
   const oldRecords = readPidFile()
   if (oldRecords.length === 0) return adopted
+
+  const allRepos = await db.select().from(repos)
+  const repoPathMap = new Map(allRepos.map((r) => [r.id, r.localPath]))
 
   for (const record of oldRecords) {
     const alive = await isProcessAlive(record.pid)
@@ -107,21 +121,40 @@ async function adoptOrphans(): Promise<Map<string, PidRecord>> {
       logger.info({ pid: record.pid, repoId: record.repoId }, "orphan process already dead, skipping")
       continue
     }
-    try {
-      const res = await fetch(`http://127.0.0.1:${record.port}/agent`, {
-        signal: AbortSignal.timeout(2000),
-      })
-      if (res.ok) {
-        adopted.set(record.repoId, record)
-        logger.info({ pid: record.pid, port: record.port, repoId: record.repoId }, "adopted live orphan process")
-      } else {
-        killPid(record.pid)
-        logger.info({ pid: record.pid, repoId: record.repoId }, "orphan not responding, killed")
-      }
-    } catch {
+
+    const expectedDir = repoPathMap.get(record.repoId)
+    if (!expectedDir) {
       killPid(record.pid)
-      logger.info({ pid: record.pid, repoId: record.repoId }, "orphan unreachable, killed")
+      logger.info({ pid: record.pid, repoId: record.repoId }, "orphan repo no longer in DB, killed")
+      continue
     }
+
+    const verified = await verifyOpenCodeIdentity(record.port, expectedDir)
+    if (verified) {
+      adopted.set(record.repoId, record)
+      logger.info({ pid: record.pid, port: record.port, repoId: record.repoId }, "adopted live orphan process")
+    } else {
+      killPid(record.pid)
+      logger.info({ pid: record.pid, repoId: record.repoId }, "orphan identity verification failed, killed")
+    }
+  }
+
+  const adoptedPids = new Set([...adopted.values()].map((r) => r.pid))
+  try {
+    const result = Bun.spawnSync(["pgrep", "-f", "opencode serve --port"])
+    const output = result.stdout.toString().trim()
+    if (output) {
+      const myPid = process.pid
+      const strayPids = output.split("\n").map(Number).filter((p) => p && p !== myPid && !adoptedPids.has(p))
+      let killed = 0
+      for (const pid of strayPids) {
+        if (killPid(pid)) killed++
+      }
+      if (killed > 0) {
+        logger.info({ killed }, "killed stray opencode serve processes not in PID file")
+      }
+    }
+  } catch {
   }
 
   if (adopted.size > 0) {
