@@ -205,6 +205,21 @@ async function pollOnce(): Promise<void> {
         prevStatuses.set(sessionId, "idle")
         emitTransition(sessionId, prev, "idle")
         clearCooldown(await getActiveId() ?? "")
+
+        if (prev === "busy") {
+          const shouldContinue = await detectTruncation(client, sessionId)
+          if (shouldContinue) {
+            await autoContinueSession(client, sessionId)
+            continue
+          }
+
+          const isEmpty = await detectEmptyResponse(client, sessionId)
+          if (isEmpty) {
+            await autoRetryEmptyResponse(client, sessionId)
+            continue
+          }
+        }
+
         autoContinueCounts.delete(sessionId)
         emptyRetryCounts.delete(sessionId)
       }
