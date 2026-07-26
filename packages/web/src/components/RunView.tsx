@@ -172,9 +172,25 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-      event.preventDefault()
-      submit()
+    if (event.key === "Enter") {
+      if (event.metaKey || event.ctrlKey) {
+        // Ctrl/Cmd+Enter: insert newline
+        event.preventDefault()
+        const el = event.currentTarget
+        const start = el.selectionStart
+        const end = el.selectionEnd
+        const next = draft.slice(0, start) + "\n" + draft.slice(end)
+        setDraft(next)
+        requestAnimationFrame(() => {
+          el.selectionStart = el.selectionEnd = start + 1
+        })
+        return
+      }
+      if (!event.shiftKey) {
+        // Enter: send
+        event.preventDefault()
+        submit()
+      }
     }
   }
 
