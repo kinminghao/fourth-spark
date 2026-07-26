@@ -89,7 +89,7 @@ export function useSessionEvents(sessionId: string | null): void {
         }
       } catch {
       }
-    }, 5_000)
+    }, 1_000)
 
     return () => {
       disposed = true
