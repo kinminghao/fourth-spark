@@ -228,9 +228,9 @@ async function pollOnce(): Promise<void> {
             continue
           }
 
-          if (!hasIncompleteTodos(client, sessionId)) {
+          emptyRetryCounts.delete(sessionId)
+          if (!await hasIncompleteTodos(client, sessionId)) {
             autoContinueCounts.delete(sessionId)
-            emptyRetryCounts.delete(sessionId)
           }
         } else {
           autoContinueCounts.delete(sessionId)
@@ -259,9 +259,9 @@ async function pollOnce(): Promise<void> {
             continue
           }
 
-          if (!hasIncompleteTodos(client, sessionId)) {
+          emptyRetryCounts.delete(sessionId)
+          if (!await hasIncompleteTodos(client, sessionId)) {
             autoContinueCounts.delete(sessionId)
-            emptyRetryCounts.delete(sessionId)
           }
         } else {
           autoContinueCounts.delete(sessionId)
