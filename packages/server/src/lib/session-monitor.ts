@@ -134,12 +134,30 @@ async function hasIncompleteTodos(client: OpenCodeClient, sessionId: string): Pr
   }
 }
 
+async function lastResponseWasTruncated(client: OpenCodeClient, sessionId: string): Promise<boolean> {
+  try {
+    const messages = await client.getMessages(sessionId)
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i]
+      const role = (msg as { role?: string }).role ?? (msg.info as { role?: string } | undefined)?.role
+      if (role !== "assistant") continue
+      const parts = msg.parts ?? []
+      return !parts.some((p) => p.type === "step-finish")
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
 async function detectTruncation(client: OpenCodeClient, sessionId: string): Promise<boolean> {
   const count = autoContinueCounts.get(sessionId) ?? 0
   if (count >= MAX_AUTO_CONTINUES) {
     logger.info({ sessionId, count }, "auto-continue limit reached, skipping")
     return false
   }
+  const truncated = await lastResponseWasTruncated(client, sessionId)
+  if (!truncated) return false
   try {
     const todos = await client.getTodos(sessionId)
     return todos.some((t) => t.status === "in_progress" || t.status === "pending")
