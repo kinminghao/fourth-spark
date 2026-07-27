@@ -163,11 +163,14 @@ sessions.get("/", async (c) => {
       const list = await client.listSessions()
       syncSessionsList(list)
       const ids = list.map((s) => s.id)
-      const issueRows = ids.length > 0
-        ? await db.select({ id: sessionsTable.id, issueId: sessionsTable.issueId }).from(sessionsTable).where(inArray(sessionsTable.id, ids))
+      const dbRows = ids.length > 0
+        ? await db.select({ id: sessionsTable.id, issueId: sessionsTable.issueId, title: sessionsTable.title }).from(sessionsTable).where(inArray(sessionsTable.id, ids))
         : []
-      const issueMap = new Map(issueRows.map((r) => [r.id, r.issueId]))
-      return c.json(list.map((s) => ({ ...s, issueId: issueMap.get(s.id) ?? null })))
+      const dbMap = new Map(dbRows.map((r) => [r.id, r]))
+      return c.json(list.map((s) => {
+        const row = dbMap.get(s.id)
+        return { ...s, issueId: row?.issueId ?? null, ...(row?.title ? { title: row.title } : {}) }
+      }))
     } catch (err) {
       logger.warn({ err, repoId }, "opencode unavailable for listSessions, falling back to DB")
     }
@@ -266,10 +269,13 @@ sessions.get("/:id/todos", async (c) => {
 
 sessions.patch("/:id", async (c) => {
   const sessionId = c.req.param("id")
-  const body = await c.req.json<{ issueId?: string | null }>().catch(() => null)
+  const body = await c.req.json<{ issueId?: string | null; title?: string }>().catch(() => null)
   if (!body) return c.json({ error: "empty body" }, 400)
-  if ("issueId" in body) {
-    await db.update(sessionsTable).set({ issueId: body.issueId ?? null }).where(eq(sessionsTable.id, sessionId))
+  const updates: Record<string, unknown> = {}
+  if ("issueId" in body) updates.issueId = body.issueId ?? null
+  if ("title" in body && typeof body.title === "string") updates.title = body.title
+  if (Object.keys(updates).length > 0) {
+    await db.update(sessionsTable).set(updates).where(eq(sessionsTable.id, sessionId))
   }
   return c.json({ ok: true })
 })

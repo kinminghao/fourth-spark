@@ -74,6 +74,7 @@ interface SessionState {
   setSessionStatus: (sessionId: string, status: string, reason?: string) => void
   bulkSetStatuses: (statuses: Record<string, string>) => void
   updateSessionInfo: (info: Partial<Session> & { id: string }) => void
+  renameSession: (id: string, title: string) => Promise<void>
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -339,5 +340,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   bulkSetStatuses: (statuses) => {
     set({ sessionStatuses: { ...get().sessionStatuses, ...statuses } })
+  },
+
+  renameSession: async (id, title) => {
+    const repoId = getRepoId()
+    if (!repoId) return
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === id ? { ...s, title } : s,
+      ),
+    }))
+    try {
+      await api.renameSession(repoId, id, title)
+    } catch {
+      await get().loadSessions()
+    }
   },
 }))
