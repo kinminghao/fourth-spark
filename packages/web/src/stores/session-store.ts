@@ -37,18 +37,6 @@ function hasAnyPendingQuestion(msgs: Message[]): boolean {
 export const EMPTY_MESSAGES: readonly Message[] = []
 export const EMPTY_TODOS: readonly Todo[] = []
 
-function mapSet<K, V>(map: Map<K, V>, key: K, value: V): Map<K, V> {
-  const next = new Map(map)
-  next.set(key, value)
-  return next
-}
-
-function mapDelete<K, V>(map: Map<K, V>, key: K): Map<K, V> {
-  const next = new Map(map)
-  next.delete(key)
-  return next
-}
-
 function partKey(part: MessagePart): string | undefined {
   return part.id ?? part.callID
 }
@@ -60,9 +48,9 @@ function getRepoId(): string | null {
 interface SessionState {
   sessions: Session[]
   activeSessionId: string | null
-  messages: Map<string, Message[]>
-  todos: Map<string, Todo[]>
-  sessionStatuses: Map<string, string>
+  messages: Record<string, Message[]>
+  todos: Record<string, Todo[]>
+  sessionStatuses: Record<string, string>
   loadingSessions: boolean
   loadError: string | null
   sendError: string | null
@@ -83,15 +71,16 @@ interface SessionState {
   ) => void
   updateTodos: (sessionId: string, todos: Todo[]) => void
   setSessionStatus: (sessionId: string, status: string) => void
+  bulkSetStatuses: (statuses: Record<string, string>) => void
   updateSessionInfo: (info: Partial<Session> & { id: string }) => void
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
   sessions: [],
   activeSessionId: null,
-  messages: new Map(),
-  todos: new Map(),
-  sessionStatuses: new Map(),
+  messages: {},
+  todos: {},
+  sessionStatuses: {},
   loadingSessions: false,
   loadError: null,
   sendError: null,
@@ -127,7 +116,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           ...state.sessions.filter((s) => s.id !== session.id),
         ],
         activeSessionId: session.id,
-        messages: mapSet(state.messages, session.id, []),
+        messages: { ...state.messages, [session.id]: [] },
       }))
       get().setSessionStatus(session.id, "busy")
       return session
@@ -159,17 +148,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set((state) => {
       const next: Partial<SessionState> = {}
       if (messages.status === "fulfilled") {
-        next.messages = mapSet(state.messages, id, messages.value)
+        next.messages = { ...state.messages, [id]: messages.value }
       }
       if (todos.status === "fulfilled") {
-        next.todos = mapSet(state.todos, id, todos.value)
+        next.todos = { ...state.todos, [id]: todos.value }
       }
       if (status.status === "fulfilled") {
-        next.sessionStatuses = mapSet(
-          state.sessionStatuses,
-          id,
-          status.value.type,
-        )
+        next.sessionStatuses = {
+          ...state.sessionStatuses,
+          [id]: status.value.type,
+        }
       }
       if (sessionInfo.status === "fulfilled") {
         const fresh = sessionInfo.value
@@ -193,14 +181,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         // Best-effort.
       }
     }
-    set((state) => ({
-      sessions: state.sessions.filter((s) => s.id !== id),
-      messages: mapDelete(state.messages, id),
-      todos: mapDelete(state.todos, id),
-      sessionStatuses: mapDelete(state.sessionStatuses, id),
-      activeSessionId:
-        state.activeSessionId === id ? null : state.activeSessionId,
-    }))
+    set((state) => {
+      const { [id]: _removedMessages, ...messages } = state.messages
+      const { [id]: _removedTodos, ...todos } = state.todos
+      const { [id]: _removedStatus, ...sessionStatuses } = state.sessionStatuses
+      return {
+        sessions: state.sessions.filter((s) => s.id !== id),
+        messages,
+        todos,
+        sessionStatuses,
+        activeSessionId:
+          state.activeSessionId === id ? null : state.activeSessionId,
+      }
+    })
   },
 
   sendMessage: async (content) => {
@@ -237,9 +230,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({
       sessions: [],
       activeSessionId: null,
-      messages: new Map(),
-      todos: new Map(),
-      sessionStatuses: new Map(),
+      messages: {},
+      todos: {},
+      sessionStatuses: {},
       loadError: null,
       sendError: null,
     })
@@ -247,7 +240,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   updateMessage: (sessionId, message) => {
     set((state) => {
-      const list = state.messages.get(sessionId) ?? []
+      const list = state.messages[sessionId] ?? []
       const idx = list.findIndex((m) => m.id === message.id)
       let next: Message[]
       if (idx >= 0) {
@@ -263,7 +256,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       } else {
         next = [...list, message]
       }
-      return { messages: mapSet(state.messages, sessionId, next) }
+      return { messages: { ...state.messages, [sessionId]: next } }
     })
     if (message.parts?.some((p) => isQuestionTool(p) && isQuestionPending(p))) {
       fireQuestionToast(sessionId, get().sessions)
@@ -272,7 +265,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   updateMessagePart: (sessionId, messageId, part) => {
     set((state) => {
-      const list = state.messages.get(sessionId) ?? []
+      const list = state.messages[sessionId] ?? []
       const idx = list.findIndex((m) => m.id === messageId)
       const base: Message =
         idx >= 0 ? list[idx] : { id: messageId, role: "assistant" }
@@ -290,7 +283,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (idx >= 0) {
         next[idx] = updated
       }
-      return { messages: mapSet(state.messages, sessionId, next) }
+      return { messages: { ...state.messages, [sessionId]: next } }
     })
     if (isQuestionTool(part) && isQuestionPending(part)) {
       fireQuestionToast(sessionId, get().sessions)
@@ -298,7 +291,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   updateTodos: (sessionId, todos) => {
-    set((state) => ({ todos: mapSet(state.todos, sessionId, todos) }))
+    set((state) => ({ todos: { ...state.todos, [sessionId]: todos } }))
   },
 
   updateSessionInfo: (info) => {
@@ -310,16 +303,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   setSessionStatus: (sessionId, status) => {
-    const prev = get().sessionStatuses.get(sessionId)
+    const prev: string | undefined = get().sessionStatuses[sessionId]
     if (prev !== status) {
       const session = get().sessions.find((s) => s.id === sessionId)
       const label = session?.title || sessionId.slice(-8)
       if (status === "idle" && prev !== undefined && prev !== "idle") {
         useToastStore.getState().removeToast(questionToastId(sessionId))
         useToastStore.getState().addToast(`${label} — 完成`, "success", sessionId)
-        // Session just finished — fetch final messages/todos via REST to cover
-        // any SSE events lost during the stream close race.
-        void get().refreshSessionData(sessionId)
       } else if (status === "busy" && (prev === undefined || prev === "idle")) {
         useToastStore.getState().addToast(`${label} — 开始运行`, "info", sessionId)
       } else if (status === "retry") {
@@ -327,7 +317,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
     }
     set((state) => ({
-      sessionStatuses: mapSet(state.sessionStatuses, sessionId, status),
+      sessionStatuses: { ...state.sessionStatuses, [sessionId]: status },
     }))
+  },
+
+  bulkSetStatuses: (statuses) => {
+    set({ sessionStatuses: { ...get().sessionStatuses, ...statuses } })
   },
 }))

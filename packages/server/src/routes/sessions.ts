@@ -247,6 +247,20 @@ sessions.patch("/:id", async (c) => {
   return c.json({ ok: true })
 })
 
+// Bulk status — returns all session statuses in one call.
+sessions.get("/status", async (c) => {
+  const repoId = c.req.param("repoId")
+  const client = processManager.getClient(repoId)
+  if (client) {
+    try {
+      return c.json(await client.getSessionStatus())
+    } catch {
+      // Process down → empty map
+    }
+  }
+  return c.json({})
+})
+
 sessions.get("/:id/status", async (c) => {
   const repoId = c.req.param("repoId")
   const client = processManager.getClient(repoId)
