@@ -3,6 +3,7 @@ import { AlertTriangle, Ban, Bot, Check, Clock, Edit3, Eye, EyeOff, FileText, Ga
 import clsx from "clsx"
 import * as api from "../lib/api-client"
 import type { AccountUsage, CustomAgent, GitHost, PromptFragment, UsageResult, UsageWindow } from "../lib/api-client"
+import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { isNativePlatform, getServerUrl, setServerUrl } from "../lib/config"
 
 let usageCache: { data: UsageResult; fetchedAt: number } | null = null
@@ -779,6 +780,7 @@ function CustomAgentsSection() {
     await api.createGlobalCustomAgent(data)
     setShowAgentForm(false)
     load()
+    void useCustomAgentStore.getState().loadAgents()
   }
 
   const handleUpdateAgent = async (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; fragmentIds?: string[] }) => {
@@ -786,11 +788,13 @@ function CustomAgentsSection() {
     await api.updateCustomAgent(editingAgent.id, data)
     setEditingAgent(null)
     load()
+    void useCustomAgentStore.getState().loadAgents()
   }
 
   const handleDeleteAgent = async (id: string) => {
     await api.deleteCustomAgent(id)
     setAgents((prev) => prev.filter((a) => a.id !== id))
+    void useCustomAgentStore.getState().loadAgents()
   }
 
   const handleCreateFrag = async (data: { name: string; content: string }) => {
