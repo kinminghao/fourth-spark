@@ -53,6 +53,7 @@ export interface Issue {
   body?: string
   state: "open" | "closed"
   labels?: Array<{ id: number; name: string; color: string }>
+  milestoneId?: string | null
   htmlUrl?: string
   createdAt: number
   updatedAt: number
@@ -462,6 +463,20 @@ export interface Tag {
   createdAt: number
 }
 
+export interface Milestone {
+  id: string
+  repoId: string
+  number: number
+  title: string
+  description: string | null
+  state: "open" | "closed"
+  dueOn: number | null
+  openIssues: number
+  closedIssues: number
+  createdAt: number
+  updatedAt: number
+}
+
 export async function listTags(repoId: string): Promise<Tag[]> {
   return unwrapList<Tag>(await apiFetch<unknown>(`${repoBase(repoId)}/tags`))
 }
@@ -493,6 +508,15 @@ export async function setIssueTags(repoId: string, issueNumber: number, tagIds: 
 
 export async function getIssueTags(repoId: string, issueNumber: number): Promise<Tag[]> {
   return unwrapList<Tag>(await apiFetch<unknown>(`${repoBase(repoId)}/issues/${issueNumber}/tags`))
+}
+
+// ---------------------------------------------------------------------------
+// Milestone API — /api/repos/:repoId/milestones
+// ---------------------------------------------------------------------------
+
+export async function listMilestones(repoId: string, state?: string): Promise<Milestone[]> {
+  const params = state ? `?state=${encodeURIComponent(state)}` : ""
+  return unwrapList<Milestone>(await apiFetch<unknown>(`${repoBase(repoId)}/milestones${params}`))
 }
 
 // ---------------------------------------------------------------------------

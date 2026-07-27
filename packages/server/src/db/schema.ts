@@ -13,6 +13,23 @@ export const repos = pgTable("repos", {
   uniqueIndex("repos_local_path_idx").on(t.localPath),
 ])
 
+export const milestones = pgTable("milestones", {
+  id: text("id").primaryKey(),
+  repoId: text("repo_id").notNull().references(() => repos.id, { onDelete: "cascade" }),
+  number: integer("number").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  state: text("state").notNull().default("open"),
+  dueOn: bigint("due_on", { mode: "number" }),
+  openIssues: integer("open_issues").notNull().default(0),
+  closedIssues: integer("closed_issues").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+}, (t) => [
+  uniqueIndex("milestones_repo_number_idx").on(t.repoId, t.number),
+  index("milestones_repo_idx").on(t.repoId),
+])
+
 export const issues = pgTable("issues", {
   id: text("id").primaryKey(),
   repoId: text("repo_id").notNull().references(() => repos.id, { onDelete: "cascade" }),
@@ -22,6 +39,7 @@ export const issues = pgTable("issues", {
   body: text("body"),
   state: text("state").notNull().default("open"),
   labels: jsonb("labels").$type<Array<{ id: number; name: string; color: string }>>(),
+  milestoneId: text("milestone_id").references(() => milestones.id, { onDelete: "set null" }),
   htmlUrl: text("html_url"),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
@@ -29,6 +47,7 @@ export const issues = pgTable("issues", {
   uniqueIndex("issues_repo_number_idx").on(t.repoId, t.number),
   index("issues_repo_state_idx").on(t.repoId, t.state),
   index("issues_parent_idx").on(t.parentId),
+  index("issues_milestone_idx").on(t.milestoneId),
 ])
 
 export const promptFragments = pgTable("prompt_fragments", {
