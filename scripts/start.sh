@@ -15,6 +15,7 @@ fi
 
 # 1. Start PostgreSQL
 echo "→ Starting PostgreSQL..."
+docker rm -f fourth-spark-db 2>/dev/null || true
 docker compose -f "$DIR/docker-compose.yml" up -d postgres
 echo "  Waiting for PostgreSQL..."
 until docker exec fourth-spark-db pg_isready -U fourth_spark -q 2>/dev/null; do
