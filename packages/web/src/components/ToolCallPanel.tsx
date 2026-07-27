@@ -280,22 +280,47 @@ function TaskInputView({ record }: { record: Record<string, unknown> }) {
   )
 }
 
+function useChildSessionId(part: MessagePart): string | null {
+  const fromPart = extractTaskSessionId(part)
+  const activeSessionId = useSessionStore((s) => s.activeSessionId)
+  const sessions = useSessionStore((s) => s.sessions)
+
+  if (fromPart) return fromPart
+
+  // Fallback: find child session by parentID when metadata/output not yet available
+  if (!activeSessionId) return null
+  const input = getToolInput(part)
+  const record = toRecord(input)
+  const description = firstString(record, ["description", "title"])
+
+  const children = sessions.filter((s) => s.parentID === activeSessionId)
+  if (children.length === 0) return null
+  if (children.length === 1) return children[0].id
+
+  // Multiple children: match by description → session title
+  if (description) {
+    const match = children.find((s) => s.title === description)
+    if (match) return match.id
+  }
+  return null
+}
+
 function TaskSessionLink({ part }: { part: MessagePart }) {
-  const sessionId = extractTaskSessionId(part)
+  const resolvedId = useChildSessionId(part)
   const setActiveSession = useSessionStore((s) => s.setActiveSession)
 
-  if (!sessionId) return null
+  if (!resolvedId) return null
 
   return (
     <button
       type="button"
       onClick={(e) => {
         e.stopPropagation()
-        void setActiveSession(sessionId)
+        void setActiveSession(resolvedId)
       }}
       className="mt-2 flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-xs text-blue-400 transition-colors hover:border-blue-500/50 hover:bg-blue-500/10"
     >
-      <span className="truncate text-fg-5">{sessionId.slice(0, 20)}…</span>
+      <span className="truncate text-fg-5">{resolvedId.slice(0, 20)}…</span>
       <ArrowRight className="h-3 w-3 shrink-0" />
       <span className="shrink-0">查看子会话</span>
     </button>
