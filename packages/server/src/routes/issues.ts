@@ -110,8 +110,15 @@ issueRoutes.get("/", async (c) => {
 
 issueRoutes.post("/sync", async (c) => {
   const repoId = c.req.param("repoId")!
-  const ctx = await getRepoGitClient(repoId)
-  if (!ctx) return c.json({ error: "Repo not found or git host not configured" }, 400)
+
+  const [repo] = await db.select().from(repos).where(eq(repos.id, repoId))
+  if (!repo) return c.json({ error: "仓库不存在" }, 404)
+  const remote = parseGitUrl(repo.gitUrl)
+  if (!remote) return c.json({ error: "仓库的 Git URL 格式无效" }, 400)
+  const info = await getHostInfo(remote.host)
+  if (!info) return c.json({ error: `未配置 ${remote.host} 的访问令牌，请在设置中添加对应的 Git Host` }, 400)
+
+  const client = createGitIssueClient(remote.host, remote.owner, remote.repo, info.token, info.platform)
 
   const body = await c.req.json<{ state?: "open" | "closed" | "all" }>().catch(() => null)
   const state = body?.state ?? "all"
@@ -119,24 +126,33 @@ issueRoutes.post("/sync", async (c) => {
   let page = 1
   let total = 0
   const limit = 50
-  while (true) {
-    const batch = await ctx.client.listIssues({ state, page, limit })
-    if (batch.length === 0) break
-    for (const gi of batch) {
-      const values = issueToDb(repoId, gi)
-      const { id: _, createdAt: __, ...updateSet } = values
-      await db.insert(issues).values(values).onConflictDoUpdate({ target: issues.id, set: updateSet })
+  try {
+    while (true) {
+      const batch = await client.listIssues({ state, page, limit })
+      if (batch.length === 0) break
+      for (const gi of batch) {
+        const values = issueToDb(repoId, gi)
+        const { id: _, createdAt: __, ...updateSet } = values
+        await db.insert(issues).values(values).onConflictDoUpdate({ target: issues.id, set: updateSet })
+      }
+      total += batch.length
+      if (batch.length < limit) break
+      page++
     }
-    total += batch.length
-    if (batch.length < limit) break
-    page++
+  } catch (err) {
+    logger.error({ err, repoId, state, page }, "failed to sync issues from git host")
+    const status = (err as { status?: number }).status
+    if (status === 401 || status === 403) {
+      return c.json({ error: `Git 平台认证失败 (${status})，请检查访问令牌是否有效` }, 400)
+    }
+    return c.json({ error: "从 Git 平台拉取 Issue 失败，请稍后重试" }, 502)
   }
 
   const allIssues = await db.select({ number: issues.number }).from(issues).where(eq(issues.repoId, repoId))
   let totalComments = 0
   for (const row of allIssues) {
     try {
-      const comments = await ctx.client.listComments(row.number)
+      const comments = await client.listComments(row.number)
       for (const gc of comments) {
         const values = commentToDb(repoId, row.number, gc)
         const { id: _, createdAt: __, ...updateSet } = values
