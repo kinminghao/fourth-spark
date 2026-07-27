@@ -1,6 +1,7 @@
 import { autoSwitch, getActiveId, isUsageLimit, clearCooldown } from "./account-switcher"
 import type { OpenCodeClient, SessionStatus } from "./opencode"
 import { notify } from "./notify"
+import { pushNotify } from "./apns"
 import { logger } from "../middleware/logger"
 import { DEFAULT_VARIANT } from "./config"
 
@@ -35,8 +36,10 @@ function emitTransition(sessionId: string, from: string, to: string): void {
     notify("Session 开始", `[${sid}] 开始运行`)
   } else if (to === "idle" && from !== "idle") {
     notify("Session 完成", `[${sid}] ${fromLabel} → ${toLabel}`)
+    pushNotify("✅ 任务完成", `Session [${sid}] 已完成`, { sessionId }).catch(() => {})
   } else if (to === "retry") {
     notify("Session 重试", `[${sid}] ${fromLabel} → ${toLabel}`)
+    pushNotify("❌ 执行出错", `Session [${sid}] 需要重试`, { sessionId }).catch(() => {})
   }
 }
 
