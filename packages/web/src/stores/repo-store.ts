@@ -14,6 +14,7 @@ interface RepoState {
   setActiveRepo: (id: string | null) => void
   addRepo: (name: string, gitUrl: string, localPath: string) => Promise<Repo | null>
   removeRepo: (id: string) => Promise<void>
+  updateRepoBranch: (repoId: string, branch: string) => void
 }
 
 export const useRepoStore = create<RepoState>((set, get) => ({
@@ -84,5 +85,11 @@ export const useRepoStore = create<RepoState>((set, get) => ({
       else localStorage.removeItem(STORAGE_KEY)
       return { repos, activeRepoId }
     })
+  },
+
+  updateRepoBranch: (repoId, branch) => {
+    set((state) => ({
+      repos: state.repos.map((r) => (r.id === repoId ? { ...r, branch } : r)),
+    }))
   },
 }))
