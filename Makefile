@@ -1,4 +1,4 @@
-.PHONY: install dev dev-server dev-web db db-stop db-push db-generate db-migrate db-studio setup status stop stop-opencode logs clean
+.PHONY: install dev dev-server dev-web run db db-stop db-push db-generate db-migrate db-studio setup status stop stop-opencode logs clean
 
 install:
 	bun install
@@ -12,6 +12,21 @@ dev-server: db
 
 dev-web:
 	bun run dev:web
+
+run: db
+	@mkdir -p /tmp/fourth-spark
+	@echo "Starting server in background..."
+	@cd packages/server && nohup bun run --watch src/index.ts >> /tmp/fourth-spark/server.log 2>&1 &
+	@echo "Starting web in background..."
+	@cd packages/web && nohup bun run dev >> /tmp/fourth-spark/web.log 2>&1 &
+	@echo ""
+	@echo "All services started in background."
+	@echo "  Server → http://127.0.0.1:3000  (log: /tmp/fourth-spark/server.log)"
+	@echo "  Web    → http://localhost:5173   (log: /tmp/fourth-spark/web.log)"
+	@echo ""
+	@echo "  make status  — check status"
+	@echo "  make logs    — view logs"
+	@echo "  make stop    — stop all"
 
 db:
 	@docker-compose up -d postgres
@@ -54,6 +69,7 @@ status:
 stop:
 	@echo "Stopping all services..."
 	-@pkill -f 'bun run --watch src/index.ts' 2>/dev/null
+	-@pkill -f 'vite.*--port 5173' 2>/dev/null
 	-@pkill -f 'opencode serve --port' 2>/dev/null
 	-@rm -f /tmp/fourth-spark/pid-map.json
 	docker-compose down
@@ -69,6 +85,9 @@ logs:
 	@echo "=== Server log (last 20) ==="
 	@tail -20 /tmp/fourth-spark/server.log 2>/dev/null || echo "  no log"
 	@echo ""
+	@echo "=== Web log (last 20) ==="
+	@tail -20 /tmp/fourth-spark/web.log 2>/dev/null || echo "  no log"
+	@echo ""
 	@for f in /tmp/fourth-spark/opencode-*.log; do \
 		echo "=== $$(basename $$f) (last 10) ==="; \
 		tail -10 "$$f" 2>/dev/null | grep -v 'duplicate skill'; \
@@ -76,5 +95,5 @@ logs:
 	done
 
 clean: stop
-	rm -f /tmp/fourth-spark/opencode-*.log /tmp/fourth-spark/server.log /tmp/fourth-spark/api-capture.flow /tmp/fourth-spark/mitmdump.log
+	rm -f /tmp/fourth-spark/opencode-*.log /tmp/fourth-spark/server.log /tmp/fourth-spark/web.log /tmp/fourth-spark/api-capture.flow /tmp/fourth-spark/mitmdump.log
 	@echo "Logs cleaned"

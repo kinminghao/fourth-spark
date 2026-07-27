@@ -61,7 +61,8 @@ make dev
 | 命令 | 说明 |
 |------|------|
 | `make setup` | 一键初始化：安装依赖 → 启动 DB → 同步 schema |
-| `make dev` | 启动 Server + Web（自动拉起 DB） |
+| `make dev` | 启动 Server + Web（前台，自动拉起 DB） |
+| `make run` | 后台启动所有服务（DB + Server + Web），日志写入 /tmp/fourth-spark/ |
 | `make dev-server` | 仅启动后端 API (port 3000) |
 | `make dev-web` | 仅启动前端 Vite dev server (port 5173) |
 | `make install` | 安装 npm 依赖 |
