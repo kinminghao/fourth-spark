@@ -21,6 +21,27 @@ function str(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback
 }
 
+/**
+ * Recursively strip PostgreSQL-incompatible Unicode NULL bytes (\u0000)
+ * from all string values in an object. PG JSONB rejects \u0000.
+ */
+function sanitizeForPg(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value.replaceAll("\u0000", "")
+  }
+  if (Array.isArray(value)) {
+    return value.map(sanitizeForPg)
+  }
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = sanitizeForPg(v)
+    }
+    return out
+  }
+  return value
+}
+
 function resolveType(eventName: string, data: R): string {
   if (eventName !== "message" && eventName !== "") return eventName
   return str(data.type, eventName)
@@ -76,19 +97,20 @@ async function upsertPart(sessionId: string, messageId: string, props: R): Promi
   if (!id || !messageId) return
   const now = Date.now()
   const partType = str(props.type)
-  const { id: _, type: __, ...data } = props
+  const { id: _, type: __, ...raw } = props
+  const data = sanitizeForPg(raw) as Record<string, unknown>
   await db.insert(parts).values({
     id,
     messageId,
     sessionId,
     type: partType,
-    data: data as Record<string, unknown>,
+    data,
     timeCreated: num((props.time as R)?.created, now),
     timeUpdated: num((props.time as R)?.updated, now),
   }).onConflictDoUpdate({
     target: parts.id,
     set: {
-      data: data as Record<string, unknown>,
+      data,
       timeUpdated: num((props.time as R)?.updated, now),
     },
   })
