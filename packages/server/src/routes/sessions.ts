@@ -87,8 +87,13 @@ sessions.post("/", async (c) => {
   const repoId = c.req.param("repoId")
   const client = processManager.requireClient(repoId)
   const body = await c.req.json<{ message?: string; agent?: string; model?: string; variant?: string; title?: string; issueId?: string; customAgentId?: string }>().catch(() => null)
-  if (!body || typeof body.message !== "string" || body.message.length === 0) {
-    return c.json({ error: "Body must include a non-empty 'message' string", status: 400 }, 400)
+  if (!body) {
+    return c.json({ error: "Request body is required", status: 400 }, 400)
+  }
+  const message = typeof body.message === "string" ? body.message.trim() : ""
+  const hasContext = Boolean(body.issueId) || Boolean(body.customAgentId)
+  if (!message && !hasContext) {
+    return c.json({ error: "Either a non-empty 'message', an 'issueId', or a 'customAgentId' is required", status: 400 }, 400)
   }
 
   let agent = body.agent
@@ -122,7 +127,7 @@ sessions.post("/", async (c) => {
     const context = await buildIssueContext(body.issueId)
     if (context) parts.push(context)
   }
-  parts.push(body.message)
+  if (message) parts.push(message)
   const prompt = parts.join("\n\n---\n\n")
 
   const session = await client.createSession({ agent, title: body.title })
