@@ -131,6 +131,10 @@ function extractSessionInfo(data: unknown): (Partial<Session> & { id: string }) 
   if (typeof props.title === "string") info.title = props.title
   if (typeof props.agent === "string") info.agent = props.agent
   if (typeof props.cost === "number") info.cost = props.cost
+  const parentID = typeof props.parentID === "string" ? props.parentID
+    : typeof props.parent_id === "string" ? props.parent_id
+    : undefined
+  if (parentID) info.parentID = parentID
 
   const tokensNested = asRecord(props.tokens)
   const hasFlat = typeof props.tokens_input === "number" || typeof props.tokens_output === "number"

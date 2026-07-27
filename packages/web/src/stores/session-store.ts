@@ -301,11 +301,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   updateSessionInfo: (info) => {
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === info.id ? { ...s, ...info } : s,
-      ),
-    }))
+    set((state) => {
+      const exists = state.sessions.some((s) => s.id === info.id)
+      if (exists) {
+        return {
+          sessions: state.sessions.map((s) =>
+            s.id === info.id ? { ...s, ...info } : s,
+          ),
+        }
+      }
+      // New session (e.g. child session spawned by task tool) — add it
+      return { sessions: [info as Session, ...state.sessions] }
+    })
   },
 
   setSessionStatus: (sessionId, status, reason?) => {

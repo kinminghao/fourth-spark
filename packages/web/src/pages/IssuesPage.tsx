@@ -1269,7 +1269,7 @@ export function IssuesPage() {
                           rootIssue={rootIssue}
                           childrenMap={childrenMap}
                           currentId={selectedId}
-                          onSelect={setSelectedId}
+                          onSelect={(id) => { setSelectedId(id); setSidebarOpen(false) }}
                           sessions={selectedIssueSessions}
                           onSessionSelect={handleSessionSelect}
                         />
