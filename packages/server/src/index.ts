@@ -3,7 +3,7 @@ import { corsMiddleware } from "./middleware/cors"
 import { requestLogger, logger } from "./middleware/logger"
 import { onError } from "./middleware/errors"
 import { sessions } from "./routes/sessions"
-import { events } from "./routes/events"
+import { events, globalEvents } from "./routes/events"
 import { agents } from "./routes/agents"
 import { issueRoutes } from "./routes/issues"
 import { settingsRoutes } from "./routes/settings"
@@ -16,9 +16,13 @@ import { globalCustomAgents, repoCustomAgents } from "./routes/custom-agents"
 import { globalFragments, repoFragments } from "./routes/prompt-fragments"
 import { modelRoutes } from "./routes/models"
 import { mcpRoute } from "./routes/mcp"
+import { tagRoutes } from "./routes/tags"
 import { pushRoutes } from "./routes/push"
 import { PORT } from "./lib/config"
 import { processManager } from "./lib/process-manager"
+import { runMigrations } from "./db/migrate"
+import { resolve, join } from "node:path"
+import { existsSync } from "node:fs"
 import "./db/index"
 
 const app = new Hono()
@@ -49,22 +53,69 @@ const repoScoped = new Hono()
 // Sessions + events share the sessions base path (events owns /:id/events).
 repoScoped.route("/sessions", sessions)
 repoScoped.route("/sessions", events)
+repoScoped.route("/events", globalEvents)
 repoScoped.route("/agents", agents)
 repoScoped.route("/custom-agents", repoCustomAgents)
 repoScoped.route("/prompt-fragments", repoFragments)
 repoScoped.route("/models", modelRoutes)
 repoScoped.route("/issues", issueRoutes)
+repoScoped.route("/tags", tagRoutes)
+repoScoped.route("/issues", tagRoutes)
 repoScoped.route("/mcp", mcpRoute)
 repoScoped.route("/health", repoHealth)
 
 app.route("/api/repos/:repoId", repoScoped)
 
-app.get("/", (c) => c.json({ name: "fourth-spark server", status: "ok" }))
+// ---------------------------------------------------------------------------
+// Static file serving (production build)
+// ---------------------------------------------------------------------------
+const STATIC_DIR = resolve(process.env.STATIC_DIR ?? "./public")
+
+if (existsSync(join(STATIC_DIR, "index.html"))) {
+  logger.info({ dir: STATIC_DIR }, "serving static frontend")
+
+  app.get("*", async (c) => {
+    const urlPath = new URL(c.req.url).pathname
+    const filePath = resolve(join(STATIC_DIR, urlPath))
+
+    // Prevent path traversal
+    if (!filePath.startsWith(STATIC_DIR)) {
+      return c.notFound()
+    }
+
+    const file = Bun.file(filePath)
+    if (await file.exists()) {
+      const headers: Record<string, string> = {}
+      if (urlPath.startsWith("/assets/")) {
+        headers["Cache-Control"] = "public, max-age=31536000, immutable"
+      }
+      return new Response(file, { headers })
+    }
+
+    // SPA fallback — return index.html for client-side routing
+    return new Response(Bun.file(join(STATIC_DIR, "index.html")), {
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-cache",
+      },
+    })
+  })
+} else {
+  app.get("/", (c) => c.json({ name: "fourth-spark server", status: "ok" }))
+}
 
 // ---------------------------------------------------------------------------
-// Startup — clean orphans from previous runs, then spawn opencode for all repos
+// Startup — run migrations, then spawn opencode for all repos
 // ---------------------------------------------------------------------------
 logger.info({ port: PORT }, "fourth-spark server starting")
+
+runMigrations()
+  .then((ran) => {
+    if (ran) logger.info("database migrations applied")
+  })
+  .catch((err) => {
+    logger.error({ err }, "migration failed — continuing with existing schema")
+  })
 
 processManager.startAll().then(() => {
   logger.info("all repos initialized")

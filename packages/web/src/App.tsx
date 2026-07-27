@@ -11,7 +11,7 @@ import { useCustomAgentStore } from "./stores/custom-agent-store"
 import { useIssueStore } from "./stores/issue-store"
 import { useThemeStore } from "./stores/theme-store"
 import { ToastContainer } from "./components/ToastContainer"
-import { useGlobalStatusPoll } from "./hooks/use-global-status-poll"
+import { orchestrator } from "./lib/session-orchestrator"
 import { initPushNotifications } from "./lib/push-notifications"
 
 function AppInner() {
@@ -19,8 +19,6 @@ function AppInner() {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const loadSessions = useSessionStore((s) => s.loadSessions)
   const clearSessions = useSessionStore((s) => s.clearSessions)
-  useGlobalStatusPoll()
-
   useEffect(() => {
     void useRepoStore.getState().loadRepos()
     void initPushNotifications(navigate)
@@ -34,10 +32,12 @@ function AppInner() {
       void loadSessions()
       void useCustomAgentStore.getState().loadAgents()
       void useIssueStore.getState().loadIssues()
+      orchestrator.start(activeRepoId)
     } else {
       clearSessions()
       useIssueStore.getState().clearIssues()
     }
+    return () => orchestrator.stop()
   }, [activeRepoId, loadSessions, clearSessions])
 
   return (

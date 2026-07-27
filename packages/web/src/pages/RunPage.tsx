@@ -288,7 +288,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
           session={session}
           isActive={session.id === activeSessionId}
           isConfirming={confirmingId === session.id}
-          status={statuses.get(session.id)}
+          status={statuses[session.id]}
           onSelect={() => { void setActiveSession(session.id); onClose?.() }}
           onDelete={() => { void deleteSession(session.id); setConfirmingId(null) }}
           onConfirm={() => setConfirmingId(session.id)}
@@ -500,11 +500,11 @@ function SessionInfoPanel() {
   )
   const todos = useSessionStore((s) => {
     const id = s.activeSessionId
-    return id ? (s.todos.get(id) ?? EMPTY_TODOS) : EMPTY_TODOS
+    return id ? (s.todos[id] ?? EMPTY_TODOS) : EMPTY_TODOS
   })
   const status = useSessionStore((s) => {
     const id = s.activeSessionId
-    return id ? s.sessionStatuses.get(id) : undefined
+    return id ? s.sessionStatuses[id] : undefined
   })
 
   if (!session) {
