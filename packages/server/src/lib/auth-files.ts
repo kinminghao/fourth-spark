@@ -82,7 +82,16 @@ export async function readAuthAnthropic(): Promise<{ access?: string; refresh?: 
 
 export async function writeAuthAnthropic(token: { refresh: string; access?: string; expires?: number }): Promise<void> {
   const path = await resolveAuthJsonPath()
-  const auth = (await readJson<AuthJson>(path)) ?? {}
+  let auth: AuthJson
+  try {
+    auth = JSON.parse(await readFile(path, "utf8")) as AuthJson
+  } catch (err: unknown) {
+    if ((err as { code?: string }).code === "ENOENT") {
+      auth = {}
+    } else {
+      throw err
+    }
+  }
   auth["anthropic"] = { type: "oauth", access: token.access ?? "", refresh: token.refresh, expires: token.expires ?? 0 }
   await atomicWrite(path, auth)
 }
