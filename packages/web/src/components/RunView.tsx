@@ -259,7 +259,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
                   className="min-w-0 flex-1 truncate rounded border border-line bg-surface px-2 py-1 font-mono text-xs text-fg focus:border-fg-5 focus:outline-none"
                 >
                   <option value="">无</option>
-                  {issues.map((issue) => (
+                  {issues.filter((i) => i.state === "open").map((issue) => (
                     <option key={issue.id} value={issue.id}>#{issue.number} {issue.title}</option>
                   ))}
                 </select>
