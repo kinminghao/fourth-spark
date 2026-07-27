@@ -187,11 +187,12 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
+  const openIssues = issues.filter((i) => i.state === "open")
   const selectedIssue = issues.find((i) => i.id === issueId)
   const iq = issueQuery.trim().toLowerCase()
   const filteredIssues = !iq
-    ? issues
-    : issues.filter((i) => `#${i.number} ${i.title}`.toLowerCase().includes(iq))
+    ? openIssues
+    : openIssues.filter((i) => `#${i.number} ${i.title}`.toLowerCase().includes(iq))
 
   const hasContext = Boolean(customAgentId) || Boolean(issueId)
 
