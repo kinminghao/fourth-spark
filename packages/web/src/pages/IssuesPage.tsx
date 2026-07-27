@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   CircleDot,
   ExternalLink,
+  Flag,
   GitBranch,
   GitMerge,
   GitPullRequest,
@@ -23,7 +24,7 @@ import ReactMarkdown from "react-markdown"
 import rehypeRaw from "rehype-raw"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
-import { ApiError, type Issue, type IssueComment, type PullRequest, type Session, listIssueComments, listIssuePullRequests, mergePullRequest } from "../lib/api-client"
+import { ApiError, type Issue, type IssueComment, type Milestone, type PullRequest, type Session, listIssueComments, listIssuePullRequests, mergePullRequest } from "../lib/api-client"
 import { useIssueStore } from "../stores/issue-store"
 import { useRepoStore } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
@@ -116,12 +117,14 @@ function IssueRow({
   sessionCount,
   isActive,
   isEpic,
+  milestone,
   onSelect,
 }: {
   issue: Issue
   sessionCount: number
   isActive: boolean
   isEpic?: boolean
+  milestone?: Milestone
   onSelect: () => void
 }) {
   return (
@@ -174,6 +177,13 @@ function IssueRow({
               ))}
             </div>
           )}
+
+          {milestone && (
+            <span className="mt-1 flex items-center gap-1 text-[10px] text-indigo-400/70">
+              <Flag className="h-2.5 w-2.5" />
+              {milestone.title}
+            </span>
+          )}
         </div>
 
         {sessionCount > 0 && (
@@ -190,7 +200,7 @@ function IssueRow({
 /*  Detail panel (right side)                                         */
 /* ------------------------------------------------------------------ */
 
-function IssueDetail({ issue, onBack, onToggleSidebar }: { issue: Issue; onBack?: () => void; onToggleSidebar?: () => void }) {
+function IssueDetail({ issue, milestone, onBack, onToggleSidebar }: { issue: Issue; milestone?: Milestone; onBack?: () => void; onToggleSidebar?: () => void }) {
   const navigate = useNavigate()
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const [comments, setComments] = useState<IssueComment[]>([])
@@ -309,6 +319,12 @@ function IssueDetail({ issue, onBack, onToggleSidebar }: { issue: Issue; onBack?
                   {l.name}
                 </span>
               ))}
+              {milestone && (
+                <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium bg-indigo-500/15 text-indigo-400">
+                  <Flag className="h-2.5 w-2.5" />
+                  {milestone.title}
+                </span>
+              )}
             </div>
             <h2 className="mt-1 text-base font-semibold text-fg">
               {issue.title}
@@ -879,6 +895,10 @@ export function IssuesPage() {
   const toggleTagFilter = useIssueStore((s) => s.toggleTagFilter)
   const clearTagFilter = useIssueStore((s) => s.clearTagFilter)
   const loadTags = useIssueStore((s) => s.loadTags)
+  const milestones = useIssueStore((s) => s.milestones)
+  const selectedMilestoneId = useIssueStore((s) => s.selectedMilestoneId)
+  const setMilestoneFilter = useIssueStore((s) => s.setMilestoneFilter)
+  const loadMilestones = useIssueStore((s) => s.loadMilestones)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const sessions = useSessionStore((s) => s.sessions)
 
@@ -892,8 +912,11 @@ export function IssuesPage() {
   }, [searchParams, setSearchParams, issues])
 
   useEffect(() => {
-    if (activeRepoId) void loadTags()
-  }, [activeRepoId, loadTags])
+    if (activeRepoId) {
+      void loadTags()
+      void loadMilestones()
+    }
+  }, [activeRepoId, loadTags, loadMilestones])
 
   const sessionCounts = new Map<string, number>()
   for (const s of sessions) {
@@ -919,6 +942,8 @@ export function IssuesPage() {
     return "stray"
   }
 
+  const milestoneMap = new Map(milestones.map((m) => [m.id, m]))
+
   const afterState = stateFilter === "all" ? issues : issues.filter((i) => i.state === stateFilter)
   const afterType = typeFilter === "all" ? afterState : afterState.filter((i) => issueType(i) === typeFilter)
   const afterTags = selectedTagIds.size === 0
@@ -933,6 +958,9 @@ export function IssuesPage() {
   const filtered = !sq
     ? afterTags
     : afterTags.filter((i) => `#${i.number} ${i.title}`.toLowerCase().includes(sq))
+  const afterMilestone = selectedMilestoneId
+    ? filtered.filter((i) => i.milestoneId === selectedMilestoneId)
+    : filtered
 
   const openCount = issues.filter((i) => i.state === "open").length
   const closedCount = issues.filter((i) => i.state === "closed").length
@@ -1164,25 +1192,62 @@ export function IssuesPage() {
           </div>
         </div>
 
+        {milestones.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-3 py-2">
+            <Flag className="h-3 w-3 text-fg-5" />
+            {milestones.map((ms) => {
+              const active = selectedMilestoneId === ms.id
+              return (
+                <button
+                  key={ms.id}
+                  type="button"
+                  onClick={() => setMilestoneFilter(active ? null : ms.id)}
+                  className={clsx(
+                    "rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors",
+                    active
+                      ? "bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-400/50"
+                      : "bg-elevated/60 text-fg-5 hover:bg-elevated hover:text-fg-3",
+                  )}
+                >
+                  {ms.title}
+                  {ms.state === "closed" && (
+                    <span className="ml-1 text-[9px] opacity-60">✓</span>
+                  )}
+                </button>
+              )
+            })}
+            {selectedMilestoneId && (
+              <button
+                type="button"
+                onClick={() => setMilestoneFilter(null)}
+                className="ml-1 rounded px-1.5 py-0.5 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3"
+              >
+                清除
+              </button>
+            )}
+          </div>
+        )}
+
         {/* list */}
         <div className="flex-1 overflow-y-auto px-2 py-2">
           {!activeRepoId ? (
             <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">
               请先选择一个仓库
             </p>
-          ) : filtered.length === 0 ? (
+          ) : afterMilestone.length === 0 ? (
             <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">
               {issues.length === 0 ? "点击 ↻ 同步 Issues" : "无匹配 Issue"}
             </p>
           ) : (
             <ul className="space-y-0.5">
-              {filtered.map((issue) => (
+              {afterMilestone.map((issue) => (
                 <IssueRow
                   key={issue.id}
                   issue={issue}
                   sessionCount={sessionCounts.get(issue.id) ?? 0}
                   isActive={selectedId === issue.id}
                   isEpic={issueType(issue) === "epic"}
+                  milestone={issue.milestoneId ? milestoneMap.get(issue.milestoneId) : undefined}
                   onSelect={() => {
                     setSelectedId(issue.id)
                     setTreeRootId(issueType(issue) === "epic" ? issue.id : null)
@@ -1201,17 +1266,18 @@ export function IssuesPage() {
             <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">Issues</span>
           </div>
           <div className="flex-1 overflow-y-auto px-2 py-2">
-            {filtered.length === 0 ? (
+            {afterMilestone.length === 0 ? (
               <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">无匹配 Issue</p>
             ) : (
               <ul className="space-y-0.5">
-                {filtered.map((issue) => (
+                {afterMilestone.map((issue) => (
                   <IssueRow
                     key={issue.id}
                     issue={issue}
                     sessionCount={sessionCounts.get(issue.id) ?? 0}
                     isActive={selectedId === issue.id}
                     isEpic={issueType(issue) === "epic"}
+                    milestone={issue.milestoneId ? milestoneMap.get(issue.milestoneId) : undefined}
                     onSelect={() => {
                       setSelectedId(issue.id)
                       setTreeRootId(issueType(issue) === "epic" ? issue.id : null)
@@ -1236,6 +1302,7 @@ export function IssuesPage() {
           <>
             <IssueDetail
               issue={selectedIssue}
+              milestone={selectedIssue.milestoneId ? milestoneMap.get(selectedIssue.milestoneId) : undefined}
               onBack={() => { setSelectedId(null); setTreeRootId(null); setSidebarOpen(false) }}
               onToggleSidebar={() => setSidebarOpen((v) => !v)}
             />
@@ -1269,7 +1336,7 @@ export function IssuesPage() {
                           rootIssue={rootIssue}
                           childrenMap={childrenMap}
                           currentId={selectedId}
-                          onSelect={setSelectedId}
+                          onSelect={(id) => { setSelectedId(id); setSidebarOpen(false) }}
                           sessions={selectedIssueSessions}
                           onSessionSelect={handleSessionSelect}
                         />

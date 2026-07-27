@@ -55,7 +55,7 @@ export type ProviderModel = {
 export type Provider = {
   id: string
   name?: string
-  models?: ProviderModel[]
+  models?: Record<string, ProviderModel> | ProviderModel[]
 }
 
 export type SessionStatus = { type: "idle" | "busy" | "retry" }
@@ -90,7 +90,7 @@ export interface OpenCodeClient {
   getTodos(sessionId: string): Promise<Todo[]>
   getSessionStatus(): Promise<Record<string, SessionStatus>>
   listAgents(): Promise<Agent[]>
-  getProviders(): Promise<Provider[]>
+  getProviders(): Promise<Record<string, Provider>>
   eventStream(signal?: AbortSignal): Promise<Response>
 }
 
@@ -210,7 +210,7 @@ export function createOpenCodeClient(baseUrl: string, directory: string): OpenCo
     },
 
     getProviders() {
-      return getJson<Provider[]>("/provider", { directory })
+      return getJson<Record<string, Provider>>("/provider", { directory })
     },
 
     async eventStream(signal?) {
