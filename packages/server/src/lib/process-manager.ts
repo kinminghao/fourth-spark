@@ -316,7 +316,6 @@ async function spawnOpenCode(repoId: string, localPath: string, port: number): P
   const logFd = openSync(logFile, "a")
   logger.info({ repoId, logFile }, "opencode debug log enabled")
 
-  const proxyPort = 9999
   const proc = Bun.spawn([
     "opencode", "serve",
     "--port", String(port),
@@ -331,10 +330,6 @@ async function spawnOpenCode(repoId: string, localPath: string, port: number): P
     env: {
       ...process.env,
       PORT: String(port),
-      HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
-      HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
-      NO_PROXY: "127.0.0.1,localhost",
-      NODE_TLS_REJECT_UNAUTHORIZED: "0",
     },
   })
   proc.unref()
