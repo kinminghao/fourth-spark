@@ -22,6 +22,19 @@ Server (Bun + Hono :3000)
 - 所有 session/event/agent API 挂在 `/api/repos/:repoId/` 下
 - Git 平台操作通过 MCP server 完成，支持 GitHub / Gitea / GitLab
 
+## 功能特性
+
+- **多仓库管理** — 注册多个 Git 仓库，每个仓库独立运行 OpenCode 进程，互不干扰
+- **Agent 对话** — 浏览器中与 AI Agent 实时对话，支持消息流式渲染、工具调用面板、Todo 进度追踪
+- **自定义 Agent** — 基于内置 Agent 创建自定义 Agent，可指定 model、system prompt，组合 Prompt 片段
+- **Prompt 片段** — 可复用的 prompt 组件，支持排序和组合，按需挂载到自定义 Agent
+- **Git 平台集成** — 通过 MCP 管理 GitHub / Gitea / GitLab 的 Issue、PR、评论，凭证按 host 自动匹配
+- **Session 持久化** — 会话、消息、工具调用、Todo 全量持久化到 PostgreSQL，进程重启不丢数据
+- **用量统计** — 按 session 追踪 cost、input/output/reasoning/cache tokens
+- **AGENTS.md 管理** — Web 上直接编辑仓库的 AGENTS.md
+- **iOS 移动端** — 基于 Capacitor 构建原生 iOS 应用，支持 APNs 推送通知
+- **推送通知** — Session 完成后通过 APNs 推送到移动设备
+
 ## 前置依赖
 
 - [Bun](https://bun.sh/) >= 1.1
@@ -66,9 +79,11 @@ make dev
 
 ## 技术栈
 
-**Server**: Bun, Hono, Drizzle ORM, PostgreSQL, Zod
+**Server**: Bun, Hono, Drizzle ORM, PostgreSQL, Zod, Pino, MCP SDK
 
-**Web**: React 19, Vite, Tailwind CSS 4, Zustand, React Router, React Markdown
+**Web**: React 19, Vite, Tailwind CSS 4, Zustand, React Router, React Markdown, Lucide React
+
+**Mobile**: Capacitor (iOS), APNs Push Notifications
 
 **Infra**: Docker Compose, OpenCode CLI
 
