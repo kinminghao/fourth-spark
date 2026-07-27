@@ -2,6 +2,7 @@ import { useEffect, useState, type KeyboardEvent } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   Activity,
+  AlertTriangle,
   ChevronLeft,
   CircleDot,
   ExternalLink,
@@ -13,6 +14,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Wrench,
   X,
   XCircle,
 } from "lucide-react"
@@ -20,10 +22,11 @@ import ReactMarkdown from "react-markdown"
 import rehypeRaw from "rehype-raw"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
-import { type Issue, type IssueComment, type PullRequest, type Session, listIssueComments, listIssuePullRequests, mergePullRequest } from "../lib/api-client"
+import { ApiError, type Issue, type IssueComment, type PullRequest, type Session, listIssueComments, listIssuePullRequests, mergePullRequest } from "../lib/api-client"
 import { useIssueStore } from "../stores/issue-store"
 import { useRepoStore } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
+import { useToastStore } from "../stores/toast-store"
 import { useSwipeDrawer } from "../hooks/use-swipe-drawer"
 import { SwipeDrawer } from "../components/SwipeDrawer"
 
@@ -230,9 +233,31 @@ function IssueDetail({ issue, onBack, onToggleSidebar }: { issue: Issue; onBack?
       const refreshed = await listIssuePullRequests(activeRepoId, issue.number)
       setLinkedPRs(refreshed)
       if (activePRIdx >= refreshed.length) setActivePRIdx(Math.max(0, refreshed.length - 1))
+      useToastStore.getState().addToast(`PR #${pr.number} 合入成功`, "success")
+    } catch (err) {
+      let msg = "合入失败"
+      if (err instanceof ApiError) {
+        try {
+          const parsed = JSON.parse(err.message)
+          msg = parsed.error ?? msg
+        } catch {
+          msg = err.message
+        }
+      }
+      useToastStore.getState().addToast(msg, "error")
     } finally {
       setMerging(false)
     }
+  }
+
+  const handleResolveConflict = () => {
+    if (!pr) return
+    const draft = `请解决 PR #${pr.number} 的合并冲突: ${pr.title}`
+    useIssueStore.getState().setSelectedIssue(issue.id)
+    useIssueStore.getState().setPendingDraft(draft)
+    useIssueStore.getState().setPreviewIssue(null)
+    useSessionStore.setState({ activeSessionId: null })
+    navigate("/run")
   }
 
   const handleStart = () => {
@@ -396,6 +421,11 @@ function IssueDetail({ issue, onBack, onToggleSidebar }: { issue: Issue; onBack?
             )}>
               {linkedPRs.length}
             </span>
+            {linkedPRs.some((p) => p.mergeable === false) && (
+              <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-500/15 text-red-400">
+                <AlertTriangle className="inline h-3 w-3 -mt-px" /> Conflict
+              </span>
+            )}
           </button>
         </div>
       )}
@@ -479,9 +509,19 @@ function IssueDetail({ issue, onBack, onToggleSidebar }: { issue: Issue; onBack?
                   <span className="hidden sm:inline">查看</span>
                 </a>
               )}
+              {pr?.mergeable === false && (
+                <button
+                  type="button"
+                  onClick={handleResolveConflict}
+                  className="flex items-center gap-1.5 rounded-md border border-amber-500/30 px-2.5 py-1.5 text-xs font-medium text-amber-400 transition-colors hover:border-amber-500/60 hover:bg-amber-500/10"
+                >
+                  <Wrench className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">解冲突</span>
+                </button>
+              )}
               <button
                 type="button"
-                disabled={merging}
+                disabled={merging || pr?.mergeable === false}
                 onClick={() => void handleMerge(false)}
                 className="flex items-center gap-1.5 rounded-md border border-emerald-500/30 px-2.5 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:border-emerald-500/60 hover:bg-emerald-500/10 disabled:opacity-40"
               >
@@ -490,7 +530,7 @@ function IssueDetail({ issue, onBack, onToggleSidebar }: { issue: Issue; onBack?
               </button>
               <button
                 type="button"
-                disabled={merging}
+                disabled={merging || pr?.mergeable === false}
                 onClick={() => void handleMerge(true)}
                 className="flex items-center gap-1.5 rounded-md border border-blue-500/30 px-2.5 py-1.5 text-xs font-medium text-blue-400 transition-colors hover:border-blue-500/60 hover:bg-blue-500/10 disabled:opacity-40"
               >
@@ -515,6 +555,11 @@ function IssueDetail({ issue, onBack, onToggleSidebar }: { issue: Issue; onBack?
                   >
                     #{pr.number} {pr.state}
                   </span>
+                  {pr.mergeable === false && (
+                    <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-500/15 text-red-400">
+                      Conflict
+                    </span>
+                  )}
                   <span className="text-sm font-semibold text-fg">{pr.title}</span>
                 </div>
                 {pr.body ? (

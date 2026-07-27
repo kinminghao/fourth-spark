@@ -528,6 +528,7 @@ export interface PullRequest {
   user: { login: string; avatar_url: string }
   created_at: string
   updated_at: string
+  mergeable: boolean | null
 }
 
 export async function listIssuePullRequests(repoId: string, issueNumber: number): Promise<PullRequest[]> {
