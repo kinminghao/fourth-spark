@@ -1,4 +1,4 @@
-.PHONY: install dev dev-server dev-web run db db-stop db-push db-generate db-migrate db-studio setup status stop stop-opencode logs clean
+.PHONY: install dev dev-server dev-web run db db-stop db-push db-generate db-migrate db-studio setup build status stop stop-opencode logs clean
 
 install:
 	bun install
@@ -51,6 +51,9 @@ db-studio:
 
 setup: install db db-push
 	@echo "Setup complete. Run 'make dev' to start."
+
+build:
+	@bash scripts/build.sh
 
 status:
 	@echo "=== PostgreSQL ==="

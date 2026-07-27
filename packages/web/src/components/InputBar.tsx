@@ -16,7 +16,7 @@ function useHasPendingQuestion(): boolean {
   return useSessionStore((state) => {
     const id = state.activeSessionId
     if (!id) return false
-    const msgs = state.messages.get(id) ?? EMPTY_MESSAGES
+    const msgs = state.messages[id] ?? EMPTY_MESSAGES
     for (let i = msgs.length - 1; i >= 0; i--) {
       const parts = msgs[i].parts
       if (!parts) continue
@@ -35,7 +35,7 @@ export function InputBar() {
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
   const status = useSessionStore((state) => {
     const id = state.activeSessionId
-    return id ? state.sessionStatuses.get(id) : undefined
+    return id ? state.sessionStatuses[id] : undefined
   })
   const sendMessage = useSessionStore((state) => state.sendMessage)
   const hasPendingQuestion = useHasPendingQuestion()
