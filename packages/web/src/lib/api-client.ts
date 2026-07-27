@@ -417,6 +417,52 @@ export async function listRepoFragments(repoId: string): Promise<PromptFragment[
 }
 
 // ---------------------------------------------------------------------------
+// Tag API — /api/repos/:repoId/tags
+// ---------------------------------------------------------------------------
+
+export interface Tag {
+  id: string
+  repoId: string
+  name: string
+  color: string
+  description: string | null
+  createdAt: number
+}
+
+export async function listTags(repoId: string): Promise<Tag[]> {
+  return unwrapList<Tag>(await apiFetch<unknown>(`${repoBase(repoId)}/tags`))
+}
+
+export async function createTag(repoId: string, name: string, color?: string, description?: string): Promise<Tag> {
+  return apiFetch<Tag>(`${repoBase(repoId)}/tags`, {
+    method: "POST",
+    body: JSON.stringify({ name, color, description }),
+  })
+}
+
+export async function updateTag(repoId: string, tagId: string, updates: { name?: string; color?: string; description?: string }): Promise<Tag> {
+  return apiFetch<Tag>(`${repoBase(repoId)}/tags/${encodeURIComponent(tagId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  })
+}
+
+export async function deleteTag(repoId: string, tagId: string): Promise<void> {
+  await apiFetch<void>(`${repoBase(repoId)}/tags/${encodeURIComponent(tagId)}`, { method: "DELETE" })
+}
+
+export async function setIssueTags(repoId: string, issueNumber: number, tagIds: string[]): Promise<Tag[]> {
+  return apiFetch<Tag[]>(`${repoBase(repoId)}/issues/${issueNumber}/tags`, {
+    method: "PUT",
+    body: JSON.stringify({ tagIds }),
+  })
+}
+
+export async function getIssueTags(repoId: string, issueNumber: number): Promise<Tag[]> {
+  return unwrapList<Tag>(await apiFetch<unknown>(`${repoBase(repoId)}/issues/${issueNumber}/tags`))
+}
+
+// ---------------------------------------------------------------------------
 // Issue API — /api/repos/:repoId/issues
 // ---------------------------------------------------------------------------
 

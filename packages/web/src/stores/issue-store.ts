@@ -1,10 +1,12 @@
 import { create } from "zustand"
 import * as api from "../lib/api-client"
-import type { Issue } from "../lib/api-client"
+import type { Issue, Tag } from "../lib/api-client"
 import { useRepoStore } from "./repo-store"
 
 interface IssueState {
   issues: Issue[]
+  tags: Tag[]
+  selectedTagIds: Set<string>
   loaded: boolean
   syncing: boolean
   selectedIssueId: string | null
@@ -22,10 +24,15 @@ interface IssueState {
   loadIssues: () => Promise<void>
   syncIssues: () => Promise<void>
   createIssue: (title: string, body?: string) => Promise<Issue | null>
+  loadTags: () => Promise<void>
+  toggleTagFilter: (tagId: string) => void
+  clearTagFilter: () => void
 }
 
 export const useIssueStore = create<IssueState>((set, get) => ({
   issues: [],
+  tags: [],
+  selectedTagIds: new Set<string>(),
   loaded: false,
   syncing: false,
   selectedIssueId: null,
@@ -34,6 +41,8 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   matchingCandidateId: null,
   clearIssues: () => set({
     issues: [],
+    tags: [],
+    selectedTagIds: new Set<string>(),
     loaded: false,
     selectedIssueId: null,
     previewIssueId: null,
@@ -100,8 +109,11 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     set({ syncing: true })
     try {
       await api.syncIssues(repoId)
-      const issues = await api.listIssues(repoId, "all")
-      set({ issues, syncing: false })
+      const [issues, tags] = await Promise.all([
+        api.listIssues(repoId, "all"),
+        api.listTags(repoId),
+      ])
+      set({ issues, tags, syncing: false })
     } catch {
       set({ syncing: false })
     }
@@ -118,4 +130,27 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       return null
     }
   },
+
+  loadTags: async () => {
+    const repoId = useRepoStore.getState().activeRepoId
+    if (!repoId) {
+      set({ tags: [] })
+      return
+    }
+    try {
+      const tags = await api.listTags(repoId)
+      set({ tags })
+    } catch { /* noop */ }
+  },
+
+  toggleTagFilter: (tagId) => {
+    set((s) => {
+      const next = new Set(s.selectedTagIds)
+      if (next.has(tagId)) next.delete(tagId)
+      else next.add(tagId)
+      return { selectedTagIds: next }
+    })
+  },
+
+  clearTagFilter: () => set({ selectedTagIds: new Set<string>() }),
 }))
