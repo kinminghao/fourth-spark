@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { eq, or, isNull, asc, inArray } from "drizzle-orm"
+import { eq, or, and, isNull, asc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { customAgents, customAgentFragments, promptFragments } from "../db/schema"
 
@@ -55,6 +55,7 @@ globalCustomAgents.post("/", async (c) => {
     baseAgent?: string
     model?: string
     systemPrompt?: string
+    systemPromptPosition?: number
     fragmentIds?: string[]
   }>().catch(() => null)
 
@@ -72,6 +73,7 @@ globalCustomAgents.post("/", async (c) => {
     baseAgent: body.baseAgent,
     model: body.model?.trim() || null,
     systemPrompt: body.systemPrompt ?? "",
+    systemPromptPosition: body.systemPromptPosition ?? -1,
     repoId: null,
     sortOrder: 0,
     createdAt: now,
@@ -90,6 +92,7 @@ globalCustomAgents.put("/:id", async (c) => {
     baseAgent?: string
     model?: string | null
     systemPrompt?: string
+    systemPromptPosition?: number
     sortOrder?: number
     fragmentIds?: string[]
   }>().catch(() => null)
@@ -104,6 +107,7 @@ globalCustomAgents.put("/:id", async (c) => {
   if (body.baseAgent !== undefined) updates.baseAgent = body.baseAgent
   if (body.model !== undefined) updates.model = body.model?.trim() || null
   if (body.systemPrompt !== undefined) updates.systemPrompt = body.systemPrompt
+  if (body.systemPromptPosition !== undefined) updates.systemPromptPosition = body.systemPromptPosition
   if (body.sortOrder !== undefined) updates.sortOrder = body.sortOrder
 
   await db.update(customAgents).set(updates).where(eq(customAgents.id, id))
@@ -117,6 +121,99 @@ globalCustomAgents.put("/:id", async (c) => {
 globalCustomAgents.delete("/:id", async (c) => {
   await db.delete(customAgents).where(eq(customAgents.id, c.req.param("id")))
   return c.json({ ok: true })
+})
+
+// ---------------------------------------------------------------------------
+// Export — GET /api/custom-agents/:id/export
+// ---------------------------------------------------------------------------
+
+globalCustomAgents.get("/:id/export", async (c) => {
+  const [agent] = await db.select().from(customAgents).where(eq(customAgents.id, c.req.param("id")))
+  if (!agent) return c.json({ error: "not found" }, 404)
+
+  const [withFragments] = await attachFragments([agent])
+  return c.json({
+    version: 1,
+    type: "fourth-spark-custom-agent",
+    exportedAt: Date.now(),
+    agent: {
+      name: withFragments.name,
+      baseAgent: withFragments.baseAgent,
+      model: withFragments.model,
+      systemPrompt: withFragments.systemPrompt,
+    },
+    fragments: withFragments.fragments.map((f) => ({ name: f.name, content: f.content })),
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Import — POST /api/custom-agents/import
+// ---------------------------------------------------------------------------
+
+globalCustomAgents.post("/import", async (c) => {
+  const body = await c.req.json<{
+    version?: number
+    type?: string
+    agent?: { name?: string; baseAgent?: string; model?: string | null; systemPrompt?: string }
+    fragments?: Array<{ name?: string; content?: string }>
+  }>().catch(() => null)
+
+  if (!body || body.type !== "fourth-spark-custom-agent" || !body.agent) {
+    return c.json({ error: "invalid import format: expected fourth-spark-custom-agent JSON" }, 400)
+  }
+  const { agent: agentData, fragments: fragData = [] } = body
+  if (!agentData.name || !agentData.baseAgent) {
+    return c.json({ error: "agent name and baseAgent are required" }, 400)
+  }
+  if (!ALLOWED_BASE_AGENTS.includes(agentData.baseAgent)) {
+    return c.json({ error: `baseAgent must be one of: ${ALLOWED_BASE_AGENTS.join(", ")}` }, 400)
+  }
+
+  const now = Date.now()
+
+  // Upsert fragments — reuse existing by name+content match, create new ones otherwise
+  const fragmentIds: string[] = []
+  for (const frag of fragData) {
+    if (!frag.name) continue
+    const content = frag.content ?? ""
+    const [existing] = await db.select({ id: promptFragments.id })
+      .from(promptFragments)
+      .where(and(eq(promptFragments.name, frag.name), eq(promptFragments.content, content), isNull(promptFragments.repoId)))
+      .limit(1)
+
+    if (existing) {
+      fragmentIds.push(existing.id)
+    } else {
+      const fragId = crypto.randomUUID()
+      await db.insert(promptFragments).values({
+        id: fragId,
+        name: frag.name,
+        content,
+        repoId: null,
+        sortOrder: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+      fragmentIds.push(fragId)
+    }
+  }
+
+  const row = {
+    id: crypto.randomUUID(),
+    name: agentData.name.trim(),
+    baseAgent: agentData.baseAgent,
+    model: agentData.model?.trim() || null,
+    systemPrompt: agentData.systemPrompt ?? "",
+    repoId: null,
+    sortOrder: 0,
+    createdAt: now,
+    updatedAt: now,
+  }
+  await db.insert(customAgents).values(row)
+  if (fragmentIds.length > 0) await syncFragmentIds(row.id, fragmentIds)
+
+  const [result] = await attachFragments([row])
+  return c.json(result, 201)
 })
 
 export const repoCustomAgents = new Hono()
@@ -136,6 +233,7 @@ repoCustomAgents.post("/", async (c) => {
     baseAgent?: string
     model?: string
     systemPrompt?: string
+    systemPromptPosition?: number
     fragmentIds?: string[]
   }>().catch(() => null)
 
@@ -153,6 +251,7 @@ repoCustomAgents.post("/", async (c) => {
     baseAgent: body.baseAgent,
     model: body.model?.trim() || null,
     systemPrompt: body.systemPrompt ?? "",
+    systemPromptPosition: body.systemPromptPosition ?? -1,
     repoId,
     sortOrder: 0,
     createdAt: now,

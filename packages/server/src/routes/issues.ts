@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import { eq, and, desc, asc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
-import { issues, issueComments, repos, tags, issueTags } from "../db/schema"
+import { issues, issueComments, repos, tags, issueTags, milestones } from "../db/schema"
 import { parseGitUrl } from "../lib/git-url"
 import { createGitIssueClient, getHostInfo, GitApiError, type GitIssue, type GitComment } from "../lib/git-provider"
 import { logger } from "../middleware/logger"
@@ -50,6 +50,7 @@ function issueToDb(repoId: string, gi: GitIssue) {
     state: gi.state,
     labels: gi.labels?.map((l) => ({ id: l.id, name: l.name, color: l.color })) ?? [],
     htmlUrl: gi.html_url,
+    milestoneId: gi.milestone ? `${repoId}_ms_${gi.milestone.id}` : null,
     createdAt: new Date(gi.created_at).getTime(),
     updatedAt: new Date(gi.updated_at).getTime(),
   }
@@ -70,6 +71,7 @@ issueRoutes.get("/", async (c) => {
   const repoId = c.req.param("repoId")!
   const state = c.req.query("state") ?? "open"
   const tagFilter = c.req.query("tags")
+  const milestoneFilter = c.req.query("milestone")
 
   let rows: (typeof issues.$inferSelect)[]
 
@@ -96,16 +98,19 @@ issueRoutes.get("/", async (c) => {
 
       const conditions = [eq(issues.repoId, repoId), inArray(issues.id, matchedIssueIds)]
       if (state !== "all") conditions.push(eq(issues.state, state))
+      if (milestoneFilter) conditions.push(eq(issues.milestoneId, milestoneFilter))
       rows = await db.select().from(issues).where(and(...conditions)).orderBy(desc(issues.updatedAt))
     } else {
-      rows = state === "all"
-        ? await db.select().from(issues).where(eq(issues.repoId, repoId)).orderBy(desc(issues.updatedAt))
-        : await db.select().from(issues).where(and(eq(issues.repoId, repoId), eq(issues.state, state))).orderBy(desc(issues.updatedAt))
+      const conditions = [eq(issues.repoId, repoId)]
+      if (state !== "all") conditions.push(eq(issues.state, state))
+      if (milestoneFilter) conditions.push(eq(issues.milestoneId, milestoneFilter))
+      rows = await db.select().from(issues).where(and(...conditions)).orderBy(desc(issues.updatedAt))
     }
   } else {
-    rows = state === "all"
-      ? await db.select().from(issues).where(eq(issues.repoId, repoId)).orderBy(desc(issues.updatedAt))
-      : await db.select().from(issues).where(and(eq(issues.repoId, repoId), eq(issues.state, state))).orderBy(desc(issues.updatedAt))
+    const conditions = [eq(issues.repoId, repoId)]
+    if (state !== "all") conditions.push(eq(issues.state, state))
+    if (milestoneFilter) conditions.push(eq(issues.milestoneId, milestoneFilter))
+    rows = await db.select().from(issues).where(and(...conditions)).orderBy(desc(issues.updatedAt))
   }
 
   for (const row of rows) {
@@ -129,6 +134,33 @@ issueRoutes.post("/sync", async (c) => {
 
   const body = await c.req.json<{ state?: "open" | "closed" | "all" }>().catch(() => null)
   const state = body?.state ?? "all"
+
+  // Must run before issue sync: issues.milestone_id FKs milestones.id, so milestone rows must exist first.
+  let totalMilestones = 0
+  try {
+    const gitMilestones = await client.listMilestones({ state: "all" })
+    for (const gm of gitMilestones) {
+      const msId = `${repoId}_ms_${gm.id}`
+      const values = {
+        id: msId,
+        repoId,
+        number: gm.number ?? gm.id,
+        title: gm.title,
+        description: gm.description || null,
+        state: gm.state,
+        dueOn: gm.due_on ? new Date(gm.due_on).getTime() : null,
+        openIssues: gm.open_issues ?? 0,
+        closedIssues: gm.closed_issues ?? 0,
+        createdAt: new Date(gm.created_at).getTime(),
+        updatedAt: new Date(gm.updated_at).getTime(),
+      }
+      const { id: _, createdAt: __, ...updateSet } = values
+      await db.insert(milestones).values(values).onConflictDoUpdate({ target: milestones.id, set: updateSet })
+      totalMilestones++
+    }
+  } catch (err) {
+    logger.warn({ err, repoId }, "failed to sync milestones from git host")
+  }
 
   let page = 1
   let total = 0
@@ -199,8 +231,8 @@ issueRoutes.post("/sync", async (c) => {
     }
   }
 
-  logger.info({ repoId, total, totalComments, totalTags, state }, "issue sync complete")
-  return c.json({ synced: total, comments: totalComments, tags: totalTags })
+  logger.info({ repoId, total, totalComments, totalTags, totalMilestones, state }, "issue sync complete")
+  return c.json({ synced: total, comments: totalComments, tags: totalTags, milestones: totalMilestones })
 })
 
 issueRoutes.post("/", async (c) => {

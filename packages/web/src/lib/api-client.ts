@@ -53,6 +53,7 @@ export interface Issue {
   body?: string
   state: "open" | "closed"
   labels?: Array<{ id: number; name: string; color: string }>
+  milestoneId?: string | null
   htmlUrl?: string
   createdAt: number
   updatedAt: number
@@ -146,6 +147,7 @@ export interface CustomAgent {
   baseAgent: string
   model: string | null
   systemPrompt: string
+  systemPromptPosition: number
   fragments: Array<{ id: string; name: string; content: string }>
   repoId: string | null
   sortOrder: number
@@ -397,11 +399,11 @@ export async function listGlobalCustomAgents(): Promise<CustomAgent[]> {
   return unwrapList<CustomAgent>(await apiFetch<unknown>("/api/custom-agents"))
 }
 
-export async function createGlobalCustomAgent(data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; fragmentIds?: string[] }): Promise<CustomAgent> {
+export async function createGlobalCustomAgent(data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }): Promise<CustomAgent> {
   return apiFetch<CustomAgent>("/api/custom-agents", { method: "POST", body: JSON.stringify(data) })
 }
 
-export async function updateCustomAgent(id: string, data: { name?: string; baseAgent?: string; model?: string | null; systemPrompt?: string; fragmentIds?: string[] }): Promise<CustomAgent> {
+export async function updateCustomAgent(id: string, data: { name?: string; baseAgent?: string; model?: string | null; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }): Promise<CustomAgent> {
   return apiFetch<CustomAgent>(`/api/custom-agents/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) })
 }
 
@@ -409,11 +411,27 @@ export async function deleteCustomAgent(id: string): Promise<void> {
   await apiFetch<void>(`/api/custom-agents/${encodeURIComponent(id)}`, { method: "DELETE" })
 }
 
+export interface CustomAgentExport {
+  version: number
+  type: "fourth-spark-custom-agent"
+  exportedAt: number
+  agent: { name: string; baseAgent: string; model: string | null; systemPrompt: string }
+  fragments: Array<{ name: string; content: string }>
+}
+
+export async function exportCustomAgent(id: string): Promise<CustomAgentExport> {
+  return apiFetch<CustomAgentExport>(`/api/custom-agents/${encodeURIComponent(id)}/export`)
+}
+
+export async function importCustomAgent(data: CustomAgentExport): Promise<CustomAgent> {
+  return apiFetch<CustomAgent>("/api/custom-agents/import", { method: "POST", body: JSON.stringify(data) })
+}
+
 export async function listRepoCustomAgents(repoId: string): Promise<CustomAgent[]> {
   return unwrapList<CustomAgent>(await apiFetch<unknown>(`${repoBase(repoId)}/custom-agents`))
 }
 
-export async function createRepoCustomAgent(repoId: string, data: { name: string; baseAgent: string; model?: string; systemPrompt?: string }): Promise<CustomAgent> {
+export async function createRepoCustomAgent(repoId: string, data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }): Promise<CustomAgent> {
   return apiFetch<CustomAgent>(`${repoBase(repoId)}/custom-agents`, { method: "POST", body: JSON.stringify(data) })
 }
 
@@ -462,6 +480,20 @@ export interface Tag {
   createdAt: number
 }
 
+export interface Milestone {
+  id: string
+  repoId: string
+  number: number
+  title: string
+  description: string | null
+  state: "open" | "closed"
+  dueOn: number | null
+  openIssues: number
+  closedIssues: number
+  createdAt: number
+  updatedAt: number
+}
+
 export async function listTags(repoId: string): Promise<Tag[]> {
   return unwrapList<Tag>(await apiFetch<unknown>(`${repoBase(repoId)}/tags`))
 }
@@ -493,6 +525,15 @@ export async function setIssueTags(repoId: string, issueNumber: number, tagIds: 
 
 export async function getIssueTags(repoId: string, issueNumber: number): Promise<Tag[]> {
   return unwrapList<Tag>(await apiFetch<unknown>(`${repoBase(repoId)}/issues/${issueNumber}/tags`))
+}
+
+// ---------------------------------------------------------------------------
+// Milestone API — /api/repos/:repoId/milestones
+// ---------------------------------------------------------------------------
+
+export async function listMilestones(repoId: string, state?: string): Promise<Milestone[]> {
+  const params = state ? `?state=${encodeURIComponent(state)}` : ""
+  return unwrapList<Milestone>(await apiFetch<unknown>(`${repoBase(repoId)}/milestones${params}`))
 }
 
 // ---------------------------------------------------------------------------
