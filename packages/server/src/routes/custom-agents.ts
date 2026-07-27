@@ -3,7 +3,7 @@ import { eq, or, isNull, asc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { customAgents, customAgentFragments, promptFragments } from "../db/schema"
 
-const ALLOWED_BASE_AGENTS = ["Sisyphus", "Prometheus", "Atlas"]
+const ALLOWED_BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atlas - Plan Executor"]
 
 type FragmentInfo = { id: string; name: string; content: string }
 
