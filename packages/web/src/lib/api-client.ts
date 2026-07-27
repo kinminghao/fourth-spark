@@ -1,8 +1,13 @@
 /*
- * API client for the Fourth Spark backend (mounted under /api/*, proxied by Vite).
+ * API client for the Fourth Spark backend.
+ *
+ * In browser: paths like "/api/…" are proxied by Vite to the backend.
+ * In Capacitor: getApiBaseUrl() prepends the remote server address.
  *
  * All session/agent calls are scoped to a repo via /api/repos/:repoId/*.
  */
+
+import { getApiBaseUrl } from "./config"
 
 export type SessionStatusValue = "idle" | "busy" | "retry"
 
@@ -163,7 +168,7 @@ export class ApiError extends Error {
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response
   try {
-    response = await fetch(path, {
+    response = await fetch(getApiBaseUrl() + path, {
       ...init,
       headers: {
         Accept: "application/json",
@@ -533,7 +538,7 @@ export async function updateRepoAgentsMd(repoId: string, content: string): Promi
 // ---------------------------------------------------------------------------
 
 export function sessionEventsUrl(repoId: string, sessionId: string): string {
-  return `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/events`
+  return `${getApiBaseUrl()}${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/events`
 }
 
 // ---------------------------------------------------------------------------
@@ -635,5 +640,23 @@ export async function switchUsageAccount(accountId: string): Promise<UsageResult
   return apiFetch<UsageResult>("/api/usage/switch", {
     method: "POST",
     body: JSON.stringify({ accountId }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Push Notification API — /api/push
+// ---------------------------------------------------------------------------
+
+export async function registerPushToken(token: string, platform = "ios"): Promise<void> {
+  await apiFetch<void>("/api/push/register", {
+    method: "POST",
+    body: JSON.stringify({ token, platform }),
+  })
+}
+
+export async function unregisterPushToken(token: string): Promise<void> {
+  await apiFetch<void>("/api/push/unregister", {
+    method: "DELETE",
+    body: JSON.stringify({ token }),
   })
 }
