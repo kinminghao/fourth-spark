@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import * as api from "../lib/api-client"
 import { ApiError } from "../lib/api-client"
-import type { Issue, Tag } from "../lib/api-client"
+import type { Issue, Tag, Milestone } from "../lib/api-client"
 import { useRepoStore } from "./repo-store"
 import { useToastStore } from "./toast-store"
 
@@ -9,6 +9,8 @@ interface IssueState {
   issues: Issue[]
   tags: Tag[]
   selectedTagIds: Set<string>
+  milestones: Milestone[]
+  selectedMilestoneId: string | null
   loaded: boolean
   syncing: boolean
   selectedIssueId: string | null
@@ -31,12 +33,16 @@ interface IssueState {
   loadTags: () => Promise<void>
   toggleTagFilter: (tagId: string) => void
   clearTagFilter: () => void
+  loadMilestones: () => Promise<void>
+  setMilestoneFilter: (id: string | null) => void
 }
 
 export const useIssueStore = create<IssueState>((set, get) => ({
   issues: [],
   tags: [],
   selectedTagIds: new Set<string>(),
+  milestones: [],
+  selectedMilestoneId: null,
   loaded: false,
   syncing: false,
   selectedIssueId: null,
@@ -48,6 +54,8 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     issues: [],
     tags: [],
     selectedTagIds: new Set<string>(),
+    milestones: [],
+    selectedMilestoneId: null,
     loaded: false,
     selectedIssueId: null,
     previewIssueId: null,
@@ -116,11 +124,12 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     set({ syncing: true })
     try {
       await api.syncIssues(repoId)
-      const [issues, tags] = await Promise.all([
+      const [issues, tags, milestones] = await Promise.all([
         api.listIssues(repoId, "all"),
         api.listTags(repoId),
+        api.listMilestones(repoId),
       ])
-      set({ issues, tags, syncing: false })
+      set({ issues, tags, milestones, syncing: false })
     } catch (err) {
       set({ syncing: false })
       let message = "同步 Issue 失败"
@@ -170,4 +179,18 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   },
 
   clearTagFilter: () => set({ selectedTagIds: new Set<string>() }),
+
+  loadMilestones: async () => {
+    const repoId = useRepoStore.getState().activeRepoId
+    if (!repoId) {
+      set({ milestones: [] })
+      return
+    }
+    try {
+      const milestones = await api.listMilestones(repoId)
+      set({ milestones })
+    } catch { /* noop */ }
+  },
+
+  setMilestoneFilter: (id) => set({ selectedMilestoneId: id }),
 }))

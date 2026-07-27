@@ -28,6 +28,20 @@ export interface GitIssue {
   state: "open" | "closed"
   labels: Array<{ id: number; name: string; color: string }>
   html_url: string
+  milestone: { id: number; title: string } | null
+  created_at: string
+  updated_at: string
+}
+
+export interface GitMilestone {
+  id: number
+  number: number    // GitHub field name; Gitea uses `id` for some endpoints
+  title: string
+  description: string
+  state: "open" | "closed"
+  due_on: string | null
+  open_issues: number
+  closed_issues: number
   created_at: string
   updated_at: string
 }
@@ -79,6 +93,7 @@ export interface GitIssueClient {
   addDependency(issueNumber: number, dependsOnNumber: number): Promise<void>
   createComment(issueNumber: number, body: string): Promise<GitComment>
   listComments(issueNumber: number): Promise<GitComment[]>
+  listMilestones(opts?: { state?: "open" | "closed" | "all" }): Promise<GitMilestone[]>
   createPullRequest(input: CreatePullRequestInput): Promise<GitPullRequest>
   listIssuePullRequests(issueNumber: number): Promise<GitPullRequest[]>
   mergePullRequest(prNumber: number): Promise<void>
@@ -171,6 +186,18 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
 
     async listComments(issueNumber) {
       return request<GitComment[]>("GET", `/issues/${issueNumber}/comments?per_page=100`)
+    },
+
+    async listMilestones(opts) {
+      const params = new URLSearchParams()
+      params.set("state", opts?.state ?? "all")
+      if (platform === "github") {
+        params.set("per_page", "100")
+        params.set("direction", "desc")
+      } else {
+        params.set("limit", "100")
+      }
+      return request<GitMilestone[]>("GET", `/milestones?${params}`)
     },
 
     async createPullRequest(input) {
