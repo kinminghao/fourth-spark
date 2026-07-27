@@ -1,5 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   Activity,
   ChevronLeft,
@@ -822,6 +822,8 @@ export function IssuesPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [listDrawerOpen, setListDrawerOpen] = useState(false)
 
+  const [searchParams, setSearchParams] = useSearchParams()
+
   const issues = useIssueStore((s) => s.issues)
   const syncing = useIssueStore((s) => s.syncing)
   const syncIssues = useIssueStore((s) => s.syncIssues)
@@ -832,6 +834,15 @@ export function IssuesPage() {
   const loadTags = useIssueStore((s) => s.loadTags)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const sessions = useSessionStore((s) => s.sessions)
+
+  /* Pick up ?issueId= from URL (e.g. navigated from session header) */
+  useEffect(() => {
+    const paramId = searchParams.get("issueId")
+    if (paramId && issues.some((i) => i.id === paramId)) {
+      setSelectedId(paramId)
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams, issues])
 
   useEffect(() => {
     if (activeRepoId) void loadTags()

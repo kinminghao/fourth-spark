@@ -6,6 +6,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react"
+import { useNavigate } from "react-router-dom"
 import { AlertTriangle, ArrowLeft, ArrowUp, Check, ExternalLink, GitBranch, Menu, Play, Square, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -472,6 +473,7 @@ function IssuePreview({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
 }
 
 export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
+  const navigate = useNavigate()
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
   const previewIssueId = useIssueStore((state) => state.previewIssueId)
   const session = useSessionStore(
@@ -553,10 +555,9 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
           <ContextInfo session={session} messages={messages} />
         </div>
         {linkedIssue && (
-          <a
-            href={linkedIssue.htmlUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={() => navigate(`/issues?issueId=${linkedIssue.id}`)}
             className="flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
           >
             <span className={clsx(
@@ -566,8 +567,7 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
               #{linkedIssue.number}
             </span>
             <span className="hidden max-w-[120px] truncate sm:inline">{linkedIssue.title}</span>
-            <ExternalLink className="h-3 w-3 shrink-0" />
-          </a>
+          </button>
         )}
         <StatusBadge status={status} />
         {busy && (
