@@ -1,6 +1,6 @@
 import { useState } from "react"
 import clsx from "clsx"
-import { MessageCircleQuestion, X } from "lucide-react"
+import { Check, MessageCircleQuestion, Send, X } from "lucide-react"
 import type { MessagePart } from "../lib/api-client"
 import {
   getQuestions,
@@ -13,10 +13,12 @@ import { useToastStore } from "../stores/toast-store"
 function QuestionCard({
   q,
   pending,
+  selected,
   onSelect,
 }: {
   q: QuestionData
   pending: boolean
+  selected?: string[]
   onSelect: (label: string) => void
 }) {
   return (
@@ -27,25 +29,31 @@ function QuestionCard({
       <p className="text-sm text-fg-2">{q.question}</p>
       {q.options.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {q.options.map((opt) => (
-            <button
-              key={opt.label}
-              type="button"
-              disabled={!pending}
-              onClick={() => onSelect(opt.label)}
-              className={clsx(
-                "rounded-md border px-3 py-1.5 text-left text-xs transition-colors",
-                pending
-                  ? "border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20"
-                  : "border-line bg-surface/50 text-fg-5 cursor-default",
-              )}
-            >
-              <span className="font-medium">{opt.label}</span>
-              {opt.description && (
-                <span className="ml-1.5 text-fg-5">{opt.description}</span>
-              )}
-            </button>
-          ))}
+          {q.options.map((opt) => {
+            const isSelected = selected?.includes(opt.label) ?? false
+            return (
+              <button
+                key={opt.label}
+                type="button"
+                disabled={!pending}
+                onClick={() => onSelect(opt.label)}
+                className={clsx(
+                  "rounded-md border px-3 py-1.5 text-left text-xs transition-colors",
+                  isSelected
+                    ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30"
+                    : pending
+                      ? "border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20"
+                      : "border-line bg-surface/50 text-fg-5 cursor-default",
+                )}
+              >
+                {isSelected && <Check className="mr-1 inline h-3 w-3" />}
+                <span className="font-medium">{opt.label}</span>
+                {opt.description && (
+                  <span className="ml-1.5 text-fg-5">{opt.description}</span>
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>
@@ -60,18 +68,62 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
   const sendMessage = useSessionStore((s) => s.sendMessage)
   const abortSession = useSessionStore((s) => s.abortSession)
   const [resolved, setResolved] = useState<"answered" | "dismissed" | null>(null)
+  const [selections, setSelections] = useState<Record<number, string[]>>({})
 
   if (!questions || questions.length === 0) return null
+
+  const isSingle = questions.length === 1
 
   const clearToast = () => {
     if (activeSessionId) useToastStore.getState().removeToast(`question-${activeSessionId}`)
   }
 
-  const handleSelect = (label: string) => {
+  const handleSelect = (questionIndex: number, label: string) => {
     if (resolved) return
+
+    if (isSingle) {
+      // Single question: send immediately (preserves existing behavior)
+      setResolved("answered")
+      clearToast()
+      void sendMessage(label)
+      return
+    }
+
+    // Multiple questions: track selection per question
+    setSelections((prev) => {
+      const q = questions[questionIndex]
+      const current = prev[questionIndex] ?? []
+
+      if (q.multiple) {
+        // Multi-select: toggle the option
+        const isSelected = current.includes(label)
+        return {
+          ...prev,
+          [questionIndex]: isSelected
+            ? current.filter((l) => l !== label)
+            : [...current, label],
+        }
+      }
+      // Single-select: replace
+      return { ...prev, [questionIndex]: [label] }
+    })
+  }
+
+  const answeredCount = questions.filter(
+    (_, i) => (selections[i]?.length ?? 0) > 0,
+  ).length
+  const allAnswered = !isSingle && answeredCount === questions.length
+
+  const handleSubmitAll = () => {
+    if (resolved || !allAnswered) return
     setResolved("answered")
     clearToast()
-    void sendMessage(label)
+
+    const answers = questions.map((_, i) => {
+      const sel = selections[i] ?? []
+      return sel.length === 1 ? sel[0] : sel
+    })
+    void sendMessage(JSON.stringify(answers))
   }
 
   const handleDismiss = () => {
@@ -97,6 +149,11 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
         <span className={clsx("font-medium", active ? "text-blue-300" : "text-fg-3")}>
           {resolved === "answered" ? "已回复" : resolved === "dismissed" ? "已取消" : active ? "等待回复" : "Question"}
         </span>
+        {!isSingle && active && (
+          <span className="text-fg-5">
+            ({answeredCount}/{questions.length})
+          </span>
+        )}
         {active && (
           <button
             type="button"
@@ -115,9 +172,28 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
             key={i}
             q={q}
             pending={active}
-            onSelect={handleSelect}
+            selected={selections[i]}
+            onSelect={(label) => handleSelect(i, label)}
           />
         ))}
+        {!isSingle && active && (
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              disabled={!allAnswered}
+              onClick={handleSubmitAll}
+              className={clsx(
+                "flex items-center gap-1.5 rounded-md px-4 py-1.5 text-xs font-medium transition-colors",
+                allAnswered
+                  ? "bg-emerald-600 text-white hover:bg-emerald-500"
+                  : "bg-surface/50 text-fg-5 cursor-not-allowed",
+              )}
+            >
+              <Send className="h-3 w-3" />
+              <span>提交回答</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
