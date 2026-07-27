@@ -384,7 +384,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
     const parent = issueMap.get(matchingParentId)
     const q = search.toLowerCase()
     const filtered = issues.filter((i) =>
-      i.id !== matchingParentId && (!q || `#${i.number} ${i.title}`.toLowerCase().includes(q))
+      i.state === "open" && i.id !== matchingParentId && (!q || `#${i.number} ${i.title}`.toLowerCase().includes(q))
     )
 
     return (
