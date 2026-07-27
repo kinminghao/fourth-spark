@@ -28,7 +28,7 @@ export interface SseDispatchTarget {
     part: MessagePart,
   ) => void
   updateTodos: (sessionId: string, todos: Todo[]) => void
-  setSessionStatus: (sessionId: string, status: string) => void
+  setSessionStatus: (sessionId: string, status: string, reason?: string) => void
   updateSessionInfo: (info: Partial<Session> & { id: string }) => void
 }
 
@@ -160,6 +160,21 @@ function extractSessionInfo(data: unknown): (Partial<Session> & { id: string }) 
   return info
 }
 
+function extractErrorReason(data: unknown): string | null {
+  const props = asRecord(getProps(data))
+  if (!props) return null
+  if (typeof props.message === "string") return props.message
+  const err = asRecord(props.error)
+  if (err) {
+    const dataMsg = asRecord(err.data)
+    if (typeof dataMsg?.message === "string") return `${err.name ?? "Error"}: ${dataMsg.message}`
+    if (typeof err.message === "string") return `${err.name ?? "Error"}: ${err.message}`
+    if (typeof err.name === "string") return String(err.name)
+  }
+  if (typeof props.reason === "string") return props.reason
+  return null
+}
+
 function extractStatus(data: unknown): string | null {
   const props = getProps(data)
   if (typeof props === "string") {
@@ -225,7 +240,8 @@ export function dispatchSseEvent(
       break
     }
     case "session.error": {
-      target.setSessionStatus(sessionId, "error")
+      const reason = extractErrorReason(data)
+      target.setSessionStatus(sessionId, "error", reason ?? undefined)
       break
     }
     default:
