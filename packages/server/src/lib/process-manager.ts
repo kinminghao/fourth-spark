@@ -312,6 +312,7 @@ async function spawnOpenCode(repoId: string, localPath: string, port: number): P
 
   injectMcpConfig(localPath, repoId)
 
+  mkdirSync(PID_DIR, { recursive: true })
   const logFile = join(PID_DIR, `opencode-${repoId.slice(0, 8)}.log`)
   const logFd = openSync(logFile, "a")
   logger.info({ repoId, logFile }, "opencode debug log enabled")
