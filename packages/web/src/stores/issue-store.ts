@@ -11,6 +11,7 @@ interface IssueState {
   previewIssueId: string | null
   matchingParentId: string | null
   matchingCandidateId: string | null
+  clearIssues: () => void
   setSelectedIssue: (id: string | null) => void
   setPreviewIssue: (id: string | null) => void
   enterMatchMode: (parentId: string) => void
@@ -31,6 +32,14 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   previewIssueId: null,
   matchingParentId: null,
   matchingCandidateId: null,
+  clearIssues: () => set({
+    issues: [],
+    loaded: false,
+    selectedIssueId: null,
+    previewIssueId: null,
+    matchingParentId: null,
+    matchingCandidateId: null,
+  }),
   setSelectedIssue: (id) => set({ selectedIssueId: id }),
   setPreviewIssue: (id) => set({ previewIssueId: id }),
   enterMatchMode: (parentId) => set({ matchingParentId: parentId, matchingCandidateId: null, previewIssueId: null }),

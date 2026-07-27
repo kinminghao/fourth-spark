@@ -30,11 +30,13 @@ function AppInner() {
   useEffect(() => {
     if (activeRepoId) {
       clearSessions()
+      useIssueStore.getState().clearIssues()
       void loadSessions()
       void useCustomAgentStore.getState().loadAgents()
       void useIssueStore.getState().loadIssues()
     } else {
       clearSessions()
+      useIssueStore.getState().clearIssues()
     }
   }, [activeRepoId, loadSessions, clearSessions])
 
