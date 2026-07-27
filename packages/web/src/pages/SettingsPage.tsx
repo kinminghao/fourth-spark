@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AlertTriangle, Ban, Bot, Check, Clock, Edit3, Eye, EyeOff, FileText, Gauge, GitBranch, Loader2, Plus, RefreshCw, Save, Trash2, User, Users, Wifi, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
@@ -188,7 +188,10 @@ function UsageSection() {
     return () => clearInterval(id)
   }, [])
 
+  const switchRef = useRef(false)
   const handleSwitch = useCallback((accountId: string) => {
+    if (switchRef.current) return
+    switchRef.current = true
     setSwitchingId(accountId)
     api.switchUsageAccount(accountId)
       .then((r) => { applyResult(r); setSwitchingId(null) })
@@ -196,6 +199,7 @@ function UsageSection() {
         setError(e instanceof Error ? e.message : String(e))
         setSwitchingId(null)
       })
+      .finally(() => { switchRef.current = false })
   }, [applyResult])
 
   return (
