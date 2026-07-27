@@ -534,11 +534,15 @@ export async function updateRepoAgentsMd(repoId: string, content: string): Promi
 }
 
 // ---------------------------------------------------------------------------
-// SSE URL builder — used by useSessionEvents hook
+// SSE URL builder — global repo event stream
 // ---------------------------------------------------------------------------
 
-export function sessionEventsUrl(repoId: string, sessionId: string): string {
-  return `${getApiBaseUrl()}${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/events`
+export function repoEventsUrl(repoId: string): string {
+  return `${getApiBaseUrl()}${repoBase(repoId)}/events`
+}
+
+export async function getAllSessionStatuses(repoId: string): Promise<Record<string, SessionStatus>> {
+  return apiFetch<Record<string, SessionStatus>>(`${repoBase(repoId)}/sessions/status`)
 }
 
 // ---------------------------------------------------------------------------

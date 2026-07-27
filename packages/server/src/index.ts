@@ -16,6 +16,7 @@ import { globalCustomAgents, repoCustomAgents } from "./routes/custom-agents"
 import { globalFragments, repoFragments } from "./routes/prompt-fragments"
 import { modelRoutes } from "./routes/models"
 import { mcpRoute } from "./routes/mcp"
+import { tagRoutes } from "./routes/tags"
 import { pushRoutes } from "./routes/push"
 import { PORT } from "./lib/config"
 import { processManager } from "./lib/process-manager"
@@ -58,6 +59,8 @@ repoScoped.route("/custom-agents", repoCustomAgents)
 repoScoped.route("/prompt-fragments", repoFragments)
 repoScoped.route("/models", modelRoutes)
 repoScoped.route("/issues", issueRoutes)
+repoScoped.route("/tags", tagRoutes)
+repoScoped.route("/issues", tagRoutes)
 repoScoped.route("/mcp", mcpRoute)
 repoScoped.route("/health", repoHealth)
 

@@ -20,7 +20,7 @@ import type { Message as ApiMessage, Session } from "../lib/api-client"
 import { useRepoStore } from "../stores/repo-store"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useIssueStore } from "../stores/issue-store"
-import { useSessionEvents } from "../hooks/use-session-events"
+import { orchestrator } from "../lib/session-orchestrator"
 import { ExecutionBlock } from "./ExecutionBlock"
 import { TodoProgress } from "./TodoProgress"
 import { InputBar } from "./InputBar"
@@ -480,20 +480,24 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   )
   const messages = useSessionStore((state) => {
     const id = state.activeSessionId
-    return id ? (state.messages.get(id) ?? EMPTY_MESSAGES) : EMPTY_MESSAGES
+    return id ? (state.messages[id] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES
   })
   const todos = useSessionStore((state) => {
     const id = state.activeSessionId
-    return id ? (state.todos.get(id) ?? EMPTY_TODOS) : EMPTY_TODOS
+    return id ? (state.todos[id] ?? EMPTY_TODOS) : EMPTY_TODOS
   })
   const status = useSessionStore((state) => {
     const id = state.activeSessionId
-    return id ? state.sessionStatuses.get(id) : undefined
+    return id ? state.sessionStatuses[id] : undefined
   })
   const sendError = useSessionStore((state) => state.sendError)
   const abortSession = useSessionStore((state) => state.abortSession)
 
-  useSessionEvents(activeSessionId)
+  useEffect(() => {
+    if (!activeSessionId) return
+    orchestrator.activateSession(activeSessionId)
+    return () => orchestrator.deactivateSession(activeSessionId)
+  }, [activeSessionId])
 
   const scrollRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
