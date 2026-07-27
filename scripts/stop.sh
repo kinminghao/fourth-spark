@@ -26,7 +26,15 @@ if [ -f "$PID_FILE" ]; then
   fi
   rm -f "$PID_FILE"
 else
-  echo "  No PID file found — server not managed by start.sh"
+  if pgrep -x fourth-spark >/dev/null 2>&1; then
+    echo "→ Stopping fourth-spark server (found by process name)..."
+    pkill -x fourth-spark 2>/dev/null || true
+    sleep 1
+    pkill -9 -x fourth-spark 2>/dev/null || true
+    echo "  Server stopped"
+  else
+    echo "  No fourth-spark server running"
+  fi
 fi
 
 # 2. Stop opencode processes spawned by server
