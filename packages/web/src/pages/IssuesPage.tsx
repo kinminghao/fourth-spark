@@ -15,6 +15,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Search,
   Wrench,
   X,
   XCircle,
@@ -878,6 +879,7 @@ export function IssuesPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("open")
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("epic")
   const [creating, setCreating] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [treeRootId, setTreeRootId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -944,7 +946,7 @@ export function IssuesPage() {
 
   const afterState = stateFilter === "all" ? issues : issues.filter((i) => i.state === stateFilter)
   const afterType = typeFilter === "all" ? afterState : afterState.filter((i) => issueType(i) === typeFilter)
-  const filtered = selectedTagIds.size === 0
+  const afterTags = selectedTagIds.size === 0
     ? afterType
     : afterType.filter((i) => {
         if (!i.labels || i.labels.length === 0) return false
@@ -952,6 +954,10 @@ export function IssuesPage() {
         const selectedNames = tags.filter((t) => selectedTagIds.has(t.id)).map((t) => t.name)
         return selectedNames.every((n) => issueTagNames.has(n))
       })
+  const sq = searchQuery.trim().toLowerCase()
+  const filtered = !sq
+    ? afterTags
+    : afterTags.filter((i) => `#${i.number} ${i.title}`.toLowerCase().includes(sq))
   const afterMilestone = selectedMilestoneId
     ? filtered.filter((i) => i.milestoneId === selectedMilestoneId)
     : filtered
@@ -1162,6 +1168,29 @@ export function IssuesPage() {
             )}
           </div>
         )}
+
+        {/* search */}
+        <div className="border-b border-line px-3 py-2">
+          <div className="flex items-center gap-2 rounded-md border border-line bg-base px-2 py-1">
+            <Search className="h-3.5 w-3.5 shrink-0 text-fg-5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索 issue..."
+              className="min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-fg-6 focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="shrink-0 text-fg-5 hover:text-fg-3"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        </div>
 
         {milestones.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-3 py-2">

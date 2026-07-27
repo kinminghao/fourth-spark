@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, Ban, Bot, Check, Clock, Edit3, Eye, EyeOff, FileText, Gauge, GitBranch, Loader2, Plus, RefreshCw, Save, Trash2, User, Users, Wifi, X, Zap } from "lucide-react"
+import { AlertTriangle, Ban, Bot, Check, Clipboard, Clock, Download, Edit3, Eye, EyeOff, FileText, Gauge, GitBranch, Loader2, Plus, RefreshCw, Save, Trash2, Upload, User, Users, Wifi, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
-import type { AccountUsage, CustomAgent, GitHost, PromptFragment, UsageResult, UsageWindow } from "../lib/api-client"
+import type { AccountUsage, CustomAgent, CustomAgentExport, GitHost, PromptFragment, UsageResult, UsageWindow } from "../lib/api-client"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
+import { useRepoStore } from "../stores/repo-store"
 import { isNativePlatform, getServerUrl, setServerUrl } from "../lib/config"
+import { ModelCombobox } from "../components/ModelCombobox"
 
 let usageCache: { data: UsageResult; fetchedAt: number } | null = null
 
@@ -531,6 +533,25 @@ const BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atl
 
 function CustomAgentRow({ agent, onEdit, onDelete }: { agent: CustomAgent; onEdit: () => void; onDelete: () => void }) {
   const [confirming, setConfirming] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const handleExportDownload = async () => {
+    const data = await api.exportCustomAgent(agent.id)
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${agent.name.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, "_")}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExportCopy = async () => {
+    const data = await api.exportCustomAgent(agent.id)
+    await navigator.clipboard.writeText(JSON.stringify(data, null, 2))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
     <div className="group flex items-center gap-3 rounded-lg border border-line bg-base px-4 py-3">
@@ -561,6 +582,14 @@ function CustomAgentRow({ agent, onEdit, onDelete }: { agent: CustomAgent; onEdi
           </>
         ) : (
           <>
+            <button type="button" onClick={() => void handleExportDownload()} title="导出 JSON 文件"
+              className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100">
+              <Download className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => void handleExportCopy()} title="复制 JSON 到剪贴板"
+              className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100">
+              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Clipboard className="h-4 w-4" />}
+            </button>
             <button type="button" onClick={onEdit} className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100">
               <Edit3 className="h-4 w-4" />
             </button>
@@ -574,41 +603,68 @@ function CustomAgentRow({ agent, onEdit, onDelete }: { agent: CustomAgent; onEdi
   )
 }
 
+const SP_KEY = "__system_prompt__"
+
 function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
   initial?: CustomAgent
   availableFragments: PromptFragment[]
-  onSave: (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; fragmentIds?: string[] }) => Promise<void>
+  onSave: (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => Promise<void>
   onCancel: () => void
 }) {
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const [name, setName] = useState(initial?.name ?? "")
   const [baseAgent, setBaseAgent] = useState(initial?.baseAgent ?? "Sisyphus - ultraworker")
   const [model, setModel] = useState(initial?.model ?? "")
   const [systemPrompt, setSystemPrompt] = useState(initial?.systemPrompt ?? "")
-  const [selectedIds, setSelectedIds] = useState<string[]>(initial?.fragments.map((f) => f.id) ?? [])
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  const [orderedItems, setOrderedItems] = useState<string[]>(() => {
+    const fragIds = initial?.fragments.map((f) => f.id) ?? []
+    const pos = initial?.systemPromptPosition ?? -1
+    const insertAt = pos >= 0 && pos <= fragIds.length ? pos : fragIds.length
+    const items = [...fragIds]
+    items.splice(insertAt, 0, SP_KEY)
+    return items
+  })
+
   const toggleFragment = (id: string) => {
-    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+    setOrderedItems((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id)
+      const spIdx = prev.indexOf(SP_KEY)
+      const items = [...prev]
+      items.splice(spIdx >= 0 ? spIdx : items.length, 0, id)
+      return items
+    })
   }
 
-  const moveFragment = (idx: number, dir: -1 | 1) => {
+  const moveItem = (idx: number, dir: -1 | 1) => {
     const target = idx + dir
-    if (target < 0 || target >= selectedIds.length) return
-    setSelectedIds((prev) => {
+    if (target < 0 || target >= orderedItems.length) return
+    setOrderedItems((prev) => {
       const next = [...prev]
       ;[next[idx], next[target]] = [next[target], next[idx]]
       return next
     })
   }
 
-  const preview = [...selectedIds.map((id) => availableFragments.find((f) => f.id === id)?.content).filter(Boolean), systemPrompt].filter(Boolean).join("\n\n---\n\n")
+  const selectedIds = orderedItems.filter((id) => id !== SP_KEY)
+  const spPosition = (() => {
+    const spIdx = orderedItems.indexOf(SP_KEY)
+    if (spIdx < 0) return -1
+    return orderedItems.slice(0, spIdx).filter((id) => id !== SP_KEY).length
+  })()
+
+  const preview = orderedItems
+    .map((id) => id === SP_KEY ? systemPrompt : availableFragments.find((f) => f.id === id)?.content)
+    .filter(Boolean)
+    .join("\n\n---\n\n")
 
   const submit = async () => {
     if (!name.trim() || !baseAgent) return
     setSaving(true)
     try {
-      await onSave({ name: name.trim(), baseAgent, model: model.trim() || undefined, systemPrompt, fragmentIds: selectedIds })
+      await onSave({ name: name.trim(), baseAgent, model: model.trim() || undefined, systemPrompt, systemPromptPosition: spPosition, fragmentIds: selectedIds })
     } finally {
       setSaving(false)
     }
@@ -630,54 +686,65 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
           </select>
         </label>
       </div>
-      <label className="block">
-        <span className="text-xs font-medium text-fg-3">模型（可选，如 anthropic/claude-sonnet-4-6）</span>
-        <input type="text" value={model} onChange={(e) => setModel(e.target.value)} placeholder="留空使用默认模型"
-          className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-1.5 font-mono text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
-      </label>
+      <div>
+        <span className="text-xs font-medium text-fg-3">模型（可选）</span>
+        <ModelCombobox value={model} onChange={setModel} repoId={activeRepoId} />
+      </div>
 
-      {availableFragments.length > 0 && (
-        <div>
-          <span className="text-xs font-medium text-fg-3">提示词片段</span>
-          <div className="mt-1 space-y-1">
-            {selectedIds.map((id, idx) => {
-              const frag = availableFragments.find((f) => f.id === id)
-              if (!frag) return null
+      <div>
+        <span className="text-xs font-medium text-fg-3">提示词组合</span>
+        <p className="mt-0.5 text-[11px] text-fg-5">拖拽排序片段与补充指令的拼接顺序。</p>
+        <div className="mt-1.5 space-y-1">
+          {orderedItems.map((id, idx) => {
+            if (id === SP_KEY) {
               return (
-                <div key={id} className="flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1">
+                <div key={id} className="flex items-center gap-2 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1">
                   <div className="flex flex-col">
-                    <button type="button" onClick={() => moveFragment(idx, -1)} disabled={idx === 0}
+                    <button type="button" onClick={() => moveItem(idx, -1)} disabled={idx === 0}
                       className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▲</button>
-                    <button type="button" onClick={() => moveFragment(idx, 1)} disabled={idx === selectedIds.length - 1}
+                    <button type="button" onClick={() => moveItem(idx, 1)} disabled={idx === orderedItems.length - 1}
                       className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▼</button>
                   </div>
-                  <span className="flex-1 truncate text-xs text-fg">{frag.name}</span>
-                  <button type="button" onClick={() => toggleFragment(id)} className="text-fg-5 hover:text-red-400">
-                    <X className="h-3 w-3" />
-                  </button>
+                  <span className="flex-1 truncate text-xs font-medium text-amber-400">✎ 补充指令</span>
                 </div>
               )
-            })}
-            {availableFragments.filter((f) => !selectedIds.includes(f.id)).length > 0 && (
-              <select
-                value=""
-                onChange={(e) => { if (e.target.value) toggleFragment(e.target.value) }}
-                className="w-full rounded border border-dashed border-line bg-surface px-2 py-1 text-xs text-fg-4 focus:border-blue-500 focus:outline-none"
-              >
-                <option value="">+ 添加片段…</option>
-                {availableFragments.filter((f) => !selectedIds.includes(f.id)).map((f) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
-              </select>
-            )}
-          </div>
+            }
+            const frag = availableFragments.find((f) => f.id === id)
+            if (!frag) return null
+            return (
+              <div key={id} className="flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1">
+                <div className="flex flex-col">
+                  <button type="button" onClick={() => moveItem(idx, -1)} disabled={idx === 0}
+                    className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▲</button>
+                  <button type="button" onClick={() => moveItem(idx, 1)} disabled={idx === orderedItems.length - 1}
+                    className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▼</button>
+                </div>
+                <span className="flex-1 truncate text-xs text-fg">{frag.name}</span>
+                <button type="button" onClick={() => toggleFragment(id)} className="text-fg-5 hover:text-red-400">
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )
+          })}
+          {availableFragments.filter((f) => !selectedIds.includes(f.id)).length > 0 && (
+            <select
+              value=""
+              onChange={(e) => { if (e.target.value) toggleFragment(e.target.value) }}
+              className="w-full rounded border border-dashed border-line bg-surface px-2 py-1 text-xs text-fg-4 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">+ 添加片段…</option>
+              {availableFragments.filter((f) => !selectedIds.includes(f.id)).map((f) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          )}
         </div>
-      )}
+      </div>
 
       <label className="block">
-        <span className="text-xs font-medium text-fg-3">补充指令（systemPrompt）</span>
+        <span className="text-xs font-medium text-fg-3">补充指令内容</span>
         <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={3}
-          placeholder="agent 级别的补充指令，拼接在 fragments 之后…"
+          placeholder="agent 级别的补充指令…"
           className="mt-1 w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
       </label>
 
@@ -763,6 +830,87 @@ function FragmentForm({ initial, onSave, onCancel }: {
   )
 }
 
+function ImportAgentForm({ onImported, onCancel }: { onImported: () => void; onCancel: () => void }) {
+  const [jsonText, setJsonText] = useState("")
+  const [importing, setImporting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const doImport = async (text: string) => {
+    setError(null)
+    let parsed: CustomAgentExport
+    try {
+      parsed = JSON.parse(text) as CustomAgentExport
+    } catch {
+      setError("JSON 格式无效")
+      return
+    }
+    if (parsed.type !== "fourth-spark-custom-agent" || !parsed.agent) {
+      setError("不是有效的 Custom Agent 导出文件")
+      return
+    }
+    setImporting(true)
+    try {
+      await api.importCustomAgent(parsed)
+      onImported()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = reader.result as string
+      setJsonText(text)
+      void doImport(text)
+    }
+    reader.readAsText(file)
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-line bg-base p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-fg-3">导入 Custom Agent</span>
+        <button type="button" onClick={onCancel} className="rounded p-1 text-fg-5 hover:text-fg-3">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <input ref={fileRef} type="file" accept=".json" onChange={handleFile} className="hidden" />
+      <button type="button" onClick={() => fileRef.current?.click()}
+        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3">
+        <Upload className="h-3.5 w-3.5" /> 上传 JSON 文件
+      </button>
+
+      <div className="relative">
+        <textarea value={jsonText} onChange={(e) => setJsonText(e.target.value)} rows={4}
+          placeholder="或粘贴 JSON 内容…"
+          className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className="rounded-md px-3 py-1.5 text-xs text-fg-4 hover:bg-elevated">取消</button>
+        <button type="button" onClick={() => void doImport(jsonText)} disabled={importing || !jsonText.trim()}
+          className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40">
+          {importing ? "导入中…" : "导入"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function CustomAgentsSection() {
   const [agents, setAgents] = useState<CustomAgent[]>([])
   const [fragments, setFragments] = useState<PromptFragment[]>([])
@@ -771,6 +919,7 @@ function CustomAgentsSection() {
   const [editingAgent, setEditingAgent] = useState<CustomAgent | null>(null)
   const [showFragForm, setShowFragForm] = useState(false)
   const [editingFrag, setEditingFrag] = useState<PromptFragment | null>(null)
+  const [showImport, setShowImport] = useState(false)
 
   const load = () => {
     Promise.all([api.listGlobalCustomAgents(), api.listGlobalFragments()])
@@ -780,14 +929,14 @@ function CustomAgentsSection() {
 
   useEffect(load, [])
 
-  const handleCreateAgent = async (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; fragmentIds?: string[] }) => {
+  const handleCreateAgent = async (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
     await api.createGlobalCustomAgent(data)
     setShowAgentForm(false)
     load()
     void useCustomAgentStore.getState().loadAgents()
   }
 
-  const handleUpdateAgent = async (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; fragmentIds?: string[] }) => {
+  const handleUpdateAgent = async (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
     if (!editingAgent) return
     await api.updateCustomAgent(editingAgent.id, data)
     setEditingAgent(null)
@@ -864,14 +1013,22 @@ function CustomAgentsSection() {
           )}
           {showAgentForm ? (
             <CustomAgentForm availableFragments={fragments} onSave={handleCreateAgent} onCancel={() => setShowAgentForm(false)} />
+          ) : showImport ? (
+            <ImportAgentForm onImported={() => { setShowImport(false); load(); void useCustomAgentStore.getState().loadAgents() }} onCancel={() => setShowImport(false)} />
           ) : (
-            <button type="button" onClick={() => setShowAgentForm(true)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3">
-              <Plus className="h-3.5 w-3.5" /> 添加 Custom Agent
-            </button>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setShowAgentForm(true)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3">
+                <Plus className="h-3.5 w-3.5" /> 添加 Custom Agent
+              </button>
+              <button type="button" onClick={() => setShowImport(true)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3">
+                <Upload className="h-3.5 w-3.5" /> 导入 Agent
+              </button>
+            </div>
           )}
         </div>
-        <p className="mt-4 text-[11px] text-fg-5">全局 Agent 对所有仓库可见。</p>
+        <p className="mt-4 text-[11px] text-fg-5">全局 Agent 对所有仓库可见。支持导出 JSON 分享给其他实例。</p>
       </section>
     </div>
   )

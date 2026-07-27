@@ -277,6 +277,7 @@ function IssueRow({ issue, indent, selected, badge, onClick }: {
 function SessionPanel({ onClose }: { onClose?: () => void }) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [search, setSearch] = useState("")
+  const [issueSearch, setIssueSearch] = useState("")
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const sessions = useSessionStore((s) => s.sessions)
@@ -324,8 +325,23 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
     return true
   })
 
-  const epics = rootIssues.filter((i) => childrenOf.has(i.id))
-  const strayIssues = rootIssues.filter((i) => !childrenOf.has(i.id))
+  const allEpics = rootIssues.filter((i) => childrenOf.has(i.id))
+  const allStrayIssues = rootIssues.filter((i) => !childrenOf.has(i.id))
+
+  const iq = issueSearch.trim().toLowerCase()
+  const issueMatches = (i: { number: number; title: string }) =>
+    `#${i.number} ${i.title}`.toLowerCase().includes(iq)
+
+  const epics = !iq
+    ? allEpics
+    : allEpics.filter((i) => {
+        if (issueMatches(i)) return true
+        const children = childrenOf.get(i.id) ?? []
+        return children.some(issueMatches)
+      })
+  const strayIssues = !iq
+    ? allStrayIssues
+    : allStrayIssues.filter(issueMatches)
 
   const toggleExpand = (id: string) => {
     setExpanded((prev) => {
@@ -368,7 +384,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
     const parent = issueMap.get(matchingParentId)
     const q = search.toLowerCase()
     const filtered = issues.filter((i) =>
-      i.id !== matchingParentId && (!q || `#${i.number} ${i.title}`.toLowerCase().includes(q))
+      i.state === "open" && i.id !== matchingParentId && (!q || `#${i.number} ${i.title}`.toLowerCase().includes(q))
     )
 
     return (
@@ -480,16 +496,40 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
             </button>
           )}
         </div>
+        <div className="border-b border-line px-3 py-2">
+          <div className="flex items-center gap-2 rounded-md border border-line bg-base px-2 py-1">
+            <Search className="h-3.5 w-3.5 shrink-0 text-fg-5" />
+            <input
+              type="text"
+              value={issueSearch}
+              onChange={(e) => setIssueSearch(e.target.value)}
+              placeholder="搜索 issue..."
+              className="min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-fg-6 focus:outline-none"
+            />
+            {issueSearch && (
+              <button
+                type="button"
+                onClick={() => setIssueSearch("")}
+                className="shrink-0 text-fg-5 hover:text-fg-3"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        </div>
         <div className="flex-1 overflow-y-auto px-2 py-2">
           {!activeRepoId ? (
             <p className="px-2 py-4 text-center font-mono text-xs text-fg-5">请先选择一个仓库</p>
           ) : issues.length === 0 ? (
             <p className="px-2 py-4 text-center font-mono text-xs text-fg-5">点击 ↻ 同步 Issues</p>
+          ) : epics.length === 0 && strayIssues.length === 0 ? (
+            <p className="px-2 py-4 text-center font-mono text-xs text-fg-5">无匹配 Issue</p>
           ) : (
             <ul className="space-y-0.5">
               {epics.map((issue) => {
-                const children = childrenOf.get(issue.id) ?? []
-                const isExpanded = expanded.has(issue.id)
+                const allChildren = childrenOf.get(issue.id) ?? []
+                const visibleChildren = iq ? allChildren.filter(issueMatches) : allChildren
+                const isExpanded = expanded.has(issue.id) || !!iq
                 return (
                   <li key={issue.id}>
                     <div className="flex items-center">
@@ -512,12 +552,12 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
                           #{issue.number}
                         </span>
                         <span className="min-w-0 flex-1 truncate text-xs font-medium text-fg-2">{issue.title}</span>
-                        <span className="shrink-0 rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">{children.length}</span>
+                        <span className="shrink-0 rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">{allChildren.length}</span>
                       </button>
                     </div>
-                    {isExpanded && (
+                    {isExpanded && visibleChildren.length > 0 && (
                       <ul className="space-y-0.5">
-                        {children.map((child) => (
+                        {visibleChildren.map((child) => (
                           <IssueRow key={child.id} issue={child} indent onClick={() => handleIssueClick(child.id)} />
                         ))}
                       </ul>

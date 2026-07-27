@@ -68,6 +68,7 @@ export const customAgents = pgTable("custom_agents", {
   baseAgent: text("base_agent").notNull(),
   model: text("model"),
   systemPrompt: text("system_prompt").notNull().default(""),
+  systemPromptPosition: integer("system_prompt_position").notNull().default(-1),
   repoId: text("repo_id").references(() => repos.id, { onDelete: "cascade" }),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
