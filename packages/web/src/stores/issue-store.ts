@@ -1,7 +1,9 @@
 import { create } from "zustand"
 import * as api from "../lib/api-client"
+import { ApiError } from "../lib/api-client"
 import type { Issue, Tag } from "../lib/api-client"
 import { useRepoStore } from "./repo-store"
+import { useToastStore } from "./toast-store"
 
 interface IssueState {
   issues: Issue[]
@@ -114,8 +116,18 @@ export const useIssueStore = create<IssueState>((set, get) => ({
         api.listTags(repoId),
       ])
       set({ issues, tags, syncing: false })
-    } catch {
+    } catch (err) {
       set({ syncing: false })
+      let message = "同步 Issue 失败"
+      if (err instanceof ApiError) {
+        try {
+          const body = JSON.parse(err.message)
+          if (body.error) message = body.error
+        } catch {
+          if (err.message) message = err.message
+        }
+      }
+      useToastStore.getState().addToast(message, "error")
     }
   },
 
