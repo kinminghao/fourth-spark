@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, Circle, CircleDot, Copy, FileText, Play, Plus, Square, Trash2, X } from "lucide-react"
+import { ArrowDownToLine, Check, Circle, CircleDot, Copy, FileText, Play, Plus, Square, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
 import { useRepoStore } from "../stores/repo-store"
@@ -15,6 +15,7 @@ export function ReposPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [pullingId, setPullingId] = useState<string | null>(null)
   const [agentsMdRepo, setAgentsMdRepo] = useState<{ id: string; name: string } | null>(null)
 
   const handleToggle = async (repoId: string, running: boolean) => {
@@ -28,6 +29,15 @@ export function ReposPage() {
       await loadRepos()
     } catch {}
     setTogglingId(null)
+  }
+
+  const handlePull = async (repoId: string) => {
+    setPullingId(repoId)
+    try {
+      await api.pullRepo(repoId)
+      await loadRepos()
+    } catch {}
+    setPullingId(null)
   }
 
   return (
@@ -156,6 +166,19 @@ export function ReposPage() {
                             className="rounded-md px-2 py-1 text-xs font-medium text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
                           >
                             <span className="flex items-center gap-1"><FileText className="h-3 w-3" />配置</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handlePull(repo.id)}
+                            disabled={pullingId === repo.id}
+                            title="拉取最新代码"
+                            className="rounded-md px-2 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/10 disabled:opacity-50"
+                          >
+                            {pullingId === repo.id ? (
+                              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                            ) : (
+                              <span className="flex items-center gap-1"><ArrowDownToLine className="h-3 w-3" />拉取</span>
+                            )}
                           </button>
                           <button
                             type="button"
@@ -293,6 +316,18 @@ export function ReposPage() {
                       className="flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-line px-2.5 text-xs font-medium text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
                     >
                       <FileText className="h-3 w-3" />配置
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handlePull(repo.id)}
+                      disabled={pullingId === repo.id}
+                      className="flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-blue-500/30 px-2.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/10 disabled:opacity-50"
+                    >
+                      {pullingId === repo.id ? (
+                        <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      ) : (
+                        <><ArrowDownToLine className="h-3 w-3" />拉取</>
+                      )}
                     </button>
                     <button
                       type="button"
