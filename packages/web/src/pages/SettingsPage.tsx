@@ -527,7 +527,7 @@ function GitHostSection() {
   )
 }
 
-const BASE_AGENTS = ["sisyphus", "prometheus", "atlas"]
+const BASE_AGENTS = ["Sisyphus", "Prometheus", "Atlas"]
 
 function CustomAgentRow({ agent, onEdit, onDelete }: { agent: CustomAgent; onEdit: () => void; onDelete: () => void }) {
   const [confirming, setConfirming] = useState(false)
@@ -581,7 +581,7 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
   onCancel: () => void
 }) {
   const [name, setName] = useState(initial?.name ?? "")
-  const [baseAgent, setBaseAgent] = useState(initial?.baseAgent ?? "sisyphus")
+  const [baseAgent, setBaseAgent] = useState(initial?.baseAgent ?? "Sisyphus")
   const [model, setModel] = useState(initial?.model ?? "")
   const [systemPrompt, setSystemPrompt] = useState(initial?.systemPrompt ?? "")
   const [selectedIds, setSelectedIds] = useState<string[]>(initial?.fragments.map((f) => f.id) ?? [])
