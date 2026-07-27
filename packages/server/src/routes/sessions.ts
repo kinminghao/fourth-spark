@@ -99,6 +99,7 @@ sessions.post("/", async (c) => {
   let agent = body.agent
   let model = body.model
   let systemPrompt: string | undefined
+  let systemPromptPosition = -1
   let customAgentId: string | null = null
 
   if (body.customAgentId) {
@@ -108,6 +109,7 @@ sessions.post("/", async (c) => {
       agent = ca.baseAgent
       if (ca.model) model = ca.model
       if (ca.systemPrompt) systemPrompt = ca.systemPrompt
+      systemPromptPosition = ca.systemPromptPosition
     }
   }
 
@@ -122,7 +124,12 @@ sessions.post("/", async (c) => {
       if (f.content) parts.push(f.content)
     }
   }
-  if (systemPrompt) parts.push(systemPrompt)
+  if (systemPrompt) {
+    const insertAt = systemPromptPosition >= 0 && systemPromptPosition <= parts.length
+      ? systemPromptPosition
+      : parts.length
+    parts.splice(insertAt, 0, systemPrompt)
+  }
   if (body.issueId) {
     const context = await buildIssueContext(body.issueId)
     if (context) parts.push(context)
