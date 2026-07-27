@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { Check, ChevronRight, Copy, Plus, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { Check, ChevronRight, Copy, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import type { Session } from "../lib/api-client"
 import { useSessionStore, EMPTY_TODOS } from "../stores/session-store"
@@ -59,17 +59,35 @@ function statusDotClass(status: string | undefined): string {
 
 function SessionItem({
   session, isActive, isConfirming,
-  onSelect, onDelete, onConfirm, onCancelConfirm,
+  onSelect, onDelete, onConfirm, onCancelConfirm, onRename,
   status,
 }: {
   session: Session; isActive: boolean; isConfirming: boolean
   onSelect: () => void; onDelete: () => void; onConfirm: () => void; onCancelConfirm: () => void
+  onRename: (title: string) => void
   status: string | undefined
 }) {
   const when = formatWhen(session)
+  const [editing, setEditing] = useState(false)
+  const [editValue, setEditValue] = useState("")
+  const editRef = useRef<HTMLInputElement>(null)
+
+  const startEditing = () => {
+    setEditValue(session.title?.trim() || "")
+    setEditing(true)
+    requestAnimationFrame(() => editRef.current?.focus())
+  }
+
+  const commitEdit = () => {
+    setEditing(false)
+    const trimmed = editValue.trim()
+    if (trimmed && trimmed !== (session.title?.trim() || "")) {
+      onRename(trimmed)
+    }
+  }
 
   /* ---- iOS-style swipe-to-reveal (mobile) ---- */
-  const REVEAL_W = 96
+  const REVEAL_W = 144
   const [swipeX, setSwipeX] = useState(0)
   const [snap, setSnap] = useState(false)
   const touch = useRef({ x0: 0, y0: 0, base: 0, dir: null as "h" | "v" | null, on: false })
@@ -118,6 +136,13 @@ function SessionItem({
           <>
             <button
               type="button"
+              onClick={() => { startEditing(); closeSwipe() }}
+              className="flex w-12 items-center justify-center bg-amber-500 text-white active:bg-amber-600"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 copyText(JSON.stringify({ id: session.id, name: session.title?.trim() || "" }, null, 2))
                 closeSwipe()
@@ -150,7 +175,7 @@ function SessionItem({
       >
         <button
           type="button"
-          onClick={() => { onSelect(); closeSwipe() }}
+          onClick={() => { if (!editing) { onSelect(); closeSwipe() } }}
           className="block w-full px-2.5 py-2 text-left"
           style={swipeX === -REVEAL_W ? { pointerEvents: "auto" } : undefined}
         >
@@ -159,7 +184,28 @@ function SessionItem({
             <span className="min-w-0 truncate font-mono text-xs text-fg-3">{session.agent?.trim() || "默认"}</span>
             {when && <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-fg-5">{when}</span>}
           </div>
-          <div className="mt-0.5 truncate pl-3.5 text-sm text-fg-2">{session.title?.trim() || "未命名运行"}</div>
+          {editing ? (
+            <input
+              ref={editRef}
+              type="text"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitEdit()
+                if (e.key === "Escape") setEditing(false)
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="mt-0.5 w-full rounded border border-blue-500 bg-base pl-3.5 text-sm text-fg-2 outline-none"
+            />
+          ) : (
+            <div
+              className="mt-0.5 truncate pl-3.5 text-sm text-fg-2"
+              onDoubleClick={(e) => { e.stopPropagation(); startEditing() }}
+            >
+              {session.title?.trim() || "未命名运行"}
+            </div>
+          )}
         </button>
 
         {/* Desktop hover buttons */}
@@ -170,6 +216,14 @@ function SessionItem({
           </span>
         ) : (
           <span className="absolute right-1.5 top-1.5 hidden items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 md:flex">
+            <button
+              type="button"
+              onClick={startEditing}
+              title="重命名"
+              className="rounded p-1 text-fg-5 hover:text-fg-2"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -230,6 +284,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
   const statuses = useSessionStore((s) => s.sessionStatuses)
   const setActiveSession = useSessionStore((s) => s.setActiveSession)
   const deleteSession = useSessionStore((s) => s.deleteSession)
+  const renameSession = useSessionStore((s) => s.renameSession)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const issues = useIssueStore((s) => s.issues)
   const syncing = useIssueStore((s) => s.syncing)
@@ -293,6 +348,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
           onDelete={() => { void deleteSession(session.id); setConfirmingId(null) }}
           onConfirm={() => setConfirmingId(session.id)}
           onCancelConfirm={() => setConfirmingId(null)}
+          onRename={(title) => void renameSession(session.id, title)}
         />
       ))}
     </ul>

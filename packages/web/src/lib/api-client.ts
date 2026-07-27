@@ -576,6 +576,13 @@ export async function updateSessionIssue(repoId: string, sessionId: string, issu
   )
 }
 
+export async function renameSession(repoId: string, sessionId: string, title: string): Promise<void> {
+  await apiFetch<void>(
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "PATCH", body: JSON.stringify({ title }) },
+  )
+}
+
 // ---------------------------------------------------------------------------
 // AGENTS.md API — global + repo-scoped
 // ---------------------------------------------------------------------------
