@@ -139,7 +139,14 @@ sessions.post("/", async (c) => {
     target: sessionsTable.id,
     set: { issueId: body.issueId ?? null, customAgentId, timeUpdated: now },
   })
-  await client.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT })
+  try {
+    await client.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT })
+  } catch (err) {
+    logger.error({ err, sessionId: session.id, agent, model }, "prompt failed after session creation, cleaning up")
+    await client.deleteSession(session.id).catch(() => {})
+    await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id)).catch(() => {})
+    throw err
+  }
   return c.json({ ...session, agent, issueId: body.issueId ?? null, customAgentId }, 201)
 })
 
@@ -163,6 +170,21 @@ sessions.get("/", async (c) => {
   const directory = await getRepoDirectory(repoId!)
   if (!directory) return c.json([])
   return c.json(await listSessionsFromDB(directory))
+})
+
+// Bulk status — returns all session statuses in one call.
+// MUST be registered before /:id to avoid being shadowed by the param route.
+sessions.get("/status", async (c) => {
+  const repoId = c.req.param("repoId")
+  const client = processManager.getClient(repoId)
+  if (client) {
+    try {
+      return c.json(await client.getSessionStatus())
+    } catch {
+      // Process down → empty map
+    }
+  }
+  return c.json({})
 })
 
 sessions.get("/:id", async (c) => {
@@ -245,20 +267,6 @@ sessions.patch("/:id", async (c) => {
     await db.update(sessionsTable).set({ issueId: body.issueId ?? null }).where(eq(sessionsTable.id, sessionId))
   }
   return c.json({ ok: true })
-})
-
-// Bulk status — returns all session statuses in one call.
-sessions.get("/status", async (c) => {
-  const repoId = c.req.param("repoId")
-  const client = processManager.getClient(repoId)
-  if (client) {
-    try {
-      return c.json(await client.getSessionStatus())
-    } catch {
-      // Process down → empty map
-    }
-  }
-  return c.json({})
 })
 
 sessions.get("/:id/status", async (c) => {
