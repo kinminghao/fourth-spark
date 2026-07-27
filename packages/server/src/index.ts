@@ -16,6 +16,7 @@ import { globalCustomAgents, repoCustomAgents } from "./routes/custom-agents"
 import { globalFragments, repoFragments } from "./routes/prompt-fragments"
 import { modelRoutes } from "./routes/models"
 import { mcpRoute } from "./routes/mcp"
+import { pushRoutes } from "./routes/push"
 import { PORT } from "./lib/config"
 import { processManager } from "./lib/process-manager"
 import "./db/index"
@@ -34,6 +35,7 @@ app.route("/api/settings", settingsRoutes)
 app.route("/api/git-hosts", gitHostRoutes)
 app.route("/api/health", health)
 app.route("/api/usage", usageRoutes)
+app.route("/api/push", pushRoutes)
 app.route("/api/agents-md", globalAgentsMd)
 app.route("/api/custom-agents", globalCustomAgents)
 app.route("/api/prompt-fragments", globalFragments)

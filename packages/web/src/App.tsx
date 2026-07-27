@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom"
 import { Layout } from "./components/Layout"
 import { ReposPage } from "./pages/ReposPage"
 import { RunPage } from "./pages/RunPage"
@@ -12,8 +12,10 @@ import { useIssueStore } from "./stores/issue-store"
 import { useThemeStore } from "./stores/theme-store"
 import { ToastContainer } from "./components/ToastContainer"
 import { useGlobalStatusPoll } from "./hooks/use-global-status-poll"
+import { initPushNotifications } from "./lib/push-notifications"
 
-export default function App() {
+function AppInner() {
+  const navigate = useNavigate()
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const loadSessions = useSessionStore((s) => s.loadSessions)
   const clearSessions = useSessionStore((s) => s.clearSessions)
@@ -21,8 +23,9 @@ export default function App() {
 
   useEffect(() => {
     void useRepoStore.getState().loadRepos()
+    void initPushNotifications(navigate)
     return useThemeStore.getState().init()
-  }, [])
+  }, [navigate])
 
   useEffect(() => {
     if (activeRepoId) {
@@ -36,7 +39,7 @@ export default function App() {
   }, [activeRepoId, loadSessions, clearSessions])
 
   return (
-    <BrowserRouter>
+    <>
       <Routes>
         <Route element={<Layout />}>
           <Route path="/repos" element={<ReposPage />} />
@@ -47,6 +50,14 @@ export default function App() {
         </Route>
       </Routes>
       <ToastContainer />
+    </>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppInner />
     </BrowserRouter>
   )
 }
