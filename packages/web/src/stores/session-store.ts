@@ -51,6 +51,7 @@ interface SessionState {
   messages: Record<string, Message[]>
   todos: Record<string, Todo[]>
   sessionStatuses: Record<string, string>
+  errorReasons: Record<string, string>
   loadingSessions: boolean
   loadError: string | null
   sendError: string | null
@@ -70,7 +71,7 @@ interface SessionState {
     part: MessagePart,
   ) => void
   updateTodos: (sessionId: string, todos: Todo[]) => void
-  setSessionStatus: (sessionId: string, status: string) => void
+  setSessionStatus: (sessionId: string, status: string, reason?: string) => void
   bulkSetStatuses: (statuses: Record<string, string>) => void
   updateSessionInfo: (info: Partial<Session> & { id: string }) => void
 }
@@ -81,6 +82,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   messages: {},
   todos: {},
   sessionStatuses: {},
+  errorReasons: {},
   loadingSessions: false,
   loadError: null,
   sendError: null,
@@ -185,11 +187,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const { [id]: _removedMessages, ...messages } = state.messages
       const { [id]: _removedTodos, ...todos } = state.todos
       const { [id]: _removedStatus, ...sessionStatuses } = state.sessionStatuses
+      const { [id]: _removedReason, ...errorReasons } = state.errorReasons
       return {
         sessions: state.sessions.filter((s) => s.id !== id),
         messages,
         todos,
         sessionStatuses,
+        errorReasons,
         activeSessionId:
           state.activeSessionId === id ? null : state.activeSessionId,
       }
@@ -233,6 +237,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       messages: {},
       todos: {},
       sessionStatuses: {},
+      errorReasons: {},
       loadError: null,
       sendError: null,
     })
@@ -302,7 +307,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }))
   },
 
-  setSessionStatus: (sessionId, status) => {
+  setSessionStatus: (sessionId, status, reason?) => {
     const prev: string | undefined = get().sessionStatuses[sessionId]
     if (prev !== status) {
       const session = get().sessions.find((s) => s.id === sessionId)
@@ -314,11 +319,22 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         useToastStore.getState().addToast(`${label} — 开始运行`, "info", sessionId)
       } else if (status === "retry") {
         useToastStore.getState().addToast(`${label} — 进入重试`, "warning", sessionId)
+      } else if (status === "error") {
+        const msg = reason ? `${label} — 错误: ${reason}` : `${label} — 发生错误`
+        useToastStore.getState().addToast(msg, "error", sessionId)
       }
     }
-    set((state) => ({
-      sessionStatuses: { ...state.sessionStatuses, [sessionId]: status },
-    }))
+    set((state) => {
+      const errorReasons = reason
+        ? { ...state.errorReasons, [sessionId]: reason }
+        : status !== "error"
+          ? (() => { const { [sessionId]: _, ...rest } = state.errorReasons; return rest })()
+          : state.errorReasons
+      return {
+        sessionStatuses: { ...state.sessionStatuses, [sessionId]: status },
+        errorReasons,
+      }
+    })
   },
 
   bulkSetStatuses: (statuses) => {
