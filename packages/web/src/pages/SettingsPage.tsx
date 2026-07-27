@@ -574,41 +574,67 @@ function CustomAgentRow({ agent, onEdit, onDelete }: { agent: CustomAgent; onEdi
   )
 }
 
+const SP_KEY = "__system_prompt__"
+
 function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
   initial?: CustomAgent
   availableFragments: PromptFragment[]
-  onSave: (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; fragmentIds?: string[] }) => Promise<void>
+  onSave: (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => Promise<void>
   onCancel: () => void
 }) {
   const [name, setName] = useState(initial?.name ?? "")
   const [baseAgent, setBaseAgent] = useState(initial?.baseAgent ?? "Sisyphus - ultraworker")
   const [model, setModel] = useState(initial?.model ?? "")
   const [systemPrompt, setSystemPrompt] = useState(initial?.systemPrompt ?? "")
-  const [selectedIds, setSelectedIds] = useState<string[]>(initial?.fragments.map((f) => f.id) ?? [])
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  const [orderedItems, setOrderedItems] = useState<string[]>(() => {
+    const fragIds = initial?.fragments.map((f) => f.id) ?? []
+    const pos = initial?.systemPromptPosition ?? -1
+    const insertAt = pos >= 0 && pos <= fragIds.length ? pos : fragIds.length
+    const items = [...fragIds]
+    items.splice(insertAt, 0, SP_KEY)
+    return items
+  })
+
   const toggleFragment = (id: string) => {
-    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+    setOrderedItems((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id)
+      const spIdx = prev.indexOf(SP_KEY)
+      const items = [...prev]
+      items.splice(spIdx >= 0 ? spIdx : items.length, 0, id)
+      return items
+    })
   }
 
-  const moveFragment = (idx: number, dir: -1 | 1) => {
+  const moveItem = (idx: number, dir: -1 | 1) => {
     const target = idx + dir
-    if (target < 0 || target >= selectedIds.length) return
-    setSelectedIds((prev) => {
+    if (target < 0 || target >= orderedItems.length) return
+    setOrderedItems((prev) => {
       const next = [...prev]
       ;[next[idx], next[target]] = [next[target], next[idx]]
       return next
     })
   }
 
-  const preview = [...selectedIds.map((id) => availableFragments.find((f) => f.id === id)?.content).filter(Boolean), systemPrompt].filter(Boolean).join("\n\n---\n\n")
+  const selectedIds = orderedItems.filter((id) => id !== SP_KEY)
+  const spPosition = (() => {
+    const spIdx = orderedItems.indexOf(SP_KEY)
+    if (spIdx < 0) return -1
+    return orderedItems.slice(0, spIdx).filter((id) => id !== SP_KEY).length
+  })()
+
+  const preview = orderedItems
+    .map((id) => id === SP_KEY ? systemPrompt : availableFragments.find((f) => f.id === id)?.content)
+    .filter(Boolean)
+    .join("\n\n---\n\n")
 
   const submit = async () => {
     if (!name.trim() || !baseAgent) return
     setSaving(true)
     try {
-      await onSave({ name: name.trim(), baseAgent, model: model.trim() || undefined, systemPrompt, fragmentIds: selectedIds })
+      await onSave({ name: name.trim(), baseAgent, model: model.trim() || undefined, systemPrompt, systemPromptPosition: spPosition, fragmentIds: selectedIds })
     } finally {
       setSaving(false)
     }
@@ -636,48 +662,60 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
           className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-1.5 font-mono text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
       </label>
 
-      {availableFragments.length > 0 && (
-        <div>
-          <span className="text-xs font-medium text-fg-3">提示词片段</span>
-          <div className="mt-1 space-y-1">
-            {selectedIds.map((id, idx) => {
-              const frag = availableFragments.find((f) => f.id === id)
-              if (!frag) return null
+      <div>
+        <span className="text-xs font-medium text-fg-3">提示词组合</span>
+        <p className="mt-0.5 text-[11px] text-fg-5">拖拽排序片段与补充指令的拼接顺序。</p>
+        <div className="mt-1.5 space-y-1">
+          {orderedItems.map((id, idx) => {
+            if (id === SP_KEY) {
               return (
-                <div key={id} className="flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1">
+                <div key={id} className="flex items-center gap-2 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1">
                   <div className="flex flex-col">
-                    <button type="button" onClick={() => moveFragment(idx, -1)} disabled={idx === 0}
+                    <button type="button" onClick={() => moveItem(idx, -1)} disabled={idx === 0}
                       className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▲</button>
-                    <button type="button" onClick={() => moveFragment(idx, 1)} disabled={idx === selectedIds.length - 1}
+                    <button type="button" onClick={() => moveItem(idx, 1)} disabled={idx === orderedItems.length - 1}
                       className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▼</button>
                   </div>
-                  <span className="flex-1 truncate text-xs text-fg">{frag.name}</span>
-                  <button type="button" onClick={() => toggleFragment(id)} className="text-fg-5 hover:text-red-400">
-                    <X className="h-3 w-3" />
-                  </button>
+                  <span className="flex-1 truncate text-xs font-medium text-amber-400">✎ 补充指令</span>
                 </div>
               )
-            })}
-            {availableFragments.filter((f) => !selectedIds.includes(f.id)).length > 0 && (
-              <select
-                value=""
-                onChange={(e) => { if (e.target.value) toggleFragment(e.target.value) }}
-                className="w-full rounded border border-dashed border-line bg-surface px-2 py-1 text-xs text-fg-4 focus:border-blue-500 focus:outline-none"
-              >
-                <option value="">+ 添加片段…</option>
-                {availableFragments.filter((f) => !selectedIds.includes(f.id)).map((f) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
-              </select>
-            )}
-          </div>
+            }
+            const frag = availableFragments.find((f) => f.id === id)
+            if (!frag) return null
+            return (
+              <div key={id} className="flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1">
+                <div className="flex flex-col">
+                  <button type="button" onClick={() => moveItem(idx, -1)} disabled={idx === 0}
+                    className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▲</button>
+                  <button type="button" onClick={() => moveItem(idx, 1)} disabled={idx === orderedItems.length - 1}
+                    className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▼</button>
+                </div>
+                <span className="flex-1 truncate text-xs text-fg">{frag.name}</span>
+                <button type="button" onClick={() => toggleFragment(id)} className="text-fg-5 hover:text-red-400">
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )
+          })}
+          {availableFragments.filter((f) => !selectedIds.includes(f.id)).length > 0 && (
+            <select
+              value=""
+              onChange={(e) => { if (e.target.value) toggleFragment(e.target.value) }}
+              className="w-full rounded border border-dashed border-line bg-surface px-2 py-1 text-xs text-fg-4 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">+ 添加片段…</option>
+              {availableFragments.filter((f) => !selectedIds.includes(f.id)).map((f) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          )}
         </div>
-      )}
+      </div>
 
       <label className="block">
-        <span className="text-xs font-medium text-fg-3">补充指令（systemPrompt）</span>
+        <span className="text-xs font-medium text-fg-3">补充指令内容</span>
         <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={3}
-          placeholder="agent 级别的补充指令，拼接在 fragments 之后…"
+          placeholder="agent 级别的补充指令…"
           className="mt-1 w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
       </label>
 
@@ -780,14 +818,14 @@ function CustomAgentsSection() {
 
   useEffect(load, [])
 
-  const handleCreateAgent = async (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; fragmentIds?: string[] }) => {
+  const handleCreateAgent = async (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
     await api.createGlobalCustomAgent(data)
     setShowAgentForm(false)
     load()
     void useCustomAgentStore.getState().loadAgents()
   }
 
-  const handleUpdateAgent = async (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; fragmentIds?: string[] }) => {
+  const handleUpdateAgent = async (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
     if (!editingAgent) return
     await api.updateCustomAgent(editingAgent.id, data)
     setEditingAgent(null)

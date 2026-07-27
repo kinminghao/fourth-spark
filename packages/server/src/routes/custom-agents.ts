@@ -55,6 +55,7 @@ globalCustomAgents.post("/", async (c) => {
     baseAgent?: string
     model?: string
     systemPrompt?: string
+    systemPromptPosition?: number
     fragmentIds?: string[]
   }>().catch(() => null)
 
@@ -72,6 +73,7 @@ globalCustomAgents.post("/", async (c) => {
     baseAgent: body.baseAgent,
     model: body.model?.trim() || null,
     systemPrompt: body.systemPrompt ?? "",
+    systemPromptPosition: body.systemPromptPosition ?? -1,
     repoId: null,
     sortOrder: 0,
     createdAt: now,
@@ -90,6 +92,7 @@ globalCustomAgents.put("/:id", async (c) => {
     baseAgent?: string
     model?: string | null
     systemPrompt?: string
+    systemPromptPosition?: number
     sortOrder?: number
     fragmentIds?: string[]
   }>().catch(() => null)
@@ -104,6 +107,7 @@ globalCustomAgents.put("/:id", async (c) => {
   if (body.baseAgent !== undefined) updates.baseAgent = body.baseAgent
   if (body.model !== undefined) updates.model = body.model?.trim() || null
   if (body.systemPrompt !== undefined) updates.systemPrompt = body.systemPrompt
+  if (body.systemPromptPosition !== undefined) updates.systemPromptPosition = body.systemPromptPosition
   if (body.sortOrder !== undefined) updates.sortOrder = body.sortOrder
 
   await db.update(customAgents).set(updates).where(eq(customAgents.id, id))
@@ -136,6 +140,7 @@ repoCustomAgents.post("/", async (c) => {
     baseAgent?: string
     model?: string
     systemPrompt?: string
+    systemPromptPosition?: number
     fragmentIds?: string[]
   }>().catch(() => null)
 
@@ -153,6 +158,7 @@ repoCustomAgents.post("/", async (c) => {
     baseAgent: body.baseAgent,
     model: body.model?.trim() || null,
     systemPrompt: body.systemPrompt ?? "",
+    systemPromptPosition: body.systemPromptPosition ?? -1,
     repoId,
     sortOrder: 0,
     createdAt: now,
