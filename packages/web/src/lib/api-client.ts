@@ -146,6 +146,7 @@ export interface CustomAgent {
   baseAgent: string
   model: string | null
   systemPrompt: string
+  systemPromptPosition: number
   fragments: Array<{ id: string; name: string; content: string }>
   repoId: string | null
   sortOrder: number
@@ -397,11 +398,11 @@ export async function listGlobalCustomAgents(): Promise<CustomAgent[]> {
   return unwrapList<CustomAgent>(await apiFetch<unknown>("/api/custom-agents"))
 }
 
-export async function createGlobalCustomAgent(data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; fragmentIds?: string[] }): Promise<CustomAgent> {
+export async function createGlobalCustomAgent(data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }): Promise<CustomAgent> {
   return apiFetch<CustomAgent>("/api/custom-agents", { method: "POST", body: JSON.stringify(data) })
 }
 
-export async function updateCustomAgent(id: string, data: { name?: string; baseAgent?: string; model?: string | null; systemPrompt?: string; fragmentIds?: string[] }): Promise<CustomAgent> {
+export async function updateCustomAgent(id: string, data: { name?: string; baseAgent?: string; model?: string | null; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }): Promise<CustomAgent> {
   return apiFetch<CustomAgent>(`/api/custom-agents/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) })
 }
 
@@ -413,7 +414,7 @@ export async function listRepoCustomAgents(repoId: string): Promise<CustomAgent[
   return unwrapList<CustomAgent>(await apiFetch<unknown>(`${repoBase(repoId)}/custom-agents`))
 }
 
-export async function createRepoCustomAgent(repoId: string, data: { name: string; baseAgent: string; model?: string; systemPrompt?: string }): Promise<CustomAgent> {
+export async function createRepoCustomAgent(repoId: string, data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }): Promise<CustomAgent> {
   return apiFetch<CustomAgent>(`${repoBase(repoId)}/custom-agents`, { method: "POST", body: JSON.stringify(data) })
 }
 
