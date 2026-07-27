@@ -13,6 +13,7 @@ const MAX_EMPTY_RETRIES = 2
 const MAX_IDLE_RESPONSES = 2
 const MAX_STAGNATION = 3
 const DEDUP_COOLDOWN_MS = 30_000
+const NOTIFY_COOLDOWN_MS = 30_000
 
 type ManagedEntry = {
   repoId: string
@@ -34,6 +35,11 @@ const entries: ManagedEntry[] = []
 const STATUS_LABELS: Record<string, string> = { idle: "完成", busy: "运行中", retry: "重试中" }
 
 function emitTransition(sessionId: string, from: string, to: string): void {
+  const notifyKey = `notify:${sessionId}`
+  const lastNotify = handled.get(notifyKey)
+  if (lastNotify && Date.now() - lastNotify < NOTIFY_COOLDOWN_MS) return
+  handled.set(notifyKey, Date.now())
+
   const fromLabel = STATUS_LABELS[from] ?? from
   const toLabel = STATUS_LABELS[to] ?? to
   const sid = sessionId.slice(-8)
@@ -126,8 +132,7 @@ async function autoRetryEmptyResponse(client: OpenCodeClient, sessionId: string)
       model: last?.model,
       variant: DEFAULT_VARIANT,
     })
-    logger.info({ sessionId, count, max: MAX_EMPTY_RETRIES }, "auto-retried empty response")
-    notify("自动重试", `[${sid}] 检测到空响应，已自动重试 (${count}/${MAX_EMPTY_RETRIES})`)
+    logger.info({ sessionId, count, max: MAX_EMPTY_RETRIES }, "auto-retried empty response (notification suppressed)")
   } catch (err) {
     logger.warn({ err, sessionId }, "empty-response retry failed")
   }
@@ -274,8 +279,7 @@ async function autoContinueSession(client: OpenCodeClient, sessionId: string): P
       model: last?.model,
       variant: DEFAULT_VARIANT,
     })
-    logger.info({ sessionId, count, max: MAX_AUTO_CONTINUES }, "auto-continued truncated session")
-    notify("自动续发", `[${sid}] 检测到响应截断，已自动继续 (${count}/${MAX_AUTO_CONTINUES})`)
+    logger.info({ sessionId, count, max: MAX_AUTO_CONTINUES }, "auto-continued truncated session (notification suppressed)")
   } catch (err) {
     logger.warn({ err, sessionId }, "auto-continue prompt failed")
   }
@@ -308,101 +312,108 @@ async function repromptSession(client: OpenCodeClient, sessionId: string): Promi
 }
 
 let pollCount = 0
+let polling = false
 
 async function pollOnce(): Promise<void> {
-  pollCount++
-  if (pollCount <= 3 || pollCount % 20 === 0) logger.info({ pollCount, repos: entries.length }, "poll tick")
-  for (const { repoId, client } of entries) {
-    let statuses: Record<string, SessionStatus>
-    try {
-      statuses = await client.getSessionStatus()
-    } catch {
-      continue
-    }
+  if (polling) return
+  polling = true
+  try {
+    pollCount++
+    if (pollCount <= 3 || pollCount % 20 === 0) logger.info({ pollCount, repos: entries.length }, "poll tick")
+    for (const { repoId, client } of entries) {
+      let statuses: Record<string, SessionStatus>
+      try {
+        statuses = await client.getSessionStatus()
+      } catch {
+        continue
+      }
 
-    const activeCount = Object.keys(statuses).length
-    if (activeCount > 0) logger.info({ repoId, activeCount }, "poll: active sessions found")
+      const activeCount = Object.keys(statuses).length
+      if (activeCount > 0) logger.info({ repoId, activeCount }, "poll: active sessions found")
 
-    const currentIds = new Set(Object.keys(statuses))
-    for (const [sessionId, prev] of prevStatuses) {
-      if (!currentIds.has(sessionId) && prev !== "idle") {
-        prevStatuses.set(sessionId, "idle")
-        emitTransition(sessionId, prev, "idle")
-        clearCooldown(await getActiveId() ?? "")
+      const currentIds = new Set(Object.keys(statuses))
+      for (const [sessionId, prev] of prevStatuses) {
+        if (!currentIds.has(sessionId) && prev !== "idle") {
+          prevStatuses.set(sessionId, "idle")
+          emitTransition(sessionId, prev, "idle")
+          clearCooldown(await getActiveId() ?? "")
 
-        if (prev === "busy") {
-          const shouldContinue = await detectTruncation(client, sessionId)
-          if (shouldContinue) {
-            await autoContinueSession(client, sessionId)
-            continue
+          if (prev === "busy") {
+            const shouldContinue = await detectTruncation(client, sessionId)
+            if (shouldContinue) {
+              await autoContinueSession(client, sessionId)
+              continue
+            }
+
+            const isEmpty = await detectEmptyResponse(client, sessionId)
+            if (isEmpty) {
+              await autoRetryEmptyResponse(client, sessionId)
+              continue
+            }
+
           }
-
-          const isEmpty = await detectEmptyResponse(client, sessionId)
-          if (isEmpty) {
-            await autoRetryEmptyResponse(client, sessionId)
-            continue
-          }
-
         }
       }
-    }
 
-    for (const [sessionId, status] of Object.entries(statuses)) {
-      const prev = prevStatuses.get(sessionId)
-      prevStatuses.set(sessionId, status.type)
+      for (const [sessionId, status] of Object.entries(statuses)) {
+        const prev = prevStatuses.get(sessionId)
+        prevStatuses.set(sessionId, status.type)
 
-      if (status.type === "idle") {
-        clearCooldown(await getActiveId() ?? "")
+        if (status.type === "idle") {
+          clearCooldown(await getActiveId() ?? "")
 
-        if (prev === "busy") {
-          const shouldContinue = await detectTruncation(client, sessionId)
-          if (shouldContinue) {
-            await autoContinueSession(client, sessionId)
-            continue
+          if (prev === "busy") {
+            const shouldContinue = await detectTruncation(client, sessionId)
+            if (shouldContinue) {
+              await autoContinueSession(client, sessionId)
+              continue
+            }
+
+            const isEmpty = await detectEmptyResponse(client, sessionId)
+            if (isEmpty) {
+              await autoRetryEmptyResponse(client, sessionId)
+              continue
+            }
           }
 
-          const isEmpty = await detectEmptyResponse(client, sessionId)
-          if (isEmpty) {
-            await autoRetryEmptyResponse(client, sessionId)
-            continue
-          }
+          if (prev && prev !== status.type) emitTransition(sessionId, prev, status.type)
+          continue
         }
 
         if (prev && prev !== status.type) emitTransition(sessionId, prev, status.type)
-        continue
-      }
 
-      if (prev && prev !== status.type) emitTransition(sessionId, prev, status.type)
+        if (status.type !== "retry") continue
 
-      if (status.type !== "retry") continue
+        const message = (status as { message?: string }).message ?? ""
+        if (!isUsageLimit(message)) continue
 
-      const message = (status as { message?: string }).message ?? ""
-      if (!isUsageLimit(message)) continue
+        const dedupKey = `${sessionId}:${message.slice(0, 80)}`
+        if (!dedup(dedupKey)) continue
 
-      const dedupKey = `${sessionId}:${message.slice(0, 80)}`
-      if (!dedup(dedupKey)) continue
+        if (Date.now() - lastSwitchAt < RECENT_SWITCH_GUARD_MS) {
+          logger.debug({ sessionId, repoId }, "skipping switch, recent switch guard active")
+          await repromptSession(client, sessionId)
+          continue
+        }
 
-      if (Date.now() - lastSwitchAt < RECENT_SWITCH_GUARD_MS) {
-        logger.debug({ sessionId, repoId }, "skipping switch, recent switch guard active")
-        await repromptSession(client, sessionId)
-        continue
-      }
+        logger.info({ sessionId, repoId, message: message.slice(0, 120) }, "rate limit detected, switching account")
 
-      logger.info({ sessionId, repoId, message: message.slice(0, 120) }, "rate limit detected, switching account")
+        const activeId = await getActiveId()
+        const result = await autoSwitch(activeId)
 
-      const activeId = await getActiveId()
-      const result = await autoSwitch(activeId)
-
-      if (result.switched) {
-        lastSwitchAt = Date.now()
-        logger.info({ from: result.from, to: result.to, label: result.label }, "account switched successfully")
-        notify("账号切换", `已切换到「${result.label}」并自动重试`)
-        await repromptSession(client, sessionId)
-      } else {
-        logger.warn({ reason: result.reason, sessionId }, "account switch failed, session remains in retry")
-        notify("账号切换失败", `所有账号不可用: ${result.reason}`)
+        if (result.switched) {
+          lastSwitchAt = Date.now()
+          logger.info({ from: result.from, to: result.to, label: result.label }, "account switched successfully")
+          notify("账号切换", `已切换到「${result.label}」并自动重试`)
+          await repromptSession(client, sessionId)
+        } else {
+          logger.warn({ reason: result.reason, sessionId }, "account switch failed, session remains in retry")
+          notify("账号切换失败", `所有账号不可用: ${result.reason}`)
+        }
       }
     }
+  } finally {
+    polling = false
   }
 }
 
