@@ -36,7 +36,7 @@ const STATUS_META: Record<
   error: { glyph: "✗", label: "error", color: "text-red-400", spin: false },
 }
 
-function StatusBadge({ status }: { status: string | undefined }) {
+function StatusBadge({ status, reason }: { status: string | undefined; reason?: string }) {
   const meta = STATUS_META[status ?? "idle"] ?? STATUS_META.idle
   return (
     <span
@@ -44,6 +44,7 @@ function StatusBadge({ status }: { status: string | undefined }) {
         "flex items-center gap-1.5 rounded border border-line px-2 py-0.5 font-mono text-xs",
         meta.color,
       )}
+      title={status === "error" && reason ? reason : undefined}
     >
       <span className={clsx("leading-none", meta.spin && "fs-spin")}>
         {meta.glyph}
@@ -494,6 +495,10 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
     const id = state.activeSessionId
     return id ? state.sessionStatuses[id] : undefined
   })
+  const errorReason = useSessionStore((state) => {
+    const id = state.activeSessionId
+    return id ? state.errorReasons[id] : undefined
+  })
   const sendError = useSessionStore((state) => state.sendError)
   const abortSession = useSessionStore((state) => state.abortSession)
   const linkedIssue = useIssueStore((state) =>
@@ -571,7 +576,7 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
             <span className="hidden max-w-[120px] truncate sm:inline">{linkedIssue.title}</span>
           </button>
         )}
-        <StatusBadge status={status} />
+        <StatusBadge status={status} reason={errorReason} />
         {busy && (
           <button
             type="button"
@@ -605,6 +610,12 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
         </div>
       </div>
 
+      {status === "error" && errorReason && (
+        <div className="flex items-center gap-2 border-t border-red-500/20 bg-red-500/10 px-4 py-2 font-mono text-xs text-red-400">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{errorReason}</span>
+        </div>
+      )}
       {sendError && (
         <div className="flex items-center gap-2 border-t border-red-500/20 bg-red-500/10 px-4 py-2 font-mono text-xs text-red-400">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />

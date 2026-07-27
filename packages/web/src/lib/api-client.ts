@@ -87,7 +87,13 @@ export interface Message {
   id: string
   role: string
   parts?: MessagePart[]
-  info?: { agent?: string; modelID?: string; providerID?: string }
+  info?: {
+    agent?: string
+    modelID?: string
+    providerID?: string
+    error?: { name?: string; data?: { message?: string } }
+    finish?: string
+  }
   tokens?: SessionTokens
   // OpenCode-native compatibility fields.
   sessionID?: string
