@@ -15,11 +15,11 @@ interface AgentState {
   loadAgents: () => Promise<void>
 }
 
-const ALLOWED_AGENTS = ["sisyphus", "prometheus", "atlas"]
+const ALLOWED_AGENTS = ["Sisyphus", "Prometheus", "Atlas"]
 
 function isAllowed(agent: Agent): boolean {
   const name = (agent.name || agent.id || "").toLowerCase()
-  return ALLOWED_AGENTS.some((key) => name.startsWith(key))
+  return ALLOWED_AGENTS.some((key) => name.startsWith(key.toLowerCase()))
 }
 
 export const useAgentStore = create<AgentState>((set) => ({
