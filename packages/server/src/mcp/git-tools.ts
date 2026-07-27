@@ -2,9 +2,9 @@ import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { eq } from "drizzle-orm"
 import { db } from "../db/index"
-import { repos } from "../db/schema"
+import { repos, issues, issueComments } from "../db/schema"
 import { parseGitUrl } from "../lib/git-url"
-import { getHostInfo, createGitIssueClient, type GitIssueClient } from "../lib/git-provider"
+import { getHostInfo, createGitIssueClient, type GitIssueClient, type GitIssue, type GitComment } from "../lib/git-provider"
 import { logger } from "../middleware/logger"
 
 // ---------------------------------------------------------------------------
@@ -31,6 +31,34 @@ function textResult(data: unknown) {
 
 function errorResult(message: string) {
   return { content: [{ type: "text" as const, text: message }], isError: true }
+}
+
+function issueToDb(repoId: string, gi: GitIssue) {
+  return {
+    id: `${repoId}_${gi.number}`,
+    repoId,
+    number: gi.number,
+    title: gi.title,
+    body: gi.body || null,
+    state: gi.state,
+    labels: gi.labels?.map((l) => ({ id: l.id, name: l.name, color: l.color })) ?? [],
+    htmlUrl: gi.html_url,
+    createdAt: new Date(gi.created_at).getTime(),
+    updatedAt: new Date(gi.updated_at).getTime(),
+  }
+}
+
+function commentToDb(repoId: string, issueNum: number, gc: GitComment) {
+  return {
+    id: `${repoId}_c${gc.id}`,
+    issueId: `${repoId}_${issueNum}`,
+    repoId,
+    authorLogin: gc.user.login,
+    authorAvatar: gc.user.avatar_url ?? null,
+    body: gc.body,
+    createdAt: new Date(gc.created_at).getTime(),
+    updatedAt: new Date(gc.updated_at).getTime(),
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -124,6 +152,8 @@ export function buildGitMcpServer(repoId: string): McpServer {
       try {
         const { client } = await getClientForRepo(repoId)
         const issue = await client.createIssue({ title, body })
+        const values = issueToDb(repoId, issue)
+        await db.insert(issues).values(values).onConflictDoNothing()
         logger.info({ repoId, issueNumber: issue.number }, "MCP: created issue")
         return textResult(issue)
       } catch (err) {
@@ -148,6 +178,9 @@ export function buildGitMcpServer(repoId: string): McpServer {
       try {
         const { client } = await getClientForRepo(repoId)
         const issue = await client.updateIssue(number, { title, body, state })
+        const values = issueToDb(repoId, issue)
+        const { id: _, createdAt: __, ...updateSet } = values
+        await db.insert(issues).values(values).onConflictDoUpdate({ target: issues.id, set: updateSet })
         logger.info({ repoId, issueNumber: number }, "MCP: updated issue")
         return textResult(issue)
       } catch (err) {
@@ -169,7 +202,9 @@ export function buildGitMcpServer(repoId: string): McpServer {
     async ({ issue_number, body }) => {
       try {
         const { client } = await getClientForRepo(repoId)
-        await client.createComment(issue_number, body)
+        const comment = await client.createComment(issue_number, body)
+        const values = commentToDb(repoId, issue_number, comment)
+        await db.insert(issueComments).values(values).onConflictDoNothing()
         logger.info({ repoId, issueNumber: issue_number }, "MCP: created comment")
         return textResult({ ok: true, issue_number })
       } catch (err) {

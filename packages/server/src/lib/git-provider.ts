@@ -76,7 +76,7 @@ export interface GitIssueClient {
   createIssue(input: CreateIssueInput): Promise<GitIssue>
   updateIssue(number: number, input: UpdateIssueInput): Promise<GitIssue>
   addDependency(issueNumber: number, dependsOnNumber: number): Promise<void>
-  createComment(issueNumber: number, body: string): Promise<void>
+  createComment(issueNumber: number, body: string): Promise<GitComment>
   listComments(issueNumber: number): Promise<GitComment[]>
   createPullRequest(input: CreatePullRequestInput): Promise<GitPullRequest>
   listIssuePullRequests(issueNumber: number): Promise<GitPullRequest[]>
@@ -165,7 +165,7 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
     },
 
     async createComment(issueNumber, body) {
-      await request<unknown>("POST", `/issues/${issueNumber}/comments`, { body })
+      return request<GitComment>("POST", `/issues/${issueNumber}/comments`, { body })
     },
 
     async listComments(issueNumber) {
