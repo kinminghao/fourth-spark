@@ -285,6 +285,16 @@ export async function checkoutBranch(repoId: string, branch: string): Promise<{ 
   })
 }
 
+export interface PullResult {
+  ok: boolean
+  output: string
+  branch: string | null
+}
+
+export async function pullRepo(id: string): Promise<PullResult> {
+  return apiFetch<PullResult>(`/api/repos/${encodeURIComponent(id)}/pull`, { method: "POST" })
+}
+
 // ---------------------------------------------------------------------------
 // Repo-scoped helpers
 // ---------------------------------------------------------------------------

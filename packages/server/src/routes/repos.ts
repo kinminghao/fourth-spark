@@ -188,3 +188,24 @@ repoRoutes.post("/:id/checkout", async (c) => {
     return c.json({ error: msg, status: 500 }, 500)
   }
 })
+
+// POST /api/repos/:id/pull — pull latest code from remote.
+repoRoutes.post("/:id/pull", async (c) => {
+  const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
+  if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
+
+  try {
+    const result = Bun.spawnSync(["git", "pull"], { cwd: repo.localPath })
+    const stdout = result.stdout.toString().trim()
+    const stderr = result.stderr.toString().trim()
+
+    if (result.exitCode !== 0) {
+      return c.json({ error: stderr || stdout || "git pull failed", status: 500 }, 500)
+    }
+
+    return c.json({ ok: true, output: stdout, branch: getBranch(repo.localPath) })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Failed to pull"
+    return c.json({ error: msg, status: 500 }, 500)
+  }
+})
