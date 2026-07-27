@@ -150,6 +150,26 @@ export const issueComments = pgTable("issue_comments", {
   index("issue_comments_repo_idx").on(t.repoId),
 ])
 
+export const tags = pgTable("tags", {
+  id: text("id").primaryKey(),
+  repoId: text("repo_id").notNull().references(() => repos.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  color: text("color").notNull().default("6b7280"),
+  description: text("description"),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+}, (t) => [
+  uniqueIndex("tags_repo_name_idx").on(t.repoId, t.name),
+  index("tags_repo_idx").on(t.repoId),
+])
+
+export const issueTags = pgTable("issue_tags", {
+  issueId: text("issue_id").notNull().references(() => issues.id, { onDelete: "cascade" }),
+  tagId: text("tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
+}, (t) => [
+  primaryKey({ columns: [t.issueId, t.tagId] }),
+  index("issue_tags_tag_idx").on(t.tagId),
+])
+
 export const deviceTokens = pgTable("device_tokens", {
   id: text("id").primaryKey(),
   token: text("token").notNull(),

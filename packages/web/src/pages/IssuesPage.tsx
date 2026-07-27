@@ -825,8 +825,17 @@ export function IssuesPage() {
   const issues = useIssueStore((s) => s.issues)
   const syncing = useIssueStore((s) => s.syncing)
   const syncIssues = useIssueStore((s) => s.syncIssues)
+  const tags = useIssueStore((s) => s.tags)
+  const selectedTagIds = useIssueStore((s) => s.selectedTagIds)
+  const toggleTagFilter = useIssueStore((s) => s.toggleTagFilter)
+  const clearTagFilter = useIssueStore((s) => s.clearTagFilter)
+  const loadTags = useIssueStore((s) => s.loadTags)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const sessions = useSessionStore((s) => s.sessions)
+
+  useEffect(() => {
+    if (activeRepoId) void loadTags()
+  }, [activeRepoId, loadTags])
 
   const sessionCounts = new Map<string, number>()
   for (const s of sessions) {
@@ -853,7 +862,15 @@ export function IssuesPage() {
   }
 
   const afterState = stateFilter === "all" ? issues : issues.filter((i) => i.state === stateFilter)
-  const filtered = typeFilter === "all" ? afterState : afterState.filter((i) => issueType(i) === typeFilter)
+  const afterType = typeFilter === "all" ? afterState : afterState.filter((i) => issueType(i) === typeFilter)
+  const filtered = selectedTagIds.size === 0
+    ? afterType
+    : afterType.filter((i) => {
+        if (!i.labels || i.labels.length === 0) return false
+        const issueTagNames = new Set(i.labels.map((l) => l.name))
+        const selectedNames = tags.filter((t) => selectedTagIds.has(t.id)).map((t) => t.name)
+        return selectedNames.every((n) => issueTagNames.has(n))
+      })
 
   const openCount = issues.filter((i) => i.state === "open").length
   const closedCount = issues.filter((i) => i.state === "closed").length
@@ -1027,6 +1044,40 @@ export function IssuesPage() {
             })}
           </div>
         </div>
+
+        {tags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-3 py-2">
+            {tags.map((tag) => {
+              const active = selectedTagIds.has(tag.id)
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => toggleTagFilter(tag.id)}
+                  className={clsx(
+                    "rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors",
+                    active ? "ring-1 ring-current" : "opacity-60 hover:opacity-100",
+                  )}
+                  style={{
+                    backgroundColor: `#${tag.color}20`,
+                    color: `#${tag.color}`,
+                  }}
+                >
+                  {tag.name}
+                </button>
+              )
+            })}
+            {selectedTagIds.size > 0 && (
+              <button
+                type="button"
+                onClick={clearTagFilter}
+                className="ml-1 rounded px-1.5 py-0.5 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3"
+              >
+                清除
+              </button>
+            )}
+          </div>
+        )}
 
         {/* list */}
         <div className="flex-1 overflow-y-auto px-2 py-2">

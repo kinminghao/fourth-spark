@@ -1,7 +1,7 @@
 import { Hono } from "hono"
-import { eq, and, desc, asc } from "drizzle-orm"
+import { eq, and, desc, asc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
-import { issues, issueComments, repos } from "../db/schema"
+import { issues, issueComments, repos, tags, issueTags } from "../db/schema"
 import { parseGitUrl } from "../lib/git-url"
 import { createGitIssueClient, getHostInfo, type GitIssue, type GitComment } from "../lib/git-provider"
 import { logger } from "../middleware/logger"
@@ -62,9 +62,44 @@ async function getRepoGitClient(repoId: string) {
 issueRoutes.get("/", async (c) => {
   const repoId = c.req.param("repoId")!
   const state = c.req.query("state") ?? "open"
-  const rows = state === "all"
-    ? await db.select().from(issues).where(eq(issues.repoId, repoId)).orderBy(desc(issues.updatedAt))
-    : await db.select().from(issues).where(and(eq(issues.repoId, repoId), eq(issues.state, state))).orderBy(desc(issues.updatedAt))
+  const tagFilter = c.req.query("tags")
+
+  let rows: (typeof issues.$inferSelect)[]
+
+  if (tagFilter) {
+    const tagNames = tagFilter.split(",").map((t) => t.trim()).filter(Boolean)
+    if (tagNames.length > 0) {
+      const matchedTags = await db.select({ id: tags.id }).from(tags)
+        .where(and(eq(tags.repoId, repoId), inArray(tags.name, tagNames)))
+      const tagIds = matchedTags.map((t) => t.id)
+
+      if (tagIds.length === 0) return c.json([])
+
+      const linked = await db.select({ issueId: issueTags.issueId }).from(issueTags)
+        .where(inArray(issueTags.tagId, tagIds))
+      const issueIdCounts = new Map<string, number>()
+      for (const r of linked) {
+        issueIdCounts.set(r.issueId, (issueIdCounts.get(r.issueId) ?? 0) + 1)
+      }
+      const matchedIssueIds = [...issueIdCounts.entries()]
+        .filter(([, count]) => count >= tagIds.length)
+        .map(([id]) => id)
+
+      if (matchedIssueIds.length === 0) return c.json([])
+
+      const conditions = [eq(issues.repoId, repoId), inArray(issues.id, matchedIssueIds)]
+      if (state !== "all") conditions.push(eq(issues.state, state))
+      rows = await db.select().from(issues).where(and(...conditions)).orderBy(desc(issues.updatedAt))
+    } else {
+      rows = state === "all"
+        ? await db.select().from(issues).where(eq(issues.repoId, repoId)).orderBy(desc(issues.updatedAt))
+        : await db.select().from(issues).where(and(eq(issues.repoId, repoId), eq(issues.state, state))).orderBy(desc(issues.updatedAt))
+    }
+  } else {
+    rows = state === "all"
+      ? await db.select().from(issues).where(eq(issues.repoId, repoId)).orderBy(desc(issues.updatedAt))
+      : await db.select().from(issues).where(and(eq(issues.repoId, repoId), eq(issues.state, state))).orderBy(desc(issues.updatedAt))
+  }
 
   for (const row of rows) {
     row.body = rewriteAttachmentUrls(row.body, repoId)
@@ -113,8 +148,36 @@ issueRoutes.post("/sync", async (c) => {
     }
   }
 
-  logger.info({ repoId, total, totalComments, state }, "issue sync complete")
-  return c.json({ synced: total, comments: totalComments })
+  let totalTags = 0
+  const allDbIssues = await db.select({ id: issues.id, labels: issues.labels }).from(issues).where(eq(issues.repoId, repoId))
+  const seenTags = new Map<string, string>()
+
+  for (const row of allDbIssues) {
+    if (!row.labels || row.labels.length === 0) continue
+    for (const label of row.labels) {
+      if (seenTags.has(label.name)) continue
+      const tid = `${repoId}_tag_${label.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`
+      await db.insert(tags).values({
+        id: tid,
+        repoId,
+        name: label.name,
+        color: label.color || "6b7280",
+        description: null,
+        createdAt: Date.now(),
+      }).onConflictDoNothing()
+      seenTags.set(label.name, tid)
+      totalTags++
+    }
+
+    const tagIds = row.labels.map((l) => seenTags.get(l.name)!).filter(Boolean)
+    if (tagIds.length > 0) {
+      await db.delete(issueTags).where(eq(issueTags.issueId, row.id))
+      await db.insert(issueTags).values(tagIds.map((tid) => ({ issueId: row.id, tagId: tid }))).onConflictDoNothing()
+    }
+  }
+
+  logger.info({ repoId, total, totalComments, totalTags, state }, "issue sync complete")
+  return c.json({ synced: total, comments: totalComments, tags: totalTags })
 })
 
 issueRoutes.post("/", async (c) => {
