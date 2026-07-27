@@ -164,9 +164,11 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     el.style.height = `${Math.min(el.scrollHeight, MAX_NEW_HEIGHT_PX)}px`
   }, [draft])
 
+  const hasContext = Boolean(customAgentId) || Boolean(issueId)
+
   const submit = () => {
     const text = draft.trim()
-    if (!text || !activeRepoId) return
+    if (!activeRepoId || (!text && !hasContext)) return
     setDraft("")
     void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined)
   }
@@ -216,7 +218,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
             <button
               type="button"
               onClick={submit}
-              disabled={!activeRepoId || draft.trim().length === 0}
+              disabled={!activeRepoId || (!draft.trim() && !hasContext)}
               aria-label="Start run"
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white transition-colors duration-150 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6/30 disabled:text-fg-5"
             >
