@@ -61,6 +61,7 @@ export interface GitPullRequest {
   user: { login: string; avatar_url: string }
   created_at: string
   updated_at: string
+  mergeable: boolean | null
 }
 
 export interface CreatePullRequestInput {
@@ -83,7 +84,7 @@ export interface GitIssueClient {
   mergePullRequest(prNumber: number): Promise<void>
 }
 
-class GitApiError extends Error {
+export class GitApiError extends Error {
   readonly status: number
   constructor(message: string, status: number) {
     super(message)
@@ -192,13 +193,12 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
 
     async listIssuePullRequests(issueNumber) {
       try {
-        // Use timeline API to find cross-referenced PRs
-        // Gitea: ref_issue field; GitHub: source.issue field
+        // Use timeline API to find cross-referenced PR numbers
         const events = await request<Record<string, unknown>[]>(
           "GET",
           `/issues/${issueNumber}/timeline`,
         )
-        const prMap = new Map<number, GitPullRequest>()
+        const prNumbers = new Set<number>()
         for (const event of events) {
           const ref =
             (event.ref_issue as Record<string, unknown> | undefined) ??
@@ -207,20 +207,28 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
               | undefined)
           if (!ref?.pull_request) continue
           const num = ref.number as number
-          if (prMap.has(num)) continue
-          const user = (ref.user as { login?: string; avatar_url?: string } | undefined) ?? {}
-          prMap.set(num, {
-            number: num,
-            title: (ref.title as string) ?? "",
-            body: (ref.body as string) ?? "",
-            state: (ref.state as string) ?? "open",
-            html_url: (ref.html_url as string) ?? "",
-            user: { login: user.login ?? "", avatar_url: user.avatar_url ?? "" },
-            created_at: (ref.created_at as string) ?? "",
-            updated_at: (ref.updated_at as string) ?? "",
-          })
+          prNumbers.add(num)
         }
-        return [...prMap.values()]
+
+        const prs: GitPullRequest[] = []
+        for (const prNum of prNumbers) {
+          try {
+            const raw = await request<Record<string, unknown>>("GET", `/pulls/${prNum}`)
+            const user = (raw.user as { login?: string; avatar_url?: string } | undefined) ?? {}
+            prs.push({
+              number: raw.number as number,
+              title: (raw.title as string) ?? "",
+              body: (raw.body as string) ?? "",
+              state: (raw.state as string) ?? "open",
+              html_url: (raw.html_url as string) ?? "",
+              user: { login: user.login ?? "", avatar_url: user.avatar_url ?? "" },
+              created_at: (raw.created_at as string) ?? "",
+              updated_at: (raw.updated_at as string) ?? "",
+              mergeable: typeof raw.mergeable === "boolean" ? raw.mergeable : null,
+            })
+          } catch {}
+        }
+        return prs
       } catch {
         return []
       }

@@ -151,6 +151,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const customAgents = useCustomAgentStore((state) => state.agents)
   const issues = useIssueStore((state) => state.issues)
   const selectedIssueId = useIssueStore((state) => state.selectedIssueId)
+  const pendingDraft = useIssueStore((state) => state.pendingDraft)
 
   useEffect(() => {
     if (selectedIssueId) {
@@ -158,6 +159,13 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
       useIssueStore.getState().setSelectedIssue(null)
     }
   }, [selectedIssueId])
+
+  useEffect(() => {
+    if (pendingDraft) {
+      setDraft(pendingDraft)
+      useIssueStore.getState().setPendingDraft(null)
+    }
+  }, [pendingDraft])
 
   useLayoutEffect(() => {
     const el = textareaRef.current
