@@ -1,5 +1,5 @@
 import { autoSwitch, getActiveId, isUsageLimit, clearCooldown } from "./account-switcher"
-import type { OpenCodeClient, SessionStatus } from "./opencode"
+import type { OpenCodeClient, SessionStatus, Message, Todo } from "./opencode"
 import { notify } from "./notify"
 import { pushNotify } from "./apns"
 import { logger } from "../middleware/logger"
@@ -10,6 +10,8 @@ const RECENT_SWITCH_GUARD_MS = 5_000
 const REPROMPT_SETTLE_MS = 1_500
 const MAX_AUTO_CONTINUES = 5
 const MAX_EMPTY_RETRIES = 2
+const MAX_IDLE_RESPONSES = 2
+const MAX_STAGNATION = 3
 const DEDUP_COOLDOWN_MS = 30_000
 
 type ManagedEntry = {
@@ -21,6 +23,9 @@ const handled = new Map<string, number>()
 const repromptInFlight = new Set<string>()
 const autoContinueCounts = new Map<string, number>()
 const emptyRetryCounts = new Map<string, number>()
+const idleResponseCounts = new Map<string, number>()
+const lastUserMessageIds = new Map<string, string>()
+const todoFingerprints = new Map<string, { fingerprint: string; count: number }>()
 const prevStatuses = new Map<string, string>()
 let lastSwitchAt = 0
 let timer: ReturnType<typeof setInterval> | undefined
@@ -137,20 +142,85 @@ async function hasIncompleteTodos(client: OpenCodeClient, sessionId: string): Pr
   }
 }
 
-async function lastResponseWasTruncated(client: OpenCodeClient, sessionId: string): Promise<boolean> {
-  try {
-    const messages = await client.getMessages(sessionId)
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i]
-      const role = (msg as { role?: string }).role ?? (msg.info as { role?: string } | undefined)?.role
-      if (role !== "assistant") continue
-      const parts = msg.parts ?? []
-      return !parts.some((p) => p.type === "step-finish")
+function buildTodoFingerprint(todos: Todo[]): string {
+  return todos
+    .map((t) => `${t.content}:${t.status}`)
+    .sort()
+    .join("|")
+}
+
+function isStagnant(sessionId: string, todos: Todo[]): boolean {
+  const fingerprint = buildTodoFingerprint(todos)
+  const prev = todoFingerprints.get(sessionId)
+  if (prev && prev.fingerprint === fingerprint) {
+    const count = prev.count + 1
+    todoFingerprints.set(sessionId, { fingerprint, count })
+    if (count >= MAX_STAGNATION) {
+      logger.info({ sessionId, count, max: MAX_STAGNATION }, "todo stagnation detected, stopping auto-continue")
+      return true
     }
     return false
-  } catch {
+  }
+  todoFingerprints.set(sessionId, { fingerprint, count: 1 })
+  return false
+}
+
+function isIdleResponse(msg: Message): boolean {
+  const parts = msg.parts ?? []
+  const hasToolCall = parts.some((p) => p.type === "tool" || p.type === "tool_use" || p.type === "tool-invocation")
+  if (hasToolCall) return false
+  const textParts = parts.filter((p) => p.type === "text")
+  if (textParts.length === 0) return false
+  const text = textParts.map((p) => p.content ?? "").join("").trim()
+  return text.length > 0 && text.length < 200
+}
+
+function detectAgentIdle(sessionId: string, messages: Message[]): boolean {
+  const lastAssistant = findLastAssistant(messages)
+  if (!lastAssistant || !isIdleResponse(lastAssistant)) {
+    idleResponseCounts.set(sessionId, 0)
     return false
   }
+  const count = (idleResponseCounts.get(sessionId) ?? 0) + 1
+  idleResponseCounts.set(sessionId, count)
+  if (count >= MAX_IDLE_RESPONSES) {
+    logger.info({ sessionId, count, max: MAX_IDLE_RESPONSES }, "agent idle detected (short text-only responses), stopping auto-continue")
+    return true
+  }
+  return false
+}
+
+function findLastAssistant(messages: Message[]): Message | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "assistant") return messages[i]
+  }
+  return undefined
+}
+
+function findLastUserMessageId(messages: Message[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user") return messages[i].id
+  }
+  return undefined
+}
+
+function resetCountersIfNewUserMessage(sessionId: string, messages: Message[]): void {
+  const currentUserMsgId = findLastUserMessageId(messages)
+  const prevUserMsgId = lastUserMessageIds.get(sessionId)
+  if (currentUserMsgId && currentUserMsgId !== prevUserMsgId) {
+    lastUserMessageIds.set(sessionId, currentUserMsgId)
+    autoContinueCounts.delete(sessionId)
+    idleResponseCounts.delete(sessionId)
+    todoFingerprints.delete(sessionId)
+    emptyRetryCounts.delete(sessionId)
+  }
+}
+
+function lastResponseWasTruncated(messages: Message[]): boolean {
+  const lastAssistant = findLastAssistant(messages)
+  if (!lastAssistant) return false
+  const parts = lastAssistant.parts ?? []
+  return !parts.some((p) => p.type === "step-finish")
 }
 
 async function detectTruncation(client: OpenCodeClient, sessionId: string): Promise<boolean> {
@@ -159,14 +229,38 @@ async function detectTruncation(client: OpenCodeClient, sessionId: string): Prom
     logger.info({ sessionId, count }, "auto-continue limit reached, skipping")
     return false
   }
-  const truncated = await lastResponseWasTruncated(client, sessionId)
-  if (!truncated) return false
+
+  let messages: Message[]
   try {
-    const todos = await client.getTodos(sessionId)
-    return todos.some((t) => t.status === "in_progress" || t.status === "pending")
+    messages = await client.getMessages(sessionId)
   } catch {
     return false
   }
+
+  resetCountersIfNewUserMessage(sessionId, messages)
+
+  const recheckedCount = autoContinueCounts.get(sessionId) ?? 0
+  if (recheckedCount >= MAX_AUTO_CONTINUES) {
+    logger.info({ sessionId, count: recheckedCount }, "auto-continue limit reached after counter reset check, skipping")
+    return false
+  }
+
+  if (detectAgentIdle(sessionId, messages)) return false
+
+  const truncated = lastResponseWasTruncated(messages)
+  if (!truncated) return false
+
+  let todos: Todo[]
+  try {
+    todos = await client.getTodos(sessionId)
+  } catch {
+    return false
+  }
+
+  if (!todos.some((t) => t.status === "in_progress" || t.status === "pending")) return false
+  if (isStagnant(sessionId, todos)) return false
+
+  return true
 }
 
 async function autoContinueSession(client: OpenCodeClient, sessionId: string): Promise<void> {
@@ -249,13 +343,6 @@ async function pollOnce(): Promise<void> {
             continue
           }
 
-          emptyRetryCounts.delete(sessionId)
-          if (!await hasIncompleteTodos(client, sessionId)) {
-            autoContinueCounts.delete(sessionId)
-          }
-        } else {
-          autoContinueCounts.delete(sessionId)
-          emptyRetryCounts.delete(sessionId)
         }
       }
     }
@@ -279,14 +366,6 @@ async function pollOnce(): Promise<void> {
             await autoRetryEmptyResponse(client, sessionId)
             continue
           }
-
-          emptyRetryCounts.delete(sessionId)
-          if (!await hasIncompleteTodos(client, sessionId)) {
-            autoContinueCounts.delete(sessionId)
-          }
-        } else {
-          autoContinueCounts.delete(sessionId)
-          emptyRetryCounts.delete(sessionId)
         }
 
         if (prev && prev !== status.type) emitTransition(sessionId, prev, status.type)
@@ -355,6 +434,9 @@ export const sessionMonitor = {
     entries.length = 0
     autoContinueCounts.clear()
     emptyRetryCounts.clear()
+    idleResponseCounts.clear()
+    lastUserMessageIds.clear()
+    todoFingerprints.clear()
     logger.info("session monitor stopped")
   },
 }
