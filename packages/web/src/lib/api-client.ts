@@ -268,6 +268,23 @@ export async function stopRepo(id: string): Promise<void> {
   await apiFetch<void>(`/api/repos/${encodeURIComponent(id)}/stop`, { method: "POST" })
 }
 
+export interface BranchList {
+  current: string | null
+  local: string[]
+  remote: string[]
+}
+
+export async function listBranches(repoId: string): Promise<BranchList> {
+  return apiFetch<BranchList>(`/api/repos/${encodeURIComponent(repoId)}/branches`)
+}
+
+export async function checkoutBranch(repoId: string, branch: string): Promise<{ ok: boolean; branch: string }> {
+  return apiFetch<{ ok: boolean; branch: string }>(`/api/repos/${encodeURIComponent(repoId)}/checkout`, {
+    method: "POST",
+    body: JSON.stringify({ branch }),
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Repo-scoped helpers
 // ---------------------------------------------------------------------------

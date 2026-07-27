@@ -135,3 +135,56 @@ repoRoutes.post("/:id/stop", async (c) => {
   await processManager.stop(c.req.param("id"))
   return c.json({ ok: true, status: "inactive" })
 })
+
+// GET /api/repos/:id/branches — list all branches.
+repoRoutes.get("/:id/branches", async (c) => {
+  const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
+  if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
+
+  const current = getBranch(repo.localPath)
+
+  try {
+    const result = Bun.spawnSync(["git", "branch", "--format=%(refname:short)"], { cwd: repo.localPath })
+    const output = result.stdout.toString().trim()
+    const local = output ? output.split("\n").map((b) => b.trim()).filter(Boolean) : []
+
+    const remoteResult = Bun.spawnSync(["git", "branch", "-r", "--format=%(refname:short)"], { cwd: repo.localPath })
+    const remoteOutput = remoteResult.stdout.toString().trim()
+    const remote = remoteOutput
+      ? remoteOutput
+          .split("\n")
+          .map((b) => b.trim())
+          .filter((b) => b && !b.includes("->"))
+          .map((b) => b.replace(/^origin\//, ""))
+          .filter((b) => !local.includes(b))
+      : []
+
+    return c.json({ current, local, remote })
+  } catch {
+    return c.json({ current, local: current ? [current] : [], remote: [] })
+  }
+})
+
+// POST /api/repos/:id/checkout — switch branch.
+repoRoutes.post("/:id/checkout", async (c) => {
+  const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
+  if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
+
+  const body = await c.req.json<{ branch?: string }>().catch(() => null)
+  if (!body?.branch) {
+    return c.json({ error: "branch is required", status: 400 }, 400)
+  }
+
+  try {
+    const result = Bun.spawnSync(["git", "checkout", body.branch], { cwd: repo.localPath })
+    if (result.exitCode !== 0) {
+      const stderr = result.stderr.toString().trim()
+      return c.json({ error: stderr || "Failed to checkout branch", status: 400 }, 400)
+    }
+    const branch = getBranch(repo.localPath)
+    return c.json({ ok: true, branch })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Failed to checkout"
+    return c.json({ error: msg, status: 500 }, 500)
+  }
+})
