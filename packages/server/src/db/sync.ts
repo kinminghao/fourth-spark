@@ -234,6 +234,15 @@ export function syncSseEvent(sessionId: string, eventName: string, raw: string):
           await ensureSession(sessionId)
           await upsertMessage(sessionId, msgProps)
         }
+        const errObj = asRecord(info?.error ?? msgProps.error)
+        if (errObj) {
+          const errData = asRecord(errObj.data)
+          const errMsg = str(errData?.message || errObj.message)
+          logger.warn(
+            { sessionId, messageId: str(msgProps.id), errorName: str(errObj.name), errorMessage: errMsg, finish: str(info?.finish ?? msgProps.finish) },
+            "upstream message error",
+          )
+        }
         break
       }
       case "message.part.updated":

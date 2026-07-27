@@ -2,7 +2,7 @@ import { useState } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import remarkGfm from "remark-gfm"
-import { Brain, ChevronDown, ChevronRight } from "lucide-react"
+import { AlertTriangle, Brain, ChevronDown, ChevronRight } from "lucide-react"
 import type { Message, MessagePart } from "../lib/api-client"
 import { classifyPart, getPartText, isQuestionTool } from "../lib/message-parts"
 import { MarkdownTable } from "./MarkdownTable"
@@ -83,6 +83,8 @@ export function ExecutionBlock({ message }: { message: Message }) {
 
   const agent = message.info?.agent ?? message.agent
   const model = message.info?.modelID ?? message.modelID
+  const msgError = message.info?.error
+  const msgFinish = message.info?.finish
 
   return (
     <div className="fs-fade-in font-mono">
@@ -93,13 +95,27 @@ export function ExecutionBlock({ message }: { message: Message }) {
           {model && <span className="text-fg-5">{model}</span>}
         </div>
       )}
+      {msgError && (
+        <div className="my-1 flex items-start gap-2 rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div className="min-w-0">
+            <span className="font-semibold">{msgError.name ?? "Error"}</span>
+            {msgError.data?.message && (
+              <p className="mt-0.5 text-red-400/80">{msgError.data.message}</p>
+            )}
+            {msgFinish && msgFinish !== "end" && (
+              <p className="mt-0.5 text-red-400/60">finish: {msgFinish}</p>
+            )}
+          </div>
+        </div>
+      )}
       <div className="space-y-2 text-sm text-fg">
         {renderable.length > 0 ? (
           renderable.map((part, index) => (
             <PartView key={part.id ?? part.callID ?? index} part={part} />
           ))
         ) : (
-          <span className="text-fg-5">…</span>
+          !msgError && <span className="text-fg-5">…</span>
         )}
       </div>
     </div>

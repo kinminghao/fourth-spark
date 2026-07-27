@@ -7,8 +7,15 @@ import { syncSseEvent } from "../db/sync"
 export const events = new Hono()
 export const globalEvents = new Hono()
 
-// Lightweight view of an OpenCode SSE event used only for filtering.
-type RawEvent = { type?: string; properties?: { sessionID?: string } }
+type RawEvent = {
+  type?: string
+  properties?: {
+    sessionID?: string
+    id?: string
+    parent_id?: string
+    parentID?: string
+  }
+}
 
 // Events with no `sessionID` in their payload but still worth forwarding to
 // every session stream (OpenCode's `/event` is a single global stream).
@@ -16,9 +23,9 @@ const GLOBAL_EVENT_TYPES = new Set(["file.edited"])
 const HEARTBEAT_MS = 30_000
 const SSE_DELIMITER = "\n\n"
 
-function shouldForward(event: RawEvent, sessionId: string): boolean {
+function shouldForward(event: RawEvent, sessionId: string, childIds: ReadonlySet<string>): boolean {
   const sid = event.properties?.sessionID
-  if (sid !== undefined) return sid === sessionId
+  if (sid !== undefined) return sid === sessionId || childIds.has(sid)
   return event.type !== undefined && GLOBAL_EVENT_TYPES.has(event.type)
 }
 
@@ -36,13 +43,24 @@ function parseBlock(block: string): { dataStr: string; parsed: RawEvent } | null
   }
 }
 
-// Parse one SSE block, and forward it verbatim if it belongs to this session.
-async function forwardBlock(block: string, sessionId: string, stream: SSEStreamingApi): Promise<void> {
+function learnChildSession(event: RawEvent, parentId: string, childIds: Set<string>): void {
+  if (event.type !== "session.updated") return
+  const props = event.properties
+  if (!props?.id) return
+  const declaredParent = props.parent_id ?? props.parentID
+  if (declaredParent === parentId && !childIds.has(props.id)) {
+    childIds.add(props.id)
+  }
+}
+
+async function forwardBlock(block: string, sessionId: string, childIds: Set<string>, stream: SSEStreamingApi): Promise<void> {
   const result = parseBlock(block)
   if (!result) return
   const { dataStr, parsed } = result
-  if (shouldForward(parsed, sessionId)) {
-    syncSseEvent(sessionId, parsed.type ?? "", dataStr)
+  learnChildSession(parsed, sessionId, childIds)
+  if (shouldForward(parsed, sessionId, childIds)) {
+    const syncId = parsed.properties?.sessionID ?? sessionId
+    syncSseEvent(syncId, parsed.type ?? "", dataStr)
     await stream.writeSSE({ data: dataStr, event: parsed.type })
   }
 }
@@ -92,6 +110,7 @@ events.get("/:id/events", (c) => {
       })
     }, HEARTBEAT_MS)
 
+    const childIds = new Set<string>()
     const reader = responseBody.getReader()
     const decoder = new TextDecoder()
     let buffer = ""
@@ -104,15 +123,13 @@ events.get("/:id/events", (c) => {
         while (boundary !== -1) {
           const block = buffer.slice(0, boundary)
           buffer = buffer.slice(boundary + SSE_DELIMITER.length)
-          await forwardBlock(block, sessionId, stream)
+          await forwardBlock(block, sessionId, childIds, stream)
           boundary = buffer.indexOf(SSE_DELIMITER)
         }
       }
-      // Flush any trailing bytes held by the streaming TextDecoder and
-      // process the remaining buffer (last SSE block without trailing \n\n).
       buffer += decoder.decode()
       if (buffer.trim()) {
-        await forwardBlock(buffer, sessionId, stream)
+        await forwardBlock(buffer, sessionId, childIds, stream)
       }
     } catch (err) {
       if (!closed) logger.error({ err, sessionId, repoId }, "SSE proxy stream error")
