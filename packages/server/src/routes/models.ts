@@ -28,21 +28,18 @@ modelRoutes.get("/", async (c) => {
   const repoId = c.req.param("repoId")
   const client = processManager.requireClient(repoId)
 
-  let raw: Record<string, Provider>
+  let providers: Provider[]
   try {
-    raw = await client.getProviders()
+    const res = await client.getProviders()
+    providers = res.all ?? []
   } catch {
     return c.json([])
   }
 
-  const providers: Provider[] = Object.entries(raw).map(([id, p]) => ({ ...p, id: p.id || id }))
-
   const models: ModelInfo[] = []
   for (const provider of providers) {
     if (!provider.models) continue
-    const providerModels: ProviderModel[] = Array.isArray(provider.models)
-      ? provider.models
-      : Object.values(provider.models as Record<string, ProviderModel>)
+    const providerModels: ProviderModel[] = Object.values(provider.models)
     for (const m of providerModels) {
       if (m.status && m.status !== "active") continue
       if (!isTextModel(m)) continue
