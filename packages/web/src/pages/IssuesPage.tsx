@@ -24,6 +24,8 @@ import { type Issue, type IssueComment, type PullRequest, type Session, listIssu
 import { useIssueStore } from "../stores/issue-store"
 import { useRepoStore } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
+import { useSwipeDrawer } from "../hooks/use-swipe-drawer"
+import { SwipeDrawer } from "../components/SwipeDrawer"
 
 type StateFilter = "open" | "closed" | "all"
 type TypeFilter = "all" | "epic" | "task" | "stray"
@@ -608,7 +610,7 @@ function countDescendants(
 ): { total: number; closed: number } {
   let total = 0
   let closed = 0
-  const stack = childrenMap.get(rootId) ?? []
+  const stack = [...(childrenMap.get(rootId) ?? [])]
   for (let i = 0; i < stack.length; i++) {
     const c = stack[i]
     total++
@@ -818,6 +820,7 @@ export function IssuesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [treeRootId, setTreeRootId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [listDrawerOpen, setListDrawerOpen] = useState(false)
 
   const issues = useIssueStore((s) => s.issues)
   const syncing = useIssueStore((s) => s.syncing)
@@ -883,8 +886,14 @@ export function IssuesPage() {
     navigate("/run")
   }
 
+  const swipeHandlers = useSwipeDrawer({
+    onSwipeRight: () => setListDrawerOpen(true),
+    onSwipeLeft: () => setSidebarOpen(true),
+    disabled: !selectedId || listDrawerOpen || sidebarOpen,
+  })
+
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1" {...swipeHandlers}>
       {/* ---- left: issue list ---- */}
       <div
         className={clsx(
@@ -1048,6 +1057,37 @@ export function IssuesPage() {
           )}
         </div>
       </div>
+
+      {/* Mobile left drawer — quick issue list for swipe navigation */}
+      <SwipeDrawer side="left" open={listDrawerOpen} onClose={() => setListDrawerOpen(false)}>
+        <div className="flex h-full flex-col">
+          <div className="border-b border-line px-3 py-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">Issues</span>
+          </div>
+          <div className="flex-1 overflow-y-auto px-2 py-2">
+            {filtered.length === 0 ? (
+              <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">无匹配 Issue</p>
+            ) : (
+              <ul className="space-y-0.5">
+                {filtered.map((issue) => (
+                  <IssueRow
+                    key={issue.id}
+                    issue={issue}
+                    sessionCount={sessionCounts.get(issue.id) ?? 0}
+                    isActive={selectedId === issue.id}
+                    isEpic={issueType(issue) === "epic"}
+                    onSelect={() => {
+                      setSelectedId(issue.id)
+                      setTreeRootId(issueType(issue) === "epic" ? issue.id : null)
+                      setListDrawerOpen(false)
+                    }}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </SwipeDrawer>
 
       {/* ---- right: detail + overlay sidebar ---- */}
       <div
