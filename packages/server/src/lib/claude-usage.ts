@@ -8,7 +8,7 @@
  *   https://api.anthropic.com/api/oauth/usage  → subscription utilization
  */
 
-import { readFile, writeFile } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { logger } from "../middleware/logger"
@@ -262,21 +262,14 @@ async function resolveAccess(
 // Public API
 // ---------------------------------------------------------------------------
 
-export async function switchAccount(accountId: string): Promise<void> {
-  const data = await readJson<AccountsFile>(ACCOUNTS_PATH)
-  if (!data || !Array.isArray(data.accounts)) {
-    throw new Error("claude-accounts.json not found or invalid")
-  }
-  const found = data.accounts.some((a: StoredAccount) => a.id === accountId)
-  if (!found) {
-    throw new Error(`account ${accountId} not found`)
-  }
-  data.activeId = accountId
-  await writeFile(ACCOUNTS_PATH, JSON.stringify(data, null, 2) + "\n", "utf8")
-  logger.info({ accountId }, "claude-usage: switched active account")
-}
+const USAGE_CACHE_TTL_MS = 30_000
+let usageCache: { result: UsageResult; fetchedAt: number } | null = null
 
 export async function collectUsage(): Promise<UsageResult> {
+  if (usageCache && Date.now() - usageCache.fetchedAt < USAGE_CACHE_TTL_MS) {
+    return usageCache.result
+  }
+
   const file = await loadAccounts()
   const auth = await readAuthAnthropic()
 
@@ -309,5 +302,20 @@ export async function collectUsage(): Promise<UsageResult> {
     }
   }
 
-  return { activeId: file.activeId, accounts: results }
+  const result: UsageResult = { activeId: file.activeId, accounts: results }
+  usageCache = { result, fetchedAt: Date.now() }
+  return result
+}
+
+export function retagActiveInCache(newActiveId: string): UsageResult | null {
+  if (!usageCache) return null
+  const updated: UsageResult = {
+    activeId: newActiveId,
+    accounts: usageCache.result.accounts.map((a) => ({
+      ...a,
+      active: a.id === newActiveId,
+    })),
+  }
+  usageCache = { result: updated, fetchedAt: usageCache.fetchedAt }
+  return updated
 }
