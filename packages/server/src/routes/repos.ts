@@ -195,12 +195,19 @@ repoRoutes.post("/:id/pull", async (c) => {
   if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
 
   try {
-    const result = Bun.spawnSync(["git", "pull"], { cwd: repo.localPath })
+    const result = Bun.spawnSync(["git", "pull", "--ff-only", "--autostash"], { cwd: repo.localPath })
     const stdout = result.stdout.toString().trim()
     const stderr = result.stderr.toString().trim()
 
     if (result.exitCode !== 0) {
-      return c.json({ error: stderr || stdout || "git pull failed", status: 500 }, 500)
+      const combined = `${stdout}\n${stderr}`.toLowerCase()
+      let message = stderr || stdout || "git pull failed"
+
+      if (combined.includes("not possible to fast-forward") || combined.includes("fatal: not possible")) {
+        message = "远端分支已分叉，无法快进合并，请手动处理"
+      }
+
+      return c.json({ error: message, status: 500 }, 500)
     }
 
     return c.json({ ok: true, output: stdout, branch: getBranch(repo.localPath) })
