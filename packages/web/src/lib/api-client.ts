@@ -410,6 +410,22 @@ export async function deleteCustomAgent(id: string): Promise<void> {
   await apiFetch<void>(`/api/custom-agents/${encodeURIComponent(id)}`, { method: "DELETE" })
 }
 
+export interface CustomAgentExport {
+  version: number
+  type: "fourth-spark-custom-agent"
+  exportedAt: number
+  agent: { name: string; baseAgent: string; model: string | null; systemPrompt: string }
+  fragments: Array<{ name: string; content: string }>
+}
+
+export async function exportCustomAgent(id: string): Promise<CustomAgentExport> {
+  return apiFetch<CustomAgentExport>(`/api/custom-agents/${encodeURIComponent(id)}/export`)
+}
+
+export async function importCustomAgent(data: CustomAgentExport): Promise<CustomAgent> {
+  return apiFetch<CustomAgent>("/api/custom-agents/import", { method: "POST", body: JSON.stringify(data) })
+}
+
 export async function listRepoCustomAgents(repoId: string): Promise<CustomAgent[]> {
   return unwrapList<CustomAgent>(await apiFetch<unknown>(`${repoBase(repoId)}/custom-agents`))
 }

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, Ban, Bot, Check, Clock, Edit3, Eye, EyeOff, FileText, Gauge, GitBranch, Loader2, Plus, RefreshCw, Save, Trash2, User, Users, Wifi, X, Zap } from "lucide-react"
+import { AlertTriangle, Ban, Bot, Check, Clipboard, Clock, Download, Edit3, Eye, EyeOff, FileText, Gauge, GitBranch, Loader2, Plus, RefreshCw, Save, Trash2, Upload, User, Users, Wifi, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
-import type { AccountUsage, CustomAgent, GitHost, PromptFragment, UsageResult, UsageWindow } from "../lib/api-client"
+import type { AccountUsage, CustomAgent, CustomAgentExport, GitHost, PromptFragment, UsageResult, UsageWindow } from "../lib/api-client"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { isNativePlatform, getServerUrl, setServerUrl } from "../lib/config"
 
@@ -531,6 +531,25 @@ const BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atl
 
 function CustomAgentRow({ agent, onEdit, onDelete }: { agent: CustomAgent; onEdit: () => void; onDelete: () => void }) {
   const [confirming, setConfirming] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const handleExportDownload = async () => {
+    const data = await api.exportCustomAgent(agent.id)
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${agent.name.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, "_")}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExportCopy = async () => {
+    const data = await api.exportCustomAgent(agent.id)
+    await navigator.clipboard.writeText(JSON.stringify(data, null, 2))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
     <div className="group flex items-center gap-3 rounded-lg border border-line bg-base px-4 py-3">
@@ -561,6 +580,14 @@ function CustomAgentRow({ agent, onEdit, onDelete }: { agent: CustomAgent; onEdi
           </>
         ) : (
           <>
+            <button type="button" onClick={() => void handleExportDownload()} title="导出 JSON 文件"
+              className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100">
+              <Download className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => void handleExportCopy()} title="复制 JSON 到剪贴板"
+              className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100">
+              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Clipboard className="h-4 w-4" />}
+            </button>
             <button type="button" onClick={onEdit} className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100">
               <Edit3 className="h-4 w-4" />
             </button>
@@ -801,6 +828,87 @@ function FragmentForm({ initial, onSave, onCancel }: {
   )
 }
 
+function ImportAgentForm({ onImported, onCancel }: { onImported: () => void; onCancel: () => void }) {
+  const [jsonText, setJsonText] = useState("")
+  const [importing, setImporting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const doImport = async (text: string) => {
+    setError(null)
+    let parsed: CustomAgentExport
+    try {
+      parsed = JSON.parse(text) as CustomAgentExport
+    } catch {
+      setError("JSON 格式无效")
+      return
+    }
+    if (parsed.type !== "fourth-spark-custom-agent" || !parsed.agent) {
+      setError("不是有效的 Custom Agent 导出文件")
+      return
+    }
+    setImporting(true)
+    try {
+      await api.importCustomAgent(parsed)
+      onImported()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = reader.result as string
+      setJsonText(text)
+      void doImport(text)
+    }
+    reader.readAsText(file)
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-line bg-base p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-fg-3">导入 Custom Agent</span>
+        <button type="button" onClick={onCancel} className="rounded p-1 text-fg-5 hover:text-fg-3">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <input ref={fileRef} type="file" accept=".json" onChange={handleFile} className="hidden" />
+      <button type="button" onClick={() => fileRef.current?.click()}
+        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3">
+        <Upload className="h-3.5 w-3.5" /> 上传 JSON 文件
+      </button>
+
+      <div className="relative">
+        <textarea value={jsonText} onChange={(e) => setJsonText(e.target.value)} rows={4}
+          placeholder="或粘贴 JSON 内容…"
+          className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className="rounded-md px-3 py-1.5 text-xs text-fg-4 hover:bg-elevated">取消</button>
+        <button type="button" onClick={() => void doImport(jsonText)} disabled={importing || !jsonText.trim()}
+          className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40">
+          {importing ? "导入中…" : "导入"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function CustomAgentsSection() {
   const [agents, setAgents] = useState<CustomAgent[]>([])
   const [fragments, setFragments] = useState<PromptFragment[]>([])
@@ -809,6 +917,7 @@ function CustomAgentsSection() {
   const [editingAgent, setEditingAgent] = useState<CustomAgent | null>(null)
   const [showFragForm, setShowFragForm] = useState(false)
   const [editingFrag, setEditingFrag] = useState<PromptFragment | null>(null)
+  const [showImport, setShowImport] = useState(false)
 
   const load = () => {
     Promise.all([api.listGlobalCustomAgents(), api.listGlobalFragments()])
@@ -902,14 +1011,22 @@ function CustomAgentsSection() {
           )}
           {showAgentForm ? (
             <CustomAgentForm availableFragments={fragments} onSave={handleCreateAgent} onCancel={() => setShowAgentForm(false)} />
+          ) : showImport ? (
+            <ImportAgentForm onImported={() => { setShowImport(false); load(); void useCustomAgentStore.getState().loadAgents() }} onCancel={() => setShowImport(false)} />
           ) : (
-            <button type="button" onClick={() => setShowAgentForm(true)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3">
-              <Plus className="h-3.5 w-3.5" /> 添加 Custom Agent
-            </button>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setShowAgentForm(true)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3">
+                <Plus className="h-3.5 w-3.5" /> 添加 Custom Agent
+              </button>
+              <button type="button" onClick={() => setShowImport(true)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3">
+                <Upload className="h-3.5 w-3.5" /> 导入 Agent
+              </button>
+            </div>
           )}
         </div>
-        <p className="mt-4 text-[11px] text-fg-5">全局 Agent 对所有仓库可见。</p>
+        <p className="mt-4 text-[11px] text-fg-5">全局 Agent 对所有仓库可见。支持导出 JSON 分享给其他实例。</p>
       </section>
     </div>
   )
