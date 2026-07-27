@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { X } from "lucide-react"
 import { useRepoStore } from "../stores/repo-store"
 import { resolveRepo } from "../lib/api-client"
@@ -33,6 +33,18 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
     }
     setResolving(false)
   }
+
+  const resolveRef = useRef(handleResolvePath)
+  resolveRef.current = handleResolvePath
+
+  useEffect(() => {
+    const trimmed = localPath.trim()
+    if (!trimmed) return
+    const timer = setTimeout(() => {
+      void resolveRef.current(trimmed)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [localPath])
 
   const handleSubmit = async () => {
     if (!canSubmit) return
