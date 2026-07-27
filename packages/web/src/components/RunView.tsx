@@ -492,6 +492,9 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   })
   const sendError = useSessionStore((state) => state.sendError)
   const abortSession = useSessionStore((state) => state.abortSession)
+  const linkedIssue = useIssueStore((state) =>
+    session?.issueId ? state.issues.find((i) => i.id === session.issueId) : undefined,
+  )
 
   useEffect(() => {
     if (!activeSessionId) return
@@ -549,6 +552,23 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
           )}
           <ContextInfo session={session} messages={messages} />
         </div>
+        {linkedIssue && (
+          <a
+            href={linkedIssue.htmlUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
+          >
+            <span className={clsx(
+              "rounded px-1 py-0.5 text-[10px] font-semibold",
+              linkedIssue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
+            )}>
+              #{linkedIssue.number}
+            </span>
+            <span className="hidden max-w-[120px] truncate sm:inline">{linkedIssue.title}</span>
+            <ExternalLink className="h-3 w-3 shrink-0" />
+          </a>
+        )}
         <StatusBadge status={status} />
         {busy && (
           <button
