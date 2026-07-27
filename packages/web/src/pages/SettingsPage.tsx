@@ -4,7 +4,9 @@ import clsx from "clsx"
 import * as api from "../lib/api-client"
 import type { AccountUsage, CustomAgent, CustomAgentExport, GitHost, PromptFragment, UsageResult, UsageWindow } from "../lib/api-client"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
+import { useRepoStore } from "../stores/repo-store"
 import { isNativePlatform, getServerUrl, setServerUrl } from "../lib/config"
+import { ModelCombobox } from "../components/ModelCombobox"
 
 let usageCache: { data: UsageResult; fetchedAt: number } | null = null
 
@@ -609,6 +611,7 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
   onSave: (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => Promise<void>
   onCancel: () => void
 }) {
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const [name, setName] = useState(initial?.name ?? "")
   const [baseAgent, setBaseAgent] = useState(initial?.baseAgent ?? "Sisyphus - ultraworker")
   const [model, setModel] = useState(initial?.model ?? "")
@@ -683,11 +686,10 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
           </select>
         </label>
       </div>
-      <label className="block">
-        <span className="text-xs font-medium text-fg-3">模型（可选，如 anthropic/claude-sonnet-4-6）</span>
-        <input type="text" value={model} onChange={(e) => setModel(e.target.value)} placeholder="留空使用默认模型"
-          className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-1.5 font-mono text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
-      </label>
+      <div>
+        <span className="text-xs font-medium text-fg-3">模型（可选）</span>
+        <ModelCombobox value={model} onChange={setModel} repoId={activeRepoId} />
+      </div>
 
       <div>
         <span className="text-xs font-medium text-fg-3">提示词组合</span>
