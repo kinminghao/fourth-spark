@@ -188,3 +188,31 @@ repoRoutes.post("/:id/checkout", async (c) => {
     return c.json({ error: msg, status: 500 }, 500)
   }
 })
+
+// POST /api/repos/:id/pull — pull latest code from remote.
+repoRoutes.post("/:id/pull", async (c) => {
+  const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
+  if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
+
+  try {
+    const result = Bun.spawnSync(["git", "pull", "--ff-only", "--autostash"], { cwd: repo.localPath })
+    const stdout = result.stdout.toString().trim()
+    const stderr = result.stderr.toString().trim()
+
+    if (result.exitCode !== 0) {
+      const combined = `${stdout}\n${stderr}`.toLowerCase()
+      let message = stderr || stdout || "git pull failed"
+
+      if (combined.includes("not possible to fast-forward") || combined.includes("fatal: not possible")) {
+        message = "远端分支已分叉，无法快进合并，请手动处理"
+      }
+
+      return c.json({ error: message, status: 500 }, 500)
+    }
+
+    return c.json({ ok: true, output: stdout, branch: getBranch(repo.localPath) })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Failed to pull"
+    return c.json({ error: msg, status: 500 }, 500)
+  }
+})
