@@ -66,25 +66,9 @@ export function InputBar() {
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter") {
-      if (event.metaKey || event.ctrlKey) {
-        // Ctrl/Cmd+Enter: insert newline
-        event.preventDefault()
-        const el = event.currentTarget
-        const start = el.selectionStart
-        const end = el.selectionEnd
-        const next = value.slice(0, start) + "\n" + value.slice(end)
-        setValue(next)
-        requestAnimationFrame(() => {
-          el.selectionStart = el.selectionEnd = start + 1
-        })
-        return
-      }
-      if (!event.shiftKey) {
-        // Enter: send
-        event.preventDefault()
-        submit()
-      }
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault()
+      submit()
     }
   }
 
@@ -138,7 +122,7 @@ export function InputBar() {
         </button>
       </div>
       <div className="mx-auto mt-1.5 max-w-4xl pl-5 font-mono text-[10px] text-fg-6">
-        ⏎ to run · ⌘⏎ / ctrl+⏎ for newline
+        ⌘⏎ / ctrl+⏎ to run · shift+⏎ for newline
       </div>
     </div>
   )
