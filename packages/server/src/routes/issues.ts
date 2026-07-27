@@ -3,10 +3,17 @@ import { eq, and, desc, asc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { issues, issueComments, repos, tags, issueTags } from "../db/schema"
 import { parseGitUrl } from "../lib/git-url"
-import { createGitIssueClient, getHostInfo, type GitIssue, type GitComment } from "../lib/git-provider"
+import { createGitIssueClient, getHostInfo, GitApiError, type GitIssue, type GitComment } from "../lib/git-provider"
 import { logger } from "../middleware/logger"
 
 export const issueRoutes = new Hono()
+
+function extractUpstreamMessage(raw: string): string {
+  const jsonMatch = raw.match(/\{.*"message"\s*:\s*"([^"]+)"/)
+  if (jsonMatch?.[1]) return jsonMatch[1]
+  const arrow = raw.indexOf("→")
+  return arrow >= 0 ? raw.slice(arrow + 1).trim() : raw
+}
 
 function rewriteAttachmentUrls(text: string | null | undefined, repoId: string): string | null {
   if (!text) return text ?? null
@@ -322,7 +329,20 @@ issueRoutes.post("/:number/pulls/:prNumber/merge", async (c) => {
   const ctx = await getRepoGitClient(repoId)
   if (!ctx) return c.json({ error: "Repo not found or git host not configured" }, 400)
 
-  await ctx.client.mergePullRequest(prNumber)
+  try {
+    await ctx.client.mergePullRequest(prNumber)
+  } catch (err) {
+    if (err instanceof GitApiError) {
+      const msg = err.message
+      const isConflict = msg.includes("merge conflict") || msg.includes("not mergeable") || err.status === 405 || err.status === 409
+      const status = isConflict ? 409 : err.status >= 400 && err.status < 600 ? err.status : 500
+      const userMessage = isConflict
+        ? "PR 存在合并冲突，请先解决冲突后再合入"
+        : `合入失败: ${extractUpstreamMessage(msg)}`
+      return c.json({ error: userMessage, code: isConflict ? "MERGE_CONFLICT" : "MERGE_FAILED" }, status as 409)
+    }
+    return c.json({ error: "合入失败: 未知错误" }, 500)
+  }
 
   const body = await c.req.json<{ closeIssue?: boolean }>().catch(() => null)
   if (body?.closeIssue) {
