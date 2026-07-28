@@ -204,7 +204,8 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
+    if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
       submit()
     }
