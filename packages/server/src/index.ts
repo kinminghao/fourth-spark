@@ -24,6 +24,7 @@ import { processManager } from "./lib/process-manager"
 import { runMigrations } from "./db/migrate"
 import { resolve, join } from "node:path"
 import { existsSync } from "node:fs"
+import { execSync } from "node:child_process"
 import "./db/index"
 
 const app = new Hono()
@@ -107,17 +108,34 @@ if (existsSync(join(STATIC_DIR, "index.html"))) {
 }
 
 // ---------------------------------------------------------------------------
-// Startup — run migrations, then spawn opencode for all repos
+// Startup — sync database schema, then spawn opencode for all repos
 // ---------------------------------------------------------------------------
 logger.info({ port: PORT }, "fourth-spark server starting")
 
-runMigrations()
-  .then((ran) => {
-    if (ran) logger.info("database migrations applied")
-  })
-  .catch((err) => {
-    logger.error({ err }, "migration failed — continuing with existing schema")
-  })
+// Auto-detect dev vs prod and sync schema accordingly.
+// Dev mode (drizzle.config.ts present): push schema.ts directly — always in sync.
+// Prod mode (compiled binary): apply SQL migration files from drizzle/ folder.
+const drizzleConfigPath = resolve("./drizzle.config.ts")
+if (existsSync(drizzleConfigPath)) {
+  try {
+    execSync("bunx drizzle-kit push --force", {
+      cwd: resolve("./"),
+      stdio: "pipe",
+      timeout: 30_000,
+    })
+    logger.info("database schema synced (dev mode)")
+  } catch (err) {
+    logger.warn({ err }, "schema push failed — continuing with existing schema")
+  }
+} else {
+  runMigrations()
+    .then((ran) => {
+      if (ran) logger.info("database migrations applied")
+    })
+    .catch((err) => {
+      logger.error({ err }, "migration failed — continuing with existing schema")
+    })
+}
 
 processManager.startAll().then(() => {
   logger.info("all repos initialized")

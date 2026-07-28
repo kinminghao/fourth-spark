@@ -29,6 +29,10 @@ if [ -n "$TARGET" ]; then
 fi
 bun build "${COMPILE_ARGS[@]}"
 
+echo "→ Generating latest DB migrations..."
+cd "$ROOT/packages/server"
+bunx drizzle-kit generate
+
 echo "→ Copying runtime assets..."
 cp "$ROOT/docker-compose.yml" "$DIST/"
 cp -r "$ROOT/packages/server/drizzle" "$DIST/drizzle"
