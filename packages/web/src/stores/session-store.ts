@@ -61,7 +61,7 @@ interface SessionState {
   setActiveSession: (id: string) => Promise<void>
   refreshSessionData: (id: string) => Promise<void>
   deleteSession: (id: string) => Promise<void>
-  sendMessage: (content: string) => Promise<void>
+  sendMessage: (content: string, model?: string) => Promise<void>
   abortSession: () => Promise<void>
   clearSessions: () => void
   updateMessage: (sessionId: string, message: Message) => void
@@ -201,7 +201,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
   },
 
-  sendMessage: async (content) => {
+  sendMessage: async (content, model?) => {
     const repoId = getRepoId()
     const sessionId = get().activeSessionId
     if (!repoId || !sessionId) return
@@ -209,7 +209,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ sendError: null })
     get().setSessionStatus(sessionId, "busy")
     try {
-      await api.sendMessage(repoId, sessionId, content, session?.agent)
+      await api.sendMessage(repoId, sessionId, content, session?.agent, model)
     } catch (error) {
       set({
         sendError:
