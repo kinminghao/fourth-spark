@@ -521,3 +521,19 @@ body {
     transform: scaleX(0);
   }
 }
+
+@keyframes highlight-flash {
+  0%, 15% {
+    outline: 2px solid var(--color-blue-500, #3b82f6);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  100% {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+  }
+}
+
+.fs-highlight {
+  animation: highlight-flash 2s ease-out;
+}

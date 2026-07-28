@@ -37,6 +37,47 @@ function activeLabel(todos: Todo[]): string {
   return "all steps complete"
 }
 
+export function TodoProgressCompact({
+  todos,
+  onClick,
+}: {
+  todos: Todo[]
+  onClick?: () => void
+}) {
+  if (todos.length === 0) return null
+
+  const total = todos.length
+  const completed = countCompletedTodos(todos)
+
+  return (
+    <div className="rounded-md border border-line bg-term/60 px-3 py-2">
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full items-center gap-2 text-left font-mono text-xs"
+      >
+        <span className="shrink-0 tabular-nums text-fg-4">
+          [{completed}/{total}]
+        </span>
+        <span className="shrink-0 tracking-tight">
+          {todos.map((todo) => {
+            const square = SQUARE[normalizeTodoStatus(todo.status)]
+            return (
+              <span key={todo.id} className={square.color}>
+                {square.glyph}
+              </span>
+            )
+          })}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-fg-2">
+          {activeLabel(todos)}
+        </span>
+        <span className="shrink-0 text-[10px] text-fg-5">详情 →</span>
+      </button>
+    </div>
+  )
+}
+
 export function TodoProgress({ todos }: { todos: Todo[] }) {
   const [expanded, setExpanded] = useState(false)
 
