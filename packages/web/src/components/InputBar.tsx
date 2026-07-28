@@ -66,7 +66,8 @@ export function InputBar() {
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
+    if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
       submit()
     }
@@ -122,7 +123,7 @@ export function InputBar() {
         </button>
       </div>
       <div className="mx-auto mt-1.5 max-w-4xl pl-5 font-mono text-[10px] text-fg-6">
-        ⌘⏎ / ctrl+⏎ to run · shift+⏎ for newline
+        ⏎ to run · shift+⏎ for newline
       </div>
     </div>
   )
