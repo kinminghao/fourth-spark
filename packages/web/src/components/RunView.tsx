@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
 } from "react"
 import { useNavigate } from "react-router-dom"
-import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, ExternalLink, GitBranch, Menu, Play, Search, Square, X } from "lucide-react"
+import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, ExternalLink, GitBranch, Menu, PanelRight, Play, Search, Square, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
@@ -23,7 +23,7 @@ import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useIssueStore } from "../stores/issue-store"
 import { orchestrator } from "../lib/session-orchestrator"
 import { ExecutionBlock } from "./ExecutionBlock"
-import { TodoProgress } from "./TodoProgress"
+import { TodoProgressCompact } from "./TodoProgress"
 import { InputBar } from "./InputBar"
 
 const STATUS_META: Record<
@@ -568,7 +568,15 @@ function IssuePreview({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   )
 }
 
-export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
+export function RunView({
+  onToggleSidebar,
+  onToggleRightPanel,
+  rightPanelOpen,
+}: {
+  onToggleSidebar?: () => void
+  onToggleRightPanel?: () => void
+  rightPanelOpen?: boolean
+}) {
   const navigate = useNavigate()
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
   const previewIssueId = useIssueStore((state) => state.previewIssueId)
@@ -670,6 +678,21 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
           </button>
         )}
         <StatusBadge status={status} reason={errorReason} />
+        {onToggleRightPanel && (
+          <button
+            type="button"
+            onClick={onToggleRightPanel}
+            aria-label={rightPanelOpen ? "关闭侧边栏" : "打开侧边栏"}
+            className={clsx(
+              "hidden items-center justify-center rounded-md border border-line p-1.5 transition-colors md:flex",
+              rightPanelOpen
+                ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20"
+                : "text-fg-4 hover:bg-elevated hover:text-fg-2",
+            )}
+          >
+            <PanelRight className="h-4 w-4" />
+          </button>
+        )}
         {busy && (
           <button
             type="button"
@@ -695,11 +718,18 @@ export function RunView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
                 {index > 0 && message.role === "user" && (
                   <div className="border-t border-line/70" />
                 )}
-                <ExecutionBlock message={message} />
+                <div data-message-id={message.id}>
+                  <ExecutionBlock message={message} />
+                </div>
               </Fragment>
             ))
           )}
-          {todos.length > 0 && <TodoProgress todos={[...todos]} />}
+          {todos.length > 0 && (
+            <TodoProgressCompact
+              todos={[...todos]}
+              onClick={onToggleRightPanel}
+            />
+          )}
         </div>
       </div>
 
