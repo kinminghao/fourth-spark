@@ -6,7 +6,7 @@ import type { AccountUsage, CustomAgent, CustomAgentExport, GitHost, ModelInfo, 
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useRepoStore } from "../stores/repo-store"
 import { isNativePlatform, getServerUrl, setServerUrl } from "../lib/config"
-import { ModelCombobox } from "../components/ModelCombobox"
+
 
 let usageCache: { data: UsageResult; fetchedAt: number } | null = null
 
@@ -832,6 +832,27 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
   const [systemPrompt, setSystemPrompt] = useState(initial?.systemPrompt ?? "")
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [pinnedModels, setPinnedModels] = useState<ModelInfo[]>([])
+
+  useEffect(() => {
+    if (!activeRepoId) { setPinnedModels([]); return }
+    let cancelled = false
+    void (async () => {
+      try {
+        const [settings, models] = await Promise.all([
+          api.getSettings(),
+          api.listModels(activeRepoId),
+        ])
+        if (cancelled) return
+        const raw = settings[PINNED_MODELS_KEY]
+        const pinnedIds: string[] = raw ? JSON.parse(raw) : []
+        setPinnedModels(pinnedIds.length > 0 ? models.filter((m) => pinnedIds.includes(m.id)) : [])
+      } catch {
+        if (!cancelled) setPinnedModels([])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [activeRepoId])
 
   const [orderedItems, setOrderedItems] = useState<string[]>(() => {
     const fragIds = initial?.fragments.map((f) => f.id) ?? []
@@ -902,7 +923,19 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
       </div>
       <div>
         <span className="text-xs font-medium text-fg-3">模型（可选）</span>
-        <ModelCombobox value={model} onChange={setModel} repoId={activeRepoId} />
+        <select
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none"
+        >
+          <option value="">默认模型</option>
+          {pinnedModels.map((m) => (
+            <option key={m.id} value={m.id}>{m.name || m.id}</option>
+          ))}
+        </select>
+        {pinnedModels.length === 0 && (
+          <p className="mt-1 text-[11px] text-fg-5">在「模型」Tab 中勾选常用模型后可选择。</p>
+        )}
       </div>
 
       <div>

@@ -17,8 +17,7 @@ import {
   EMPTY_TODOS,
   useSessionStore,
 } from "../stores/session-store"
-import type { Message as ApiMessage, ModelInfo, Session } from "../lib/api-client"
-import { getSettings, listModels } from "../lib/api-client"
+import type { Message as ApiMessage, Session } from "../lib/api-client"
 import { useRepoStore } from "../stores/repo-store"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useIssueStore } from "../stores/issue-store"
@@ -156,31 +155,6 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const issues = useIssueStore((state) => state.issues)
   const selectedIssueId = useIssueStore((state) => state.selectedIssueId)
   const pendingDraft = useIssueStore((state) => state.pendingDraft)
-  const [selectedModel, setSelectedModel] = useState("")
-  const [pinnedModels, setPinnedModels] = useState<ModelInfo[]>([])
-
-  useEffect(() => {
-    if (!activeRepoId) { setPinnedModels([]); return }
-    let cancelled = false
-    void (async () => {
-      try {
-        const [settings, models] = await Promise.all([
-          getSettings(),
-          listModels(activeRepoId),
-        ])
-        if (cancelled) return
-        const raw = settings.pinned_models
-        const pinnedIds: string[] = raw ? JSON.parse(raw) : []
-        const pinned = pinnedIds.length > 0
-          ? models.filter((m) => pinnedIds.includes(m.id))
-          : []
-        setPinnedModels(pinned)
-      } catch {
-        if (!cancelled) setPinnedModels([])
-      }
-    })()
-    return () => { cancelled = true }
-  }, [activeRepoId])
 
   useEffect(() => {
     if (selectedIssueId) {
@@ -226,7 +200,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     const text = draft.trim()
     if (!activeRepoId || (!text && !hasContext)) return
     setDraft("")
-    void createSession(text, undefined, selectedModel || undefined, undefined, issueId || undefined, customAgentId || undefined)
+    void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined)
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -297,21 +271,6 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
                 ))}
               </select>
             </label>
-            {pinnedModels.length > 0 && (
-              <label className="flex items-center gap-1.5 font-mono text-[11px] text-fg-4">
-                <span className="shrink-0">Model</span>
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="max-w-[180px] truncate rounded border border-line bg-surface px-2 py-1 font-mono text-xs text-fg focus:border-fg-5 focus:outline-none"
-                >
-                  <option value="">默认</option>
-                  {pinnedModels.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name || m.id}</option>
-                  ))}
-                </select>
-              </label>
-            )}
             {issues.length > 0 && (
               <div ref={issueComboRef} className="relative flex min-w-0 flex-1 items-center gap-1.5 font-mono text-[11px] text-fg-4">
                 <span className="shrink-0">Issue</span>
