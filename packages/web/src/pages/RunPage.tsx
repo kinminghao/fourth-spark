@@ -1,14 +1,15 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Check, ChevronRight, Copy, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import type { Session } from "../lib/api-client"
-import { useSessionStore, EMPTY_TODOS } from "../stores/session-store"
+import { useSessionStore, EMPTY_TODOS, EMPTY_MESSAGES } from "../stores/session-store"
 import { useRepoStore } from "../stores/repo-store"
 import { useIssueStore } from "../stores/issue-store"
 import { RunView } from "../components/RunView"
+import { SidePanel } from "../components/SidePanel"
 import { useSwipeDrawer } from "../hooks/use-swipe-drawer"
 import { SwipeDrawer } from "../components/SwipeDrawer"
-import { normalizeTodoStatus } from "../lib/message-parts"
+
 
 function sessionTime(session: Session): number {
   if (typeof session.time?.updated === "number") return session.time.updated
@@ -581,108 +582,62 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
   )
 }
 
-/* ---- Right-side detail panel (mobile drawer content) ---- */
-
-const TODO_MARK: Record<string, { glyph: string; color: string; spin: boolean }> = {
-  completed: { glyph: "✓", color: "text-emerald-400", spin: false },
-  in_progress: { glyph: "◌", color: "text-amber-400", spin: true },
-  cancelled: { glyph: "✗", color: "text-fg-5", spin: false },
-  pending: { glyph: "○", color: "text-fg-4", spin: false },
-}
-
-function SessionInfoPanel() {
-  const session = useSessionStore(
-    (s) => s.sessions.find((item) => item.id === s.activeSessionId) ?? null,
-  )
-  const todos = useSessionStore((s) => {
-    const id = s.activeSessionId
-    return id ? (s.todos[id] ?? EMPTY_TODOS) : EMPTY_TODOS
-  })
-  const status = useSessionStore((s) => {
-    const id = s.activeSessionId
-    return id ? s.sessionStatuses[id] : undefined
-  })
-
-  if (!session) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="font-mono text-xs text-fg-5">未选择运行</p>
-      </div>
-    )
-  }
-
-  const statusMeta: Record<string, { label: string; color: string }> = {
-    idle: { label: "就绪", color: "text-emerald-400" },
-    busy: { label: "运行中", color: "text-amber-400" },
-    retry: { label: "重试中", color: "text-amber-400" },
-    error: { label: "错误", color: "text-red-400" },
-  }
-  const meta = statusMeta[status ?? "idle"] ?? statusMeta.idle
-
-  const doneCount = todos.filter((t) => {
-    const st = normalizeTodoStatus(t.status)
-    return st === "completed" || st === "cancelled"
-  }).length
-
-  return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-line px-3 py-3">
-        <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">
-          Session 详情
-        </span>
-      </div>
-      <div className="flex-1 overflow-y-auto px-3 py-3">
-        <div className="space-y-2 border-b border-line pb-3">
-          <div>
-            <span className="text-[10px] font-semibold uppercase text-fg-5">标题</span>
-            <p className="mt-0.5 text-sm text-fg-2">{session.title?.trim() || "未命名运行"}</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div>
-              <span className="text-[10px] font-semibold uppercase text-fg-5">Agent</span>
-              <p className="mt-0.5 font-mono text-xs text-fg-3">{session.agent?.trim() || "默认"}</p>
-            </div>
-            <div>
-              <span className="text-[10px] font-semibold uppercase text-fg-5">状态</span>
-              <p className={clsx("mt-0.5 font-mono text-xs", meta.color)}>{meta.label}</p>
-            </div>
-          </div>
-        </div>
-
-        {todos.length > 0 && (
-          <div className="mt-3">
-            <span className="text-[10px] font-semibold uppercase text-fg-5">
-              待办 ({doneCount}/{todos.length})
-            </span>
-            <ul className="mt-2 space-y-1.5">
-              {todos.map((todo) => {
-                const st = normalizeTodoStatus(todo.status)
-                const mark = TODO_MARK[st] ?? TODO_MARK.pending
-                const done = st === "completed" || st === "cancelled"
-                return (
-                  <li key={todo.id} className="flex items-start gap-2 font-mono text-xs">
-                    <span className={clsx("shrink-0 leading-5", mark.color, mark.spin && "fs-spin")}>
-                      {mark.glyph}
-                    </span>
-                    <span className={clsx("leading-5", done ? "text-fg-5 line-through" : "text-fg-2")}>
-                      {todo.content}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
 /* ---- Page ---- */
+
+function useIsXl(): boolean {
+  const [isXl, setIsXl] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1280px)").matches,
+  )
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1280px)")
+    const handler = (e: MediaQueryListEvent) => setIsXl(e.matches)
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  }, [])
+  return isXl
+}
+
+function scrollToMessage(messageId: string) {
+  const el = document.querySelector(`[data-message-id="${messageId}"]`)
+  if (!el) return
+  el.scrollIntoView({ behavior: "smooth", block: "center" })
+  el.classList.add("fs-highlight")
+  setTimeout(() => el.classList.remove("fs-highlight"), 2000)
+}
 
 export function RunPage() {
   const [leftOpen, setLeftOpen] = useState(false)
   const [rightOpen, setRightOpen] = useState(false)
+  const [sidePanelOpen, setSidePanelOpen] = useState(false)
+
+  const isXl = useIsXl()
+  const activeSessionId = useSessionStore((s) => s.activeSessionId)
+  const todos = useSessionStore((s) => {
+    const id = s.activeSessionId
+    return id ? (s.todos[id] ?? EMPTY_TODOS) : EMPTY_TODOS
+  })
+  const messages = useSessionStore((s) => {
+    const id = s.activeSessionId
+    return id ? (s.messages[id] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES
+  })
+
+  useEffect(() => {
+    if (isXl && activeSessionId) {
+      setSidePanelOpen(true)
+    } else if (!isXl) {
+      setSidePanelOpen(false)
+    }
+  }, [isXl, activeSessionId])
+
+  const desktopSidePanelVisible = sidePanelOpen && !!activeSessionId
+
+  const toggleRightPanel = () => {
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      setRightOpen((v) => !v)
+    } else {
+      setSidePanelOpen((v) => !v)
+    }
+  }
 
   const swipeHandlers = useSwipeDrawer({
     onSwipeRight: () => setLeftOpen(true),
@@ -692,7 +647,7 @@ export function RunPage() {
 
   return (
     <div className="flex min-h-0 flex-1" {...swipeHandlers}>
-      {/* Desktop sidebar — always visible at md+ */}
+      {/* Desktop left sidebar — always visible at md+ */}
       <div className="hidden shrink-0 md:flex">
         <SessionPanel />
       </div>
@@ -702,15 +657,34 @@ export function RunPage() {
         <SessionPanel onClose={() => setLeftOpen(false)} />
       </SwipeDrawer>
 
-      {/* Mobile right drawer — Session detail / Todo */}
+      {/* Mobile right drawer — SidePanel (Todo + Prompts) */}
       <SwipeDrawer side="right" open={rightOpen} onClose={() => setRightOpen(false)}>
-        <SessionInfoPanel />
+        <SidePanel
+          todos={todos}
+          messages={messages}
+          onScrollToMessage={(id) => { setRightOpen(false); setTimeout(() => scrollToMessage(id), 300) }}
+        />
       </SwipeDrawer>
 
       {/* Main content */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <RunView onToggleSidebar={() => setLeftOpen((v) => !v)} />
+        <RunView
+          onToggleSidebar={() => setLeftOpen((v) => !v)}
+          onToggleRightPanel={toggleRightPanel}
+          rightPanelOpen={desktopSidePanelVisible}
+        />
       </div>
+
+      {/* Desktop right sidebar — SidePanel (Todo + Prompts) */}
+      {desktopSidePanelVisible && (
+        <div className="hidden shrink-0 md:flex">
+          <SidePanel
+            todos={todos}
+            messages={messages}
+            onScrollToMessage={scrollToMessage}
+          />
+        </div>
+      )}
     </div>
   )
 }
