@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, Ban, Bot, Check, Clipboard, Clock, Cpu, Download, Edit3, Eye, EyeOff, FileText, Gauge, GitBranch, Loader2, Plus, RefreshCw, Save, Trash2, Upload, User, Users, Wifi, X, Zap } from "lucide-react"
+import { AlertTriangle, Ban, Bot, Check, Clipboard, Clock, Cpu, Download, Edit3, Eye, EyeOff, FileText, Gauge, GitBranch, Loader2, Plus, RefreshCw, Save, Search, Trash2, Upload, User, Users, Wifi, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
 import type { AccountUsage, CustomAgent, CustomAgentExport, GitHost, ModelInfo, PromptFragment, UsageResult, UsageWindow } from "../lib/api-client"
@@ -566,6 +566,8 @@ function ModelManagementSection() {
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activeProvider, setActiveProvider] = useState<string | null>(null)
+  const [query, setQuery] = useState("")
 
   useEffect(() => {
     let cancelled = false
@@ -582,6 +584,8 @@ function ModelManagementSection() {
         const pinned: string[] = raw ? JSON.parse(raw) : []
         setPinnedIds(new Set(pinned))
         setModels(modelList)
+        setActiveProvider(null)
+        setQuery("")
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       }
@@ -605,6 +609,15 @@ function ModelManagementSection() {
 
   const grouped = useMemo(() => groupModelsByProvider(models), [models])
   const pinnedCount = models.filter((m) => pinnedIds.has(m.id)).length
+
+  const selectedGroup = activeProvider
+    ? grouped.find((g) => g.provider === activeProvider)
+    : grouped[0]
+
+  const q = query.trim().toLowerCase()
+  const visibleModels = selectedGroup
+    ? (q ? selectedGroup.models.filter((m) => (m.name || m.id).toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : selectedGroup.models)
+    : []
 
   return (
     <section className="rounded-xl border border-line bg-surface p-5">
@@ -645,14 +658,54 @@ function ModelManagementSection() {
             <p className="text-xs">当前仓库没有可用模型。</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {grouped.map((group) => (
-              <div key={group.provider} className="rounded-lg border border-line bg-base">
-                <div className="border-b border-line/60 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-fg-5">
-                  {group.provider}
-                </div>
+          <>
+            <div className="flex gap-1 overflow-x-auto rounded-lg border border-line bg-base p-1">
+              {grouped.map((g) => {
+                const isActive = g.provider === (activeProvider ?? grouped[0]?.provider)
+                const count = g.models.filter((m) => pinnedIds.has(m.id)).length
+                return (
+                  <button
+                    key={g.provider}
+                    type="button"
+                    onClick={() => { setActiveProvider(g.provider); setQuery("") }}
+                    className={clsx(
+                      "flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                      isActive ? "bg-surface text-fg shadow-sm" : "text-fg-4 hover:text-fg-3",
+                    )}
+                  >
+                    {g.provider}
+                    {count > 0 && (
+                      <span className="rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-blue-500">
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="mt-3 flex items-center gap-2 rounded-md border border-line bg-base px-3 py-1.5">
+              <Search className="h-3.5 w-3.5 shrink-0 text-fg-5" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索模型…"
+                className="min-w-0 flex-1 bg-transparent text-xs text-fg placeholder:text-fg-6 focus:outline-none"
+              />
+              {query && (
+                <button type="button" onClick={() => setQuery("")} className="text-fg-5 hover:text-fg-3">
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+
+            <div className="mt-3 rounded-lg border border-line bg-base">
+              {visibleModels.length === 0 ? (
+                <div className="px-3 py-6 text-center text-xs text-fg-5">无匹配模型</div>
+              ) : (
                 <div className="divide-y divide-line/40">
-                  {group.models.map((m) => {
+                  {visibleModels.map((m) => {
                     const checked = pinnedIds.has(m.id)
                     const ctx = fmtCtx(m.contextLimit)
                     const cost = fmtCost(m.cost)
@@ -681,9 +734,9 @@ function ModelManagementSection() {
                     )
                   })}
                 </div>
-              </div>
-            ))}
-          </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </section>
