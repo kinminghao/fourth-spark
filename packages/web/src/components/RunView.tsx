@@ -621,6 +621,22 @@ export function RunView({
     }
   }, [messages, todos])
 
+  useEffect(() => {
+    if (status !== "busy") return
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return
+      const target = event.target as HTMLElement | null
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable
+      ) return
+      void abortSession()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [status, abortSession])
+
   const matchingParentId = useIssueStore((state) => state.matchingParentId)
 
   if (!activeSessionId) {
