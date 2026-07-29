@@ -8,7 +8,7 @@
 import { create } from "zustand"
 import * as api from "../lib/api-client"
 import type { Message, MessagePart, Session, Todo, SessionLinks, SessionLinkSummary } from "../lib/api-client"
-import { isQuestionTool, isQuestionPending } from "../lib/message-parts"
+import { isQuestionTool, isQuestionPending, getPartText } from "../lib/message-parts"
 import { useRepoStore } from "./repo-store"
 import { useToastStore } from "./toast-store"
 
@@ -74,6 +74,12 @@ interface SessionState {
     sessionId: string,
     messageId: string,
     part: MessagePart,
+  ) => void
+  appendMessagePartDelta: (
+    sessionId: string,
+    messageId: string,
+    partId: string,
+    delta: string,
   ) => void
   updateTodos: (sessionId: string, todos: Todo[]) => void
   setSessionStatus: (sessionId: string, status: string, reason?: string) => void
@@ -349,6 +355,33 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (isQuestionTool(part) && isQuestionPending(part)) {
       fireQuestionToast(sessionId, get().sessions)
     }
+  },
+
+  appendMessagePartDelta: (sessionId, messageId, partId, delta) => {
+    set((state) => {
+      const list = state.messages[sessionId] ?? []
+      const idx = list.findIndex((m) => m.id === messageId)
+      const base: Message =
+        idx >= 0 ? list[idx] : { id: messageId, role: "assistant" }
+      const parts = base.parts ? [...base.parts] : []
+      const partIdx = parts.findIndex((p) => p.id === partId)
+      if (partIdx >= 0) {
+        const existing = parts[partIdx]
+        const nextText = getPartText(existing) + delta
+        parts[partIdx] =
+          existing.content != null
+            ? { ...existing, content: nextText }
+            : { ...existing, text: nextText }
+      } else {
+        parts.push({ id: partId, type: "text", text: delta })
+      }
+      const updated: Message = { ...base, parts }
+      const next = idx >= 0 ? [...list] : [...list, updated]
+      if (idx >= 0) {
+        next[idx] = updated
+      }
+      return { messages: { ...state.messages, [sessionId]: next } }
+    })
   },
 
   updateTodos: (sessionId, todos) => {
