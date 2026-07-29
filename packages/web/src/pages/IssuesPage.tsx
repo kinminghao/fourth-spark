@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   Activity,
   AlertTriangle,
+  ChevronDown,
   ChevronLeft,
   CircleDot,
   ExternalLink,
@@ -197,10 +198,90 @@ function IssueRow({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Full-width issue row (for list mode)                              */
+/* ------------------------------------------------------------------ */
+
+function FullWidthIssueRow({
+  issue,
+  sessionCount,
+  isEpic,
+  milestone,
+  onSelect,
+}: {
+  issue: Issue
+  sessionCount: number
+  isEpic?: boolean
+  milestone?: Milestone
+  onSelect: () => void
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="group flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left transition-colors hover:bg-elevated/50"
+      >
+        <span
+          className={clsx(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-mono text-sm font-bold",
+            issue.state === "open"
+              ? "bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 text-emerald-400 ring-1 ring-emerald-500/25"
+              : "bg-gradient-to-br from-purple-500/20 to-purple-500/5 text-purple-400 ring-1 ring-purple-500/25",
+          )}
+        >
+          {issue.number}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            {isEpic && (
+              <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide bg-amber-400/12 text-amber-400">
+                EPIC
+              </span>
+            )}
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg-2 group-hover:text-fg">
+              {issue.title}
+            </span>
+            {milestone && (
+              <span className="hidden shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium bg-indigo-500/15 text-indigo-400 sm:flex">
+                <Flag className="h-2.5 w-2.5" />
+                {milestone.title}
+              </span>
+            )}
+            {sessionCount > 0 && (
+              <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 font-mono text-[10px] text-fg-5">
+                {sessionCount} 次运行
+              </span>
+            )}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {issue.labels && issue.labels.length > 0 ? (
+              issue.labels.map((l) => (
+                <span
+                  key={l.id}
+                  className="rounded px-1.5 py-0.5 text-[11px] font-medium"
+                  style={{
+                    backgroundColor: `#${l.color}20`,
+                    color: `#${l.color}`,
+                  }}
+                >
+                  {l.name}
+                </span>
+              ))
+            ) : (
+              <span className="text-[11px] text-fg-6">&nbsp;</span>
+            )}
+          </div>
+        </div>
+      </button>
+    </li>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  Detail panel (right side)                                         */
 /* ------------------------------------------------------------------ */
 
-function IssueDetail({ issue, milestone, onBack, onToggleSidebar }: { issue: Issue; milestone?: Milestone; onBack?: () => void; onToggleSidebar?: () => void }) {
+function IssueDetail({ issue, milestone, onBack, onClose, onToggleSidebar }: { issue: Issue; milestone?: Milestone; onBack?: () => void; onClose?: () => void; onToggleSidebar?: () => void }) {
   const navigate = useNavigate()
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const [comments, setComments] = useState<IssueComment[]>([])
@@ -399,6 +480,16 @@ function IssueDetail({ issue, milestone, onBack, onToggleSidebar }: { issue: Iss
               className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-2"
             >
               <PanelRight className="h-4 w-4" />
+            </button>
+          )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              title="关闭详情"
+              className="hidden h-8 w-8 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-2 md:flex"
+            >
+              <X className="h-4 w-4" />
             </button>
           )}
         </div>
@@ -877,13 +968,16 @@ function IssueSessionSidebar({
 
 export function IssuesPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("open")
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>("epic")
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("stray")
   const [creating, setCreating] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [treeRootId, setTreeRootId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [listDrawerOpen, setListDrawerOpen] = useState(false)
+  const [expandedFilter, setExpandedFilter] = useState<"type" | "tag" | "milestone" | "author" | "assignee" | null>(null)
+  const [selectedAuthor, setSelectedAuthor] = useState<string | null>(null)
+  const [selectedAssignee, setSelectedAssignee] = useState<string | null>(null)
 
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -891,8 +985,8 @@ export function IssuesPage() {
   const syncing = useIssueStore((s) => s.syncing)
   const syncIssues = useIssueStore((s) => s.syncIssues)
   const tags = useIssueStore((s) => s.tags)
-  const selectedTagIds = useIssueStore((s) => s.selectedTagIds)
-  const toggleTagFilter = useIssueStore((s) => s.toggleTagFilter)
+  const tagFilterMode = useIssueStore((s) => s.tagFilterMode)
+  const cycleTagFilter = useIssueStore((s) => s.cycleTagFilter)
   const clearTagFilter = useIssueStore((s) => s.clearTagFilter)
   const loadTags = useIssueStore((s) => s.loadTags)
   const milestones = useIssueStore((s) => s.milestones)
@@ -946,13 +1040,17 @@ export function IssuesPage() {
 
   const afterState = stateFilter === "all" ? issues : issues.filter((i) => i.state === stateFilter)
   const afterType = typeFilter === "all" ? afterState : afterState.filter((i) => issueType(i) === typeFilter)
-  const afterTags = selectedTagIds.size === 0
+  const afterTags = tagFilterMode.size === 0
     ? afterType
     : afterType.filter((i) => {
-        if (!i.labels || i.labels.length === 0) return false
-        const issueTagNames = new Set(i.labels.map((l) => l.name))
-        const selectedNames = tags.filter((t) => selectedTagIds.has(t.id)).map((t) => t.name)
-        return selectedNames.every((n) => issueTagNames.has(n))
+        const issueTagNames = new Set((i.labels ?? []).map((l) => l.name))
+        for (const [tagId, mode] of tagFilterMode) {
+          const tagName = tags.find((t) => t.id === tagId)?.name
+          if (!tagName) continue
+          if (mode === "include" && !issueTagNames.has(tagName)) return false
+          if (mode === "exclude" && issueTagNames.has(tagName)) return false
+        }
+        return true
       })
   const sq = searchQuery.trim().toLowerCase()
   const filtered = !sq
@@ -961,6 +1059,23 @@ export function IssuesPage() {
   const afterMilestone = selectedMilestoneId
     ? filtered.filter((i) => i.milestoneId === selectedMilestoneId)
     : filtered
+  const afterAuthor = !selectedAuthor
+    ? afterMilestone
+    : afterMilestone.filter((i) => i.authorLogin === selectedAuthor)
+  const finalFiltered = !selectedAssignee
+    ? afterAuthor
+    : afterAuthor.filter((i) => (i.assignees ?? []).some((a) => a.login === selectedAssignee))
+
+  const uniqueAuthors = (() => {
+    const m = new Map<string, { login: string; avatar: string | undefined }>()
+    for (const i of issues) if (i.authorLogin && !m.has(i.authorLogin)) m.set(i.authorLogin, { login: i.authorLogin, avatar: i.authorAvatar })
+    return [...m.values()]
+  })()
+  const uniqueAssignees = (() => {
+    const m = new Map<string, { login: string; avatar: string | undefined }>()
+    for (const i of issues) for (const a of i.assignees ?? []) if (!m.has(a.login)) m.set(a.login, { login: a.login, avatar: a.avatar_url })
+    return [...m.values()]
+  })()
 
   const openCount = issues.filter((i) => i.state === "open").length
   const closedCount = issues.filter((i) => i.state === "closed").length
@@ -1004,273 +1119,458 @@ export function IssuesPage() {
       {/* ---- left: issue list ---- */}
       <div
         className={clsx(
-          "w-full shrink-0 flex-col border-r border-line bg-surface md:w-80",
-          selectedId ? "hidden md:flex" : "flex",
+          "shrink-0 flex-col bg-surface",
+          selectedId
+            ? "hidden md:flex md:w-80 border-r border-line"
+            : "flex w-full",
         )}
       >
-        {/* header */}
-        <div className="flex items-center justify-between border-b border-line px-3 py-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">
-            Issues
-          </span>
-          {activeRepoId && (
-            <div className="flex items-center gap-1">
+        {!selectedId ? (
+          <>
+            <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+              <span className="shrink-0 text-sm font-semibold text-fg">Issues</span>
+              <div className="flex shrink-0 items-center rounded-lg bg-elevated/60 p-0.5">
+                {STATE_FILTERS.map(({ key, label }) => {
+                  const count = key === "open" ? openCount : key === "closed" ? closedCount : issues.length
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setStateFilter(key)}
+                      className={clsx(
+                        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                        stateFilter === key
+                          ? "bg-surface text-fg shadow-sm"
+                          : "text-fg-4 hover:text-fg-2",
+                      )}
+                    >
+                      {label}
+                      <span className={clsx(
+                        "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+                        stateFilter === key ? "bg-blue-500/10 text-blue-500" : "text-fg-5",
+                      )}>
+                        {count}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="mx-1 h-4 w-px shrink-0 bg-line" />
               <button
                 type="button"
-                onClick={() => void syncIssues()}
-                disabled={syncing}
-                title="同步 Issues"
-                className="flex h-7 w-7 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"
-              >
-                <RefreshCw
-                  className={clsx("h-3.5 w-3.5", syncing && "animate-spin")}
-                />
-              </button>
-              <button
-                type="button"
-                onClick={() => setCreating((v) => !v)}
-                title="新建 Issue"
+                onClick={() => setExpandedFilter(expandedFilter === "type" ? null : "type")}
                 className={clsx(
-                  "flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-                  creating
-                    ? "bg-blue-600 text-white"
-                    : "text-fg-4 hover:bg-elevated hover:text-fg-2",
+                  "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                  expandedFilter === "type" ? "bg-elevated text-fg"
+                    : typeFilter !== "all" ? "text-fg-2" : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
                 )}
               >
-                <Plus className="h-3.5 w-3.5" />
+                类型
+                {typeFilter !== "all" && (
+                  <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">
+                    {typeFilter === "epic" ? "Epic" : typeFilter === "task" ? "任务" : "游离"}
+                  </span>
+                )}
+                <ChevronDown className={clsx("h-3 w-3 transition-transform", expandedFilter === "type" && "rotate-180")} />
               </button>
+              <button
+                type="button"
+                onClick={() => setExpandedFilter(expandedFilter === "tag" ? null : "tag")}
+                className={clsx(
+                  "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                  expandedFilter === "tag" ? "bg-elevated text-fg"
+                    : tagFilterMode.size > 0 ? "text-fg-2" : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
+                )}
+              >
+                标签
+                {tagFilterMode.size > 0 && (
+                  <span className="rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">
+                    {tagFilterMode.size}
+                  </span>
+                )}
+                <ChevronDown className={clsx("h-3 w-3 transition-transform", expandedFilter === "tag" && "rotate-180")} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setExpandedFilter(expandedFilter === "milestone" ? null : "milestone")}
+                className={clsx(
+                  "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                  expandedFilter === "milestone" ? "bg-elevated text-fg"
+                    : selectedMilestoneId ? "text-fg-2" : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
+                )}
+              >
+                Milestone
+                {selectedMilestoneId && (() => {
+                  const ms = milestones.find((m) => m.id === selectedMilestoneId)
+                  return ms ? <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">{ms.title}</span> : null
+                })()}
+                <ChevronDown className={clsx("h-3 w-3 transition-transform", expandedFilter === "milestone" && "rotate-180")} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setExpandedFilter(expandedFilter === "author" ? null : "author")}
+                className={clsx(
+                  "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                  expandedFilter === "author" ? "bg-elevated text-fg"
+                    : selectedAuthor ? "text-fg-2" : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
+                )}
+              >
+                Author
+                {selectedAuthor && (
+                  <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">{selectedAuthor}</span>
+                )}
+                <ChevronDown className={clsx("h-3 w-3 transition-transform", expandedFilter === "author" && "rotate-180")} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setExpandedFilter(expandedFilter === "assignee" ? null : "assignee")}
+                className={clsx(
+                  "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                  expandedFilter === "assignee" ? "bg-elevated text-fg"
+                    : selectedAssignee ? "text-fg-2" : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
+                )}
+              >
+                Assignee
+                {selectedAssignee && (
+                  <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">{selectedAssignee}</span>
+                )}
+                <ChevronDown className={clsx("h-3 w-3 transition-transform", expandedFilter === "assignee" && "rotate-180")} />
+              </button>
+              <div className="min-w-0 flex-1 px-1">
+                <div className="flex items-center gap-2 rounded-md border border-line bg-base px-2.5 py-1.5">
+                  <Search className="h-3.5 w-3.5 shrink-0 text-fg-5" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="搜索 issue..."
+                    className="min-w-0 flex-1 bg-transparent text-xs text-fg placeholder:text-fg-6 focus:outline-none"
+                  />
+                  {searchQuery && (
+                    <button type="button" onClick={() => setSearchQuery("")} className="shrink-0 text-fg-5 hover:text-fg-3">
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {activeRepoId && (
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void syncIssues()}
+                    disabled={syncing}
+                    title="同步 Issues"
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"
+                  >
+                    <RefreshCw className={clsx("h-3.5 w-3.5", syncing && "animate-spin")} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreating((v) => !v)}
+                    title="新建 Issue"
+                    className={clsx(
+                      "flex h-8 w-8 items-center justify-center rounded-md transition-colors",
+                      creating ? "bg-blue-600 text-white" : "text-fg-4 hover:bg-elevated hover:text-fg-2",
+                    )}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-
-        {/* create form */}
-        {creating && <CreateForm onDone={() => setCreating(false)} />}
-
-        {/* filter tabs */}
-        <div className="flex border-b border-line">
-          {STATE_FILTERS.map(({ key, label }) => {
-            const count =
-              key === "open"
-                ? openCount
-                : key === "closed"
-                  ? closedCount
-                  : issues.length
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setStateFilter(key)}
-                className={clsx(
-                  "flex flex-1 items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors",
-                  stateFilter === key
-                    ? "border-b-2 border-blue-500 text-blue-500"
-                    : "text-fg-4 hover:text-fg-2",
-                )}
-              >
-                {label}
-                <span
-                  className={clsx(
-                    "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
-                    stateFilter === key
-                      ? "bg-blue-500/10 text-blue-500"
-                      : "bg-elevated text-fg-5",
-                  )}
-                >
-                  {count}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="flex items-center gap-1.5 border-b border-line px-3 py-2">
-          {(["epic", "stray"] as const).map((key) => {
-            const label = key === "epic" ? "Epic" : "游离"
-            const count = key === "epic" ? epicCount : strayCount
-            const active = typeFilter === key
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setTypeFilter(active ? "all" : key)}
-                className={clsx(
-                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors",
-                  active
-                    ? key === "epic"
-                      ? "bg-amber-400/15 text-amber-400"
-                      : "bg-sky-400/15 text-sky-400"
-                    : "bg-elevated/60 text-fg-5 hover:bg-elevated hover:text-fg-3",
-                )}
-              >
-                {label}
-                <span className={clsx(
-                  "rounded-full px-1.5 py-0.5 font-mono text-[10px] font-medium",
-                  active ? "opacity-70" : "text-fg-6",
-                )}>
-                  {count}
-                </span>
-              </button>
-            )
-          })}
-          <div className="ml-auto flex items-center gap-1">
-            {(["all", "task"] as const).map((key) => {
-              const label = key === "all" ? "全部" : "任务"
-              const count = key === "all" ? afterState.length : taskCount
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setTypeFilter(key)}
-                  className={clsx(
-                    "rounded px-1.5 py-0.5 font-mono text-[10px] transition-colors",
-                    typeFilter === key
-                      ? "bg-fg-6/20 text-fg-3"
-                      : "text-fg-6 hover:text-fg-4",
-                  )}
-                >
-                  {label} {count}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {tags.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-3 py-2">
-            {tags.map((tag) => {
-              const active = selectedTagIds.has(tag.id)
-              return (
-                <button
-                  key={tag.id}
-                  type="button"
-                  onClick={() => toggleTagFilter(tag.id)}
-                  className={clsx(
-                    "rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors",
-                    active ? "ring-1 ring-current" : "opacity-60 hover:opacity-100",
-                  )}
-                  style={{
-                    backgroundColor: `#${tag.color}20`,
-                    color: `#${tag.color}`,
-                  }}
-                >
-                  {tag.name}
-                </button>
-              )
-            })}
-            {selectedTagIds.size > 0 && (
-              <button
-                type="button"
-                onClick={clearTagFilter}
-                className="ml-1 rounded px-1.5 py-0.5 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3"
-              >
-                清除
-              </button>
+            {expandedFilter === "type" && (
+              <div className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2" style={{ scrollbarWidth: "none" }}>
+                {(["epic", "stray", "task", "all"] as const).map((key) => {
+                  const label = key === "epic" ? "Epic" : key === "stray" ? "游离" : key === "task" ? "任务" : "全部"
+                  const count = key === "epic" ? epicCount : key === "stray" ? strayCount : key === "task" ? taskCount : afterState.length
+                  const active = typeFilter === key
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setTypeFilter(active && key !== "all" ? "all" : key)}
+                      className={clsx(
+                        "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors",
+                        active
+                          ? key === "epic" ? "bg-amber-400/15 text-amber-400"
+                            : key === "stray" ? "bg-sky-400/15 text-sky-400"
+                            : key === "task" ? "bg-violet-400/15 text-violet-400"
+                            : "bg-fg-6/20 text-fg-3"
+                          : "bg-elevated/60 text-fg-5 hover:bg-elevated hover:text-fg-3",
+                      )}
+                    >
+                      {label}
+                      <span className={clsx("rounded-full px-1.5 py-0.5 font-mono text-[10px] font-medium", active ? "opacity-70" : "text-fg-6")}>
+                        {count}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
             )}
-          </div>
+            {expandedFilter === "tag" && (
+              <div className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2" style={{ scrollbarWidth: "none" }}>
+                {tags.length === 0 ? (
+                  <span className="text-xs text-fg-5">暂无标签</span>
+                ) : (
+                  <>
+                    {tags.map((tag) => {
+                      const mode = tagFilterMode.get(tag.id)
+                      return (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => cycleTagFilter(tag.id)}
+                          className={clsx(
+                            "shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                            mode === "include"
+                              ? "ring-1 ring-current shadow-sm"
+                              : mode === "exclude"
+                                ? "opacity-90 line-through decoration-2"
+                                : "opacity-50 hover:opacity-80",
+                          )}
+                          style={mode === "exclude"
+                            ? { backgroundColor: `#${tag.color}10`, color: `#${tag.color}`, boxShadow: `inset 0 0 0 1px color-mix(in srgb, #${tag.color} 30%, transparent)` }
+                            : { backgroundColor: `#${tag.color}18`, color: `#${tag.color}`, boxShadow: mode === "include" ? `inset 0 0 0 1px color-mix(in srgb, #${tag.color} 50%, transparent)` : undefined }
+                          }
+                        >
+                          {mode === "exclude" && <span className="mr-1 text-[10px]">✕</span>}
+                          {tag.name}
+                        </button>
+                      )
+                    })}
+                    {tagFilterMode.size > 0 && (
+                      <button type="button" onClick={clearTagFilter}
+                        className="shrink-0 rounded-md px-2 py-1 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3">
+                        清除
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+            {expandedFilter === "milestone" && (
+              <div className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2" style={{ scrollbarWidth: "none" }}>
+                {milestones.length === 0 ? (
+                  <span className="text-xs text-fg-5">暂无里程碑</span>
+                ) : (
+                  <>
+                    {milestones.map((ms) => {
+                      const active = selectedMilestoneId === ms.id
+                      return (
+                        <button
+                          key={ms.id}
+                          type="button"
+                          onClick={() => setMilestoneFilter(active ? null : ms.id)}
+                          className={clsx(
+                            "shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                            active
+                              ? "bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-400/50 shadow-sm"
+                              : "bg-elevated/60 text-fg-5 hover:bg-elevated hover:text-fg-3",
+                          )}
+                        >
+                          {ms.title}
+                          {ms.state === "closed" && <span className="ml-1 text-[10px] opacity-60">✓</span>}
+                        </button>
+                      )
+                    })}
+                    {selectedMilestoneId && (
+                      <button type="button" onClick={() => setMilestoneFilter(null)}
+                        className="shrink-0 rounded-md px-2 py-1 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3">
+                        清除
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+            {expandedFilter === "author" && (
+              <div className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2" style={{ scrollbarWidth: "none" }}>
+                {uniqueAuthors.length === 0 ? (
+                  <span className="text-xs text-fg-5">同步后可见作者</span>
+                ) : (
+                  <>
+                    {uniqueAuthors.map((a) => (
+                      <button
+                        key={a.login}
+                        type="button"
+                        onClick={() => setSelectedAuthor(selectedAuthor === a.login ? null : a.login)}
+                        className={clsx(
+                          "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                          selectedAuthor === a.login
+                            ? "bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30 shadow-sm"
+                            : "bg-elevated/60 text-fg-5 hover:bg-elevated hover:text-fg-3",
+                        )}
+                      >
+                        {a.avatar && <img src={a.avatar} alt="" className="h-4 w-4 rounded-full" />}
+                        {a.login}
+                      </button>
+                    ))}
+                    {selectedAuthor && (
+                      <button type="button" onClick={() => setSelectedAuthor(null)}
+                        className="shrink-0 rounded-md px-2 py-1 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3">
+                        清除
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+            {expandedFilter === "assignee" && (
+              <div className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2" style={{ scrollbarWidth: "none" }}>
+                {uniqueAssignees.length === 0 ? (
+                  <span className="text-xs text-fg-5">同步后可见指派人</span>
+                ) : (
+                  <>
+                    {uniqueAssignees.map((a) => (
+                      <button
+                        key={a.login}
+                        type="button"
+                        onClick={() => setSelectedAssignee(selectedAssignee === a.login ? null : a.login)}
+                        className={clsx(
+                          "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                          selectedAssignee === a.login
+                            ? "bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30 shadow-sm"
+                            : "bg-elevated/60 text-fg-5 hover:bg-elevated hover:text-fg-3",
+                        )}
+                      >
+                        {a.avatar && <img src={a.avatar} alt="" className="h-4 w-4 rounded-full" />}
+                        {a.login}
+                      </button>
+                    ))}
+                    {selectedAssignee && (
+                      <button type="button" onClick={() => setSelectedAssignee(null)}
+                        className="shrink-0 rounded-md px-2 py-1 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3">
+                        清除
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+            {creating && <CreateForm onDone={() => setCreating(false)} />}
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between border-b border-line px-3 py-3">
+              <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">Issues</span>
+              {activeRepoId && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void syncIssues()}
+                    disabled={syncing}
+                    title="同步"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"
+                  >
+                    <RefreshCw className={clsx("h-3.5 w-3.5", syncing && "animate-spin")} />
+                  </button>
+                </div>
+              )}
+            </div>
+            {creating && <CreateForm onDone={() => setCreating(false)} />}
+            <div className="flex border-b border-line">
+              {STATE_FILTERS.map(({ key, label }) => {
+                const count = key === "open" ? openCount : key === "closed" ? closedCount : issues.length
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setStateFilter(key)}
+                    className={clsx(
+                      "flex flex-1 items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors",
+                      stateFilter === key
+                        ? "border-b-2 border-blue-500 text-blue-500"
+                        : "text-fg-4 hover:text-fg-2",
+                    )}
+                  >
+                    {label}
+                    <span className={clsx(
+                      "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+                      stateFilter === key ? "bg-blue-500/10 text-blue-500" : "bg-elevated text-fg-5",
+                    )}>
+                      {count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="border-b border-line px-3 py-2">
+              <div className="flex items-center gap-2 rounded-md border border-line bg-base px-2 py-1">
+                <Search className="h-3.5 w-3.5 shrink-0 text-fg-5" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="搜索 issue..."
+                  className="min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-fg-6 focus:outline-none"
+                />
+                {searchQuery && (
+                  <button type="button" onClick={() => setSearchQuery("")} className="shrink-0 text-fg-5 hover:text-fg-3">
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
         )}
 
-        {/* search */}
-        <div className="border-b border-line px-3 py-2">
-          <div className="flex items-center gap-2 rounded-md border border-line bg-base px-2 py-1">
-            <Search className="h-3.5 w-3.5 shrink-0 text-fg-5" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索 issue..."
-              className="min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-fg-6 focus:outline-none"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="shrink-0 text-fg-5 hover:text-fg-3"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {milestones.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-3 py-2">
-            <Flag className="h-3 w-3 text-fg-5" />
-            {milestones.map((ms) => {
-              const active = selectedMilestoneId === ms.id
-              return (
-                <button
-                  key={ms.id}
-                  type="button"
-                  onClick={() => setMilestoneFilter(active ? null : ms.id)}
-                  className={clsx(
-                    "rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors",
-                    active
-                      ? "bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-400/50"
-                      : "bg-elevated/60 text-fg-5 hover:bg-elevated hover:text-fg-3",
-                  )}
-                >
-                  {ms.title}
-                  {ms.state === "closed" && (
-                    <span className="ml-1 text-[9px] opacity-60">✓</span>
-                  )}
-                </button>
-              )
-            })}
-            {selectedMilestoneId && (
-              <button
-                type="button"
-                onClick={() => setMilestoneFilter(null)}
-                className="ml-1 rounded px-1.5 py-0.5 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3"
-              >
-                清除
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* list */}
-        <div className="flex-1 overflow-y-auto px-2 py-2">
+        <div className={clsx("flex-1 overflow-y-auto", selectedId ? "px-2 py-2" : "px-3 py-3")}>
           {!activeRepoId ? (
             <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">
               请先选择一个仓库
             </p>
-          ) : afterMilestone.length === 0 ? (
+          ) : finalFiltered.length === 0 ? (
             <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">
               {issues.length === 0 ? "点击 ↻ 同步 Issues" : "无匹配 Issue"}
             </p>
           ) : (
-            <ul className="space-y-0.5">
-              {afterMilestone.map((issue) => (
-                <IssueRow
-                  key={issue.id}
-                  issue={issue}
-                  sessionCount={sessionCounts.get(issue.id) ?? 0}
-                  isActive={selectedId === issue.id}
-                  isEpic={issueType(issue) === "epic"}
-                  milestone={issue.milestoneId ? milestoneMap.get(issue.milestoneId) : undefined}
-                  onSelect={() => {
-                    setSelectedId(issue.id)
-                    setTreeRootId(issueType(issue) === "epic" ? issue.id : null)
-                  }}
-                />
-              ))}
+            <ul className={clsx(selectedId ? "space-y-0.5" : "space-y-1")}>
+              {finalFiltered.map((issue) =>
+                selectedId ? (
+                  <IssueRow
+                    key={issue.id}
+                    issue={issue}
+                    sessionCount={sessionCounts.get(issue.id) ?? 0}
+                    isActive={selectedId === issue.id}
+                    isEpic={issueType(issue) === "epic"}
+                    milestone={issue.milestoneId ? milestoneMap.get(issue.milestoneId) : undefined}
+                    onSelect={() => {
+                      setSelectedId(issue.id)
+                      setTreeRootId(issueType(issue) === "epic" ? issue.id : null)
+                    }}
+                  />
+                ) : (
+                  <FullWidthIssueRow
+                    key={issue.id}
+                    issue={issue}
+                    sessionCount={sessionCounts.get(issue.id) ?? 0}
+                    isEpic={issueType(issue) === "epic"}
+                    milestone={issue.milestoneId ? milestoneMap.get(issue.milestoneId) : undefined}
+                    onSelect={() => {
+                      setSelectedId(issue.id)
+                      setTreeRootId(issueType(issue) === "epic" ? issue.id : null)
+                    }}
+                  />
+                ),
+              )}
             </ul>
           )}
         </div>
       </div>
 
-      {/* Mobile left drawer — quick issue list for swipe navigation */}
+      {selectedId && (
       <SwipeDrawer side="left" open={listDrawerOpen} onClose={() => setListDrawerOpen(false)}>
         <div className="flex h-full flex-col">
           <div className="border-b border-line px-3 py-3">
             <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">Issues</span>
           </div>
           <div className="flex-1 overflow-y-auto px-2 py-2">
-            {afterMilestone.length === 0 ? (
+            {finalFiltered.length === 0 ? (
               <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">无匹配 Issue</p>
             ) : (
               <ul className="space-y-0.5">
-                {afterMilestone.map((issue) => (
+                {finalFiltered.map((issue) => (
                   <IssueRow
                     key={issue.id}
                     issue={issue}
@@ -1290,20 +1590,18 @@ export function IssuesPage() {
           </div>
         </div>
       </SwipeDrawer>
+      )}
 
       {/* ---- right: detail + overlay sidebar ---- */}
-      <div
-        className={clsx(
-          "relative min-w-0 flex-1 flex-col bg-term md:flex",
-          selectedId ? "flex" : "hidden",
-        )}
-      >
+      {selectedId && (
+      <div className="relative flex min-w-0 flex-1 flex-col bg-term">
         {selectedIssue ? (
           <>
             <IssueDetail
               issue={selectedIssue}
               milestone={selectedIssue.milestoneId ? milestoneMap.get(selectedIssue.milestoneId) : undefined}
               onBack={() => { setSelectedId(null); setTreeRootId(null); setSidebarOpen(false) }}
+              onClose={() => { setSelectedId(null); setTreeRootId(null); setSidebarOpen(false) }}
               onToggleSidebar={() => setSidebarOpen((v) => !v)}
             />
 
@@ -1354,16 +1652,11 @@ export function IssuesPage() {
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center">
-            <p className="font-mono text-xs text-fg-5">
-              {!activeRepoId
-                ? "请先选择一个仓库"
-                : issues.length === 0
-                  ? "点击 ↻ 同步 Issues 后选择查看"
-                  : "← 选择一个 Issue 查看详情"}
-            </p>
+            <p className="font-mono text-xs text-fg-5">Issue 未找到</p>
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }
