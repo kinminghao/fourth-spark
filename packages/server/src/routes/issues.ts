@@ -54,6 +54,7 @@ function issueToDb(repoId: string, gi: GitIssue) {
     authorLogin: gi.user?.login ?? null,
     authorAvatar: gi.user?.avatar_url ?? null,
     assignees: gi.assignees?.map((a) => ({ login: a.login, avatar_url: a.avatar_url })) ?? [],
+    commentCount: gi.comments ?? 0,
     createdAt: new Date(gi.created_at).getTime(),
     updatedAt: new Date(gi.updated_at).getTime(),
   }

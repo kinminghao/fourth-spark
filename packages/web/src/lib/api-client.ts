@@ -58,6 +58,7 @@ export interface Issue {
   authorLogin?: string
   authorAvatar?: string
   assignees?: Array<{ login: string; avatar_url: string }>
+  commentCount?: number
   createdAt: number
   updatedAt: number
 }

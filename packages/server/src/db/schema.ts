@@ -44,6 +44,7 @@ export const issues = pgTable("issues", {
   authorLogin: text("author_login"),
   authorAvatar: text("author_avatar"),
   assignees: jsonb("assignees").$type<Array<{ login: string; avatar_url: string }>>(),
+  commentCount: integer("comment_count").notNull().default(0),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 }, (t) => [

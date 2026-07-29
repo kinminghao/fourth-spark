@@ -31,6 +31,7 @@ export interface GitIssue {
   milestone: { id: number; title: string } | null
   user?: { login: string; avatar_url: string }
   assignees?: Array<{ login: string; avatar_url: string }>
+  comments?: number
   created_at: string
   updated_at: string
 }

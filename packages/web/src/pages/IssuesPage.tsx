@@ -17,6 +17,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  MessageCircle,
   Wrench,
   X,
   XCircle,
@@ -41,6 +42,17 @@ const STATE_FILTERS: { key: StateFilter; label: string }[] = [
   { key: "closed", label: "已关闭" },
   { key: "all", label: "全部" },
 ]
+
+function relativeTime(ts: number): string {
+  const ms = ts < 1_000_000_000_000 ? ts * 1000 : ts
+  const diff = Date.now() - ms
+  if (diff < 60_000) return "刚刚"
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}分钟前`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}小时前`
+  if (diff < 2_592_000_000) return `${Math.floor(diff / 86_400_000)}天前`
+  const d = new Date(ms)
+  return d.toLocaleDateString("zh-CN", { month: "short", day: "numeric" })
+}
 
 
 
@@ -272,7 +284,16 @@ function FullWidthIssueRow({
                 {issue.authorLogin}
               </span>
             )}
-            {issue.authorLogin && issue.labels && issue.labels.length > 0 && (
+            {issue.authorLogin && <span className="text-fg-6">·</span>}
+            <span className="shrink-0 text-[11px] text-fg-6">{relativeTime(issue.createdAt)}</span>
+            {(issue.commentCount ?? 0) > 0 && (
+              <span className="flex shrink-0 items-center gap-0.5 text-[11px] text-fg-6">
+                <span className="text-fg-6">·</span>
+                <MessageCircle className="h-3 w-3" />
+                {issue.commentCount}
+              </span>
+            )}
+            {((issue.labels && issue.labels.length > 0) || (issue.commentCount ?? 0) > 0 || issue.authorLogin) && issue.labels && issue.labels.length > 0 && (
               <span className="text-fg-6">·</span>
             )}
             {issue.labels && issue.labels.length > 0 ? (
