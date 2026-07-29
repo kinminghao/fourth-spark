@@ -252,8 +252,29 @@ function FullWidthIssueRow({
                 {sessionCount} 次运行
               </span>
             )}
+            {issue.assignees && issue.assignees.length > 0 && (
+              <div className="hidden shrink-0 items-center -space-x-1.5 sm:flex">
+                {issue.assignees.slice(0, 3).map((a) => (
+                  <img key={a.login} src={a.avatar_url} alt={a.login} title={a.login} className="h-5 w-5 rounded-full ring-2 ring-surface" />
+                ))}
+                {issue.assignees.length > 3 && (
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-elevated text-[9px] font-medium text-fg-4 ring-2 ring-surface">
+                    +{issue.assignees.length - 3}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
-          <div className="mt-1 flex flex-wrap gap-1">
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {issue.authorLogin && (
+              <span className="shrink-0 text-[11px] text-fg-5" title={issue.authorLogin}>
+                {issue.authorAvatar && <img src={issue.authorAvatar} alt="" className="mr-1 inline-block h-3.5 w-3.5 rounded-full align-text-bottom" />}
+                {issue.authorLogin}
+              </span>
+            )}
+            {issue.authorLogin && issue.labels && issue.labels.length > 0 && (
+              <span className="text-fg-6">·</span>
+            )}
             {issue.labels && issue.labels.length > 0 ? (
               issue.labels.map((l) => (
                 <span
@@ -267,9 +288,9 @@ function FullWidthIssueRow({
                   {l.name}
                 </span>
               ))
-            ) : (
+            ) : !issue.authorLogin ? (
               <span className="text-[11px] text-fg-6">&nbsp;</span>
-            )}
+            ) : null}
           </div>
         </div>
       </button>
@@ -410,6 +431,27 @@ function IssueDetail({ issue, milestone, onBack, onClose, onToggleSidebar }: { i
             <h2 className="mt-1 text-base font-semibold text-fg">
               {issue.title}
             </h2>
+            {(issue.authorLogin || (issue.assignees && issue.assignees.length > 0)) && (
+              <div className="mt-1.5 flex items-center gap-3 text-xs text-fg-4">
+                {issue.authorLogin && (
+                  <span className="flex items-center gap-1.5">
+                    {issue.authorAvatar && <img src={issue.authorAvatar} alt="" className="h-4 w-4 rounded-full" />}
+                    {issue.authorLogin}
+                  </span>
+                )}
+                {issue.assignees && issue.assignees.length > 0 && (
+                  <span className="flex items-center gap-1">
+                    <span className="text-fg-5">→</span>
+                    <span className="flex items-center -space-x-1">
+                      {issue.assignees.map((a) => (
+                        <img key={a.login} src={a.avatar_url} alt={a.login} title={a.login} className="h-4 w-4 rounded-full ring-1 ring-surface" />
+                      ))}
+                    </span>
+                    <span className="text-fg-4">{issue.assignees.map((a) => a.login).join(", ")}</span>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
