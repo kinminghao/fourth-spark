@@ -171,12 +171,17 @@ sessions.get("/", async (c) => {
       syncSessionsList(list)
       const ids = list.map((s) => s.id)
       const dbRows = ids.length > 0
-        ? await db.select({ id: sessionsTable.id, issueId: sessionsTable.issueId, title: sessionsTable.title }).from(sessionsTable).where(inArray(sessionsTable.id, ids))
+        ? await db.select({ id: sessionsTable.id, issueId: sessionsTable.issueId, title: sessionsTable.title, parentId: sessionsTable.parentId }).from(sessionsTable).where(inArray(sessionsTable.id, ids))
         : []
       const dbMap = new Map(dbRows.map((r) => [r.id, r]))
       return c.json(list.map((s) => {
         const row = dbMap.get(s.id)
-        return { ...s, issueId: row?.issueId ?? null, ...(row?.title ? { title: row.title } : {}) }
+        return {
+          ...s,
+          issueId: row?.issueId ?? null,
+          ...(row?.title ? { title: row.title } : {}),
+          ...(row?.parentId && !s.parentID ? { parentID: row.parentId } : {}),
+        }
       }))
     } catch (err) {
       logger.warn({ err, repoId }, "opencode unavailable for listSessions, falling back to DB")
