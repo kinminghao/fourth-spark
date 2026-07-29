@@ -41,6 +41,9 @@ export const issues = pgTable("issues", {
   labels: jsonb("labels").$type<Array<{ id: number; name: string; color: string }>>(),
   milestoneId: text("milestone_id").references(() => milestones.id, { onDelete: "set null" }),
   htmlUrl: text("html_url"),
+  authorLogin: text("author_login"),
+  authorAvatar: text("author_avatar"),
+  assignees: jsonb("assignees").$type<Array<{ login: string; avatar_url: string }>>(),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 }, (t) => [

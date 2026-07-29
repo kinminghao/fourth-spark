@@ -51,6 +51,9 @@ function issueToDb(repoId: string, gi: GitIssue) {
     labels: gi.labels?.map((l) => ({ id: l.id, name: l.name, color: l.color })) ?? [],
     htmlUrl: gi.html_url,
     milestoneId: gi.milestone ? `${repoId}_ms_${gi.milestone.id}` : null,
+    authorLogin: gi.user?.login ?? null,
+    authorAvatar: gi.user?.avatar_url ?? null,
+    assignees: gi.assignees?.map((a) => ({ login: a.login, avatar_url: a.avatar_url })) ?? [],
     createdAt: new Date(gi.created_at).getTime(),
     updatedAt: new Date(gi.updated_at).getTime(),
   }

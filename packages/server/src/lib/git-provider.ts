@@ -29,6 +29,8 @@ export interface GitIssue {
   labels: Array<{ id: number; name: string; color: string }>
   html_url: string
   milestone: { id: number; title: string } | null
+  user?: { login: string; avatar_url: string }
+  assignees?: Array<{ login: string; avatar_url: string }>
   created_at: string
   updated_at: string
 }

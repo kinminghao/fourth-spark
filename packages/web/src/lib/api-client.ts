@@ -55,6 +55,9 @@ export interface Issue {
   labels?: Array<{ id: number; name: string; color: string }>
   milestoneId?: string | null
   htmlUrl?: string
+  authorLogin?: string
+  authorAvatar?: string
+  assignees?: Array<{ login: string; avatar_url: string }>
   createdAt: number
   updatedAt: number
 }

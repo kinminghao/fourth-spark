@@ -8,7 +8,7 @@ import { useToastStore } from "./toast-store"
 interface IssueState {
   issues: Issue[]
   tags: Tag[]
-  selectedTagIds: Set<string>
+  tagFilterMode: Map<string, "include" | "exclude">
   milestones: Milestone[]
   selectedMilestoneId: string | null
   loaded: boolean
@@ -31,7 +31,7 @@ interface IssueState {
   syncIssues: () => Promise<void>
   createIssue: (title: string, body?: string) => Promise<Issue | null>
   loadTags: () => Promise<void>
-  toggleTagFilter: (tagId: string) => void
+  cycleTagFilter: (tagId: string) => void
   clearTagFilter: () => void
   loadMilestones: () => Promise<void>
   setMilestoneFilter: (id: string | null) => void
@@ -40,7 +40,7 @@ interface IssueState {
 export const useIssueStore = create<IssueState>((set, get) => ({
   issues: [],
   tags: [],
-  selectedTagIds: new Set<string>(),
+  tagFilterMode: new Map<string, "include" | "exclude">(),
   milestones: [],
   selectedMilestoneId: null,
   loaded: false,
@@ -53,7 +53,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   clearIssues: () => set({
     issues: [],
     tags: [],
-    selectedTagIds: new Set<string>(),
+    tagFilterMode: new Map<string, "include" | "exclude">(),
     milestones: [],
     selectedMilestoneId: null,
     loaded: false,
@@ -169,16 +169,18 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     } catch { /* noop */ }
   },
 
-  toggleTagFilter: (tagId) => {
+  cycleTagFilter: (tagId) => {
     set((s) => {
-      const next = new Set(s.selectedTagIds)
-      if (next.has(tagId)) next.delete(tagId)
-      else next.add(tagId)
-      return { selectedTagIds: next }
+      const next = new Map(s.tagFilterMode)
+      const current = next.get(tagId)
+      if (!current) next.set(tagId, "include")
+      else if (current === "include") next.set(tagId, "exclude")
+      else next.delete(tagId)
+      return { tagFilterMode: next }
     })
   },
 
-  clearTagFilter: () => set({ selectedTagIds: new Set<string>() }),
+  clearTagFilter: () => set({ tagFilterMode: new Map<string, "include" | "exclude">() }),
 
   loadMilestones: async () => {
     const repoId = useRepoStore.getState().activeRepoId
