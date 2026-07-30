@@ -1,9 +1,12 @@
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import clsx from "clsx"
-import { ListTodo, MessageSquare, Link2 } from "lucide-react"
+import { ListTodo, MessageSquare, Link2, Plus, X, Search } from "lucide-react"
 import type { Message, Todo, SessionLinks } from "../lib/api-client"
 import { normalizeTodoStatus, type TodoStatus } from "../lib/message-parts"
+import { useIssueStore } from "../stores/issue-store"
+import { usePrStore } from "../stores/pr-store"
+import { useSessionStore } from "../stores/session-store"
 
 const MARK: Record<TodoStatus, { glyph: string; color: string; spin: boolean }> = {
   completed: { glyph: "✓", color: "text-emerald-400", spin: false },
@@ -126,79 +129,199 @@ function PromptsTab({
   )
 }
 
-function LinksTab({ links }: { links?: SessionLinks }) {
+function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: string | null }) {
   const navigate = useNavigate()
+  const [searching, setSearching] = useState(false)
+  const [query, setQuery] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const allIssues = useIssueStore((s) => s.issues)
+  const allPrs = usePrStore((s) => s.pulls)
+  const addLink = useSessionStore((s) => s.addLink)
+  const removeLink = useSessionStore((s) => s.removeLink)
+
+  const linkedIssueIds = new Set(links?.issues?.map((i) => i.id) ?? [])
+  const linkedPrIds = new Set(links?.pullRequests?.map((p) => p.id) ?? [])
+
+  useEffect(() => {
+    if (searching) inputRef.current?.focus()
+  }, [searching])
+
+  const q = query.trim().toLowerCase()
+  const candidateIssues = q
+    ? allIssues.filter((i) => !linkedIssueIds.has(i.id) && `#${i.number} ${i.title}`.toLowerCase().includes(q))
+    : []
+  const candidatePrs = q
+    ? allPrs.filter((p) => !linkedPrIds.has(p.id) && `#${p.number} ${p.title} ${p.headBranch}`.toLowerCase().includes(q))
+    : []
+
+  const handleAdd = async (type: "issue" | "pr", targetId: string) => {
+    if (!sessionId) return
+    await addLink(sessionId, type, targetId)
+    setQuery("")
+    setSearching(false)
+  }
+
+  const handleRemove = async (type: "issue" | "pr", targetId: string) => {
+    if (!sessionId) return
+    await removeLink(sessionId, type, targetId)
+  }
+
   const issueCount = links?.issues?.length ?? 0
   const prCount = links?.pullRequests?.length ?? 0
 
-  if (issueCount === 0 && prCount === 0) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <p className="font-mono text-xs text-fg-5">暂无关联</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="flex-1 overflow-y-auto px-3 py-3">
-      {issueCount > 0 && (
-        <div className="mb-3">
-          <div className="mb-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-5">
-            Issues ({issueCount})
+    <div className="flex flex-1 flex-col overflow-hidden">
+      {/* search bar */}
+      <div className="flex items-center gap-1 border-b border-line px-3 py-2">
+        {searching ? (
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-line bg-base px-2 py-1">
+            <Search className="h-3 w-3 shrink-0 text-fg-5" />
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜索 issue / PR..."
+              className="min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-fg-6 focus:outline-none"
+            />
+            <button type="button" onClick={() => { setSearching(false); setQuery("") }} className="shrink-0 text-fg-5 hover:text-fg-3">
+              <X className="h-3 w-3" />
+            </button>
           </div>
-          <ul className="space-y-1">
-            {links!.issues.map((issue) => (
-              <li key={issue.id}>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/issues?issueId=${encodeURIComponent(issue.id)}`)}
-                  className="group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
-                >
-                  <span className={clsx(
-                    "mt-0.5 shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
-                    issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-                  )}>
-                    #{issue.number}
-                  </span>
-                  <span className="line-clamp-2 text-xs leading-5 text-fg-3 group-hover:text-fg-2">
-                    {issue.title}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+        ) : (
+          <>
+            <span className="flex-1 font-mono text-[10px] text-fg-5">
+              {issueCount + prCount > 0 ? `${issueCount + prCount} 项关联` : "暂无关联"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSearching(true)}
+              className="flex h-6 w-6 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* search results */}
+      {searching && q && (candidateIssues.length > 0 || candidatePrs.length > 0) && (
+        <div className="max-h-40 overflow-y-auto border-b border-line bg-base px-3 py-2">
+          {candidateIssues.slice(0, 5).map((issue) => (
+            <button
+              key={issue.id}
+              type="button"
+              onClick={() => handleAdd("issue", issue.id)}
+              className="flex w-full items-start gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-elevated/60"
+            >
+              <span className="mt-0.5 shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 font-mono text-[10px] font-semibold text-emerald-400">
+                #{issue.number}
+              </span>
+              <span className="line-clamp-1 text-xs leading-5 text-fg-3">{issue.title}</span>
+            </button>
+          ))}
+          {candidatePrs.slice(0, 5).map((pr) => (
+            <button
+              key={pr.id}
+              type="button"
+              onClick={() => handleAdd("pr", pr.id)}
+              className="flex w-full items-start gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-elevated/60"
+            >
+              <span className="mt-0.5 shrink-0 rounded bg-blue-500/15 px-1 py-0.5 font-mono text-[10px] font-semibold text-blue-400">
+                PR#{pr.number}
+              </span>
+              <span className="line-clamp-1 text-xs leading-5 text-fg-3">{pr.title}</span>
+            </button>
+          ))}
         </div>
       )}
-      {prCount > 0 && (
-        <div>
-          <div className="mb-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-5">
-            Pull Requests ({prCount})
-          </div>
-          <ul className="space-y-1">
-            {links!.pullRequests.map((pr) => (
-              <li key={pr.id}>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/pulls?prId=${encodeURIComponent(pr.id)}`)}
-                  className="group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
-                >
-                  <span className={clsx(
-                    "mt-0.5 shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
-                    pr.state === "open" ? "bg-emerald-500/15 text-emerald-400"
-                      : pr.mergedAt ? "bg-purple-500/15 text-purple-400"
-                      : "bg-red-500/15 text-red-400",
-                  )}>
-                    #{pr.number}
-                  </span>
-                  <span className="line-clamp-2 text-xs leading-5 text-fg-3 group-hover:text-fg-2">
-                    {pr.title}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+      {searching && q && candidateIssues.length === 0 && candidatePrs.length === 0 && (
+        <div className="border-b border-line px-3 py-3 text-center font-mono text-xs text-fg-5">
+          无匹配结果
         </div>
       )}
+
+      {/* linked items */}
+      <div className="flex-1 overflow-y-auto px-3 py-3">
+        {issueCount > 0 && (
+          <div className="mb-3">
+            <div className="mb-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-5">
+              Issues ({issueCount})
+            </div>
+            <ul className="space-y-1">
+              {links!.issues.map((issue) => (
+                <li key={issue.id} className="group flex items-start gap-1">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/issues?issueId=${encodeURIComponent(issue.id)}`)}
+                    className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
+                  >
+                    <span className={clsx(
+                      "mt-0.5 shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
+                      issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
+                    )}>
+                      #{issue.number}
+                    </span>
+                    <span className="line-clamp-2 text-xs leading-5 text-fg-3 group-hover:text-fg-2">
+                      {issue.title}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemove("issue", issue.id)}
+                    className="mt-1.5 hidden shrink-0 rounded p-0.5 text-fg-5 transition-colors hover:bg-red-500/15 hover:text-red-400 group-hover:block"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {prCount > 0 && (
+          <div>
+            <div className="mb-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-5">
+              Pull Requests ({prCount})
+            </div>
+            <ul className="space-y-1">
+              {links!.pullRequests.map((pr) => (
+                <li key={pr.id} className="group flex items-start gap-1">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/pulls?prId=${encodeURIComponent(pr.id)}`)}
+                    className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
+                  >
+                    <span className={clsx(
+                      "mt-0.5 shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
+                      pr.state === "open" ? "bg-emerald-500/15 text-emerald-400"
+                        : pr.mergedAt ? "bg-purple-500/15 text-purple-400"
+                        : "bg-red-500/15 text-red-400",
+                    )}>
+                      #{pr.number}
+                    </span>
+                    <span className="line-clamp-2 text-xs leading-5 text-fg-3 group-hover:text-fg-2">
+                      {pr.title}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemove("pr", pr.id)}
+                    className="mt-1.5 hidden shrink-0 rounded p-0.5 text-fg-5 transition-colors hover:bg-red-500/15 hover:text-red-400 group-hover:block"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {issueCount === 0 && prCount === 0 && !searching && (
+          <div className="flex flex-1 items-center justify-center py-10">
+            <p className="font-mono text-xs text-fg-5">点击 + 添加关联</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -207,11 +330,13 @@ export function SidePanel({
   todos,
   messages,
   sessionLinks,
+  sessionId,
   onScrollToMessage,
 }: {
   todos: readonly Todo[]
   messages: readonly Message[]
   sessionLinks?: SessionLinks
+  sessionId: string | null
   onScrollToMessage?: (messageId: string) => void
 }) {
   const [activeTab, setActiveTab] = useState<Tab>("todo")
@@ -283,7 +408,7 @@ export function SidePanel({
       ) : activeTab === "prompts" ? (
         <PromptsTab messages={messages} onScrollToMessage={onScrollToMessage} />
       ) : (
-        <LinksTab links={sessionLinks} />
+        <LinksTab links={sessionLinks} sessionId={sessionId} />
       )}
     </div>
   )

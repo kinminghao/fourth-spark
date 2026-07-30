@@ -398,6 +398,20 @@ export async function getSessionLinks(repoId: string, sessionId: string): Promis
   )
 }
 
+export async function addSessionLink(repoId: string, sessionId: string, type: "issue" | "pr", targetId: string): Promise<void> {
+  await apiFetch<void>(
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/links`,
+    { method: "POST", body: JSON.stringify({ type, targetId }) },
+  )
+}
+
+export async function removeSessionLink(repoId: string, sessionId: string, type: "issue" | "pr", targetId: string): Promise<void> {
+  await apiFetch<void>(
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/links`,
+    { method: "DELETE", body: JSON.stringify({ type, targetId }) },
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Agent API — /api/repos/:repoId/agents
 // ---------------------------------------------------------------------------

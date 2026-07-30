@@ -62,6 +62,8 @@ interface SessionState {
   setActiveSession: (id: string) => Promise<void>
   refreshSessionData: (id: string) => Promise<void>
   refreshSessionLinks: (id: string) => Promise<void>
+  addLink: (sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
+  removeLink: (sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
   deleteSession: (id: string) => Promise<void>
   sendMessage: (content: string, model?: string) => Promise<void>
   abortSession: () => Promise<void>
@@ -190,6 +192,30 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set((state) => ({ sessionLinks: { ...state.sessionLinks, [id]: links } }))
     } catch {
       // best-effort
+    }
+  },
+
+  addLink: async (sessionId, type, targetId) => {
+    const repoId = getRepoId()
+    if (!repoId) return false
+    try {
+      await api.addSessionLink(repoId, sessionId, type, targetId)
+      await get().refreshSessionLinks(sessionId)
+      return true
+    } catch {
+      return false
+    }
+  },
+
+  removeLink: async (sessionId, type, targetId) => {
+    const repoId = getRepoId()
+    if (!repoId) return false
+    try {
+      await api.removeSessionLink(repoId, sessionId, type, targetId)
+      await get().refreshSessionLinks(sessionId)
+      return true
+    } catch {
+      return false
     }
   },
 
