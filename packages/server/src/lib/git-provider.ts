@@ -75,9 +75,16 @@ export interface GitPullRequest {
   body: string
   state: string
   html_url: string
+  head: { ref: string; label?: string }
+  base: { ref: string; label?: string }
   user: { login: string; avatar_url: string }
+  assignees?: Array<{ login: string; avatar_url: string }>
+  labels?: Array<{ id: number; name: string; color: string }>
+  draft?: boolean
+  comments?: number
   created_at: string
   updated_at: string
+  merged_at?: string | null
   mergeable: boolean | null
 }
 
@@ -98,6 +105,8 @@ export interface GitIssueClient {
   listComments(issueNumber: number): Promise<GitComment[]>
   listMilestones(opts?: { state?: "open" | "closed" | "all" }): Promise<GitMilestone[]>
   createPullRequest(input: CreatePullRequestInput): Promise<GitPullRequest>
+  listPullRequests(opts?: { state?: "open" | "closed" | "all"; page?: number; limit?: number }): Promise<GitPullRequest[]>
+  getPullRequest(number: number): Promise<GitPullRequest>
   listIssuePullRequests(issueNumber: number): Promise<GitPullRequest[]>
   mergePullRequest(prNumber: number): Promise<void>
 }
@@ -142,6 +151,34 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
       throw new GitApiError(`${platform} ${method} ${path} → ${res.status}: ${text}`, res.status)
     }
     return (await res.json()) as T
+  }
+
+  function normalizePR(raw: Record<string, unknown>): GitPullRequest {
+    const user = (raw.user as { login?: string; avatar_url?: string } | undefined) ?? {}
+    const head = (raw.head as { ref?: string; label?: string } | undefined) ?? {}
+    const baseBranch = (raw.base as { ref?: string; label?: string } | undefined) ?? {}
+    return {
+      number: raw.number as number,
+      title: (raw.title as string) ?? "",
+      body: (raw.body as string) ?? "",
+      state: (raw.state as string) ?? "open",
+      html_url: (raw.html_url as string) ?? "",
+      head: { ref: head.ref ?? "", label: head.label },
+      base: { ref: baseBranch.ref ?? "", label: baseBranch.label },
+      user: { login: user.login ?? "", avatar_url: user.avatar_url ?? "" },
+      assignees: Array.isArray(raw.assignees)
+        ? (raw.assignees as Array<{ login: string; avatar_url: string }>)
+        : [],
+      labels: Array.isArray(raw.labels)
+        ? (raw.labels as Array<{ id: number; name: string; color: string }>)
+        : [],
+      draft: typeof raw.draft === "boolean" ? raw.draft : false,
+      comments: typeof raw.comments === "number" ? raw.comments : 0,
+      created_at: (raw.created_at as string) ?? "",
+      updated_at: (raw.updated_at as string) ?? "",
+      merged_at: (raw.merged_at as string | null) ?? null,
+      mergeable: typeof raw.mergeable === "boolean" ? raw.mergeable : null,
+    }
   }
 
   return {
@@ -203,6 +240,29 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
       return request<GitMilestone[]>("GET", `/milestones?${params}`)
     },
 
+    async listPullRequests(opts) {
+      const params = new URLSearchParams()
+      const state = opts?.state ?? "open"
+      params.set("state", state)
+      params.set("sort", "updated")
+      params.set("page", String(opts?.page ?? 1))
+
+      if (platform === "github") {
+        params.set("per_page", String(opts?.limit ?? 50))
+        params.set("direction", "desc")
+      } else {
+        params.set("limit", String(opts?.limit ?? 50))
+      }
+
+      const raw = await request<Record<string, unknown>[]>("GET", `/pulls?${params}`)
+      return raw.map((r) => normalizePR(r))
+    },
+
+    async getPullRequest(number) {
+      const raw = await request<Record<string, unknown>>("GET", `/pulls/${number}`)
+      return normalizePR(raw)
+    },
+
     async createPullRequest(input) {
       const payload: Record<string, unknown> = {
         title: input.title,
@@ -210,7 +270,8 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
         base: input.base,
       }
       if (input.body !== undefined) payload.body = input.body
-      return request<GitPullRequest>("POST", platform === "github" ? "/pulls" : "/pulls", payload)
+      const raw = await request<Record<string, unknown>>("POST", "/pulls", payload)
+      return normalizePR(raw)
     },
 
     async mergePullRequest(prNumber) {
@@ -244,18 +305,7 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
         for (const prNum of prNumbers) {
           try {
             const raw = await request<Record<string, unknown>>("GET", `/pulls/${prNum}`)
-            const user = (raw.user as { login?: string; avatar_url?: string } | undefined) ?? {}
-            prs.push({
-              number: raw.number as number,
-              title: (raw.title as string) ?? "",
-              body: (raw.body as string) ?? "",
-              state: (raw.state as string) ?? "open",
-              html_url: (raw.html_url as string) ?? "",
-              user: { login: user.login ?? "", avatar_url: user.avatar_url ?? "" },
-              created_at: (raw.created_at as string) ?? "",
-              updated_at: (raw.updated_at as string) ?? "",
-              mergeable: typeof raw.mergeable === "boolean" ? raw.mergeable : null,
-            })
+            prs.push(normalizePR(raw))
           } catch {}
         }
         return prs

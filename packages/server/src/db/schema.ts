@@ -194,6 +194,39 @@ export const issueTags = pgTable("issue_tags", {
   index("issue_tags_tag_idx").on(t.tagId),
 ])
 
+export const pullRequests = pgTable("pull_requests", {
+  id: text("id").primaryKey(),
+  repoId: text("repo_id").notNull().references(() => repos.id, { onDelete: "cascade" }),
+  number: integer("number").notNull(),
+  title: text("title").notNull(),
+  body: text("body"),
+  state: text("state").notNull().default("open"),
+  headBranch: text("head_branch").notNull(),
+  baseBranch: text("base_branch").notNull(),
+  labels: jsonb("labels").$type<Array<{ id: number; name: string; color: string }>>(),
+  htmlUrl: text("html_url"),
+  authorLogin: text("author_login"),
+  authorAvatar: text("author_avatar"),
+  assignees: jsonb("assignees").$type<Array<{ login: string; avatar_url: string }>>(),
+  mergeable: text("mergeable"),
+  draft: integer("draft").notNull().default(0),
+  commentCount: integer("comment_count").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+  mergedAt: bigint("merged_at", { mode: "number" }),
+}, (t) => [
+  uniqueIndex("pull_requests_repo_number_idx").on(t.repoId, t.number),
+  index("pull_requests_repo_state_idx").on(t.repoId, t.state),
+])
+
+export const prIssueLinks = pgTable("pr_issue_links", {
+  prId: text("pr_id").notNull().references(() => pullRequests.id, { onDelete: "cascade" }),
+  issueId: text("issue_id").notNull().references(() => issues.id, { onDelete: "cascade" }),
+}, (t) => [
+  primaryKey({ columns: [t.prId, t.issueId] }),
+  index("pr_issue_links_issue_idx").on(t.issueId),
+])
+
 export const deviceTokens = pgTable("device_tokens", {
   id: text("id").primaryKey(),
   token: text("token").notNull(),

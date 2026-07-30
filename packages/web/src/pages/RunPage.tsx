@@ -61,12 +61,13 @@ function statusDotClass(status: string | undefined): string {
 function SessionItem({
   session, isActive, isConfirming,
   onSelect, onDelete, onConfirm, onCancelConfirm, onRename,
-  status,
+  status, issue,
 }: {
   session: Session; isActive: boolean; isConfirming: boolean
   onSelect: () => void; onDelete: () => void; onConfirm: () => void; onCancelConfirm: () => void
   onRename: (title: string) => void
   status: string | undefined
+  issue?: { number: number; title: string; state: string }
 }) {
   const when = formatWhen(session)
   const [editing, setEditing] = useState(false)
@@ -201,10 +202,18 @@ function SessionItem({
             />
           ) : (
             <div
-              className="mt-0.5 truncate pl-3.5 text-sm text-fg-2"
+              className="mt-0.5 flex items-center gap-1.5 pl-3.5 text-sm text-fg-2"
               onDoubleClick={(e) => { e.stopPropagation(); startEditing() }}
             >
-              {session.title?.trim() || "未命名运行"}
+              {issue && (
+                <span className={clsx(
+                  "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium leading-none",
+                  issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
+                )}>
+                  #{issue.number}
+                </span>
+              )}
+              <span className="min-w-0 truncate">{session.title?.trim() || "未命名运行"}</span>
             </div>
           )}
         </button>
@@ -299,18 +308,10 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
     .sort((a, b) => sessionTime(b) - sessionTime(a))
 
   const issueMap = new Map(issues.map((i) => [i.id, i]))
-  const sessionsByIssue = new Map<string, Session[]>()
-  const unlinked: Session[] = []
-
+  const sessionsPerIssue = new Map<string, number>()
   for (const s of topLevel) {
-    if (s.issueId && issueMap.has(s.issueId)) {
-      const issue = issueMap.get(s.issueId)!
-      if (issue.state === "closed") continue
-      const list = sessionsByIssue.get(s.issueId) ?? []
-      list.push(s)
-      sessionsByIssue.set(s.issueId, list)
-    } else {
-      unlinked.push(s)
+    if (s.issueId) {
+      sessionsPerIssue.set(s.issueId, (sessionsPerIssue.get(s.issueId) ?? 0) + 1)
     }
   }
 
@@ -354,20 +355,24 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
 
   const renderSessionList = (list: Session[]) => (
     <ul className="space-y-0.5">
-      {list.map((session) => (
-        <SessionItem
-          key={session.id}
-          session={session}
-          isActive={session.id === activeSessionId}
-          isConfirming={confirmingId === session.id}
-          status={statuses[session.id]}
-          onSelect={() => { void setActiveSession(session.id); onClose?.() }}
-          onDelete={() => { void deleteSession(session.id); setConfirmingId(null) }}
-          onConfirm={() => setConfirmingId(session.id)}
-          onCancelConfirm={() => setConfirmingId(null)}
-          onRename={(title) => void renameSession(session.id, title)}
-        />
-      ))}
+      {list.map((session) => {
+        const linkedIssue = session.issueId ? issueMap.get(session.issueId) : undefined
+        return (
+          <SessionItem
+            key={session.id}
+            session={session}
+            isActive={session.id === activeSessionId}
+            isConfirming={confirmingId === session.id}
+            status={statuses[session.id]}
+            issue={linkedIssue ? { number: linkedIssue.number, title: linkedIssue.title, state: linkedIssue.state } : undefined}
+            onSelect={() => { void setActiveSession(session.id); onClose?.() }}
+            onDelete={() => { void deleteSession(session.id); setConfirmingId(null) }}
+            onConfirm={() => setConfirmingId(session.id)}
+            onCancelConfirm={() => setConfirmingId(null)}
+            onRename={(title) => void renameSession(session.id, title)}
+          />
+        )
+      })}
     </ul>
   )
 
@@ -425,8 +430,6 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
     )
   }
 
-  const hasIssueGroups = sessionsByIssue.size > 0
-
   return (
     <div className="flex h-full w-80 shrink-0 flex-col border-r border-line bg-surface">
       <div className="flex min-h-0 flex-1 flex-col">
@@ -449,34 +452,8 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
           ) : topLevel.length === 0 ? (
             <p className="px-2 py-6 text-center font-mono text-xs text-fg-5">暂无运行记录</p>
           ) : (
-            <div className="space-y-3">
-              {[...sessionsByIssue.entries()].map(([gid, list]) => {
-                const issue = issueMap.get(gid)!
-                return (
-                  <div key={gid}>
-                    <div className="mb-1 flex items-center gap-1.5 px-1">
-                      <span className={clsx(
-                        "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium",
-                        issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-                      )}>
-                        #{issue.number}
-                      </span>
-                      <span className="min-w-0 truncate text-xs font-medium text-fg-3">{issue.title}</span>
-                    </div>
-                    {renderSessionList(list)}
-                  </div>
-                )
-              })}
-              {unlinked.length > 0 && (
-                <div>
-                  {hasIssueGroups && (
-                    <div className="mb-1 px-1">
-                      <span className="text-xs font-medium text-fg-5">未关联 Issue</span>
-                    </div>
-                  )}
-                  {renderSessionList(unlinked)}
-                </div>
-              )}
+            <div>
+              {renderSessionList(topLevel)}
             </div>
           )}
         </div>
@@ -570,7 +547,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
                 <IssueRow
                   key={issue.id}
                   issue={issue}
-                  badge={sessionsByIssue.get(issue.id)?.length}
+                  badge={sessionsPerIssue.get(issue.id)}
                   onClick={() => handleIssueClick(issue.id)}
                 />
               ))}

@@ -621,6 +621,68 @@ export async function mergePullRequest(
   )
 }
 
+export interface PersistentPullRequest {
+  id: string
+  repoId: string
+  number: number
+  title: string
+  body?: string | null
+  state: string
+  headBranch: string
+  baseBranch: string
+  labels?: Array<{ id: number; name: string; color: string }> | null
+  htmlUrl?: string | null
+  authorLogin?: string | null
+  authorAvatar?: string | null
+  assignees?: Array<{ login: string; avatar_url: string }> | null
+  mergeable?: string | null
+  draft: number
+  commentCount: number
+  createdAt: number
+  updatedAt: number
+  mergedAt?: number | null
+}
+
+export async function listPulls(repoId: string, state = "open"): Promise<PersistentPullRequest[]> {
+  return unwrapList<PersistentPullRequest>(
+    await apiFetch<unknown>(`${repoBase(repoId)}/pulls?state=${encodeURIComponent(state)}`),
+  )
+}
+
+export async function syncPulls(repoId: string, state = "all"): Promise<{ synced: number }> {
+  return apiFetch<{ synced: number }>(`${repoBase(repoId)}/pulls/sync`, {
+    method: "POST",
+    body: JSON.stringify({ state }),
+  })
+}
+
+export async function getPull(repoId: string, number: number): Promise<PersistentPullRequest> {
+  return apiFetch<PersistentPullRequest>(`${repoBase(repoId)}/pulls/${number}`)
+}
+
+export async function mergePull(repoId: string, prNumber: number): Promise<void> {
+  await apiFetch<void>(`${repoBase(repoId)}/pulls/${prNumber}/merge`, { method: "POST" })
+}
+
+export async function listPrLinkedIssues(repoId: string, prNumber: number): Promise<Issue[]> {
+  return unwrapList<Issue>(await apiFetch<unknown>(`${repoBase(repoId)}/pulls/${prNumber}/issues`))
+}
+
+export async function linkPrToIssue(repoId: string, prNumber: number, issueNumber: number): Promise<void> {
+  await apiFetch<void>(`${repoBase(repoId)}/pulls/${prNumber}/issues`, {
+    method: "POST",
+    body: JSON.stringify({ issueNumber }),
+  })
+}
+
+export async function unlinkPrFromIssue(repoId: string, prNumber: number, issueNumber: number): Promise<void> {
+  await apiFetch<void>(`${repoBase(repoId)}/pulls/${prNumber}/issues/${issueNumber}`, { method: "DELETE" })
+}
+
+export async function listPullComments(repoId: string, prNumber: number): Promise<IssueComment[]> {
+  return apiFetch<IssueComment[]>(`${repoBase(repoId)}/pulls/${prNumber}/comments`)
+}
+
 export async function listIssueComments(repoId: string, issueNumber: number): Promise<IssueComment[]> {
   return apiFetch<IssueComment[]>(`${repoBase(repoId)}/issues/${issueNumber}/comments`)
 }
