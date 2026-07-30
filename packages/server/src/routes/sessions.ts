@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { eq, asc, desc, inArray } from "drizzle-orm"
+import { eq, and, asc, desc, inArray } from "drizzle-orm"
 import { processManager } from "../lib/process-manager"
 import { DEFAULT_VARIANT } from "../lib/config"
 import { syncSessionsList, syncMessagesList } from "../db/sync"
@@ -307,6 +307,33 @@ sessions.get("/:id/links", async (c) => {
     : []
 
   return c.json({ issues: linkedIssues, pullRequests: linkedPrs })
+})
+
+sessions.post("/:id/links", async (c) => {
+  const sessionId = c.req.param("id")
+  const body = await c.req.json<{ type: "issue" | "pr"; targetId: string }>().catch(() => null)
+  if (!body?.type || !body?.targetId) return c.json({ error: "type and targetId required" }, 400)
+  if (body.type !== "issue" && body.type !== "pr") return c.json({ error: "type must be 'issue' or 'pr'" }, 400)
+  await db.insert(sessionLinks).values({
+    sessionId,
+    type: body.type,
+    targetId: body.targetId,
+    createdAt: Date.now(),
+  }).onConflictDoNothing()
+  return c.json({ ok: true }, 201)
+})
+
+sessions.delete("/:id/links", async (c) => {
+  const sessionId = c.req.param("id")
+  const body = await c.req.json<{ type: "issue" | "pr"; targetId: string }>().catch(() => null)
+  if (!body?.type || !body?.targetId) return c.json({ error: "type and targetId required" }, 400)
+  await db.delete(sessionLinks)
+    .where(and(
+      eq(sessionLinks.sessionId, sessionId),
+      eq(sessionLinks.type, body.type),
+      eq(sessionLinks.targetId, body.targetId),
+    ))
+  return c.json({ ok: true })
 })
 
 sessions.get("/:id/status", async (c) => {

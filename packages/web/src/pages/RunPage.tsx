@@ -644,6 +644,7 @@ export function RunPage() {
           todos={todos}
           messages={messages}
           sessionLinks={sessionLinks}
+          sessionId={activeSessionId}
           onScrollToMessage={(id) => { setRightOpen(false); setTimeout(() => scrollToMessage(id), 300) }}
         />
       </SwipeDrawer>
@@ -664,6 +665,7 @@ export function RunPage() {
             todos={todos}
             messages={messages}
             sessionLinks={sessionLinks}
+            sessionId={activeSessionId}
             onScrollToMessage={scrollToMessage}
           />
         </div>
