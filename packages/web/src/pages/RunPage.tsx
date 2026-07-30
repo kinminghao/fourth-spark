@@ -61,13 +61,14 @@ function statusDotClass(status: string | undefined): string {
 function SessionItem({
   session, isActive, isConfirming,
   onSelect, onDelete, onConfirm, onCancelConfirm, onRename,
-  status, issue,
+  status, issue, linkedItems,
 }: {
   session: Session; isActive: boolean; isConfirming: boolean
   onSelect: () => void; onDelete: () => void; onConfirm: () => void; onCancelConfirm: () => void
   onRename: (title: string) => void
   status: string | undefined
   issue?: { number: number; title: string; state: string }
+  linkedItems?: Array<{ number: number; state: string; type: "issue" | "pr"; mergedAt?: number | null }>
 }) {
   const when = formatWhen(session)
   const [editing, setEditing] = useState(false)
@@ -202,7 +203,7 @@ function SessionItem({
             />
           ) : (
             <div
-              className="mt-0.5 flex items-center gap-1.5 pl-3.5 text-sm text-fg-2"
+              className="mt-0.5 flex items-center gap-1 pl-3.5 text-sm text-fg-2"
               onDoubleClick={(e) => { e.stopPropagation(); startEditing() }}
             >
               {issue && (
@@ -213,6 +214,21 @@ function SessionItem({
                   #{issue.number}
                 </span>
               )}
+              {linkedItems?.map((item) => (
+                <span
+                  key={`${item.type}-${item.number}`}
+                  className={clsx(
+                    "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium leading-none",
+                    item.type === "pr"
+                      ? item.state === "open" ? "bg-blue-500/15 text-blue-400"
+                        : item.mergedAt ? "bg-purple-500/15 text-purple-400"
+                        : "bg-red-500/15 text-red-400"
+                      : item.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
+                  )}
+                >
+                  {item.type === "pr" ? `PR#${item.number}` : `#${item.number}`}
+                </span>
+              ))}
               <span className="min-w-0 truncate">{session.title?.trim() || "未命名运行"}</span>
             </div>
           )}
@@ -302,6 +318,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
   const syncIssues = useIssueStore((s) => s.syncIssues)
   const matchingParentId = useIssueStore((s) => s.matchingParentId)
   const matchingCandidateId = useIssueStore((s) => s.matchingCandidateId)
+  const allSessionLinks = useSessionStore((s) => s.allSessionLinks)
 
   const topLevel = [...sessions]
     .filter((s) => !s.parentID)
@@ -357,6 +374,12 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
     <ul className="space-y-0.5">
       {list.map((session) => {
         const linkedIssue = session.issueId ? issueMap.get(session.issueId) : undefined
+        const sLinks = allSessionLinks[session.id]
+        const linkedItems: Array<{ number: number; state: string; type: "issue" | "pr"; mergedAt?: number | null }> = []
+        if (sLinks) {
+          for (const i of sLinks.issues) linkedItems.push({ number: i.number, state: i.state, type: "issue" })
+          for (const p of sLinks.pullRequests) linkedItems.push({ number: p.number, state: p.state, type: "pr", mergedAt: p.mergedAt })
+        }
         return (
           <SessionItem
             key={session.id}
@@ -365,6 +388,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
             isConfirming={confirmingId === session.id}
             status={statuses[session.id]}
             issue={linkedIssue ? { number: linkedIssue.number, title: linkedIssue.title, state: linkedIssue.state } : undefined}
+            linkedItems={linkedItems.length > 0 ? linkedItems : undefined}
             onSelect={() => { void setActiveSession(session.id); onClose?.() }}
             onDelete={() => { void deleteSession(session.id); setConfirmingId(null) }}
             onConfirm={() => setConfirmingId(session.id)}

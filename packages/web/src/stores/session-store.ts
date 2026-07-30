@@ -7,7 +7,7 @@
 
 import { create } from "zustand"
 import * as api from "../lib/api-client"
-import type { Message, MessagePart, Session, Todo, SessionLinks } from "../lib/api-client"
+import type { Message, MessagePart, Session, Todo, SessionLinks, SessionLinkSummary } from "../lib/api-client"
 import { isQuestionTool, isQuestionPending } from "../lib/message-parts"
 import { useRepoStore } from "./repo-store"
 import { useToastStore } from "./toast-store"
@@ -53,6 +53,7 @@ interface SessionState {
   sessionStatuses: Record<string, string>
   errorReasons: Record<string, string>
   sessionLinks: Record<string, SessionLinks>
+  allSessionLinks: Record<string, SessionLinkSummary>
   loadingSessions: boolean
   loadError: string | null
   sendError: string | null
@@ -89,6 +90,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   sessionStatuses: {},
   errorReasons: {},
   sessionLinks: {},
+  allSessionLinks: {},
   loadingSessions: false,
   loadError: null,
   sendError: null,
@@ -101,8 +103,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
     set({ loadingSessions: true, loadError: null })
     try {
-      const sessions = await api.listSessions(repoId)
-      set({ sessions, loadingSessions: false })
+      const [sessions, allLinks] = await Promise.all([
+        api.listSessions(repoId),
+        api.getAllSessionLinks(repoId).catch(() => ({})),
+      ])
+      set({ sessions, allSessionLinks: allLinks, loadingSessions: false })
     } catch (error) {
       set({
         loadingSessions: false,
@@ -234,6 +239,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const { [id]: _removedStatus, ...sessionStatuses } = state.sessionStatuses
       const { [id]: _removedReason, ...errorReasons } = state.errorReasons
       const { [id]: _removedLinks, ...sessionLinks } = state.sessionLinks
+      const { [id]: _removedAllLinks, ...allSessionLinks } = state.allSessionLinks
       return {
         sessions: state.sessions.filter((s) => s.id !== id),
         messages,
@@ -241,6 +247,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         sessionStatuses,
         errorReasons,
         sessionLinks,
+        allSessionLinks,
         activeSessionId:
           state.activeSessionId === id ? null : state.activeSessionId,
       }
@@ -286,6 +293,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       sessionStatuses: {},
       errorReasons: {},
       sessionLinks: {},
+      allSessionLinks: {},
       loadError: null,
       sendError: null,
     })

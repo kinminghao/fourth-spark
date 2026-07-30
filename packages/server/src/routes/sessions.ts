@@ -194,6 +194,35 @@ sessions.get("/", async (c) => {
 
 // Bulk status — returns all session statuses in one call.
 // MUST be registered before /:id to avoid being shadowed by the param route.
+sessions.get("/all-links", async (c) => {
+  const allLinks = await db.select().from(sessionLinks)
+  const issueIds = [...new Set(allLinks.filter((l) => l.type === "issue").map((l) => l.targetId))]
+  const prIds = [...new Set(allLinks.filter((l) => l.type === "pr").map((l) => l.targetId))]
+
+  const issueRows = issueIds.length > 0
+    ? await db.select({ id: issues.id, number: issues.number, title: issues.title, state: issues.state }).from(issues).where(inArray(issues.id, issueIds))
+    : []
+  const prRows = prIds.length > 0
+    ? await db.select({ id: pullRequests.id, number: pullRequests.number, title: pullRequests.title, state: pullRequests.state, mergedAt: pullRequests.mergedAt }).from(pullRequests).where(inArray(pullRequests.id, prIds))
+    : []
+
+  const issueMap = new Map(issueRows.map((r) => [r.id, r]))
+  const prMap = new Map(prRows.map((r) => [r.id, r]))
+
+  const result: Record<string, { issues: typeof issueRows; pullRequests: typeof prRows }> = {}
+  for (const link of allLinks) {
+    if (!result[link.sessionId]) result[link.sessionId] = { issues: [], pullRequests: [] }
+    if (link.type === "issue") {
+      const row = issueMap.get(link.targetId)
+      if (row) result[link.sessionId].issues.push(row)
+    } else {
+      const row = prMap.get(link.targetId)
+      if (row) result[link.sessionId].pullRequests.push(row)
+    }
+  }
+  return c.json(result)
+})
+
 sessions.get("/status", async (c) => {
   const repoId = c.req.param("repoId")
   const client = processManager.getClient(repoId)

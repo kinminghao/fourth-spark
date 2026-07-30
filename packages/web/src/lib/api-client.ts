@@ -398,6 +398,17 @@ export async function getSessionLinks(repoId: string, sessionId: string): Promis
   )
 }
 
+export interface SessionLinkSummary {
+  issues: Array<{ id: string; number: number; title: string; state: string }>
+  pullRequests: Array<{ id: string; number: number; title: string; state: string; mergedAt?: number | null }>
+}
+
+export async function getAllSessionLinks(repoId: string): Promise<Record<string, SessionLinkSummary>> {
+  return apiFetch<Record<string, SessionLinkSummary>>(
+    `${repoBase(repoId)}/sessions/all-links`,
+  )
+}
+
 export async function addSessionLink(repoId: string, sessionId: string, type: "issue" | "pr", targetId: string): Promise<void> {
   await apiFetch<void>(
     `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/links`,
