@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom"
-import { Box, Check, ChevronDown, CircleDot, GitBranch, Loader2, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
+import { Box, Check, ChevronDown, CircleDot, GitBranch, GitPullRequest, Loader2, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
 import clsx from "clsx"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useThemeStore } from "../stores/theme-store"
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { to: "/repos", icon: Box, label: "仓库管理" },
   { to: "/run", icon: Play, label: "运行面板" },
   { to: "/issues", icon: CircleDot, label: "Issues" },
+  { to: "/pulls", icon: GitPullRequest, label: "PRs" },
   { to: "/settings", icon: Settings, label: "设置" },
 ]
 

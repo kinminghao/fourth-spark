@@ -233,6 +233,48 @@ export function buildGitMcpServer(repoId: string): McpServer {
     },
   )
 
+  // ── list_pull_requests ────────────────────────────────────────────────────
+  server.registerTool(
+    "list_pull_requests",
+    {
+      description: "List pull requests from the Git platform (GitHub/Gitea/GitLab)",
+      inputSchema: z.object({
+        state: z.enum(["open", "closed", "all"]).optional().describe("Filter by PR state, defaults to 'open'"),
+        page: z.number().int().positive().optional().describe("Page number for pagination"),
+        limit: z.number().int().positive().max(100).optional().describe("Max PRs per page, defaults to 50"),
+      }),
+    },
+    async ({ state, page, limit }) => {
+      try {
+        const { client } = await getClientForRepo(repoId)
+        const prs = await client.listPullRequests({ state, page, limit })
+        return textResult(prs)
+      } catch (err) {
+        return errorResult(String(err))
+      }
+    },
+  )
+
+  // ── get_pull_request ─────────────────────────────────────────────────────
+  server.registerTool(
+    "get_pull_request",
+    {
+      description: "Get a single pull request by number",
+      inputSchema: z.object({
+        pr_number: z.number().int().positive().describe("Pull request number"),
+      }),
+    },
+    async ({ pr_number }) => {
+      try {
+        const { client } = await getClientForRepo(repoId)
+        const pr = await client.getPullRequest(pr_number)
+        return textResult(pr)
+      } catch (err) {
+        return errorResult(String(err))
+      }
+    },
+  )
+
   // ── create_pull_request ──────────────────────────────────────────────────
   server.registerTool(
     "create_pull_request",
