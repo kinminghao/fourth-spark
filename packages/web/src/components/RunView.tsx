@@ -18,7 +18,7 @@ import {
   useSessionStore,
 } from "../stores/session-store"
 import type { Message as ApiMessage, Session } from "../lib/api-client"
-import { useRepoStore } from "../stores/repo-store"
+import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useIssueStore } from "../stores/issue-store"
 import { orchestrator } from "../lib/session-orchestrator"
@@ -578,7 +578,7 @@ export function RunView({
   rightPanelOpen?: boolean
 }) {
   const navigate = useNavigate()
-  const activeRepoId = useRepoStore((s) => s.activeRepoId)
+  const repoName = useRepoStore(selectActiveRepoName)
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
   const previewIssueId = useIssueStore((state) => state.previewIssueId)
   const session = useSessionStore(
@@ -666,7 +666,7 @@ export function RunView({
         {linkedIssue && (
           <button
             type="button"
-            onClick={() => navigate(`/${activeRepoId}/issues?issueId=${linkedIssue.id}`)}
+            onClick={() => navigate(`/${encodeURIComponent(repoName!)}/issues?issueId=${linkedIssue.id}`)}
             className="flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
           >
             <span className={clsx(

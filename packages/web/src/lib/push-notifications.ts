@@ -1,7 +1,7 @@
 import { PushNotifications } from "@capacitor/push-notifications"
 import { isNativePlatform } from "./config"
 import { registerPushToken } from "./api-client"
-import { useRepoStore } from "../stores/repo-store"
+import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 
 let registered = false
 
@@ -28,8 +28,8 @@ export async function initPushNotifications(navigate: (path: string) => void): P
     const data = action.notification.data as Record<string, string> | undefined
     const sessionId = data?.sessionId
     if (sessionId) {
-      const repoId = useRepoStore.getState().activeRepoId
-      navigate(`/${repoId}/run?session=${sessionId}`)
+      const name = selectActiveRepoName(useRepoStore.getState())
+      if (name) navigate(`/${encodeURIComponent(name)}/run?session=${sessionId}`)
     }
   })
 
