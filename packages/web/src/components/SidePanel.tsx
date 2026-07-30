@@ -129,9 +129,58 @@ function PromptsTab({
   )
 }
 
+function LinkMatchRow({
+  linked,
+  number,
+  title,
+  state,
+  mergedAt,
+  isPr,
+  onToggle,
+}: {
+  linked: boolean
+  number: number
+  title: string
+  state: string
+  mergedAt?: number | null
+  isPr?: boolean
+  onToggle: () => void
+}) {
+  const badgeColor = isPr
+    ? state === "open" ? "bg-emerald-500/15 text-emerald-400"
+      : mergedAt ? "bg-purple-500/15 text-purple-400"
+      : "bg-red-500/15 text-red-400"
+    : state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400"
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onToggle}
+        className={clsx(
+          "flex w-full items-start gap-2 rounded-md px-2 py-2 text-left transition-colors",
+          linked
+            ? "border-l-2 border-emerald-500 bg-emerald-500/5"
+            : "border-l-2 border-transparent hover:bg-elevated/50",
+        )}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className={clsx("shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold", badgeColor)}>
+            #{number}
+          </span>
+          <span className="min-w-0 truncate text-xs text-fg-2">{title}</span>
+          {linked && <Link2 className="ml-auto h-3 w-3 shrink-0 text-emerald-400" />}
+        </div>
+      </button>
+    </li>
+  )
+}
+
+type MatchMode = null | "issue" | "pr"
+
 function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: string | null }) {
   const navigate = useNavigate()
-  const [searching, setSearching] = useState(false)
+  const [matchMode, setMatchMode] = useState<MatchMode>(null)
   const [query, setQuery] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -144,105 +193,121 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
   const linkedPrIds = new Set(links?.pullRequests?.map((p) => p.id) ?? [])
 
   useEffect(() => {
-    if (searching) inputRef.current?.focus()
-  }, [searching])
+    if (matchMode) inputRef.current?.focus()
+  }, [matchMode])
+
+  const exitMatch = () => { setMatchMode(null); setQuery("") }
+
+  const handleToggle = async (type: "issue" | "pr", targetId: string, isLinked: boolean) => {
+    if (!sessionId) return
+    if (isLinked) {
+      await removeLink(sessionId, type, targetId)
+    } else {
+      await addLink(sessionId, type, targetId)
+    }
+  }
 
   const q = query.trim().toLowerCase()
-  const candidateIssues = q
-    ? allIssues.filter((i) => !linkedIssueIds.has(i.id) && `#${i.number} ${i.title}`.toLowerCase().includes(q))
-    : []
-  const candidatePrs = q
-    ? allPrs.filter((p) => !linkedPrIds.has(p.id) && `#${p.number} ${p.title} ${p.headBranch}`.toLowerCase().includes(q))
-    : []
-
-  const handleAdd = async (type: "issue" | "pr", targetId: string) => {
-    if (!sessionId) return
-    await addLink(sessionId, type, targetId)
-    setQuery("")
-    setSearching(false)
-  }
-
-  const handleRemove = async (type: "issue" | "pr", targetId: string) => {
-    if (!sessionId) return
-    await removeLink(sessionId, type, targetId)
-  }
+  const filteredIssues = !q
+    ? allIssues
+    : allIssues.filter((i) => `#${i.number} ${i.title}`.toLowerCase().includes(q))
+  const filteredPrs = !q
+    ? allPrs
+    : allPrs.filter((p) => `#${p.number} ${p.title} ${p.headBranch}`.toLowerCase().includes(q))
 
   const issueCount = links?.issues?.length ?? 0
   const prCount = links?.pullRequests?.length ?? 0
 
-  return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      {/* search bar */}
-      <div className="flex items-center gap-1 border-b border-line px-3 py-2">
-        {searching ? (
-          <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-line bg-base px-2 py-1">
-            <Search className="h-3 w-3 shrink-0 text-fg-5" />
+  if (matchMode) {
+    const isIssueMode = matchMode === "issue"
+    const items = isIssueMode ? filteredIssues : filteredPrs
+    const linkedIds = isIssueMode ? linkedIssueIds : linkedPrIds
+
+    return (
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex items-center justify-between border-b border-line px-3 py-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-blue-400">
+            {isIssueMode ? "关联 Issue" : "关联 PR"}
+          </span>
+          <button
+            type="button"
+            onClick={exitMatch}
+            className="flex h-6 items-center gap-1 rounded-md px-2 text-xs text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+          >
+            <X className="h-3.5 w-3.5" />
+            完成
+          </button>
+        </div>
+        <div className="border-b border-line px-3 py-2">
+          <div className="flex items-center gap-2 rounded-md border border-line bg-base px-2 py-1">
+            <Search className="h-3.5 w-3.5 shrink-0 text-fg-5" />
             <input
               ref={inputRef}
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索 issue / PR..."
+              placeholder={isIssueMode ? "搜索 issue..." : "搜索 PR..."}
               className="min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-fg-6 focus:outline-none"
             />
-            <button type="button" onClick={() => { setSearching(false); setQuery("") }} className="shrink-0 text-fg-5 hover:text-fg-3">
-              <X className="h-3 w-3" />
-            </button>
+            {query && (
+              <button type="button" onClick={() => setQuery("")} className="shrink-0 text-fg-5 hover:text-fg-3">
+                <X className="h-3 w-3" />
+              </button>
+            )}
           </div>
-        ) : (
-          <>
-            <span className="flex-1 font-mono text-[10px] text-fg-5">
-              {issueCount + prCount > 0 ? `${issueCount + prCount} 项关联` : "暂无关联"}
-            </span>
-            <button
-              type="button"
-              onClick={() => setSearching(true)}
-              className="flex h-6 w-6 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </>
-        )}
+        </div>
+        <div className="flex-1 overflow-y-auto px-2 py-2">
+          {items.length === 0 ? (
+            <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">
+              {(isIssueMode ? allIssues : allPrs).length === 0
+                ? (isIssueMode ? "暂无 Issue，请先同步" : "暂无 PR，请先同步")
+                : "无匹配结果"}
+            </p>
+          ) : (
+            <ul className="space-y-0.5">
+              {items.map((item) => (
+                <LinkMatchRow
+                  key={item.id}
+                  linked={linkedIds.has(item.id)}
+                  number={item.number}
+                  title={item.title}
+                  state={item.state}
+                  mergedAt={isIssueMode ? undefined : (item as typeof allPrs[number]).mergedAt}
+                  isPr={!isIssueMode}
+                  onToggle={() => handleToggle(matchMode, item.id, linkedIds.has(item.id))}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex items-center gap-1.5 border-b border-line px-3 py-2">
+        <span className="flex-1 font-mono text-[10px] text-fg-5">
+          {issueCount + prCount > 0 ? `${issueCount + prCount} 项关联` : "暂无关联"}
+        </span>
+        <button
+          type="button"
+          onClick={() => setMatchMode("issue")}
+          className="flex h-6 items-center gap-1 rounded-md border border-line px-1.5 text-fg-4 transition-colors hover:border-emerald-500/50 hover:text-emerald-400"
+        >
+          <Plus className="h-3 w-3" />
+          <span className="text-[10px] font-medium">Issue</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMatchMode("pr")}
+          className="flex h-6 items-center gap-1 rounded-md border border-line px-1.5 text-fg-4 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+        >
+          <Plus className="h-3 w-3" />
+          <span className="text-[10px] font-medium">PR</span>
+        </button>
       </div>
 
-      {/* search results */}
-      {searching && q && (candidateIssues.length > 0 || candidatePrs.length > 0) && (
-        <div className="max-h-40 overflow-y-auto border-b border-line bg-base px-3 py-2">
-          {candidateIssues.slice(0, 5).map((issue) => (
-            <button
-              key={issue.id}
-              type="button"
-              onClick={() => handleAdd("issue", issue.id)}
-              className="flex w-full items-start gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-elevated/60"
-            >
-              <span className="mt-0.5 shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 font-mono text-[10px] font-semibold text-emerald-400">
-                #{issue.number}
-              </span>
-              <span className="line-clamp-1 text-xs leading-5 text-fg-3">{issue.title}</span>
-            </button>
-          ))}
-          {candidatePrs.slice(0, 5).map((pr) => (
-            <button
-              key={pr.id}
-              type="button"
-              onClick={() => handleAdd("pr", pr.id)}
-              className="flex w-full items-start gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-elevated/60"
-            >
-              <span className="mt-0.5 shrink-0 rounded bg-blue-500/15 px-1 py-0.5 font-mono text-[10px] font-semibold text-blue-400">
-                PR#{pr.number}
-              </span>
-              <span className="line-clamp-1 text-xs leading-5 text-fg-3">{pr.title}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      {searching && q && candidateIssues.length === 0 && candidatePrs.length === 0 && (
-        <div className="border-b border-line px-3 py-3 text-center font-mono text-xs text-fg-5">
-          无匹配结果
-        </div>
-      )}
-
-      {/* linked items */}
       <div className="flex-1 overflow-y-auto px-3 py-3">
         {issueCount > 0 && (
           <div className="mb-3">
@@ -269,7 +334,7 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleRemove("issue", issue.id)}
+                    onClick={() => void handleToggle("issue", issue.id, true)}
                     className="mt-1.5 hidden shrink-0 rounded p-0.5 text-fg-5 transition-colors hover:bg-red-500/15 hover:text-red-400 group-hover:block"
                   >
                     <X className="h-3 w-3" />
@@ -306,7 +371,7 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleRemove("pr", pr.id)}
+                    onClick={() => void handleToggle("pr", pr.id, true)}
                     className="mt-1.5 hidden shrink-0 rounded p-0.5 text-fg-5 transition-colors hover:bg-red-500/15 hover:text-red-400 group-hover:block"
                   >
                     <X className="h-3 w-3" />
@@ -316,9 +381,9 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
             </ul>
           </div>
         )}
-        {issueCount === 0 && prCount === 0 && !searching && (
+        {issueCount === 0 && prCount === 0 && (
           <div className="flex flex-1 items-center justify-center py-10">
-            <p className="font-mono text-xs text-fg-5">点击 + 添加关联</p>
+            <p className="font-mono text-xs text-fg-5">点击上方按钮添加关联</p>
           </div>
         )}
       </div>
