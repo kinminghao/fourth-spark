@@ -356,30 +356,31 @@ function IssueRow({
         type="button"
         onClick={onSelect}
         className={clsx(
-          "group flex w-full items-start gap-2 rounded-md px-3 py-2.5 text-left transition-colors",
+          "group flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors",
           isActive
             ? "border-l-2 border-blue-500 bg-elevated/80"
             : "border-l-2 border-transparent hover:bg-elevated/50",
         )}
       >
+        <span
+          className={clsx(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-mono text-sm font-bold",
+            issue.state === "open"
+              ? "bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 text-emerald-400 ring-1 ring-emerald-500/25"
+              : "bg-gradient-to-br from-purple-500/20 to-purple-500/5 text-purple-400 ring-1 ring-purple-500/25",
+          )}
+        >
+          {issue.number}
+        </span>
+
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span
-              className={clsx(
-                "shrink-0 rounded px-1.5 py-0.5 font-mono text-xs font-medium",
-                issue.state === "open"
-                  ? "bg-emerald-500/15 text-emerald-400"
-                  : "bg-purple-500/15 text-purple-400",
-              )}
-            >
-              #{issue.number}
-            </span>
             {isEpic && (
-              <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide bg-amber-400/12 text-amber-400">
+              <span className="shrink-0 rounded px-1 py-0.5 text-[9px] font-bold tracking-wide bg-amber-400/12 text-amber-400">
                 EPIC
               </span>
             )}
-            <span className="min-w-0 text-sm font-medium text-fg-2">
+            <span className="min-w-0 text-xs font-medium text-fg-2 group-hover:text-fg">
               {issue.title}
             </span>
           </div>
@@ -389,7 +390,7 @@ function IssueRow({
               {issue.labels.map((l) => (
                 <span
                   key={l.id}
-                  className="rounded px-1.5 py-0.5 text-[11px] font-medium"
+                  className="rounded px-1 py-0.5 text-[10px] font-medium"
                   style={{
                     backgroundColor: `#${l.color}20`,
                     color: `#${l.color}`,
@@ -410,7 +411,7 @@ function IssueRow({
         </div>
 
         {sessionCount > 0 && (
-          <span className="mt-0.5 shrink-0 rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">
+          <span className="shrink-0 rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">
             {sessionCount}
           </span>
         )}
