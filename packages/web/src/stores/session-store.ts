@@ -111,9 +111,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       const [sessions, allLinks] = await Promise.all([
         api.listSessions(repoId),
-        api.getAllSessionLinks(repoId).catch(() => ({})),
+        api.getAllSessionLinks(repoId).catch(() => null),
       ])
-      set({ sessions, allSessionLinks: allLinks, loadingSessions: false })
+      const next: Partial<SessionState> = { sessions, loadingSessions: false }
+      if (allLinks) next.allSessionLinks = allLinks
+      set(next)
     } catch (error) {
       set({
         loadingSessions: false,
@@ -199,8 +201,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const repoId = getRepoId()
     if (!repoId) return
     try {
-      const links = await api.getSessionLinks(repoId, id)
-      set((state) => ({ sessionLinks: { ...state.sessionLinks, [id]: links } }))
+      const [links, allLinks] = await Promise.all([
+        api.getSessionLinks(repoId, id),
+        api.getAllSessionLinks(repoId).catch(() => null),
+      ])
+      set((state) => {
+        const next: Partial<SessionState> = { sessionLinks: { ...state.sessionLinks, [id]: links } }
+        if (allLinks) next.allSessionLinks = allLinks
+        return next
+      })
     } catch {
       // best-effort
     }
