@@ -139,6 +139,7 @@ function ContextInfo({ session, messages }: { session: Session | null; messages:
 }
 
 const MAX_NEW_HEIGHT_PX = 144
+const STICK_TO_BOTTOM_THRESHOLD_PX = 64
 
 function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const [draft, setDraft] = useState("")
@@ -614,12 +615,33 @@ export function RunView({
   }, [activeSessionId])
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const stickToBottomRef = useRef(true)
   useEffect(() => {
     const element = scrollRef.current
-    if (element) {
+    if (element && stickToBottomRef.current) {
       element.scrollTop = element.scrollHeight
     }
   }, [messages, todos])
+
+  useEffect(() => {
+    stickToBottomRef.current = true
+  }, [activeSessionId])
+
+  useEffect(() => {
+    if (status !== "busy") return
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return
+      const target = event.target as HTMLElement | null
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable
+      ) return
+      void abortSession()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [status, abortSession])
 
   const matchingParentId = useIssueStore((state) => state.matchingParentId)
 
@@ -706,7 +728,17 @@ export function RunView({
         )}
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div
+        ref={scrollRef}
+        onScroll={() => {
+          const element = scrollRef.current
+          if (!element) return
+          stickToBottomRef.current =
+            element.scrollHeight - element.clientHeight - element.scrollTop <=
+            STICK_TO_BOTTOM_THRESHOLD_PX
+        }}
+        className="flex-1 overflow-y-auto"
+      >
         <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-4">
           {messages.length === 0 ? (
             <p className="py-10 text-center font-mono text-xs text-fg-6">

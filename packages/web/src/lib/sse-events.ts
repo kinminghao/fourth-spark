@@ -27,6 +27,12 @@ export interface SseDispatchTarget {
     messageId: string,
     part: MessagePart,
   ) => void
+  appendMessagePartDelta: (
+    sessionId: string,
+    messageId: string,
+    partId: string,
+    delta: string,
+  ) => void
   updateTodos: (sessionId: string, todos: Todo[]) => void
   setSessionStatus: (sessionId: string, status: string, reason?: string) => void
   updateSessionInfo: (info: Partial<Session> & { id: string }) => void
@@ -105,6 +111,19 @@ function extractPart(
     (typeof props.messageId === "string" && props.messageId) ||
     undefined
   return { messageId, part: candidate as unknown as MessagePart }
+}
+
+function extractPartDelta(
+  data: unknown,
+): { messageId: string; partId: string; delta: string } | null {
+  const props = asRecord(getProps(data))
+  if (!props) return null
+  if (props.field !== "text") return null
+  const messageId = typeof props.messageID === "string" ? props.messageID : null
+  const partId = typeof props.partID === "string" ? props.partID : null
+  const delta = typeof props.delta === "string" ? props.delta : null
+  if (!messageId || !partId || delta === null) return null
+  return { messageId, partId, delta }
 }
 
 function extractTodos(data: unknown): Todo[] {
@@ -220,11 +239,17 @@ export function dispatchSseEvent(
       }
       break
     }
-    case "message.part.updated":
-    case "message.part.delta": {
+    case "message.part.updated": {
       const { messageId, part } = extractPart(data)
       if (part && messageId) {
         target.updateMessagePart(sessionId, messageId, part)
+      }
+      break
+    }
+    case "message.part.delta": {
+      const d = extractPartDelta(data)
+      if (d) {
+        target.appendMessagePartDelta(sessionId, d.messageId, d.partId, d.delta)
       }
       break
     }
