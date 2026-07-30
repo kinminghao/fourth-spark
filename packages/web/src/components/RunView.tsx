@@ -578,6 +578,7 @@ export function RunView({
   rightPanelOpen?: boolean
 }) {
   const navigate = useNavigate()
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
   const previewIssueId = useIssueStore((state) => state.previewIssueId)
   const session = useSessionStore(
@@ -665,7 +666,7 @@ export function RunView({
         {linkedIssue && (
           <button
             type="button"
-            onClick={() => navigate(`/issues?issueId=${linkedIssue.id}`)}
+            onClick={() => navigate(`/${activeRepoId}/issues?issueId=${linkedIssue.id}`)}
             className="flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
           >
             <span className={clsx(

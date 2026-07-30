@@ -406,7 +406,7 @@ function PrDetail({
                   <div key={issue.id} className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => navigate(`/issues?issueId=${encodeURIComponent(issue.id)}`)}
+                      onClick={() => navigate(`/${activeRepoId}/issues?issueId=${encodeURIComponent(issue.id)}`)}
                       className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-elevated/60"
                     >
                       <span
