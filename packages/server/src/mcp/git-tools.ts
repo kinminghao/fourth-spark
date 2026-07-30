@@ -378,6 +378,48 @@ export function buildGitMcpServer(repoId: string): McpServer {
     },
   )
 
+  // ── list_pr_comments ──────────────────────────────────────────────────────
+  server.registerTool(
+    "list_pr_comments",
+    {
+      description: "List comments on a pull request",
+      inputSchema: z.object({
+        pr_number: z.number().int().positive().describe("Pull request number"),
+      }),
+    },
+    async ({ pr_number }) => {
+      try {
+        const { client } = await getClientForRepo(repoId)
+        const comments = await client.listComments(pr_number)
+        return textResult(comments)
+      } catch (err) {
+        return errorResult(String(err))
+      }
+    },
+  )
+
+  // ── create_pr_comment ──────────────────────────────────────────────────
+  server.registerTool(
+    "create_pr_comment",
+    {
+      description: "Add a comment to a pull request",
+      inputSchema: z.object({
+        pr_number: z.number().int().positive().describe("Pull request number"),
+        body: z.string().describe("Comment body (Markdown)"),
+      }),
+    },
+    async ({ pr_number, body }) => {
+      try {
+        const { client } = await getClientForRepo(repoId)
+        await client.createComment(pr_number, body)
+        logger.info({ repoId, prNumber: pr_number }, "MCP: created PR comment")
+        return textResult({ ok: true, pr_number })
+      } catch (err) {
+        return errorResult(String(err))
+      }
+    },
+  )
+
   // ── merge_pull_request ───────────────────────────────────────────────────
   server.registerTool(
     "merge_pull_request",
