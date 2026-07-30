@@ -42,6 +42,8 @@ Server (Bun+Hono :3000)
 | `create_comment` | 给 issue 添加评论 |
 | `list_comments` | 列出 issue 的评论 |
 | `create_pull_request` | 创建 PR (需指定 head/base 分支)；可选 issue_number 自动关联 issue |
+| `list_pr_comments` | 列出 PR 的评论 |
+| `create_pr_comment` | 给 PR 添加评论 |
 | `merge_pull_request` | 合并 PR |
 
 - 凭证自动从 PostgreSQL `git_hosts` 表读取，按仓库 remote URL 中的 host 匹配
