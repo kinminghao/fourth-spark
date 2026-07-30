@@ -203,33 +203,37 @@ function SessionItem({
             />
           ) : (
             <div
-              className="mt-0.5 flex items-center gap-1 pl-3.5 text-sm text-fg-2"
+              className="mt-0.5 pl-3.5"
               onDoubleClick={(e) => { e.stopPropagation(); startEditing() }}
             >
-              {issue && (
-                <span className={clsx(
-                  "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium leading-none",
-                  issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-                )}>
-                  #{issue.number}
-                </span>
-              )}
-              {linkedItems?.map((item) => (
-                <span
-                  key={`${item.type}-${item.number}`}
-                  className={clsx(
-                    "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium leading-none",
-                    item.type === "pr"
-                      ? item.state === "open" ? "bg-blue-500/15 text-blue-400"
-                        : item.mergedAt ? "bg-purple-500/15 text-purple-400"
-                        : "bg-red-500/15 text-red-400"
-                      : item.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
+              {(issue || linkedItems) && (
+                <div className="mb-0.5 flex flex-wrap gap-1">
+                  {issue && (
+                    <span className={clsx(
+                      "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium leading-none",
+                      issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
+                    )}>
+                      #{issue.number}
+                    </span>
                   )}
-                >
-                  {item.type === "pr" ? `PR#${item.number}` : `#${item.number}`}
-                </span>
-              ))}
-              <span className="min-w-0 truncate">{session.title?.trim() || "未命名运行"}</span>
+                  {linkedItems?.map((item) => (
+                    <span
+                      key={`${item.type}-${item.number}`}
+                      className={clsx(
+                        "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium leading-none",
+                        item.type === "pr"
+                          ? item.state === "open" ? "bg-blue-500/15 text-blue-400"
+                            : item.mergedAt ? "bg-purple-500/15 text-purple-400"
+                            : "bg-red-500/15 text-red-400"
+                          : item.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
+                      )}
+                    >
+                      {item.type === "pr" ? `PR#${item.number}` : `#${item.number}`}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <span className="block truncate text-sm text-fg-2">{session.title?.trim() || "未命名运行"}</span>
             </div>
           )}
         </button>
