@@ -44,6 +44,10 @@ function issueToDb(repoId: string, gi: GitIssue) {
     state: gi.state,
     labels: gi.labels?.map((l) => ({ id: l.id, name: l.name, color: l.color })) ?? [],
     htmlUrl: gi.html_url,
+    authorLogin: gi.user?.login ?? null,
+    authorAvatar: gi.user?.avatar_url ?? null,
+    assignees: gi.assignees ?? [],
+    commentCount: gi.comments ?? 0,
     createdAt: new Date(gi.created_at).getTime(),
     updatedAt: new Date(gi.updated_at).getTime(),
   }
@@ -411,7 +415,9 @@ export function buildGitMcpServer(repoId: string): McpServer {
     async ({ pr_number, body }) => {
       try {
         const { client } = await getClientForRepo(repoId)
-        await client.createComment(pr_number, body)
+        const comment = await client.createComment(pr_number, body)
+        const values = commentToDb(repoId, pr_number, comment)
+        await db.insert(issueComments).values(values).onConflictDoNothing()
         logger.info({ repoId, prNumber: pr_number }, "MCP: created PR comment")
         return textResult({ ok: true, pr_number })
       } catch (err) {
@@ -433,6 +439,10 @@ export function buildGitMcpServer(repoId: string): McpServer {
       try {
         const { client } = await getClientForRepo(repoId)
         await client.mergePullRequest(pr_number)
+        const prId = `${repoId}_pr_${pr_number}`
+        await db.update(pullRequests)
+          .set({ state: "closed", mergedAt: Date.now(), updatedAt: Date.now() })
+          .where(eq(pullRequests.id, prId))
         logger.info({ repoId, prNumber: pr_number }, "MCP: merged pull request")
         return textResult({ ok: true, pr_number })
       } catch (err) {
