@@ -387,6 +387,17 @@ export async function getSessionStatus(repoId: string, sessionId: string): Promi
   )
 }
 
+export interface SessionLinks {
+  issues: Issue[]
+  pullRequests: PersistentPullRequest[]
+}
+
+export async function getSessionLinks(repoId: string, sessionId: string): Promise<SessionLinks> {
+  return apiFetch<SessionLinks>(
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/links`,
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Agent API — /api/repos/:repoId/agents
 // ---------------------------------------------------------------------------

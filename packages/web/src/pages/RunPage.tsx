@@ -597,6 +597,10 @@ export function RunPage() {
     const id = s.activeSessionId
     return id ? (s.messages[id] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES
   })
+  const sessionLinks = useSessionStore((s) => {
+    const id = s.activeSessionId
+    return id ? s.sessionLinks[id] : undefined
+  })
 
   useEffect(() => {
     if (isXl && activeSessionId) {
@@ -639,6 +643,7 @@ export function RunPage() {
         <SidePanel
           todos={todos}
           messages={messages}
+          sessionLinks={sessionLinks}
           onScrollToMessage={(id) => { setRightOpen(false); setTimeout(() => scrollToMessage(id), 300) }}
         />
       </SwipeDrawer>
@@ -658,6 +663,7 @@ export function RunPage() {
           <SidePanel
             todos={todos}
             messages={messages}
+            sessionLinks={sessionLinks}
             onScrollToMessage={scrollToMessage}
           />
         </div>

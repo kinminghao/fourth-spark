@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   AlertTriangle,
   ChevronLeft,
@@ -479,6 +479,7 @@ export function PullRequestsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [issueSearchQuery, setIssueSearchQuery] = useState("")
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const pulls = usePrStore((s) => s.pulls)
   const syncing = usePrStore((s) => s.syncing)
@@ -489,6 +490,14 @@ export function PullRequestsPage() {
   const linkIssue = usePrStore((s) => s.linkIssue)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const allIssues = useIssueStore((s) => s.issues)
+
+  useEffect(() => {
+    const paramId = searchParams.get("prId")
+    if (paramId && pulls.some((p) => p.id === paramId)) {
+      setSelectedId(paramId)
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams, pulls])
 
   const matchingPr = matchingPrId ? pulls.find((p) => p.id === matchingPrId) ?? null : null
 

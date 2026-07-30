@@ -2,9 +2,10 @@ import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { eq } from "drizzle-orm"
 import { db } from "../db/index"
-import { repos, issues, issueComments } from "../db/schema"
+import { repos, issues, issueComments, pullRequests, sessionLinks } from "../db/schema"
 import { parseGitUrl } from "../lib/git-url"
-import { getHostInfo, createGitIssueClient, type GitIssueClient, type GitIssue, type GitComment } from "../lib/git-provider"
+import { getHostInfo, createGitIssueClient, type GitIssueClient, type GitIssue, type GitComment, type GitPullRequest } from "../lib/git-provider"
+import { processManager } from "../lib/process-manager"
 import { logger } from "../middleware/logger"
 
 // ---------------------------------------------------------------------------
@@ -58,6 +59,60 @@ function commentToDb(repoId: string, issueNum: number, gc: GitComment) {
     body: gc.body,
     createdAt: new Date(gc.created_at).getTime(),
     updatedAt: new Date(gc.updated_at).getTime(),
+  }
+}
+
+function prToDb(repoId: string, pr: GitPullRequest) {
+  return {
+    id: `${repoId}_pr_${pr.number}`,
+    repoId,
+    number: pr.number,
+    title: pr.title,
+    body: pr.body || null,
+    state: pr.state,
+    headBranch: pr.head.ref,
+    baseBranch: pr.base.ref,
+    labels: pr.labels?.map((l) => ({ id: l.id, name: l.name, color: l.color })) ?? [],
+    htmlUrl: pr.html_url,
+    authorLogin: pr.user.login,
+    authorAvatar: pr.user.avatar_url,
+    assignees: pr.assignees ?? [],
+    mergeable: pr.mergeable === null ? null : String(pr.mergeable),
+    draft: pr.draft ? 1 : 0,
+    commentCount: pr.comments ?? 0,
+    createdAt: new Date(pr.created_at).getTime(),
+    updatedAt: new Date(pr.updated_at).getTime(),
+    mergedAt: pr.merged_at ? new Date(pr.merged_at).getTime() : null,
+  }
+}
+
+async function findBusySessionId(repoId: string): Promise<string | null> {
+  try {
+    const client = processManager.getClient(repoId)
+    if (!client) return null
+    const statuses = await client.getSessionStatus()
+    for (const [sessionId, status] of Object.entries(statuses)) {
+      if (status.type === "busy") return sessionId
+    }
+  } catch (err) {
+    logger.warn({ err, repoId }, "failed to find busy session for auto-link")
+  }
+  return null
+}
+
+async function linkSessionTarget(repoId: string, type: "issue" | "pr", targetId: string): Promise<void> {
+  const sessionId = await findBusySessionId(repoId)
+  if (!sessionId) return
+  try {
+    await db.insert(sessionLinks).values({
+      sessionId,
+      type,
+      targetId,
+      createdAt: Date.now(),
+    }).onConflictDoNothing()
+    logger.info({ sessionId, type, targetId }, "auto-linked session to target")
+  } catch (err) {
+    logger.warn({ err, sessionId, type, targetId }, "failed to auto-link session")
   }
 }
 
@@ -155,6 +210,7 @@ export function buildGitMcpServer(repoId: string): McpServer {
         const values = issueToDb(repoId, issue)
         await db.insert(issues).values(values).onConflictDoNothing()
         logger.info({ repoId, issueNumber: issue.number }, "MCP: created issue")
+        await linkSessionTarget(repoId, "issue", values.id)
         return textResult(issue)
       } catch (err) {
         return errorResult(String(err))
@@ -300,6 +356,12 @@ export function buildGitMcpServer(repoId: string): McpServer {
 
         const pr = await client.createPullRequest({ title, body: prBody, head, base })
         logger.info({ repoId, prNumber: pr.number, issue_number }, "MCP: created pull request")
+
+        const prValues = prToDb(repoId, pr)
+        const { id: _prId, createdAt: _prCreatedAt, ...prUpdateSet } = prValues
+        await db.insert(pullRequests).values(prValues).onConflictDoUpdate({ target: pullRequests.id, set: prUpdateSet })
+
+        await linkSessionTarget(repoId, "pr", prValues.id)
 
         if (issue_number) {
           try {

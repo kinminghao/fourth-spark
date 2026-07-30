@@ -1,7 +1,8 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import clsx from "clsx"
-import { ListTodo, MessageSquare } from "lucide-react"
-import type { Message, Todo } from "../lib/api-client"
+import { ListTodo, MessageSquare, Link2 } from "lucide-react"
+import type { Message, Todo, SessionLinks } from "../lib/api-client"
 import { normalizeTodoStatus, type TodoStatus } from "../lib/message-parts"
 
 const MARK: Record<TodoStatus, { glyph: string; color: string; spin: boolean }> = {
@@ -11,7 +12,7 @@ const MARK: Record<TodoStatus, { glyph: string; color: string; spin: boolean }> 
   pending: { glyph: "○", color: "text-fg-4", spin: false },
 }
 
-type Tab = "todo" | "prompts"
+type Tab = "todo" | "prompts" | "links"
 
 function formatTime(msg: Message): string {
   const raw = msg.time?.created
@@ -125,18 +126,98 @@ function PromptsTab({
   )
 }
 
+function LinksTab({ links }: { links?: SessionLinks }) {
+  const navigate = useNavigate()
+  const issueCount = links?.issues?.length ?? 0
+  const prCount = links?.pullRequests?.length ?? 0
+
+  if (issueCount === 0 && prCount === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <p className="font-mono text-xs text-fg-5">暂无关联</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto px-3 py-3">
+      {issueCount > 0 && (
+        <div className="mb-3">
+          <div className="mb-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-5">
+            Issues ({issueCount})
+          </div>
+          <ul className="space-y-1">
+            {links!.issues.map((issue) => (
+              <li key={issue.id}>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/issues?issueId=${encodeURIComponent(issue.id)}`)}
+                  className="group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
+                >
+                  <span className={clsx(
+                    "mt-0.5 shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
+                    issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
+                  )}>
+                    #{issue.number}
+                  </span>
+                  <span className="line-clamp-2 text-xs leading-5 text-fg-3 group-hover:text-fg-2">
+                    {issue.title}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {prCount > 0 && (
+        <div>
+          <div className="mb-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-5">
+            Pull Requests ({prCount})
+          </div>
+          <ul className="space-y-1">
+            {links!.pullRequests.map((pr) => (
+              <li key={pr.id}>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/pulls?prId=${encodeURIComponent(pr.id)}`)}
+                  className="group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
+                >
+                  <span className={clsx(
+                    "mt-0.5 shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
+                    pr.state === "open" ? "bg-emerald-500/15 text-emerald-400"
+                      : pr.mergedAt ? "bg-purple-500/15 text-purple-400"
+                      : "bg-red-500/15 text-red-400",
+                  )}>
+                    #{pr.number}
+                  </span>
+                  <span className="line-clamp-2 text-xs leading-5 text-fg-3 group-hover:text-fg-2">
+                    {pr.title}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function SidePanel({
   todos,
   messages,
+  sessionLinks,
   onScrollToMessage,
 }: {
   todos: readonly Todo[]
   messages: readonly Message[]
+  sessionLinks?: SessionLinks
   onScrollToMessage?: (messageId: string) => void
 }) {
   const [activeTab, setActiveTab] = useState<Tab>("todo")
 
   const userCount = messages.filter((m) => m.role === "user").length
+  const linkCount = (sessionLinks?.issues?.length ?? 0) + (sessionLinks?.pullRequests?.length ?? 0)
 
   return (
     <div className="flex h-full w-72 shrink-0 flex-col border-l border-line bg-surface">
@@ -177,12 +258,32 @@ export function SidePanel({
             </span>
           )}
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("links")}
+          className={clsx(
+            "flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
+            activeTab === "links"
+              ? "border-blue-500 text-blue-500"
+              : "border-transparent text-fg-4 hover:text-fg-2",
+          )}
+        >
+          <Link2 className="h-3.5 w-3.5" />
+          关联
+          {linkCount > 0 && (
+            <span className="rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">
+              {linkCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {activeTab === "todo" ? (
         <TodoTab todos={todos} />
-      ) : (
+      ) : activeTab === "prompts" ? (
         <PromptsTab messages={messages} onScrollToMessage={onScrollToMessage} />
+      ) : (
+        <LinksTab links={sessionLinks} />
       )}
     </div>
   )
