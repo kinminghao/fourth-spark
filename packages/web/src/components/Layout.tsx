@@ -3,7 +3,7 @@ import { Box, Check, ChevronDown, CircleDot, GitBranch, GitPullRequest, Loader2,
 import clsx from "clsx"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useThemeStore } from "../stores/theme-store"
-import { useRepoStore } from "../stores/repo-store"
+import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { listBranches, checkoutBranch, type BranchList } from "../lib/api-client"
 
 const NAV_ITEMS = [
@@ -14,9 +14,9 @@ const NAV_ITEMS = [
   { segment: "settings", icon: Settings, label: "设置", global: true },
 ]
 
-function navPath(segment: string, global: boolean, repoId: string | null): string {
+function navPath(segment: string, global: boolean, repoName: string | null): string {
   if (global) return `/${segment}`
-  return repoId ? `/${repoId}/${segment}` : `/${segment}`
+  return repoName ? `/${encodeURIComponent(repoName)}/${segment}` : `/${segment}`
 }
 
 function BranchSwitcher({ repoId, currentBranch }: { repoId: string; currentBranch: string | null }) {
@@ -163,8 +163,10 @@ function Header() {
   const handleRepoChange = (newRepoId: string) => {
     if (!newRepoId) return
     setActiveRepo(newRepoId)
+    const repo = repos.find((r) => r.id === newRepoId)
+    if (!repo) return
     const subPage = location.pathname.match(/\/(run|issues|pulls)/)?.[1] ?? "run"
-    navigate(`/${newRepoId}/${subPage}`)
+    navigate(`/${encodeURIComponent(repo.name)}/${subPage}`)
   }
 
   return (
@@ -218,13 +220,13 @@ function Header() {
 }
 
 function Sidebar() {
-  const activeRepoId = useRepoStore((s) => s.activeRepoId)
+  const repoName = useRepoStore(selectActiveRepoName)
   return (
     <nav className="hidden w-48 shrink-0 flex-col border-r border-line bg-surface py-2 md:flex">
       {NAV_ITEMS.map((item) => (
         <NavLink
           key={item.segment}
-          to={navPath(item.segment, item.global, activeRepoId)}
+          to={navPath(item.segment, item.global, repoName)}
           className={({ isActive }) =>
             clsx(
               "mx-2 flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
@@ -243,14 +245,14 @@ function Sidebar() {
 }
 
 function BottomBar() {
-  const activeRepoId = useRepoStore((s) => s.activeRepoId)
+  const repoName = useRepoStore(selectActiveRepoName)
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-line bg-surface pb-[var(--safe-bottom)] md:hidden">
       <div className="flex h-14 items-center justify-around">
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.segment}
-            to={navPath(item.segment, item.global, activeRepoId)}
+            to={navPath(item.segment, item.global, repoName)}
             aria-label={item.label}
             className={({ isActive }) =>
               clsx(

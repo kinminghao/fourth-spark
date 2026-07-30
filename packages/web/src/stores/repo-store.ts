@@ -93,3 +93,6 @@ export const useRepoStore = create<RepoState>((set, get) => ({
     }))
   },
 }))
+
+export const selectActiveRepoName = (s: RepoState): string | null =>
+  s.repos.find((r) => r.id === s.activeRepoId)?.name ?? null

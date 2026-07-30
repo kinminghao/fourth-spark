@@ -6,7 +6,7 @@ import { RunPage } from "./pages/RunPage"
 import { IssuesPage } from "./pages/IssuesPage"
 import { PullRequestsPage } from "./pages/PullRequestsPage"
 import { SettingsPage } from "./pages/SettingsPage"
-import { useRepoStore } from "./stores/repo-store"
+import { useRepoStore, selectActiveRepoName } from "./stores/repo-store"
 import { useSessionStore } from "./stores/session-store"
 import { useCustomAgentStore } from "./stores/custom-agent-store"
 import { useIssueStore } from "./stores/issue-store"
@@ -16,16 +16,16 @@ import { ToastContainer } from "./components/ToastContainer"
 import { orchestrator } from "./lib/session-orchestrator"
 import { initPushNotifications } from "./lib/push-notifications"
 
-function extractRepoIdFromUrl(pathname: string): string | null {
+function extractRepoSlugFromUrl(pathname: string): string | null {
   const match = pathname.match(/^\/([^/]+)\/(run|issues|pulls)/)
-  return match ? match[1] : null
+  return match ? decodeURIComponent(match[1]) : null
 }
 
 function DefaultRedirect() {
   const repos = useRepoStore((s) => s.repos)
-  const activeRepoId = useRepoStore((s) => s.activeRepoId)
-  const fallbackId = activeRepoId ?? (repos.length > 0 ? repos[0].id : null)
-  if (fallbackId) return <Navigate to={`/${fallbackId}/run`} replace />
+  const activeRepoName = useRepoStore(selectActiveRepoName)
+  const fallbackName = activeRepoName ?? (repos.length > 0 ? repos[0].name : null)
+  if (fallbackName) return <Navigate to={`/${encodeURIComponent(fallbackName)}/run`} replace />
   return <Navigate to="/repos" replace />
 }
 
@@ -46,11 +46,11 @@ function AppInner() {
 
   useEffect(() => {
     if (repos.length === 0) return
-    const urlRepoId = extractRepoIdFromUrl(location.pathname)
-    if (!urlRepoId) return
-    const currentActive = useRepoStore.getState().activeRepoId
-    if (urlRepoId !== currentActive && repos.some((r) => r.id === urlRepoId)) {
-      setActiveRepo(urlRepoId)
+    const urlSlug = extractRepoSlugFromUrl(location.pathname)
+    if (!urlSlug) return
+    const matched = repos.find((r) => r.name === urlSlug)
+    if (matched && matched.id !== useRepoStore.getState().activeRepoId) {
+      setActiveRepo(matched.id)
     }
   }, [location.pathname, repos, setActiveRepo])
 

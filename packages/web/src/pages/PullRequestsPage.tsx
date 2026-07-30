@@ -20,7 +20,7 @@ import clsx from "clsx"
 import { ApiError, listPrLinkedIssues, listPullComments, mergePull, updateIssue, type Issue, type IssueComment, type PersistentPullRequest } from "../lib/api-client"
 import { usePrStore } from "../stores/pr-store"
 import { useIssueStore } from "../stores/issue-store"
-import { useRepoStore } from "../stores/repo-store"
+import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { useToastStore } from "../stores/toast-store"
 
 type StateFilter = "open" | "closed" | "merged" | "all"
@@ -220,6 +220,7 @@ function PrDetail({
   onEnterMatch: () => void
 }) {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
+  const repoName = useRepoStore(selectActiveRepoName)
   const [merging, setMerging] = useState(false)
   const [comments, setComments] = useState<IssueComment[]>([])
   const [loadingComments, setLoadingComments] = useState(false)
@@ -406,7 +407,7 @@ function PrDetail({
                   <div key={issue.id} className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => navigate(`/${activeRepoId}/issues?issueId=${encodeURIComponent(issue.id)}`)}
+                      onClick={() => navigate(`/${encodeURIComponent(repoName!)}/issues?issueId=${encodeURIComponent(issue.id)}`)}
                       className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-elevated/60"
                     >
                       <span

@@ -28,7 +28,7 @@ import remarkGfm from "remark-gfm"
 import clsx from "clsx"
 import { ApiError, type Issue, type IssueComment, type Milestone, type PullRequest, type Session, listIssueComments, listIssuePullRequests, mergePullRequest } from "../lib/api-client"
 import { useIssueStore } from "../stores/issue-store"
-import { useRepoStore } from "../stores/repo-store"
+import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
 import { useToastStore } from "../stores/toast-store"
 import { useSwipeDrawer } from "../hooks/use-swipe-drawer"
@@ -326,6 +326,7 @@ function FullWidthIssueRow({
 function IssueDetail({ issue, milestone, onBack, onClose, onToggleSidebar }: { issue: Issue; milestone?: Milestone; onBack?: () => void; onClose?: () => void; onToggleSidebar?: () => void }) {
   const navigate = useNavigate()
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
+  const repoName = useRepoStore(selectActiveRepoName)
   const [comments, setComments] = useState<IssueComment[]>([])
   const [loadingComments, setLoadingComments] = useState(false)
   const [linkedPRs, setLinkedPRs] = useState<PullRequest[]>([])
@@ -391,14 +392,14 @@ function IssueDetail({ issue, milestone, onBack, onClose, onToggleSidebar }: { i
     useIssueStore.getState().setPendingDraft(draft)
     useIssueStore.getState().setPreviewIssue(null)
     useSessionStore.setState({ activeSessionId: null })
-    navigate(`/${activeRepoId}/run`)
+    navigate(`/${encodeURIComponent(repoName!)}/run`)
   }
 
   const handleStart = () => {
     useIssueStore.getState().setSelectedIssue(issue.id)
     useIssueStore.getState().setPreviewIssue(null)
     useSessionStore.setState({ activeSessionId: null })
-    navigate(`/${activeRepoId}/run`)
+    navigate(`/${encodeURIComponent(repoName!)}/run`)
   }
 
   const fmtDate = (iso: string) => {
@@ -493,7 +494,7 @@ function IssueDetail({ issue, milestone, onBack, onClose, onToggleSidebar }: { i
             onClick={() => {
               useIssueStore.getState().enterMatchMode(issue.id)
               useSessionStore.setState({ activeSessionId: null })
-              navigate(`/${activeRepoId}/run`)
+              navigate(`/${encodeURIComponent(repoName!)}/run`)
             }}
             className="flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 text-xs text-fg-3 transition-colors hover:border-blue-500/50 hover:text-blue-400"
           >
@@ -1166,9 +1167,10 @@ export function IssuesPage() {
     (s) => s.issueId && selectedIssueIds.has(s.issueId) && !s.parentID,
   )
 
+  const repoName = useRepoStore(selectActiveRepoName)
   const handleSessionSelect = (sessionId: string) => {
     useSessionStore.setState({ activeSessionId: sessionId })
-    navigate(`/${activeRepoId}/run`)
+    navigate(`/${encodeURIComponent(repoName!)}/run`)
   }
 
   const swipeHandlers = useSwipeDrawer({
