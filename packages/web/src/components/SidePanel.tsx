@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import clsx from "clsx"
 import { ListTodo, MessageSquare, Link2 } from "lucide-react"
 import type { Message, Todo, SessionLinks } from "../lib/api-client"
@@ -126,6 +127,7 @@ function PromptsTab({
 }
 
 function LinksTab({ links }: { links?: SessionLinks }) {
+  const navigate = useNavigate()
   const issueCount = links?.issues?.length ?? 0
   const prCount = links?.pullRequests?.length ?? 0
 
@@ -147,11 +149,10 @@ function LinksTab({ links }: { links?: SessionLinks }) {
           <ul className="space-y-1">
             {links!.issues.map((issue) => (
               <li key={issue.id}>
-                <a
-                  href={issue.htmlUrl ?? undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-elevated/60"
+                <button
+                  type="button"
+                  onClick={() => navigate(`/issues?issueId=${encodeURIComponent(issue.id)}`)}
+                  className="group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
                 >
                   <span className={clsx(
                     "mt-0.5 shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
@@ -162,7 +163,7 @@ function LinksTab({ links }: { links?: SessionLinks }) {
                   <span className="line-clamp-2 text-xs leading-5 text-fg-3 group-hover:text-fg-2">
                     {issue.title}
                   </span>
-                </a>
+                </button>
               </li>
             ))}
           </ul>
@@ -176,11 +177,10 @@ function LinksTab({ links }: { links?: SessionLinks }) {
           <ul className="space-y-1">
             {links!.pullRequests.map((pr) => (
               <li key={pr.id}>
-                <a
-                  href={pr.htmlUrl ?? undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-elevated/60"
+                <button
+                  type="button"
+                  onClick={() => navigate(`/pulls?prId=${encodeURIComponent(pr.id)}`)}
+                  className="group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
                 >
                   <span className={clsx(
                     "mt-0.5 shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
@@ -193,7 +193,7 @@ function LinksTab({ links }: { links?: SessionLinks }) {
                   <span className="line-clamp-2 text-xs leading-5 text-fg-3 group-hover:text-fg-2">
                     {pr.title}
                   </span>
-                </a>
+                </button>
               </li>
             ))}
           </ul>
