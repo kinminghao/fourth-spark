@@ -92,168 +92,7 @@ export function ReposPage() {
           </div>
         ) : (
           <>
-          <div className="hidden overflow-hidden rounded-xl border border-line md:block">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-line bg-surface">
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-4">名称</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-4">Git 地址</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-4">本地路径</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-4">状态</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-4">直连链接</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-fg-4">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {repos.map((repo) => {
-                  const isActive = repo.id === activeRepoId
-                  return (
-                    <tr
-                      key={repo.id}
-                      className={clsx(
-                        "group border-b border-line transition-colors last:border-b-0",
-                        isActive ? "bg-blue-500/5" : "hover:bg-surface/60",
-                      )}
-                    >
-                      <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => setActiveRepo(repo.id)}
-                          className="flex items-center gap-2 text-left"
-                        >
-                          {isActive ? (
-                            <CircleDot className="h-3.5 w-3.5 shrink-0 text-blue-500" />
-                          ) : (
-                            <Circle className="h-3.5 w-3.5 shrink-0 text-fg-5" />
-                          )}
-                          <span className={clsx("font-medium", isActive ? "text-fg" : "text-fg-2")}>
-                            {repo.name}
-                          </span>
-                        </button>
-                      </td>
-                      <td className="max-w-[200px] truncate px-4 py-3 font-mono text-xs text-fg-4">
-                        {repo.gitUrl}
-                      </td>
-                      <td className="max-w-[200px] truncate px-4 py-3 font-mono text-xs text-fg-4">
-                        {repo.localPath}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={clsx(
-                            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-                            repo.running
-                              ? "bg-emerald-500/10 text-emerald-600"
-                              : "bg-fg-6/30 text-fg-4",
-                          )}
-                        >
-                          <span className={clsx("h-1.5 w-1.5 rounded-full", repo.running ? "bg-emerald-500" : "bg-fg-5")} />
-                          {repo.running ? "运行中" : "已停止"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {repo.running && repo.port ? (
-                          <span className="inline-flex items-center gap-1.5">
-                            <a
-                              href={`http://127.0.0.1:${repo.port}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-mono text-xs text-blue-500 hover:underline"
-                            >
-                              127.0.0.1:{repo.port}
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => void navigator.clipboard.writeText(`http://127.0.0.1:${repo.port}`)}
-                              title="复制链接"
-                              className="rounded p-0.5 text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3"
-                            >
-                              <Copy className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ) : (
-                          <span className="text-xs text-fg-5">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="inline-flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setAgentsMdRepo({ id: repo.id, name: repo.name })}
-                            title="配置 AGENTS.md"
-                            className="rounded-md px-2 py-1 text-xs font-medium text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
-                          >
-                            <span className="flex items-center gap-1"><FileText className="h-3 w-3" />配置</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void handlePull(repo.id)}
-                            disabled={pullingId === repo.id}
-                            title="拉取最新代码"
-                            className="rounded-md px-2 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/10 disabled:opacity-50"
-                          >
-                            {pullingId === repo.id ? (
-                              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                            ) : (
-                              <span className="flex items-center gap-1"><ArrowDownToLine className="h-3 w-3" />拉取</span>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void handleToggle(repo.id, repo.running)}
-                            disabled={togglingId === repo.id}
-                            title={repo.running ? "停止" : "启动"}
-                            className={clsx(
-                              "rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50",
-                              repo.running
-                                ? "text-amber-600 hover:bg-amber-500/10"
-                                : "text-emerald-600 hover:bg-emerald-500/10",
-                            )}
-                          >
-                            {togglingId === repo.id ? (
-                              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                            ) : repo.running ? (
-                              <span className="flex items-center gap-1"><Square className="h-3 w-3 fill-current" />停止</span>
-                            ) : (
-                              <span className="flex items-center gap-1"><Play className="h-3 w-3 fill-current" />启动</span>
-                            )}
-                          </button>
-                          {confirmingId === repo.id ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => { void removeRepo(repo.id); setConfirmingId(null) }}
-                                className="rounded-md p-1.5 text-red-500 transition-colors hover:bg-red-500/10"
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setConfirmingId(null)}
-                                className="rounded-md p-1.5 text-fg-4 transition-colors hover:bg-elevated"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setConfirmingId(repo.id)}
-                              className="rounded-md p-1.5 text-fg-5 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* mobile card list */}
-          <div className="flex flex-col gap-3 md:hidden">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {repos.map((repo) => {
               const isActive = repo.id === activeRepoId
               return (
@@ -299,7 +138,17 @@ export function ReposPage() {
                     </div>
                     <div className="flex gap-2">
                       <dt className="shrink-0 text-fg-5">路径</dt>
-                      <dd className="min-w-0 truncate">{repo.localPath}</dd>
+                      <dd className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate">{repo.localPath}</span>
+                        <button
+                          type="button"
+                          onClick={() => void navigator.clipboard.writeText(repo.localPath)}
+                          title="复制路径"
+                          className="shrink-0 rounded p-0.5 text-fg-5 transition-colors hover:text-fg-3"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      </dd>
                     </div>
                     {repo.running && repo.port && (
                       <div className="flex items-center gap-2">
