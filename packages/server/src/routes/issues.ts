@@ -1,10 +1,22 @@
 import { Hono } from "hono"
 import { eq, and, desc, asc, inArray } from "drizzle-orm"
+import { mkdir, writeFile, readFile, unlink } from "node:fs/promises"
+import { existsSync } from "node:fs"
 import { db } from "../db/index"
-import { issues, issueComments, repos, tags, issueTags, milestones } from "../db/schema"
+import { issues, issueComments, repos, tags, issueTags, milestones, sessions as sessionsTable, customAgents } from "../db/schema"
 import { parseGitUrl } from "../lib/git-url"
 import { createGitIssueClient, getHostInfo, GitApiError, type GitIssue, type GitComment } from "../lib/git-provider"
+import { processManager } from "../lib/process-manager"
+import { DEFAULT_VARIANT } from "../lib/config"
+import { COMMENT_POLISHER_ID } from "../lib/system-agents"
+import { buildIssueContext } from "./sessions"
 import { logger } from "../middleware/logger"
+
+const DRAFT_DIR = "/tmp/fourth-spark/drafts"
+
+function draftPath(repoId: string, issueNumber: number): string {
+  return `${DRAFT_DIR}/${repoId}-${issueNumber}.md`
+}
 
 export const issueRoutes = new Hono()
 
@@ -408,4 +420,115 @@ issueRoutes.patch("/:number", async (c) => {
   await db.insert(issues).values(values).onConflictDoUpdate({ target: issues.id, set: updateSet })
 
   return c.json(values)
+})
+
+// ---------------------------------------------------------------------------
+// AI 评论润色 — 写草稿到临时文件，起 session 让 Agent 润色
+// ---------------------------------------------------------------------------
+
+issueRoutes.post("/:number/polish", async (c) => {
+  const repoId = c.req.param("repoId")!
+  const number = Number(c.req.param("number"))
+  if (!Number.isFinite(number)) return c.json({ error: "invalid issue number" }, 400)
+
+  const body = await c.req.json<{ draft: string }>().catch(() => null)
+  if (!body?.draft?.trim()) return c.json({ error: "draft is required" }, 400)
+
+  const client = processManager.requireClient(repoId)
+
+  await mkdir(DRAFT_DIR, { recursive: true })
+  const filePath = draftPath(repoId, number)
+  await writeFile(filePath, body.draft, "utf-8")
+
+  const [agent] = await db.select().from(customAgents).where(eq(customAgents.id, COMMENT_POLISHER_ID))
+  if (!agent) return c.json({ error: "系统评论助手 Agent 未初始化" }, 500)
+
+  const iid = issueId(repoId, number)
+  const parts: string[] = []
+  if (agent.systemPrompt) parts.push(agent.systemPrompt)
+
+  const issueContext = await buildIssueContext(iid)
+  if (issueContext) parts.push(issueContext)
+
+  parts.push(`请润色以下文件中的评论草稿内容: ${filePath}`)
+
+  const prompt = parts.join("\n\n---\n\n")
+  const session = await client.createSession({ agent: agent.baseAgent })
+  const now = Date.now()
+  await db.insert(sessionsTable).values({
+    id: session.id,
+    title: `润色评论 #${number}`,
+    issueId: iid,
+    customAgentId: COMMENT_POLISHER_ID,
+    agent: agent.baseAgent,
+    timeCreated: now,
+    timeUpdated: now,
+  }).onConflictDoUpdate({
+    target: sessionsTable.id,
+    set: { issueId: iid, customAgentId: COMMENT_POLISHER_ID, timeUpdated: now },
+  })
+
+  try {
+    await client.prompt(session.id, prompt, { agent: agent.baseAgent, model: agent.model ?? undefined, variant: DEFAULT_VARIANT })
+  } catch (err) {
+    logger.error({ err, sessionId: session.id }, "polish prompt failed, cleaning up")
+    await client.deleteSession(session.id).catch(() => {})
+    await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id)).catch(() => {})
+    throw err
+  }
+
+  return c.json({ sessionId: session.id, draftPath: filePath }, 201)
+})
+
+// ---------------------------------------------------------------------------
+// 读取润色后的草稿文件
+// ---------------------------------------------------------------------------
+
+issueRoutes.get("/:number/draft", async (c) => {
+  const repoId = c.req.param("repoId")!
+  const number = Number(c.req.param("number"))
+  if (!Number.isFinite(number)) return c.json({ error: "invalid issue number" }, 400)
+
+  const filePath = draftPath(repoId, number)
+  if (!existsSync(filePath)) return c.json({ error: "no draft found" }, 404)
+
+  const content = await readFile(filePath, "utf-8")
+  return c.json({ body: content })
+})
+
+// ---------------------------------------------------------------------------
+// 发布评论 — 调 git provider + 存 DB + 删临时文件
+// ---------------------------------------------------------------------------
+
+issueRoutes.post("/:number/comments", async (c) => {
+  const repoId = c.req.param("repoId")!
+  const number = Number(c.req.param("number"))
+  if (!Number.isFinite(number)) return c.json({ error: "invalid issue number" }, 400)
+
+  const body = await c.req.json<{ body: string }>().catch(() => null)
+  if (!body?.body?.trim()) return c.json({ error: "comment body is required" }, 400)
+
+  const ctx = await getRepoGitClient(repoId)
+  if (!ctx) return c.json({ error: "Repo not found or git host not configured" }, 400)
+
+  const gc = await ctx.client.createComment(number, body.body)
+
+  const values = commentToDb(repoId, number, gc)
+  const { id: _, createdAt: __, ...updateSet } = values
+  await db.insert(issueComments).values(values).onConflictDoUpdate({ target: issueComments.id, set: updateSet })
+
+  const iid = issueId(repoId, number)
+  const commentRows = await db.select({ id: issueComments.id }).from(issueComments).where(eq(issueComments.issueId, iid))
+  await db.update(issues).set({ commentCount: commentRows.length }).where(eq(issues.id, iid))
+
+  const filePath = draftPath(repoId, number)
+  await unlink(filePath).catch(() => {})
+
+  return c.json({
+    id: gc.id,
+    body: gc.body,
+    user: gc.user,
+    created_at: gc.created_at,
+    updated_at: gc.updated_at,
+  }, 201)
 })

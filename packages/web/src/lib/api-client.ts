@@ -723,6 +723,24 @@ export async function listIssueComments(repoId: string, issueNumber: number): Pr
   return apiFetch<IssueComment[]>(`${repoBase(repoId)}/issues/${issueNumber}/comments`)
 }
 
+export async function createIssueComment(repoId: string, issueNumber: number, body: string): Promise<IssueComment> {
+  return apiFetch<IssueComment>(`${repoBase(repoId)}/issues/${issueNumber}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  })
+}
+
+export async function polishComment(repoId: string, issueNumber: number, draft: string): Promise<{ sessionId: string; draftPath: string }> {
+  return apiFetch<{ sessionId: string; draftPath: string }>(`${repoBase(repoId)}/issues/${issueNumber}/polish`, {
+    method: "POST",
+    body: JSON.stringify({ draft }),
+  })
+}
+
+export async function getDraft(repoId: string, issueNumber: number): Promise<{ body: string }> {
+  return apiFetch<{ body: string }>(`${repoBase(repoId)}/issues/${issueNumber}/draft`)
+}
+
 export async function updateSessionIssue(repoId: string, sessionId: string, issueId: string | null): Promise<void> {
   await apiFetch<void>(
     `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`,
