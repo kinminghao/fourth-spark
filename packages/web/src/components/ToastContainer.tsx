@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useToastStore, type Toast, type ToastVariant } from "../stores/toast-store"
 import { useSessionStore } from "../stores/session-store"
+import { useRepoStore } from "../stores/repo-store"
 
 /** How long the exit animation runs before the node is unmounted (ms). */
 const EXIT_MS = 300
@@ -30,13 +31,14 @@ export function ToastContainer() {
   const toasts = useToastStore((s) => s.toasts)
   const removeToast = useToastStore((s) => s.removeToast)
   const setActiveSession = useSessionStore((s) => s.setActiveSession)
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const navigate = useNavigate()
 
   const handleClick = (t: RenderToast) => {
     removeToast(t.id)
     if (t.sessionId) {
       void setActiveSession(t.sessionId)
-      navigate("/run")
+      navigate(`/${activeRepoId}/run`)
     }
   }
 

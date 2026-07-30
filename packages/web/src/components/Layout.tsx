@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom"
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
 import { Box, Check, ChevronDown, CircleDot, GitBranch, GitPullRequest, Loader2, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
 import clsx from "clsx"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -7,12 +7,17 @@ import { useRepoStore } from "../stores/repo-store"
 import { listBranches, checkoutBranch, type BranchList } from "../lib/api-client"
 
 const NAV_ITEMS = [
-  { to: "/repos", icon: Box, label: "仓库管理" },
-  { to: "/run", icon: Play, label: "运行面板" },
-  { to: "/issues", icon: CircleDot, label: "Issues" },
-  { to: "/pulls", icon: GitPullRequest, label: "PRs" },
-  { to: "/settings", icon: Settings, label: "设置" },
+  { segment: "repos", icon: Box, label: "仓库管理", global: true },
+  { segment: "run", icon: Play, label: "运行面板", global: false },
+  { segment: "issues", icon: CircleDot, label: "Issues", global: false },
+  { segment: "pulls", icon: GitPullRequest, label: "PRs", global: false },
+  { segment: "settings", icon: Settings, label: "设置", global: true },
 ]
+
+function navPath(segment: string, global: boolean, repoId: string | null): string {
+  if (global) return `/${segment}`
+  return repoId ? `/${repoId}/${segment}` : `/${segment}`
+}
 
 function BranchSwitcher({ repoId, currentBranch }: { repoId: string; currentBranch: string | null }) {
   const updateRepoBranch = useRepoStore((s) => s.updateRepoBranch)
@@ -145,6 +150,8 @@ function BranchSwitcher({ repoId, currentBranch }: { repoId: string; currentBran
 }
 
 function Header() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const repos = useRepoStore((s) => s.repos)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const setActiveRepo = useRepoStore((s) => s.setActiveRepo)
@@ -152,6 +159,13 @@ function Header() {
   const cycle = useThemeStore((s) => s.cycle)
   const ThemeIcon = preference === "light" ? Sun : preference === "dark" ? Moon : Monitor
   const activeRepo = repos.find((r) => r.id === activeRepoId)
+
+  const handleRepoChange = (newRepoId: string) => {
+    if (!newRepoId) return
+    setActiveRepo(newRepoId)
+    const subPage = location.pathname.match(/\/(run|issues|pulls)/)?.[1] ?? "run"
+    navigate(`/${newRepoId}/${subPage}`)
+  }
 
   return (
     <header className="shrink-0 border-b border-line bg-surface pt-[var(--safe-top)]">
@@ -166,7 +180,7 @@ function Header() {
             <div className="flex items-center gap-2">
               <select
                 value={activeRepoId ?? ""}
-                onChange={(e) => setActiveRepo(e.target.value || null)}
+                onChange={(e) => handleRepoChange(e.target.value)}
                 className="rounded-md border border-line bg-base px-2.5 py-1 text-xs text-fg-2 focus:border-blue-500 focus:outline-none"
               >
                 {repos.map((r) => (
@@ -204,12 +218,13 @@ function Header() {
 }
 
 function Sidebar() {
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
   return (
     <nav className="hidden w-48 shrink-0 flex-col border-r border-line bg-surface py-2 md:flex">
       {NAV_ITEMS.map((item) => (
         <NavLink
-          key={item.to}
-          to={item.to}
+          key={item.segment}
+          to={navPath(item.segment, item.global, activeRepoId)}
           className={({ isActive }) =>
             clsx(
               "mx-2 flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
@@ -228,13 +243,14 @@ function Sidebar() {
 }
 
 function BottomBar() {
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-line bg-surface pb-[var(--safe-bottom)] md:hidden">
       <div className="flex h-14 items-center justify-around">
         {NAV_ITEMS.map((item) => (
           <NavLink
-            key={item.to}
-            to={item.to}
+            key={item.segment}
+            to={navPath(item.segment, item.global, activeRepoId)}
             aria-label={item.label}
             className={({ isActive }) =>
               clsx(

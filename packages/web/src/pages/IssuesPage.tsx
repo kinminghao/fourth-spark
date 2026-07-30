@@ -391,14 +391,14 @@ function IssueDetail({ issue, milestone, onBack, onClose, onToggleSidebar }: { i
     useIssueStore.getState().setPendingDraft(draft)
     useIssueStore.getState().setPreviewIssue(null)
     useSessionStore.setState({ activeSessionId: null })
-    navigate("/run")
+    navigate(`/${activeRepoId}/run`)
   }
 
   const handleStart = () => {
     useIssueStore.getState().setSelectedIssue(issue.id)
     useIssueStore.getState().setPreviewIssue(null)
     useSessionStore.setState({ activeSessionId: null })
-    navigate("/run")
+    navigate(`/${activeRepoId}/run`)
   }
 
   const fmtDate = (iso: string) => {
@@ -493,7 +493,7 @@ function IssueDetail({ issue, milestone, onBack, onClose, onToggleSidebar }: { i
             onClick={() => {
               useIssueStore.getState().enterMatchMode(issue.id)
               useSessionStore.setState({ activeSessionId: null })
-              navigate("/run")
+              navigate(`/${activeRepoId}/run`)
             }}
             className="flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 text-xs text-fg-3 transition-colors hover:border-blue-500/50 hover:text-blue-400"
           >
@@ -1168,7 +1168,7 @@ export function IssuesPage() {
 
   const handleSessionSelect = (sessionId: string) => {
     useSessionStore.setState({ activeSessionId: sessionId })
-    navigate("/run")
+    navigate(`/${activeRepoId}/run`)
   }
 
   const swipeHandlers = useSwipeDrawer({

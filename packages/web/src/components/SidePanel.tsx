@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import { useRepoStore } from "../stores/repo-store"
 import clsx from "clsx"
 import { ListTodo, MessageSquare, Link2, Plus, X, Search } from "lucide-react"
 import type { Message, Todo, SessionLinks } from "../lib/api-client"
@@ -180,6 +181,7 @@ type MatchMode = null | "issue" | "pr"
 
 function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: string | null }) {
   const navigate = useNavigate()
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const [matchMode, setMatchMode] = useState<MatchMode>(null)
   const [query, setQuery] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
@@ -319,7 +321,7 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
                 <li key={issue.id} className="group flex items-start gap-1">
                   <button
                     type="button"
-                    onClick={() => navigate(`/issues?issueId=${encodeURIComponent(issue.id)}`)}
+                    onClick={() => navigate(`/${activeRepoId}/issues?issueId=${encodeURIComponent(issue.id)}`)}
                     className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
                   >
                     <span className={clsx(
@@ -354,7 +356,7 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
                 <li key={pr.id} className="group flex items-start gap-1">
                   <button
                     type="button"
-                    onClick={() => navigate(`/pulls?prId=${encodeURIComponent(pr.id)}`)}
+                    onClick={() => navigate(`/${activeRepoId}/pulls?prId=${encodeURIComponent(pr.id)}`)}
                     className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
                   >
                     <span className={clsx(
