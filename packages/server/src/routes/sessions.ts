@@ -40,7 +40,7 @@ async function collectAncestorChain(issueId: string) {
   return chain.reverse()
 }
 
-async function buildIssueContext(issueId: string): Promise<string | null> {
+export async function buildIssueContext(issueId: string): Promise<string | null> {
   const chain = await collectAncestorChain(issueId)
   if (chain.length === 0) return null
 

@@ -87,6 +87,12 @@ globalCustomAgents.post("/", async (c) => {
 
 globalCustomAgents.put("/:id", async (c) => {
   const id = c.req.param("id")
+
+  const [existing] = await db.select({ isSystem: customAgents.isSystem }).from(customAgents).where(eq(customAgents.id, id))
+  if (existing?.isSystem === 1) {
+    return c.json({ error: "系统内置 Agent 不可修改" }, 403)
+  }
+
   const body = await c.req.json<{
     name?: string
     baseAgent?: string
@@ -119,7 +125,12 @@ globalCustomAgents.put("/:id", async (c) => {
 })
 
 globalCustomAgents.delete("/:id", async (c) => {
-  await db.delete(customAgents).where(eq(customAgents.id, c.req.param("id")))
+  const id = c.req.param("id")
+  const [existing] = await db.select({ isSystem: customAgents.isSystem }).from(customAgents).where(eq(customAgents.id, id))
+  if (existing?.isSystem === 1) {
+    return c.json({ error: "系统内置 Agent 不可删除" }, 403)
+  }
+  await db.delete(customAgents).where(eq(customAgents.id, id))
   return c.json({ ok: true })
 })
 

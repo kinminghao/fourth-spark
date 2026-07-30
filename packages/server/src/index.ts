@@ -22,6 +22,7 @@ import { pullRoutes } from "./routes/pulls"
 import { pushRoutes } from "./routes/push"
 import { PORT } from "./lib/config"
 import { processManager } from "./lib/process-manager"
+import { seedSystemAgents } from "./lib/system-agents"
 import { runMigrations } from "./db/migrate"
 import { resolve, join } from "node:path"
 import { existsSync } from "node:fs"
@@ -138,6 +139,12 @@ if (existsSync(drizzleConfigPath)) {
       logger.error({ err }, "migration failed — continuing with existing schema")
     })
 }
+
+seedSystemAgents().then(() => {
+  logger.info("system agents seeded")
+}).catch((err) => {
+  logger.warn({ err }, "failed to seed system agents — continuing")
+})
 
 processManager.startAll().then(() => {
   logger.info("all repos initialized")
