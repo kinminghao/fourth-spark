@@ -237,6 +237,17 @@ export const deviceTokens = pgTable("device_tokens", {
   uniqueIndex("device_tokens_token_idx").on(t.token),
 ])
 
+export const sessionLinks = pgTable("session_links", {
+  sessionId: text("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // "issue" | "pr"
+  targetId: text("target_id").notNull(), // issues.id or pullRequests.id
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.sessionId, t.type, t.targetId] }),
+  index("session_links_session_idx").on(t.sessionId),
+  index("session_links_target_idx").on(t.type, t.targetId),
+])
+
 export const todos = pgTable("todos", {
   sessionId: text("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
   position: integer("position").notNull(),

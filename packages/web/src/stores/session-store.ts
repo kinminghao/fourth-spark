@@ -7,7 +7,7 @@
 
 import { create } from "zustand"
 import * as api from "../lib/api-client"
-import type { Message, MessagePart, Session, Todo } from "../lib/api-client"
+import type { Message, MessagePart, Session, Todo, SessionLinks } from "../lib/api-client"
 import { isQuestionTool, isQuestionPending } from "../lib/message-parts"
 import { useRepoStore } from "./repo-store"
 import { useToastStore } from "./toast-store"
@@ -52,6 +52,7 @@ interface SessionState {
   todos: Record<string, Todo[]>
   sessionStatuses: Record<string, string>
   errorReasons: Record<string, string>
+  sessionLinks: Record<string, SessionLinks>
   loadingSessions: boolean
   loadError: string | null
   sendError: string | null
@@ -60,6 +61,7 @@ interface SessionState {
   createSession: (message: string, agent?: string, model?: string, variant?: string, issueId?: string, customAgentId?: string) => Promise<Session | null>
   setActiveSession: (id: string) => Promise<void>
   refreshSessionData: (id: string) => Promise<void>
+  refreshSessionLinks: (id: string) => Promise<void>
   deleteSession: (id: string) => Promise<void>
   sendMessage: (content: string, model?: string) => Promise<void>
   abortSession: () => Promise<void>
@@ -84,6 +86,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   todos: {},
   sessionStatuses: {},
   errorReasons: {},
+  sessionLinks: {},
   loadingSessions: false,
   loadError: null,
   sendError: null,
@@ -142,11 +145,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   refreshSessionData: async (id) => {
     const repoId = getRepoId()
     if (!repoId) return
-    const [messages, todos, status, sessionInfo] = await Promise.allSettled([
+    const [messages, todos, status, sessionInfo, links] = await Promise.allSettled([
       api.getMessages(repoId, id),
       api.getTodos(repoId, id),
       api.getSessionStatus(repoId, id),
       api.getSession(repoId, id),
+      api.getSessionLinks(repoId, id),
     ])
     set((state) => {
       const next: Partial<SessionState> = {}
@@ -168,10 +172,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           s.id === id ? { ...s, ...fresh } : s,
         )
       }
+      if (links.status === "fulfilled") {
+        next.sessionLinks = { ...state.sessionLinks, [id]: links.value }
+      }
       return next
     })
     if (messages.status === "fulfilled" && hasAnyPendingQuestion(messages.value)) {
       fireQuestionToast(id, get().sessions)
+    }
+  },
+
+  refreshSessionLinks: async (id) => {
+    const repoId = getRepoId()
+    if (!repoId) return
+    try {
+      const links = await api.getSessionLinks(repoId, id)
+      set((state) => ({ sessionLinks: { ...state.sessionLinks, [id]: links } }))
+    } catch {
+      // best-effort
     }
   },
 
@@ -189,12 +207,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const { [id]: _removedTodos, ...todos } = state.todos
       const { [id]: _removedStatus, ...sessionStatuses } = state.sessionStatuses
       const { [id]: _removedReason, ...errorReasons } = state.errorReasons
+      const { [id]: _removedLinks, ...sessionLinks } = state.sessionLinks
       return {
         sessions: state.sessions.filter((s) => s.id !== id),
         messages,
         todos,
         sessionStatuses,
         errorReasons,
+        sessionLinks,
         activeSessionId:
           state.activeSessionId === id ? null : state.activeSessionId,
       }
@@ -239,6 +259,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       todos: {},
       sessionStatuses: {},
       errorReasons: {},
+      sessionLinks: {},
       loadError: null,
       sendError: null,
     })

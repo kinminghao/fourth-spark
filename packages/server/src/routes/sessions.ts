@@ -5,7 +5,7 @@ import { DEFAULT_VARIANT } from "../lib/config"
 import { syncSessionsList, syncMessagesList } from "../db/sync"
 import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFromDB, getTodosFromDB } from "../db/query"
 import { db } from "../db/index"
-import { sessions as sessionsTable, issues, issueComments, customAgents, customAgentFragments, promptFragments } from "../db/schema"
+import { sessions as sessionsTable, issues, issueComments, customAgents, customAgentFragments, promptFragments, sessionLinks, pullRequests } from "../db/schema"
 import { logger } from "../middleware/logger"
 import type { SessionStatus } from "../lib/opencode"
 
@@ -290,6 +290,23 @@ sessions.patch("/:id", async (c) => {
     await db.update(sessionsTable).set(updates).where(eq(sessionsTable.id, sessionId))
   }
   return c.json({ ok: true })
+})
+
+sessions.get("/:id/links", async (c) => {
+  const sessionId = c.req.param("id")
+  const links = await db.select().from(sessionLinks).where(eq(sessionLinks.sessionId, sessionId))
+
+  const issueIds = links.filter((l) => l.type === "issue").map((l) => l.targetId)
+  const prIds = links.filter((l) => l.type === "pr").map((l) => l.targetId)
+
+  const linkedIssues = issueIds.length > 0
+    ? await db.select().from(issues).where(inArray(issues.id, issueIds))
+    : []
+  const linkedPrs = prIds.length > 0
+    ? await db.select().from(pullRequests).where(inArray(pullRequests.id, prIds))
+    : []
+
+  return c.json({ issues: linkedIssues, pullRequests: linkedPrs })
 })
 
 sessions.get("/:id/status", async (c) => {
