@@ -149,6 +149,19 @@ function BranchSwitcher({ repoId, currentBranch }: { repoId: string; currentBran
   )
 }
 
+function useLatestVersion() {
+  const [latest, setLatest] = useState<string | null>(null)
+  useEffect(() => {
+    fetch("/api/health")
+      .then((r) => r.json())
+      .then((d: { latestVersion?: string }) => {
+        if (d.latestVersion && d.latestVersion !== __APP_VERSION__) setLatest(d.latestVersion)
+      })
+      .catch(() => {})
+  }, [])
+  return latest
+}
+
 function Header() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -159,6 +172,7 @@ function Header() {
   const cycle = useThemeStore((s) => s.cycle)
   const ThemeIcon = preference === "light" ? Sun : preference === "dark" ? Moon : Monitor
   const activeRepo = repos.find((r) => r.id === activeRepoId)
+  const latestVersion = useLatestVersion()
 
   const handleRepoChange = (newRepoId: string) => {
     if (!newRepoId) return
@@ -178,6 +192,11 @@ function Header() {
           <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-fg-4">
             v{__APP_VERSION__}
           </span>
+          {latestVersion && (
+            <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-500" title={`v${latestVersion} 可用，运行 fourth-spark upgrade 更新`}>
+              ↑ {latestVersion}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
