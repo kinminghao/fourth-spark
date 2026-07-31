@@ -30,7 +30,7 @@ async function findFreePort(start: number): Promise<number> {
 
 function isPortOccupiedByOther(port: number, containerName: string): boolean {
   try {
-    const out = execSync(`lsof -i :${port} -P -n -t 2>/dev/null`, { stdio: "pipe" }).toString().trim()
+    const out = execSync(`lsof -i :${port} -P -n -t -sTCP:LISTEN 2>/dev/null`, { stdio: "pipe" }).toString().trim()
     if (!out) return false
     try {
       const containerId = execSync(`docker inspect --format '{{.State.Pid}}' ${containerName} 2>/dev/null`, { stdio: "pipe" }).toString().trim()
