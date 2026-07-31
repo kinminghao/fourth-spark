@@ -1,3 +1,11 @@
+export const APP_VERSION = process.env.APP_VERSION ?? (() => {
+  try {
+    return require("child_process").execSync("git rev-parse --short HEAD", { stdio: "pipe" }).toString().trim()
+  } catch {
+    return "dev"
+  }
+})()
+
 const DEFAULT_FRONTEND_ORIGIN = "http://localhost:5173"
 const DEFAULT_PORT = 3000
 

@@ -1,11 +1,11 @@
 import { Hono } from "hono"
 import { processManager } from "../lib/process-manager"
+import { APP_VERSION } from "../lib/config"
 
 export const health = new Hono()
 
-// GET /api/health — reports backend liveness.
 health.get("/", async (c) => {
-  return c.json({ status: "ok" })
+  return c.json({ status: "ok", version: APP_VERSION })
 })
 
 // GET /api/repos/:repoId/health — reports whether the repo's opencode is reachable.

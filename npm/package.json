@@ -1,0 +1,25 @@
+{
+  "name": "fourth-spark",
+  "version": "0.0.0",
+  "description": "AI Agent Platform — multi-repo agent management based on OpenCode",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kinminghao/fourth-spark"
+  },
+  "bin": {
+    "fourth-spark": "./bin/fourth-spark"
+  },
+  "files": [
+    "bin/",
+    "public/",
+    "drizzle/",
+    "docker-compose.yml",
+    "postinstall.js"
+  ],
+  "scripts": {
+    "postinstall": "node postinstall.js"
+  },
+  "os": ["darwin", "linux", "win32"],
+  "cpu": ["x64", "arm64"]
+}

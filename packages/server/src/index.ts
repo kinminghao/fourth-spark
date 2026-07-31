@@ -24,8 +24,8 @@ import { PORT } from "./lib/config"
 import { processManager } from "./lib/process-manager"
 import { seedSystemAgents } from "./lib/system-agents"
 import { runMigrations } from "./db/migrate"
-import { resolve, join } from "node:path"
-import { existsSync } from "node:fs"
+import { resolve, join, dirname } from "node:path"
+import { existsSync, realpathSync } from "node:fs"
 import { execSync } from "node:child_process"
 import "./db/index"
 
@@ -75,7 +75,12 @@ app.route("/api/repos/:repoId", repoScoped)
 // ---------------------------------------------------------------------------
 // Static file serving (production build)
 // ---------------------------------------------------------------------------
-const STATIC_DIR = resolve(process.env.STATIC_DIR ?? "./public")
+const BINARY_DIR = (() => {
+  try { return dirname(realpathSync(process.execPath)) }
+  catch { return process.cwd() }
+})()
+
+const STATIC_DIR = resolve(process.env.STATIC_DIR ?? join(BINARY_DIR, "public"))
 
 if (existsSync(join(STATIC_DIR, "index.html"))) {
   logger.info({ dir: STATIC_DIR }, "serving static frontend")

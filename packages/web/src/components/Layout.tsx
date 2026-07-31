@@ -175,6 +175,9 @@ function Header() {
         <div className="flex items-center gap-2.5">
           <Zap className="h-5 w-5 text-blue-500" />
           <span className="text-sm font-bold tracking-tight text-fg">Fourth Spark</span>
+          <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-fg-4">
+            v{__APP_VERSION__}
+          </span>
         </div>
 
         <div className="flex items-center gap-3">
