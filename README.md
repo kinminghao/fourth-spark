@@ -71,31 +71,90 @@ Server (Bun + Hono :3000)
 
 ### 部署与运维
 
+- **npm 分发** — `npm install -g fourth-spark` 一键安装，postinstall 自动下载对应平台二进制
 - **跨平台构建** — 支持编译为 Linux (x64/arm64)、macOS (x64/arm64)、Windows (x64) 原生二进制
-- **CI/CD** — GitHub Actions 自动构建和发布，基于 git tag (v*) 触发
-- **生产部署** — 提供 start.sh/stop.sh 脚本，优雅启停，PID 管理，日志记录
+- **CLI 管理** — `fourth-spark start/stop/status/upgrade`，内置进程管理，无需外部脚本
+- **自动更新** — `fourth-spark upgrade` 检查最新版本并原子替换二进制，启动时自动提示新版本
+- **CI/CD** — GitHub Actions 自动构建、发布 GitHub Release 和 npm，基于 git tag (v*) 触发
 - **健康检查** — 后端存活检测、OpenCode 进程可达性检查
+
+## 安装
+
+```bash
+npm install -g fourth-spark
+```
+
+安装后自动下载对应平台的编译二进制（支持 macOS/Linux/Windows，x64/arm64）。
 
 ## 前置依赖
 
-- [Bun](https://bun.sh/) >= 1.1
 - [Docker](https://docs.docker.com/get-docker/) (用于 PostgreSQL)
 - [OpenCode](https://opencode.ai/) CLI (`opencode serve`)
 
 ## 快速开始
 
 ```bash
-# 1. 克隆项目
-git clone <repo-url> && cd fourth-spark
+# 启动（自动拉起 PostgreSQL + 后台运行 server）
+fourth-spark start
 
-# 2. 一键初始化（安装依赖 + 启动 DB + 同步 schema）
+# 查看状态
+fourth-spark status
+
+# 停止所有服务
+fourth-spark stop
+```
+
+启动后访问 http://localhost:3000 。
+
+## CLI 命令
+
+```
+fourth-spark              前台启动 server（Ctrl-C 停止）
+fourth-spark start        后台启动（PostgreSQL + server）
+fourth-spark stop         停止所有服务
+fourth-spark status       查看运行状态
+fourth-spark upgrade      检查并更新到最新版本
+fourth-spark --version    查看版本号
+fourth-spark --help       查看帮助
+```
+
+## 更新
+
+```bash
+fourth-spark upgrade
+```
+
+或通过 npm：
+
+```bash
+npm update -g fourth-spark
+```
+
+启动时如有新版本，终端和 Web UI 都会提示。
+
+## 开发者部署
+
+如果需要从源码构建或参与开发：
+
+### 前置依赖
+
+- [Bun](https://bun.sh/) >= 1.1
+- [Docker](https://docs.docker.com/get-docker/) (用于 PostgreSQL)
+- [OpenCode](https://opencode.ai/) CLI (`opencode serve`)
+
+### 从源码运行
+
+```bash
+git clone https://github.com/kinminghao/fourth-spark.git && cd fourth-spark
+
+# 一键初始化（安装依赖 + 启动 DB + 同步 schema）
 make setup
 
-# 3. 启动开发服务
+# 启动开发服务
 make dev
 ```
 
-启动后访问 http://localhost:5173 。
+开发模式访问 http://localhost:5173 （Vite 代理到后端 :3000）。
 
 ## Makefile 命令
 
@@ -156,10 +215,12 @@ packages/
 │       ├── stores/        # Zustand stores (7 个)
 │       ├── hooks/
 │       └── lib/           # API client, SSE, session orchestrator
-└── scripts/               # 构建和部署脚本
-    ├── build.sh           # 跨平台构建
-    ├── start.sh           # 生产启动
-    └── stop.sh            # 优雅停止
+├── npm/                   # npm 发布包模板
+│   ├── package.json       # npm 包配置
+│   ├── cli.js             # bin wrapper
+│   └── postinstall.js     # 平台二进制下载器
+└── scripts/
+    └── build.sh           # 跨平台构建 + npm 包组装
 ```
 
 ## 开发说明

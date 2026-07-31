@@ -15,7 +15,8 @@
     "public/",
     "drizzle/",
     "docker-compose.yml",
-    "postinstall.js"
+    "postinstall.js",
+    "README.md"
   ],
   "scripts": {
     "postinstall": "node postinstall.js"
