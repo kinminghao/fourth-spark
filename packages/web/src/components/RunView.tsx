@@ -14,6 +14,7 @@ import clsx from "clsx"
 import { MarkdownTable } from "./MarkdownTable"
 import {
   EMPTY_MESSAGES,
+  EMPTY_QUEUE,
   EMPTY_TODOS,
   useSessionStore,
 } from "../stores/session-store"
@@ -598,6 +599,10 @@ export function RunView({
     const id = state.activeSessionId
     return id ? state.sessionStatuses[id] : undefined
   })
+  const queuedIds = useSessionStore((state) => {
+    const id = state.activeSessionId
+    return id ? (state.queuedMessageIds[id] ?? EMPTY_QUEUE) : EMPTY_QUEUE
+  })
   const errorReason = useSessionStore((state) => {
     const id = state.activeSessionId
     return id ? state.errorReasons[id] : undefined
@@ -754,7 +759,7 @@ export function RunView({
                   <div className="border-t border-line/70" />
                 )}
                 <div data-message-id={message.id}>
-                  <ExecutionBlock message={message} isStreaming={busy && index === messages.length - 1} />
+                  <ExecutionBlock message={message} isStreaming={busy && index === messages.length - 1} queued={queuedIds.includes(message.id)} />
                 </div>
               </Fragment>
             ))
