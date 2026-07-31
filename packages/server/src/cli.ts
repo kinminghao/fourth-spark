@@ -30,10 +30,17 @@ switch (command) {
     await statusCommand()
     break
   }
+  case "upgrade": {
+    const { upgradeCommand } = await import("./cli/upgrade")
+    await upgradeCommand(args.slice(1))
+    break
+  }
   case "serve":
   case undefined: {
     const { default: serverConfig } = await import("./index")
     Bun.serve(serverConfig)
+    const { checkForUpdates } = await import("./cli/upgrade")
+    checkForUpdates()
     break
   }
   default:
@@ -52,6 +59,7 @@ Commands:
   start     Start server in background (with PostgreSQL)
   stop      Stop background server and all services
   status    Show server and service status
+  upgrade   Check for updates and upgrade to latest version
 
 Options:
   -v, --version    Show version
