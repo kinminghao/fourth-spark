@@ -29,11 +29,9 @@ async function main() {
   const ext = isWindows ? "zip" : "tar.gz"
   const url = `https://github.com/${REPO}/releases/download/${tag}/${asset}.${ext}`
 
-  const binDir = join(__dirname, "bin")
-  mkdirSync(binDir, { recursive: true })
-
+  const pkgDir = __dirname
   const binaryName = isWindows ? "fourth-spark.exe" : "fourth-spark"
-  const binaryPath = join(binDir, binaryName)
+  const binaryPath = join(pkgDir, binaryName)
 
   if (existsSync(binaryPath)) {
     console.log("fourth-spark: binary already exists, skipping download")
@@ -41,16 +39,16 @@ async function main() {
   }
 
   console.log(`fourth-spark: downloading ${version} for ${key}...`)
-  const tmpFile = join(binDir, `_download.${ext}`)
+  const tmpFile = join(pkgDir, `_download.${ext}`)
 
   await download(url, tmpFile)
 
   if (isWindows) {
     execSync(
-      `powershell -Command "Expand-Archive -Path '${tmpFile}' -DestinationPath '${binDir}' -Force"`,
+      `powershell -Command "Expand-Archive -Path '${tmpFile}' -DestinationPath '${pkgDir}' -Force"`,
     )
   } else {
-    execSync(`tar xzf "${tmpFile}" -C "${binDir}" fourth-spark`, { stdio: "pipe" })
+    execSync(`tar xzf "${tmpFile}" -C "${pkgDir}" fourth-spark`, { stdio: "pipe" })
     chmodSync(binaryPath, 0o755)
   }
 

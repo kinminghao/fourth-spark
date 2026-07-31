@@ -56,6 +56,8 @@ if [ -z "$TARGET" ]; then
   mkdir -p "$NPM_DIST/bin"
   cp "$ROOT/npm/package.json" "$NPM_DIST/"
   cp "$ROOT/npm/postinstall.js" "$NPM_DIST/"
+  cp "$ROOT/npm/cli.js" "$NPM_DIST/bin/"
+  chmod +x "$NPM_DIST/bin/cli.js"
   sed -i.bak "s/\"0.0.0\"/\"$VERSION\"/" "$NPM_DIST/package.json" && rm -f "$NPM_DIST/package.json.bak"
   cp -r "$DIST/public" "$NPM_DIST/public"
   cp -r "$DIST/drizzle" "$NPM_DIST/drizzle"
