@@ -14,13 +14,26 @@ function QuestionCard({
   q,
   pending,
   selected,
+  customText,
   onSelect,
+  onCustomTextChange,
+  onClearSelections,
+  onSubmitCustom,
+  isSingle,
 }: {
   q: QuestionData
   pending: boolean
   selected?: string[]
+  customText: string
   onSelect: (label: string) => void
+  onCustomTextChange: (text: string) => void
+  onClearSelections: () => void
+  onSubmitCustom?: () => void
+  isSingle: boolean
 }) {
+  const [showCustomInput, setShowCustomInput] = useState(false)
+  const isCustomActive = showCustomInput || customText.length > 0
+
   return (
     <div className="space-y-2">
       {q.header && (
@@ -30,13 +43,17 @@ function QuestionCard({
       {q.options.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {q.options.map((opt) => {
-            const isSelected = selected?.includes(opt.label) ?? false
+            const isSelected = !isCustomActive && (selected?.includes(opt.label) ?? false)
             return (
               <button
                 key={opt.label}
                 type="button"
                 disabled={!pending}
-                onClick={() => onSelect(opt.label)}
+                onClick={() => {
+                  setShowCustomInput(false)
+                  onCustomTextChange("")
+                  onSelect(opt.label)
+                }}
                 className={clsx(
                   "rounded-md border px-3 py-1.5 text-left text-xs transition-colors",
                   isSelected
@@ -54,6 +71,64 @@ function QuestionCard({
               </button>
             )
           })}
+          {pending && (
+            <button
+              type="button"
+              onClick={() => {
+                if (isCustomActive) {
+                  setShowCustomInput(false)
+                  onCustomTextChange("")
+                } else {
+                  setShowCustomInput(true)
+                  onClearSelections()
+                }
+              }}
+              className={clsx(
+                "rounded-md border px-3 py-1.5 text-left text-xs transition-colors",
+                isCustomActive
+                  ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30"
+                  : "border-dashed border-blue-500/40 text-blue-300 hover:bg-blue-500/10",
+              )}
+            >
+              {isCustomActive && <Check className="mr-1 inline h-3 w-3" />}
+              <span className="font-medium">其他…</span>
+            </button>
+          )}
+        </div>
+      )}
+      {isCustomActive && pending && (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={customText}
+            onChange={(e) => {
+              onCustomTextChange(e.target.value)
+              if (e.target.value) onClearSelections()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && customText.trim() && isSingle && onSubmitCustom) {
+                onSubmitCustom()
+              }
+            }}
+            placeholder="输入自定义回复…"
+            autoFocus
+            className="flex-1 rounded-md border border-blue-500/40 bg-blue-500/5 px-3 py-1.5 text-xs text-fg-1 placeholder:text-fg-5 outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30"
+          />
+          {isSingle && (
+            <button
+              type="button"
+              disabled={!customText.trim()}
+              onClick={onSubmitCustom}
+              className={clsx(
+                "flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                customText.trim()
+                  ? "bg-emerald-600 text-white hover:bg-emerald-500"
+                  : "bg-surface/50 text-fg-5 cursor-not-allowed",
+              )}
+            >
+              <Send className="h-3 w-3" />
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -69,6 +144,7 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
   const abortSession = useSessionStore((s) => s.abortSession)
   const [resolved, setResolved] = useState<"answered" | "dismissed" | null>(null)
   const [selections, setSelections] = useState<Record<number, string[]>>({})
+  const [customTexts, setCustomTexts] = useState<Record<number, string>>({})
 
   if (!questions || questions.length === 0) return null
 
@@ -80,6 +156,11 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
 
   const handleSelect = (questionIndex: number, label: string) => {
     if (resolved) return
+
+    setCustomTexts((prev) => {
+      const { [questionIndex]: _, ...rest } = prev
+      return rest
+    })
 
     if (isSingle) {
       // Single question: send immediately (preserves existing behavior)
@@ -109,8 +190,33 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
     })
   }
 
+  const handleCustomTextChange = (questionIndex: number, text: string) => {
+    setCustomTexts((prev) => {
+      if (text) return { ...prev, [questionIndex]: text }
+      const { [questionIndex]: _, ...rest } = prev
+      return rest
+    })
+  }
+
+  const handleClearSelections = (questionIndex: number) => {
+    setSelections((prev) => {
+      const { [questionIndex]: _, ...rest } = prev
+      return rest
+    })
+  }
+
+  const handleSubmitCustomSingle = (questionIndex: number) => {
+    const text = customTexts[questionIndex]?.trim()
+    if (resolved || !text) return
+    setResolved("answered")
+    clearToast()
+    void sendMessage(text)
+  }
+
   const answeredCount = questions.filter(
-    (_, i) => (selections[i]?.length ?? 0) > 0,
+    (_, i) =>
+      (selections[i]?.length ?? 0) > 0 ||
+      (customTexts[i]?.trim().length ?? 0) > 0,
   ).length
   const allAnswered = !isSingle && answeredCount === questions.length
 
@@ -120,6 +226,8 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
     clearToast()
 
     const answers = questions.map((_, i) => {
+      const custom = customTexts[i]?.trim()
+      if (custom) return custom
       const sel = selections[i] ?? []
       return sel.length === 1 ? sel[0] : sel
     })
@@ -173,7 +281,12 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
             q={q}
             pending={active}
             selected={selections[i]}
+            customText={customTexts[i] ?? ""}
             onSelect={(label) => handleSelect(i, label)}
+            onCustomTextChange={(text) => handleCustomTextChange(i, text)}
+            onClearSelections={() => handleClearSelections(i)}
+            onSubmitCustom={isSingle ? () => handleSubmitCustomSingle(i) : undefined}
+            isSingle={isSingle}
           />
         ))}
         {!isSingle && active && (
