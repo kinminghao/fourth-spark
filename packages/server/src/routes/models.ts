@@ -9,6 +9,7 @@ type ModelInfo = {
   name: string
   providerID: string
   providerName: string
+  configured: boolean
   cost?: { input?: number; output?: number }
   contextLimit?: number
 }
@@ -29,9 +30,12 @@ modelRoutes.get("/", async (c) => {
   const client = processManager.requireClient(repoId)
 
   let providers: Provider[]
+  let connectedIds: Set<string>
   try {
     const res = await client.getProviders()
     providers = res.all ?? []
+    const raw = res.connected
+    connectedIds = new Set(Array.isArray(raw) ? raw.filter((v): v is string => typeof v === "string") : [])
   } catch {
     return c.json([])
   }
@@ -48,6 +52,7 @@ modelRoutes.get("/", async (c) => {
         name: m.name || m.id,
         providerID: provider.id,
         providerName: provider.name || provider.id,
+        configured: connectedIds.has(provider.id),
         cost: m.cost,
         contextLimit: m.limit?.context,
       })

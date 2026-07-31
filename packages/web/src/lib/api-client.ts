@@ -164,6 +164,7 @@ export interface ModelInfo {
   name: string
   providerID: string
   providerName: string
+  configured: boolean
   cost?: { input?: number; output?: number }
   contextLimit?: number
 }
