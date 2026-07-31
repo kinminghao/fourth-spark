@@ -21,7 +21,12 @@ function groupByProvider(models: ModelInfo[]): GroupedModels {
     if (list) list.push(m)
     else map.set(key, [m])
   }
-  return Array.from(map, ([provider, models]) => ({ provider, models }))
+  return Array.from(map, ([provider, models]) => ({ provider, models })).sort((a, b) => {
+    const aCfg = a.models.some((m) => m.configured)
+    const bCfg = b.models.some((m) => m.configured)
+    if (aCfg !== bCfg) return aCfg ? -1 : 1
+    return a.provider.localeCompare(b.provider)
+  })
 }
 
 function formatContext(limit: number | undefined): string {
