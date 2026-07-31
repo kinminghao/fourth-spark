@@ -1,7 +1,7 @@
 import { spawn, execSync } from "node:child_process"
 import { readFileSync, writeFileSync, existsSync, openSync } from "node:fs"
 import { createServer } from "node:net"
-import { PID_FILE, LOG_FILE, ensureDataDir, isProcessRunning, findDockerCompose } from "./paths"
+import { PID_FILE, LOG_FILE, ensureDataDir, isProcessRunning, findDockerCompose, getDockerComposeCmd } from "./paths"
 
 const DEFAULT_PORT = 3000
 const PG_PORT = 5432
@@ -56,7 +56,8 @@ export async function startCommand(args: string[]): Promise<void> {
   }
 
   const composePath = findDockerCompose()
-  if (composePath && !process.env.DATABASE_URL) {
+  const composeCmd = getDockerComposeCmd()
+  if (composePath && composeCmd && !process.env.DATABASE_URL) {
     if (isPortOccupiedByOther(PG_PORT, "fourth-spark-db")) {
       console.error(`ERROR: Port ${PG_PORT} is already in use by another process.`)
       console.error("Options:")
@@ -67,7 +68,7 @@ export async function startCommand(args: string[]): Promise<void> {
 
     console.log("→ Starting PostgreSQL...")
     try {
-      execSync(`docker compose -f "${composePath}" up -d postgres`, { stdio: "pipe" })
+      execSync(`${composeCmd.join(" ")} -f "${composePath}" up -d postgres`, { stdio: "pipe" })
       let ready = false
       for (let i = 0; i < 30; i++) {
         try {

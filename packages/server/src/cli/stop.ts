@@ -1,6 +1,6 @@
 import { readFileSync, existsSync, unlinkSync } from "node:fs"
 import { execSync } from "node:child_process"
-import { PID_FILE, isProcessRunning, findDockerCompose } from "./paths"
+import { PID_FILE, isProcessRunning, findDockerCompose, getDockerComposeCmd } from "./paths"
 
 export async function stopCommand(): Promise<void> {
   if (existsSync(PID_FILE)) {
@@ -46,10 +46,11 @@ export async function stopCommand(): Promise<void> {
   }
 
   const composePath = findDockerCompose()
-  if (composePath) {
+  const composeCmd = getDockerComposeCmd()
+  if (composePath && composeCmd) {
     console.log("→ Stopping PostgreSQL...")
     try {
-      execSync(`docker compose -f "${composePath}" down`, { stdio: "inherit" })
+      execSync(`${composeCmd.join(" ")} -f "${composePath}" down`, { stdio: "inherit" })
     } catch {}
   }
 

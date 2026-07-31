@@ -16,7 +16,14 @@ fi
 # 1. Start PostgreSQL
 echo "→ Starting PostgreSQL..."
 docker rm -f fourth-spark-db 2>/dev/null || true
-docker compose -f "$DIR/docker-compose.yml" up -d postgres
+if docker compose version >/dev/null 2>&1; then
+  docker compose -f "$DIR/docker-compose.yml" up -d postgres
+elif command -v docker-compose >/dev/null 2>&1; then
+  docker-compose -f "$DIR/docker-compose.yml" up -d postgres
+else
+  echo "ERROR: neither 'docker compose' nor 'docker-compose' found"
+  exit 1
+fi
 echo "  Waiting for PostgreSQL..."
 until docker exec fourth-spark-db pg_isready -U fourth_spark -q 2>/dev/null; do
   sleep 0.5

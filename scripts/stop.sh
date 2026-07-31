@@ -46,7 +46,13 @@ fi
 
 # 3. Stop PostgreSQL
 echo "→ Stopping PostgreSQL..."
-docker compose -f "$DIR/docker-compose.yml" down
+if docker compose version >/dev/null 2>&1; then
+  docker compose -f "$DIR/docker-compose.yml" down
+elif command -v docker-compose >/dev/null 2>&1; then
+  docker-compose -f "$DIR/docker-compose.yml" down
+else
+  echo "  Warning: neither 'docker compose' nor 'docker-compose' found"
+fi
 
 echo ""
 echo "=== All services stopped ==="

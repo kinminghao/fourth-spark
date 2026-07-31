@@ -1,5 +1,6 @@
 import { join, resolve, dirname } from "node:path"
 import { mkdirSync, existsSync } from "node:fs"
+import { execSync } from "node:child_process"
 import { homedir } from "node:os"
 
 const DATA_DIR = join(homedir(), ".fourth-spark")
@@ -30,4 +31,18 @@ export function findDockerCompose(): string | null {
   if (existsSync(inCwd)) return inCwd
 
   return null
+}
+
+export function getDockerComposeCmd(): string[] | null {
+  try {
+    execSync("docker compose version", { stdio: "pipe" })
+    return ["docker", "compose"]
+  } catch {
+    try {
+      execSync("docker-compose version", { stdio: "pipe" })
+      return ["docker-compose"]
+    } catch {
+      return null
+    }
+  }
 }
