@@ -152,12 +152,19 @@ function BranchSwitcher({ repoId, currentBranch }: { repoId: string; currentBran
 function useLatestVersion() {
   const [latest, setLatest] = useState<string | null>(null)
   useEffect(() => {
-    fetch("/api/health")
-      .then((r) => r.json())
-      .then((d: { latestVersion?: string }) => {
-        if (d.latestVersion && d.latestVersion !== __APP_VERSION__) setLatest(d.latestVersion)
-      })
-      .catch(() => {})
+    const check = () =>
+      fetch("/api/health")
+        .then((r) => r.json())
+        .then((d: { latestVersion?: string }) => {
+          if (d.latestVersion && d.latestVersion !== __APP_VERSION__) setLatest(d.latestVersion)
+        })
+        .catch(() => {})
+
+    check()
+    const id = setInterval(check, 30 * 60_000)
+    const onFocus = () => check()
+    window.addEventListener("focus", onFocus)
+    return () => { clearInterval(id); window.removeEventListener("focus", onFocus) }
   }, [])
   return latest
 }
