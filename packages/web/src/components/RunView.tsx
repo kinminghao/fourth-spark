@@ -628,7 +628,7 @@ export function RunView({
   }, [activeSessionId])
 
   useEffect(() => {
-    if (status !== "busy") return
+    if (status !== "busy" && status !== "retry") return
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return
       const target = event.target as HTMLElement | null
@@ -652,6 +652,8 @@ export function RunView({
   }
 
   const busy = status === "busy"
+  const retrying = status === "retry"
+  const stoppable = busy || retrying
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-term">
@@ -716,14 +718,14 @@ export function RunView({
             <PanelRight className="h-4 w-4" />
           </button>
         )}
-        {busy && (
+        {stoppable && (
           <button
             type="button"
             onClick={() => void abortSession()}
             className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-xs text-fg-2 transition-colors hover:border-red-500/50 hover:text-red-400"
           >
             <Square className="h-3 w-3 fill-current" />
-            stop
+            {retrying ? "stop retry" : "stop"}
           </button>
         )}
       </header>

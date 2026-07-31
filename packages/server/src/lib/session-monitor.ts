@@ -22,6 +22,7 @@ type ManagedEntry = {
 
 const handled = new Map<string, number>()
 const repromptInFlight = new Set<string>()
+const userAborted = new Set<string>()
 const autoContinueCounts = new Map<string, number>()
 const emptyRetryCounts = new Map<string, number>()
 const idleResponseCounts = new Map<string, number>()
@@ -218,6 +219,7 @@ function resetCountersIfNewUserMessage(sessionId: string, messages: Message[]): 
     idleResponseCounts.delete(sessionId)
     todoFingerprints.delete(sessionId)
     emptyRetryCounts.delete(sessionId)
+    userAborted.delete(sessionId)
   }
 }
 
@@ -384,6 +386,11 @@ async function pollOnce(): Promise<void> {
 
         if (status.type !== "retry") continue
 
+        if (userAborted.has(sessionId)) {
+          logger.debug({ sessionId }, "skipping retry handling: user aborted")
+          continue
+        }
+
         const message = (status as { message?: string }).message ?? ""
         if (!isUsageLimit(message)) continue
 
@@ -418,6 +425,11 @@ async function pollOnce(): Promise<void> {
 }
 
 export const sessionMonitor = {
+  markAborted(sessionId: string): void {
+    userAborted.add(sessionId)
+    logger.info({ sessionId }, "session marked as user-aborted, monitor will skip retry")
+  },
+
   register(repoId: string, client: OpenCodeClient): void {
     if (entries.some((e) => e.repoId === repoId)) return
     entries.push({ repoId, client })
@@ -448,6 +460,7 @@ export const sessionMonitor = {
     idleResponseCounts.clear()
     lastUserMessageIds.clear()
     todoFingerprints.clear()
+    userAborted.clear()
     logger.info("session monitor stopped")
   },
 }
