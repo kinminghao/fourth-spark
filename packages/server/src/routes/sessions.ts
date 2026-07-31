@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { eq, and, asc, desc, inArray } from "drizzle-orm"
 import { processManager } from "../lib/process-manager"
+import { sessionMonitor } from "../lib/session-monitor"
 import { DEFAULT_VARIANT } from "../lib/config"
 import { syncSessionsList, syncMessagesList } from "../db/sync"
 import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFromDB, getTodosFromDB } from "../db/query"
@@ -275,7 +276,9 @@ sessions.post("/:id/prompt", async (c) => {
 
 sessions.post("/:id/abort", async (c) => {
   const client = processManager.requireClient(c.req.param("repoId"))
-  await client.abort(c.req.param("id"))
+  const sessionId = c.req.param("id")
+  sessionMonitor.markAborted(sessionId)
+  await client.abort(sessionId)
   return c.json({ ok: true })
 })
 
