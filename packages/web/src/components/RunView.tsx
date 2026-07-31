@@ -754,7 +754,7 @@ export function RunView({
                   <div className="border-t border-line/70" />
                 )}
                 <div data-message-id={message.id}>
-                  <ExecutionBlock message={message} />
+                  <ExecutionBlock message={message} isStreaming={busy && index === messages.length - 1} />
                 </div>
               </Fragment>
             ))
