@@ -1,8 +1,8 @@
 # Fourth Spark
 
-AI Agent Platform — 基于 [OpenCode](https://opencode.ai/) 的多仓库 Agent 管理平台。
+自托管的 AI Agent 平台 — 在浏览器中管理多个 Git 仓库，与 AI Agent 实时对话，让它们直接操作你的代码。
 
-浏览器中与 AI Agent 实时对话，管理多个 Git 仓库，集成 GitHub / Gitea / GitLab。
+基于 [OpenCode](https://opencode.ai/)，每个仓库隔离为独立 Agent 运行时，集成 GitHub / Gitea / GitLab。
 
 ## 安装
 
