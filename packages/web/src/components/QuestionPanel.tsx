@@ -32,7 +32,7 @@ function QuestionCard({
   isSingle: boolean
 }) {
   const [showCustomInput, setShowCustomInput] = useState(false)
-  const isCustomActive = showCustomInput || customText.length > 0
+  const isCustomFilled = customText.length > 0
 
   return (
     <div className="space-y-2">
@@ -43,7 +43,7 @@ function QuestionCard({
       {q.options.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {q.options.map((opt) => {
-            const isSelected = !isCustomActive && (selected?.includes(opt.label) ?? false)
+            const isSelected = !isCustomFilled && (selected?.includes(opt.label) ?? false)
             return (
               <button
                 key={opt.label}
@@ -75,9 +75,10 @@ function QuestionCard({
             <button
               type="button"
               onClick={() => {
-                if (isCustomActive) {
+                if (showCustomInput) {
                   setShowCustomInput(false)
-                  onCustomTextChange("")
+                } else if (isCustomFilled) {
+                  setShowCustomInput(true)
                 } else {
                   setShowCustomInput(true)
                   onClearSelections()
@@ -85,18 +86,22 @@ function QuestionCard({
               }}
               className={clsx(
                 "rounded-md border px-3 py-1.5 text-left text-xs transition-colors",
-                isCustomActive
+                isCustomFilled
                   ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30"
                   : "border-dashed border-blue-500/40 text-blue-300 hover:bg-blue-500/10",
               )}
             >
-              {isCustomActive && <Check className="mr-1 inline h-3 w-3" />}
-              <span className="font-medium">其他…</span>
+              {isCustomFilled && <Check className="mr-1 inline h-3 w-3" />}
+              <span className="font-medium">
+                {isCustomFilled && !showCustomInput
+                  ? (customText.length > 30 ? `${customText.slice(0, 30)}…` : customText)
+                  : "其他…"}
+              </span>
             </button>
           )}
         </div>
       )}
-      {isCustomActive && pending && (
+      {showCustomInput && pending && (
         <div className="flex items-center gap-2">
           <input
             type="text"
@@ -106,8 +111,13 @@ function QuestionCard({
               if (e.target.value) onClearSelections()
             }}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && customText.trim() && isSingle && onSubmitCustom) {
-                onSubmitCustom()
+              if (e.key === "Enter" && customText.trim()) {
+                e.preventDefault()
+                if (isSingle && onSubmitCustom) {
+                  onSubmitCustom()
+                } else {
+                  setShowCustomInput(false)
+                }
               }
             }}
             placeholder="输入自定义回复…"
