@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import remarkGfm from "remark-gfm"
@@ -35,7 +35,26 @@ function ThinkingBlock({ text }: { text: string }) {
   )
 }
 
-function PartView({ part }: { part: MessagePart }) {
+function ThinkingIndicator() {
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    const start = Date.now()
+    const timer = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - start) / 1000))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  return (
+    <div className="my-1 flex items-center gap-1.5 font-mono text-xs text-fg-5">
+      <Brain className="h-3 w-3 shrink-0 animate-pulse" />
+      <span>thinking</span>
+      {elapsed > 0 && <span className="text-fg-6">{elapsed}s</span>}
+    </div>
+  )
+}
+
+function PartView({ part, isStreaming }: { part: MessagePart; isStreaming?: boolean }) {
   const kind = classifyPart(part)
   switch (kind) {
     case "text": {
@@ -52,7 +71,7 @@ function PartView({ part }: { part: MessagePart }) {
     case "thinking": {
       const text = getPartText(part)
       if (!text.trim()) {
-        return null
+        return isStreaming ? <ThinkingIndicator /> : null
       }
       return <ThinkingBlock text={text} />
     }
@@ -64,7 +83,7 @@ function PartView({ part }: { part: MessagePart }) {
   }
 }
 
-export function ExecutionBlock({ message }: { message: Message }) {
+export function ExecutionBlock({ message, isStreaming }: { message: Message; isStreaming?: boolean }) {
   const isUser = message.role === "user"
   const parts = message.parts ?? []
   const renderable = parts.filter((part) => classifyPart(part) !== "other")
@@ -112,7 +131,7 @@ export function ExecutionBlock({ message }: { message: Message }) {
       <div className="space-y-2 text-sm text-fg">
         {renderable.length > 0 ? (
           renderable.map((part, index) => (
-            <PartView key={part.id ?? part.callID ?? index} part={part} />
+            <PartView key={part.id ?? part.callID ?? index} part={part} isStreaming={isStreaming} />
           ))
         ) : (
           !msgError && <span className="text-fg-5">…</span>
