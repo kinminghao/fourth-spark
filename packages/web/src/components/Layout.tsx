@@ -193,8 +193,8 @@ function Header() {
             v{__APP_VERSION__}
           </span>
           {latestVersion && (
-            <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-500" title={`v${latestVersion} 可用，运行 fourth-spark upgrade 更新`}>
-              ↑ {latestVersion}
+            <span className="text-[10px] text-amber-500">
+              → v{latestVersion} 可用，运行 <code className="rounded bg-amber-500/10 px-1 font-mono">fourth-spark upgrade</code> 更新
             </span>
           )}
         </div>
