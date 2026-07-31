@@ -36,6 +36,9 @@ function hasAnyPendingQuestion(msgs: Message[]): boolean {
 
 export const EMPTY_MESSAGES: readonly Message[] = []
 export const EMPTY_TODOS: readonly Todo[] = []
+export const EMPTY_QUEUE: readonly string[] = []
+
+const _pendingQueueMarks: Record<string, number> = {}
 
 function partKey(part: MessagePart): string | undefined {
   return part.id ?? part.callID
@@ -52,6 +55,7 @@ interface SessionState {
   todos: Record<string, Todo[]>
   sessionStatuses: Record<string, string>
   errorReasons: Record<string, string>
+  queuedMessageIds: Record<string, string[]>
   sessionLinks: Record<string, SessionLinks>
   allSessionLinks: Record<string, SessionLinkSummary>
   loadingSessions: boolean
@@ -95,6 +99,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   todos: {},
   sessionStatuses: {},
   errorReasons: {},
+  queuedMessageIds: {},
   sessionLinks: {},
   allSessionLinks: {},
   loadingSessions: false,
@@ -248,11 +253,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         // Best-effort.
       }
     }
+    delete _pendingQueueMarks[id]
     set((state) => {
       const { [id]: _removedMessages, ...messages } = state.messages
       const { [id]: _removedTodos, ...todos } = state.todos
       const { [id]: _removedStatus, ...sessionStatuses } = state.sessionStatuses
       const { [id]: _removedReason, ...errorReasons } = state.errorReasons
+      const { [id]: _removedQueued, ...queuedMessageIds } = state.queuedMessageIds
       const { [id]: _removedLinks, ...sessionLinks } = state.sessionLinks
       const { [id]: _removedAllLinks, ...allSessionLinks } = state.allSessionLinks
       return {
@@ -261,6 +268,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         todos,
         sessionStatuses,
         errorReasons,
+        queuedMessageIds,
         sessionLinks,
         allSessionLinks,
         activeSessionId:
@@ -274,16 +282,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const sessionId = get().activeSessionId
     if (!repoId || !sessionId) return
     const session = get().sessions.find((s) => s.id === sessionId)
+    const wasBusy = get().sessionStatuses[sessionId] === "busy"
     set({ sendError: null })
-    get().setSessionStatus(sessionId, "busy")
+    if (!wasBusy) {
+      get().setSessionStatus(sessionId, "busy")
+    }
     try {
       await api.sendMessage(repoId, sessionId, content, session?.agent, model)
+      if (wasBusy) {
+        _pendingQueueMarks[sessionId] = (_pendingQueueMarks[sessionId] || 0) + 1
+      }
     } catch (error) {
       set({
         sendError:
           error instanceof Error ? error.message : "Failed to send message",
       })
-      get().setSessionStatus(sessionId, "idle")
+      if (!wasBusy) {
+        get().setSessionStatus(sessionId, "idle")
+      }
     }
   },
 
@@ -300,6 +316,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   clearSessions: () => {
+    for (const k of Object.keys(_pendingQueueMarks)) delete _pendingQueueMarks[k]
     set({
       sessions: [],
       activeSessionId: null,
@@ -307,6 +324,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       todos: {},
       sessionStatuses: {},
       errorReasons: {},
+      queuedMessageIds: {},
       sessionLinks: {},
       allSessionLinks: {},
       loadError: null,
@@ -319,6 +337,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const list = state.messages[sessionId] ?? []
       const idx = list.findIndex((m) => m.id === message.id)
       let next: Message[]
+      let queuedMessageIds = state.queuedMessageIds
+
       if (idx >= 0) {
         const merged: Message = { ...list[idx], ...message }
         if (
@@ -331,8 +351,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         next[idx] = merged
       } else {
         next = [...list, message]
+
+        const pending = _pendingQueueMarks[sessionId] || 0
+        if (message.role === "user" && pending > 0) {
+          const queue = [...(queuedMessageIds[sessionId] ?? [])]
+          queue.push(message.id)
+          queuedMessageIds = { ...queuedMessageIds, [sessionId]: queue }
+          _pendingQueueMarks[sessionId] = pending - 1
+        } else if (message.role === "assistant") {
+          const queue = queuedMessageIds[sessionId]
+          if (queue && queue.length > 0) {
+            queuedMessageIds = { ...queuedMessageIds, [sessionId]: queue.slice(1) }
+          }
+        }
       }
-      return { messages: { ...state.messages, [sessionId]: next } }
+      return {
+        messages: { ...state.messages, [sessionId]: next },
+        queuedMessageIds,
+      }
     })
     if (message.parts?.some((p) => isQuestionTool(p) && isQuestionPending(p))) {
       fireQuestionToast(sessionId, get().sessions)

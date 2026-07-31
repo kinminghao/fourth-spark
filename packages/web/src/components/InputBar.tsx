@@ -67,7 +67,7 @@ export function InputBar() {
   }, [activeRepoId])
 
   const busy = status === "busy" && !hasPendingQuestion
-  const disabled = !activeSessionId || busy
+  const disabled = !activeSessionId
 
   useLayoutEffect(() => {
     const element = textareaRef.current
@@ -101,10 +101,10 @@ export function InputBar() {
 
   const placeholder = !activeSessionId
     ? "select or start a run"
-    : busy
-      ? "agent is running…"
-      : hasPendingQuestion
-        ? "输入回复，或点击上方选项…"
+    : hasPendingQuestion
+      ? "输入回复，或点击上方选项…"
+      : busy
+        ? "输入消息将排队等待处理…"
         : "enter a command…"
 
   const promptColor = !activeSessionId

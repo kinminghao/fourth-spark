@@ -83,7 +83,7 @@ function PartView({ part, isStreaming }: { part: MessagePart; isStreaming?: bool
   }
 }
 
-export function ExecutionBlock({ message, isStreaming }: { message: Message; isStreaming?: boolean }) {
+export function ExecutionBlock({ message, isStreaming, queued }: { message: Message; isStreaming?: boolean; queued?: boolean }) {
   const isUser = message.role === "user"
   const parts = message.parts ?? []
   const renderable = parts.filter((part) => classifyPart(part) !== "other")
@@ -91,11 +91,17 @@ export function ExecutionBlock({ message, isStreaming }: { message: Message; isS
   if (isUser) {
     const prompt = parts.map(getPartText).join("").trim()
     return (
-      <div className="fs-fade-in flex gap-2 font-mono text-sm">
+      <div className="fs-fade-in flex items-start gap-2 font-mono text-sm">
         <span className="shrink-0 select-none text-emerald-400">❯</span>
-        <span className="min-w-0 whitespace-pre-wrap break-words text-fg-2">
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-fg-2">
           {prompt || "…"}
         </span>
+        {queued && (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded border border-amber-500/30 px-1.5 py-0.5 text-xs text-amber-400">
+            <span className="leading-none">○</span>
+            <span>queued</span>
+          </span>
+        )}
       </div>
     )
   }
