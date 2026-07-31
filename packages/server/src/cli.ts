@@ -17,7 +17,7 @@ const command = args[0]
 switch (command) {
   case "start": {
     const { startCommand } = await import("./cli/start")
-    await startCommand()
+    await startCommand(args.slice(1))
     break
   }
   case "stop": {
@@ -56,7 +56,7 @@ Usage: fourth-spark [command] [options]
 
 Commands:
   serve     Start server in foreground (default)
-  start     Start server in background (with PostgreSQL)
+  start     Start server in background (with PostgreSQL) [--port PORT]
   stop      Stop background server and all services
   status    Show server and service status
   upgrade   Check for updates and upgrade to latest version
