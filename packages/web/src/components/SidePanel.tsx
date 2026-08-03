@@ -443,8 +443,12 @@ function SubtasksTab() {
   const sessionStatuses = useSessionStore((s) => s.sessionStatuses)
   const setActiveSession = useSessionStore((s) => s.setActiveSession)
 
+  const activeSession = sessions.find((s) => s.id === activeSessionId)
+  const parentId = activeSession?.parentID ?? activeSessionId
+  const isSiblingView = !!activeSession?.parentID
+
   const children = sessions
-    .filter((s) => s.parentID === activeSessionId)
+    .filter((s) => s.parentID === parentId)
     .sort((a, b) => (subtaskCreatedMs(b) ?? 0) - (subtaskCreatedMs(a) ?? 0))
 
   if (children.length === 0) {
@@ -457,8 +461,14 @@ function SubtasksTab() {
 
   return (
     <div className="flex-1 overflow-y-auto px-2 py-2">
+      {isSiblingView && (
+        <div className="mb-1.5 px-2 font-mono text-[10px] text-fg-5">
+          同级子任务 ({children.length})
+        </div>
+      )}
       <ul className="space-y-0.5">
         {children.map((child) => {
+          const isCurrent = child.id === activeSessionId
           const status = sessionStatuses[child.id]
           const created = subtaskCreatedMs(child)
           const agentColor = (child.agent && AGENT_COLORS[child.agent]) ?? "bg-elevated text-fg-4"
@@ -467,8 +477,13 @@ function SubtasksTab() {
             <li key={child.id}>
               <button
                 type="button"
-                onClick={() => void setActiveSession(child.id)}
-                className="group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
+                onClick={() => { if (!isCurrent) void setActiveSession(child.id) }}
+                className={clsx(
+                  "group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
+                  isCurrent
+                    ? "border-l-2 border-blue-500 bg-blue-500/5"
+                    : "border-l-2 border-transparent hover:bg-elevated/60",
+                )}
               >
                 <span className={clsx("mt-1 h-2 w-2 shrink-0 rounded-full", subtaskStatusDot(status))} />
                 <div className="min-w-0 flex-1">
@@ -484,7 +499,10 @@ function SubtasksTab() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-fg-3 group-hover:text-fg-2">
+                  <p className={clsx(
+                    "mt-0.5 line-clamp-2 text-xs leading-5",
+                    isCurrent ? "text-fg-2" : "text-fg-3 group-hover:text-fg-2",
+                  )}>
                     {title}
                   </p>
                 </div>
@@ -516,7 +534,9 @@ export function SidePanel({
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
   const userCount = messages.filter((m) => m.role === "user").length
   const linkCount = (sessionLinks?.issues?.length ?? 0) + (sessionLinks?.pullRequests?.length ?? 0)
-  const subtaskCount = allSessions.filter((s) => s.parentID === activeSessionId).length
+  const activeSession = allSessions.find((s) => s.id === activeSessionId)
+  const subtaskParentId = activeSession?.parentID ?? activeSessionId
+  const subtaskCount = allSessions.filter((s) => s.parentID === subtaskParentId).length
 
   return (
     <div className="flex h-full w-72 shrink-0 flex-col border-l border-line bg-surface">
