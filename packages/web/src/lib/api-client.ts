@@ -357,6 +357,20 @@ export async function abortSession(repoId: string, sessionId: string): Promise<v
   )
 }
 
+export async function replyQuestion(repoId: string, sessionId: string, answers: string[][]): Promise<void> {
+  await apiFetch<void>(
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/questions/reply`,
+    { method: "POST", body: JSON.stringify({ answers }) },
+  )
+}
+
+export async function rejectQuestion(repoId: string, sessionId: string): Promise<void> {
+  await apiFetch<void>(
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/questions/reject`,
+    { method: "POST" },
+  )
+}
+
 function normalizeMessage(raw: unknown): Message {
   const r = raw as Record<string, unknown>
   const info = r.info as Record<string, unknown> | undefined

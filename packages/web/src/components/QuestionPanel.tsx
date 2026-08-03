@@ -140,8 +140,8 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
   const status = getToolStatus(part)
   const pending = status === "pending" || status === "running"
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
-  const sendMessage = useSessionStore((s) => s.sendMessage)
-  const abortSession = useSessionStore((s) => s.abortSession)
+  const replyQuestion = useSessionStore((s) => s.replyQuestion)
+  const rejectQuestion = useSessionStore((s) => s.rejectQuestion)
   const [resolved, setResolved] = useState<"answered" | "dismissed" | null>(null)
   const [selections, setSelections] = useState<Record<number, string[]>>({})
   const [customTexts, setCustomTexts] = useState<Record<number, string>>({})
@@ -163,10 +163,9 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
     })
 
     if (isSingle) {
-      // Single question: send immediately (preserves existing behavior)
       setResolved("answered")
       clearToast()
-      void sendMessage(label)
+      void replyQuestion([[label]])
       return
     }
 
@@ -210,7 +209,7 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
     if (resolved || !text) return
     setResolved("answered")
     clearToast()
-    void sendMessage(text)
+    void replyQuestion([[text]])
   }
 
   const answeredCount = questions.filter(
@@ -225,20 +224,19 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
     setResolved("answered")
     clearToast()
 
-    const answers = questions.map((_, i) => {
+    const answers: string[][] = questions.map((_, i) => {
       const custom = customTexts[i]?.trim()
-      if (custom) return custom
-      const sel = selections[i] ?? []
-      return sel.length === 1 ? sel[0] : sel
+      if (custom) return [custom]
+      return selections[i] ?? []
     })
-    void sendMessage(JSON.stringify(answers))
+    void replyQuestion(answers)
   }
 
   const handleDismiss = () => {
     if (resolved) return
     setResolved("dismissed")
     clearToast()
-    void abortSession()
+    void rejectQuestion()
   }
 
   const active = pending && !resolved

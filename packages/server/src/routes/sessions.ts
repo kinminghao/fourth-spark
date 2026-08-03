@@ -282,6 +282,34 @@ sessions.post("/:id/abort", async (c) => {
   return c.json({ ok: true })
 })
 
+sessions.post("/:id/questions/reply", async (c) => {
+  const client = processManager.requireClient(c.req.param("repoId"))
+  const sessionId = c.req.param("id")
+  const body = await c.req.json<{ answers?: string[][] }>().catch(() => null)
+  if (!body?.answers || !Array.isArray(body.answers)) {
+    return c.json({ error: "'answers' must be an array of string arrays", status: 400 }, 400)
+  }
+  const pending = await client.listQuestions()
+  const match = pending.find((q) => q.sessionID === sessionId)
+  if (!match) {
+    return c.json({ error: "No pending question for this session", status: 404 }, 404)
+  }
+  await client.replyQuestion(match.id, body.answers)
+  return c.json({ ok: true })
+})
+
+sessions.post("/:id/questions/reject", async (c) => {
+  const client = processManager.requireClient(c.req.param("repoId"))
+  const sessionId = c.req.param("id")
+  const pending = await client.listQuestions()
+  const match = pending.find((q) => q.sessionID === sessionId)
+  if (!match) {
+    return c.json({ error: "No pending question for this session", status: 404 }, 404)
+  }
+  await client.rejectQuestion(match.id)
+  return c.json({ ok: true })
+})
+
 sessions.get("/:id/messages", async (c) => {
   const repoId = c.req.param("repoId")
   const id = c.req.param("id")

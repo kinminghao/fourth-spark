@@ -66,6 +66,18 @@ export type ProviderListResponse = {
 
 export type SessionStatus = { type: "idle" | "busy" | "retry" }
 
+export type PendingQuestion = {
+  id: string
+  sessionID: string
+  questions: Array<{
+    question: string
+    header?: string
+    options: Array<{ label: string; description?: string }>
+    multiple?: boolean
+  }>
+  tool?: { messageID: string; callID: string }
+}
+
 export class OpenCodeError extends Error {
   readonly status: number
   readonly body: string
@@ -95,6 +107,9 @@ export interface OpenCodeClient {
   abort(sessionId: string): Promise<void>
   getTodos(sessionId: string): Promise<Todo[]>
   getSessionStatus(): Promise<Record<string, SessionStatus>>
+  listQuestions(): Promise<PendingQuestion[]>
+  replyQuestion(requestID: string, answers: string[][]): Promise<void>
+  rejectQuestion(requestID: string): Promise<void>
   listAgents(): Promise<Agent[]>
   getProviders(): Promise<ProviderListResponse>
   eventStream(signal?: AbortSignal): Promise<Response>
@@ -209,6 +224,18 @@ export function createOpenCodeClient(baseUrl: string, directory: string): OpenCo
 
     getSessionStatus() {
       return getJson<Record<string, SessionStatus>>("/session/status", { directory })
+    },
+
+    listQuestions() {
+      return getJson<PendingQuestion[]>("/question", { directory })
+    },
+
+    replyQuestion(requestID, answers) {
+      return send("POST", "/question/reply", { directory }, { requestID, answers })
+    },
+
+    rejectQuestion(requestID) {
+      return send("POST", "/question/reject", { directory }, { requestID })
     },
 
     listAgents() {
