@@ -93,6 +93,8 @@ export class GlobalEventDispatcher {
     if (record.properties && typeof record.properties === "object") {
       const props = record.properties as Record<string, unknown>
       if (typeof props.sessionID === "string") return props.sessionID
+      // Fallback: session.updated events may carry only `id`, not `sessionID`
+      if (typeof props.id === "string") return props.id
     }
     if (typeof record.sessionID === "string") return record.sessionID
     if (typeof record.sessionId === "string") return record.sessionId
