@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import clsx from "clsx"
-import { ListTodo, MessageSquare, Link2, Plus, X, Search } from "lucide-react"
-import type { Message, Todo, SessionLinks } from "../lib/api-client"
+import { ListTodo, MessageSquare, Link2, GitBranch, Plus, X, Search } from "lucide-react"
+import type { Message, Todo, SessionLinks, Session } from "../lib/api-client"
 import { normalizeTodoStatus, type TodoStatus } from "../lib/message-parts"
 import { useIssueStore } from "../stores/issue-store"
 import { usePrStore } from "../stores/pr-store"
@@ -16,7 +16,7 @@ const MARK: Record<TodoStatus, { glyph: string; color: string; spin: boolean }> 
   pending: { glyph: "○", color: "text-fg-4", spin: false },
 }
 
-type Tab = "todo" | "prompts" | "links"
+type Tab = "todo" | "prompts" | "links" | "subtasks"
 
 function formatTime(msg: Message): string {
   const raw = msg.time?.created
@@ -393,6 +393,110 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
   )
 }
 
+const AGENT_COLORS: Record<string, string> = {
+  "visual-engineering": "bg-purple-500/15 text-purple-400",
+  quick: "bg-emerald-500/15 text-emerald-400",
+  deep: "bg-blue-500/15 text-blue-400",
+  ultrabrain: "bg-amber-500/15 text-amber-400",
+  artistry: "bg-pink-500/15 text-pink-400",
+  writing: "bg-cyan-500/15 text-cyan-400",
+  explore: "bg-teal-500/15 text-teal-400",
+  librarian: "bg-indigo-500/15 text-indigo-400",
+  oracle: "bg-amber-500/15 text-amber-400",
+  metis: "bg-rose-500/15 text-rose-400",
+  momus: "bg-orange-500/15 text-orange-400",
+}
+
+function subtaskStatusDot(status: string | undefined): string {
+  switch (status) {
+    case "idle": return "bg-emerald-500"
+    case "busy": case "retry": return "bg-amber-500 animate-pulse"
+    case "error": return "bg-red-500"
+    default: return "bg-fg-5"
+  }
+}
+
+function subtaskCreatedMs(session: Session): number | null {
+  const raw = session.time?.created
+  if (raw) return raw < 1_000_000_000_000 ? raw * 1000 : raw
+  if (session.createdAt) {
+    const parsed = Date.parse(session.createdAt)
+    if (!Number.isNaN(parsed)) return parsed
+  }
+  return null
+}
+
+function formatElapsed(ms: number): string {
+  const diff = Date.now() - ms
+  const secs = Math.floor(diff / 1000)
+  if (secs < 60) return "just now"
+  const mins = Math.floor(secs / 60)
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
+
+function SubtasksTab() {
+  const sessions = useSessionStore((s) => s.sessions)
+  const activeSessionId = useSessionStore((s) => s.activeSessionId)
+  const sessionStatuses = useSessionStore((s) => s.sessionStatuses)
+  const setActiveSession = useSessionStore((s) => s.setActiveSession)
+
+  const children = sessions
+    .filter((s) => s.parentID === activeSessionId)
+    .sort((a, b) => (subtaskCreatedMs(b) ?? 0) - (subtaskCreatedMs(a) ?? 0))
+
+  if (children.length === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <p className="font-mono text-xs text-fg-5">暂无子任务</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto px-2 py-2">
+      <ul className="space-y-0.5">
+        {children.map((child) => {
+          const status = sessionStatuses[child.id]
+          const created = subtaskCreatedMs(child)
+          const agentColor = (child.agent && AGENT_COLORS[child.agent]) ?? "bg-elevated text-fg-4"
+          const title = child.title || `${child.id.slice(0, 9)}...`
+          return (
+            <li key={child.id}>
+              <button
+                type="button"
+                onClick={() => void setActiveSession(child.id)}
+                className="group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
+              >
+                <span className={clsx("mt-1 h-2 w-2 shrink-0 rounded-full", subtaskStatusDot(status))} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    {child.agent && (
+                      <span className={clsx("shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium", agentColor)}>
+                        {child.agent}
+                      </span>
+                    )}
+                    {created != null && (
+                      <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-fg-6">
+                        {formatElapsed(created)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-fg-3 group-hover:text-fg-2">
+                    {title}
+                  </p>
+                </div>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
 export function SidePanel({
   todos,
   messages,
@@ -408,8 +512,11 @@ export function SidePanel({
 }) {
   const [activeTab, setActiveTab] = useState<Tab>("todo")
 
+  const allSessions = useSessionStore((s) => s.sessions)
+  const activeSessionId = useSessionStore((s) => s.activeSessionId)
   const userCount = messages.filter((m) => m.role === "user").length
   const linkCount = (sessionLinks?.issues?.length ?? 0) + (sessionLinks?.pullRequests?.length ?? 0)
+  const subtaskCount = allSessions.filter((s) => s.parentID === activeSessionId).length
 
   return (
     <div className="flex h-full w-72 shrink-0 flex-col border-l border-line bg-surface">
@@ -468,14 +575,34 @@ export function SidePanel({
             </span>
           )}
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("subtasks")}
+          className={clsx(
+            "flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
+            activeTab === "subtasks"
+              ? "border-blue-500 text-blue-500"
+              : "border-transparent text-fg-4 hover:text-fg-2",
+          )}
+        >
+          <GitBranch className="h-3.5 w-3.5" />
+          子任务
+          {subtaskCount > 0 && (
+            <span className="rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">
+              {subtaskCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {activeTab === "todo" ? (
         <TodoTab todos={todos} />
       ) : activeTab === "prompts" ? (
         <PromptsTab messages={messages} onScrollToMessage={onScrollToMessage} />
-      ) : (
+      ) : activeTab === "links" ? (
         <LinksTab links={sessionLinks} sessionId={sessionId} />
+      ) : (
+        <SubtasksTab />
       )}
     </div>
   )
