@@ -71,6 +71,8 @@ interface SessionState {
   removeLink: (sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
   deleteSession: (id: string) => Promise<void>
   sendMessage: (content: string, model?: string) => Promise<void>
+  replyQuestion: (answers: string[][]) => Promise<void>
+  rejectQuestion: () => Promise<void>
   abortSession: () => Promise<void>
   clearSessions: () => void
   updateMessage: (sessionId: string, message: Message) => void
@@ -300,6 +302,31 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (!wasBusy) {
         get().setSessionStatus(sessionId, "idle")
       }
+    }
+  },
+
+  replyQuestion: async (answers) => {
+    const repoId = getRepoId()
+    const sessionId = get().activeSessionId
+    if (!repoId || !sessionId) return
+    try {
+      await api.replyQuestion(repoId, sessionId, answers)
+    } catch (error) {
+      set({
+        sendError:
+          error instanceof Error ? error.message : "Failed to reply to question",
+      })
+    }
+  },
+
+  rejectQuestion: async () => {
+    const repoId = getRepoId()
+    const sessionId = get().activeSessionId
+    if (!repoId || !sessionId) return
+    try {
+      await api.rejectQuestion(repoId, sessionId)
+    } catch {
+      // best-effort
     }
   },
 
