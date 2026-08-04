@@ -287,6 +287,21 @@ async function autoContinueSession(client: OpenCodeClient, sessionId: string): P
   }
 }
 
+function hasSubstantialProgress(messages: Message[]): boolean {
+  const last = findLastAssistant(messages)
+  if (!last) return false
+  const parts = last.parts ?? []
+  return parts.some((p) => {
+    if (p.type === "tool" || p.type === "tool_use" || p.type === "tool-invocation") {
+      return p.output !== undefined
+    }
+    if (p.type === "text") {
+      return (p.content ?? "").trim().length > 0
+    }
+    return false
+  })
+}
+
 async function repromptSession(client: OpenCodeClient, sessionId: string): Promise<void> {
   if (repromptInFlight.has(sessionId)) return
   repromptInFlight.add(sessionId)
@@ -298,14 +313,27 @@ async function repromptSession(client: OpenCodeClient, sessionId: string): Promi
     }
     await new Promise((r) => setTimeout(r, REPROMPT_SETTLE_MS))
 
+    let messages: Message[]
+    try {
+      messages = await client.getMessages(sessionId)
+    } catch {
+      messages = []
+    }
+
     const last = await getLastUserPrompt(client, sessionId)
+    if (hasSubstantialProgress(messages)) {
+      await client.prompt(sessionId, "continue", { agent: last?.agent, model: last?.model, variant: DEFAULT_VARIANT })
+      logger.info({ sessionId }, "sent continue after account switch (progress detected)")
+      return
+    }
+
     if (!last) {
       logger.warn({ sessionId }, "no user prompt found for reprompt, sending continue")
       await client.prompt(sessionId, "continue")
       return
     }
     await client.prompt(sessionId, last.content, { agent: last.agent, model: last.model, variant: last.variant })
-    logger.info({ sessionId }, "reprompted session after account switch")
+    logger.info({ sessionId }, "resent original prompt after account switch (no progress)")
   } catch (err) {
     logger.warn({ err, sessionId }, "reprompt failed")
   } finally {
