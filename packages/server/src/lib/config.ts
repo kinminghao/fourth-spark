@@ -89,3 +89,9 @@ export function isWorkerMode(): boolean {
 export function getWorkerConfig(): WorkerConfig | null {
   return workerConfigCache ?? null
 }
+
+import { hostname } from "node:os"
+
+export function getDefaultWorkerId(): string {
+  return hostname().replace(/\.local$/, "").replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 64) || "worker-1"
+}

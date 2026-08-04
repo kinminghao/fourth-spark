@@ -1398,11 +1398,11 @@ function CloudPoolSection() {
       ])
       if (cancelled) return
       const masterUrl = settings.cloud_master_url ?? ""
-      const cwid = settings.cloud_worker_id ?? ""
+      const cwid = settings.cloud_worker_id || cloudStatus?.defaultWorkerId || ""
       setUrl(masterUrl)
       setSavedUrl(masterUrl)
       setWorkerId(cwid)
-      setSavedWorkerId(cwid)
+      setSavedWorkerId(settings.cloud_worker_id ?? "")
       setStatus(cloudStatus)
     })()
     return () => { cancelled = true }
