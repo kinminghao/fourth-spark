@@ -836,6 +836,7 @@ export interface CloudStatus {
   masterUrl?: string
   workerId?: string
   connected?: boolean
+  heldAccount?: { id: string; label: string }
 }
 
 export async function getCloudStatus(): Promise<CloudStatus> {

@@ -1450,26 +1450,36 @@ function CloudPoolSection() {
         </div>
       </div>
 
-      <div className="mt-4 flex items-center gap-2 rounded-lg border border-line bg-base px-3 py-2">
-        <span
-          className={clsx(
-            "h-2 w-2 shrink-0 rounded-full",
-            isWorker ? "bg-blue-500 shadow-sm shadow-blue-500/60" : "bg-green-500 shadow-sm shadow-green-500/60",
-          )}
-        />
-        <span className="text-xs font-medium text-fg-3">{isWorker ? "Worker 模式" : "本地模式"}</span>
-        {isWorker && status?.workerId && (
-          <span className="rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-4">{status.workerId}</span>
-        )}
-        {isWorker && status?.connected != null && (
+      <div className="mt-4 space-y-2">
+        <div className="flex items-center gap-2 rounded-lg border border-line bg-base px-3 py-2">
           <span
             className={clsx(
-              "ml-auto text-[10px] font-medium",
-              status.connected ? "text-green-500" : "text-red-400",
+              "h-2 w-2 shrink-0 rounded-full",
+              isWorker ? "bg-blue-500 shadow-sm shadow-blue-500/60" : "bg-green-500 shadow-sm shadow-green-500/60",
             )}
-          >
-            {status.connected ? "已连接" : "未连接"}
-          </span>
+          />
+          <span className="text-xs font-medium text-fg-3">{isWorker ? "Worker 模式" : "本地模式"}</span>
+          {isWorker && status?.workerId && (
+            <span className="rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-4">{status.workerId}</span>
+          )}
+          {isWorker && status?.connected != null && (
+            <span
+              className={clsx(
+                "ml-auto text-[10px] font-medium",
+                status.connected ? "text-green-500" : "text-red-400",
+              )}
+            >
+              {status.connected ? "已连接" : "未连接"}
+            </span>
+          )}
+        </div>
+        {isWorker && status?.heldAccount && (
+          <div className="flex items-center gap-2 rounded-lg border border-line bg-base px-3 py-2">
+            <User className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+            <span className="text-xs text-fg-4">当前账号</span>
+            <span className="min-w-0 truncate text-xs font-medium text-fg">{status.heldAccount.label}</span>
+            <span className="ml-auto rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">{status.heldAccount.id.slice(0, 8)}</span>
+          </div>
         )}
       </div>
 
