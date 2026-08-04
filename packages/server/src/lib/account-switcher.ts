@@ -1,10 +1,44 @@
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs"
+import { join } from "node:path"
 import { loadAccounts, saveAccounts, readAuthAnthropic, writeAuthAnthropic, withAuthLock, accountsOf, providerOf, applyToken, type StoredAccount, type AccountsFile } from "./auth-files"
 import { refreshToken, isStale as isTokenStale, RefreshRevokedError } from "./token-refresh"
 import { logger } from "../middleware/logger"
 
+const COOLDOWN_FILE = join("/tmp", "fourth-spark", "cooldown.json")
+
 const cooldown = new Map<string, number>()
 const cooldownPending = new Set<string>()
 const recoveryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function persistCooldown(): void {
+  const now = Date.now()
+  const snapshot: Record<string, number> = {}
+  for (const [id, until] of cooldown) if (until > now) snapshot[id] = until
+  try {
+    mkdirSync(join("/tmp", "fourth-spark"), { recursive: true })
+    writeFileSync(COOLDOWN_FILE, JSON.stringify(snapshot))
+  } catch {
+    // best-effort
+  }
+}
+
+function restoreCooldown(): void {
+  try {
+    const raw = readFileSync(COOLDOWN_FILE, "utf8")
+    const stored = JSON.parse(raw) as Record<string, number>
+    const now = Date.now()
+    for (const [id, until] of Object.entries(stored)) {
+      if (typeof until !== "number" || until <= now) continue
+      cooldown.set(id, until)
+      scheduleRecovery(id, until)
+    }
+    if (cooldown.size > 0) logger.info({ count: cooldown.size }, "restored cooldown state from disk")
+  } catch {
+    // no file or corrupt — start fresh
+  }
+}
+
+restoreCooldown()
 
 const RATE_LIMIT_RE = /rate limit|usage limit|limit reached|too many requests|out of (?:usage|quota)|5[- ]?hour|weekly limit|exceed/i
 
@@ -12,6 +46,18 @@ export function isUsageLimit(message?: string): boolean {
   if (!message) return false
   if (/overloaded_error/i.test(message)) return false
   return RATE_LIMIT_RE.test(message)
+}
+
+const RESET_DURATION_RE = /(\d+)\s*(?:hour|小时|h)/i
+const RESET_MINUTES_RE = /(\d+)\s*(?:minute|分钟|min)/i
+
+export function parseResetMsFromMessage(message?: string): number | undefined {
+  if (!message) return undefined
+  const hours = message.match(RESET_DURATION_RE)
+  if (hours) return Date.now() + Number(hours[1]) * 3600_000
+  const minutes = message.match(RESET_MINUTES_RE)
+  if (minutes) return Date.now() + Number(minutes[1]) * 60_000
+  return undefined
 }
 
 function scheduleRecovery(id: string, until: number): void {
@@ -32,6 +78,7 @@ export function markCooldown(id: string, untilMs?: number): void {
     cooldownPending.delete(id)
     cooldown.set(id, untilMs)
     scheduleRecovery(id, untilMs)
+    persistCooldown()
     logger.info({ id, until: new Date(untilMs).toISOString() }, "account cooldown set")
   } else {
     cooldown.delete(id)
@@ -48,6 +95,7 @@ export function clearCooldown(id: string): void {
   }
   cooldownPending.delete(id)
   if (cooldown.delete(id)) {
+    persistCooldown()
     logger.info({ id }, "account cooldown cleared")
   }
 }

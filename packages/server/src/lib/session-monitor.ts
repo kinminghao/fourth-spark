@@ -1,4 +1,4 @@
-import { autoSwitch, getActiveId, isUsageLimit, clearCooldown } from "./account-switcher"
+import { autoSwitch, getActiveId, isUsageLimit, clearCooldown, markCooldown as markCooldownWithReset, parseResetMsFromMessage } from "./account-switcher"
 import type { OpenCodeClient, SessionStatus, Message, Todo } from "./opencode"
 import { notify } from "./notify"
 import { pushNotify } from "./apns"
@@ -287,10 +287,21 @@ async function autoContinueSession(client: OpenCodeClient, sessionId: string): P
   }
 }
 
+function collectAssistantParts(messages: Message[]): NonNullable<Message["parts"]> {
+  const lastUserIdx = messages.findLastIndex((m) => m.role === "user")
+  if (lastUserIdx < 0) return []
+  const parts: NonNullable<Message["parts"]> = []
+  for (let i = lastUserIdx + 1; i < messages.length; i++) {
+    if (messages[i].role === "assistant") {
+      for (const p of messages[i].parts ?? []) parts.push(p)
+    }
+  }
+  return parts
+}
+
 function hasSubstantialProgress(messages: Message[]): boolean {
-  const last = findLastAssistant(messages)
-  if (!last) return false
-  const parts = last.parts ?? []
+  const parts = collectAssistantParts(messages)
+  if (parts.length === 0) return false
   return parts.some((p) => {
     if (p.type === "tool" || p.type === "tool_use" || p.type === "tool-invocation") {
       return p.output !== undefined
@@ -433,7 +444,9 @@ async function pollOnce(): Promise<void> {
 
         logger.info({ sessionId, repoId, message: message.slice(0, 120) }, "rate limit detected, switching account")
 
+        const resetMs = parseResetMsFromMessage(message)
         const activeId = await getActiveId()
+        if (activeId) markCooldownWithReset(activeId, resetMs)
         const result = await autoSwitch(activeId)
 
         if (result.switched) {
