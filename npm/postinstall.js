@@ -48,7 +48,7 @@ async function main() {
       `powershell -Command "Expand-Archive -Path '${tmpFile}' -DestinationPath '${pkgDir}' -Force"`,
     )
   } else {
-    execSync(`tar xzf "${tmpFile}" -C "${pkgDir}" fourth-spark`, { stdio: "pipe" })
+    execSync(`tar xzf "${tmpFile}" -C "${pkgDir}" ./fourth-spark`, { stdio: "pipe" })
     chmodSync(binaryPath, 0o755)
   }
 
