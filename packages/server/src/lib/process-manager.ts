@@ -512,4 +512,8 @@ export const processManager = {
     managed.clear()
     clearPidFile()
   },
+
+  getHeldAccountId(): string | undefined {
+    return activeLeaseKeeper?.heldAccountId()
+  },
 }
