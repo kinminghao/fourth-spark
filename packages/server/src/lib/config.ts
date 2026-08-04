@@ -37,3 +37,61 @@ export const APNS_TEAM_ID = process.env.APNS_TEAM_ID ?? ""
 export const APNS_KEY_PATH = process.env.APNS_KEY_PATH ?? ""
 export const APNS_BUNDLE_ID = process.env.APNS_BUNDLE_ID ?? "com.fourthspark.app"
 export const APNS_PRODUCTION = process.env.APNS_PRODUCTION === "true"
+
+// ---------------------------------------------------------------------------
+// Cloud Worker mode (optional — connects to a claude-accounts-pool master)
+// ---------------------------------------------------------------------------
+// Priority: DB settings > env vars > not configured (local mode).
+// Resolved once at startup and cached — mode switch requires server restart.
+
+const WORKER_ID_PATTERN = /^[A-Za-z0-9._-]{1,64}$/
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === "http:" || url.protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
+export type WorkerConfig = { masterUrl: string; workerId: string }
+
+let workerConfigCache: WorkerConfig | null | undefined
+
+/** Synchronously read env-var based worker config. DB-based config is
+ *  resolved asynchronously via initWorkerConfig() at startup. */
+function resolveWorkerConfigFromEnv(): WorkerConfig | null {
+  const url = process.env.MASTER_URL?.trim()
+  const id = process.env.WORKER_ID?.trim()
+  if (!url && !id) return null
+  if (!url || !isHttpUrl(url)) return null
+  if (!id || !WORKER_ID_PATTERN.test(id)) return null
+  return { masterUrl: url.replace(/\/+$/, ""), workerId: id }
+}
+
+/** Called once at server startup to resolve DB-based config (async).
+ *  Falls back to env vars if DB has no config. */
+export async function initWorkerConfig(getSetting: (key: string) => Promise<string | undefined>): Promise<void> {
+  const dbUrl = await getSetting("cloud_master_url")
+  const dbId = await getSetting("cloud_worker_id")
+  if (dbUrl && isHttpUrl(dbUrl) && dbId && WORKER_ID_PATTERN.test(dbId)) {
+    workerConfigCache = { masterUrl: dbUrl.replace(/\/+$/, ""), workerId: dbId }
+    return
+  }
+  workerConfigCache = resolveWorkerConfigFromEnv()
+}
+
+export function isWorkerMode(): boolean {
+  return workerConfigCache != null
+}
+
+export function getWorkerConfig(): WorkerConfig | null {
+  return workerConfigCache ?? null
+}
+
+import { hostname } from "node:os"
+
+export function getDefaultWorkerId(): string {
+  return hostname().replace(/\.local$/, "").replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 64) || "worker-1"
+}

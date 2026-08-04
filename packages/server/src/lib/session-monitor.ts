@@ -1,9 +1,10 @@
-import { autoSwitch, getActiveId, isUsageLimit, clearCooldown } from "./account-switcher"
+import { autoSwitch, getActiveId, isUsageLimit, clearCooldown, markCooldown as markCooldownWithReset, parseResetMsFromMessage } from "./account-switcher"
 import type { OpenCodeClient, SessionStatus, Message, Todo } from "./opencode"
 import { notify } from "./notify"
 import { pushNotify } from "./apns"
 import { logger } from "../middleware/logger"
-import { DEFAULT_VARIANT } from "./config"
+import { DEFAULT_VARIANT, isWorkerMode } from "./config"
+import type { LeaseStrategy } from "./lease-strategy"
 
 const POLL_INTERVAL_MS = 3_000
 const RECENT_SWITCH_GUARD_MS = 5_000
@@ -32,6 +33,7 @@ const prevStatuses = new Map<string, string>()
 let lastSwitchAt = 0
 let timer: ReturnType<typeof setInterval> | undefined
 const entries: ManagedEntry[] = []
+let leaseStrategy: LeaseStrategy | undefined
 
 const STATUS_LABELS: Record<string, string> = { idle: "完成", busy: "运行中", retry: "重试中" }
 
@@ -287,6 +289,32 @@ async function autoContinueSession(client: OpenCodeClient, sessionId: string): P
   }
 }
 
+function collectAssistantParts(messages: Message[]): NonNullable<Message["parts"]> {
+  const lastUserIdx = messages.findLastIndex((m) => m.role === "user")
+  if (lastUserIdx < 0) return []
+  const parts: NonNullable<Message["parts"]> = []
+  for (let i = lastUserIdx + 1; i < messages.length; i++) {
+    if (messages[i].role === "assistant") {
+      for (const p of messages[i].parts ?? []) parts.push(p)
+    }
+  }
+  return parts
+}
+
+function hasSubstantialProgress(messages: Message[]): boolean {
+  const parts = collectAssistantParts(messages)
+  if (parts.length === 0) return false
+  return parts.some((p) => {
+    if (p.type === "tool" || p.type === "tool_use" || p.type === "tool-invocation") {
+      return p.output !== undefined
+    }
+    if (p.type === "text") {
+      return (p.content ?? "").trim().length > 0
+    }
+    return false
+  })
+}
+
 async function repromptSession(client: OpenCodeClient, sessionId: string): Promise<void> {
   if (repromptInFlight.has(sessionId)) return
   repromptInFlight.add(sessionId)
@@ -298,14 +326,27 @@ async function repromptSession(client: OpenCodeClient, sessionId: string): Promi
     }
     await new Promise((r) => setTimeout(r, REPROMPT_SETTLE_MS))
 
+    let messages: Message[]
+    try {
+      messages = await client.getMessages(sessionId)
+    } catch {
+      messages = []
+    }
+
     const last = await getLastUserPrompt(client, sessionId)
+    if (hasSubstantialProgress(messages)) {
+      await client.prompt(sessionId, "continue", { agent: last?.agent, model: last?.model, variant: DEFAULT_VARIANT })
+      logger.info({ sessionId }, "sent continue after account switch (progress detected)")
+      return
+    }
+
     if (!last) {
       logger.warn({ sessionId }, "no user prompt found for reprompt, sending continue")
       await client.prompt(sessionId, "continue")
       return
     }
     await client.prompt(sessionId, last.content, { agent: last.agent, model: last.model, variant: last.variant })
-    logger.info({ sessionId }, "reprompted session after account switch")
+    logger.info({ sessionId }, "resent original prompt after account switch (no progress)")
   } catch (err) {
     logger.warn({ err, sessionId }, "reprompt failed")
   } finally {
@@ -338,7 +379,7 @@ async function pollOnce(): Promise<void> {
         if (!currentIds.has(sessionId) && prev !== "idle") {
           prevStatuses.set(sessionId, "idle")
           emitTransition(sessionId, prev, "idle")
-          clearCooldown(await getActiveId() ?? "")
+          if (!isWorkerMode()) clearCooldown(await getActiveId() ?? "")
 
           if (prev === "busy") {
             const shouldContinue = await detectTruncation(client, sessionId)
@@ -362,7 +403,7 @@ async function pollOnce(): Promise<void> {
         prevStatuses.set(sessionId, status.type)
 
         if (status.type === "idle") {
-          clearCooldown(await getActiveId() ?? "")
+          if (!isWorkerMode()) clearCooldown(await getActiveId() ?? "")
 
           if (prev === "busy") {
             const shouldContinue = await detectTruncation(client, sessionId)
@@ -405,17 +446,33 @@ async function pollOnce(): Promise<void> {
 
         logger.info({ sessionId, repoId, message: message.slice(0, 120) }, "rate limit detected, switching account")
 
-        const activeId = await getActiveId()
-        const result = await autoSwitch(activeId)
-
-        if (result.switched) {
-          lastSwitchAt = Date.now()
-          logger.info({ from: result.from, to: result.to, label: result.label }, "account switched successfully")
-          notify("账号切换", `已切换到「${result.label}」并自动重试`)
-          await repromptSession(client, sessionId)
+        if (isWorkerMode() && leaseStrategy) {
+          const activeId = await getActiveId()
+          const ok = await leaseStrategy.onLimit({ accountId: activeId ?? "", message })
+          if (ok) {
+            lastSwitchAt = Date.now()
+            logger.info({ sessionId }, "worker: lease switch succeeded, reprompting")
+            notify("账号切换", "已从 Master 获取新账号并自动重试")
+            await repromptSession(client, sessionId)
+          } else {
+            logger.warn({ sessionId }, "worker: lease switch failed")
+            notify("账号切换失败", "云端账号池暂无可用账号")
+          }
         } else {
-          logger.warn({ reason: result.reason, sessionId }, "account switch failed, session remains in retry")
-          notify("账号切换失败", `所有账号不可用: ${result.reason}`)
+          const resetMs = parseResetMsFromMessage(message)
+          const activeId = await getActiveId()
+          if (activeId) markCooldownWithReset(activeId, resetMs)
+          const result = await autoSwitch(activeId)
+
+          if (result.switched) {
+            lastSwitchAt = Date.now()
+            logger.info({ from: result.from, to: result.to, label: result.label }, "account switched successfully")
+            notify("账号切换", `已切换到「${result.label}」并自动重试`)
+            await repromptSession(client, sessionId)
+          } else {
+            logger.warn({ reason: result.reason, sessionId }, "account switch failed, session remains in retry")
+            notify("账号切换失败", `所有账号不可用: ${result.reason}`)
+          }
         }
       }
     }
@@ -462,5 +519,9 @@ export const sessionMonitor = {
     todoFingerprints.clear()
     userAborted.clear()
     logger.info("session monitor stopped")
+  },
+
+  setLeaseStrategy(strategy: LeaseStrategy): void {
+    leaseStrategy = strategy
   },
 }

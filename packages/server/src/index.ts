@@ -20,8 +20,9 @@ import { tagRoutes } from "./routes/tags"
 import { milestoneRoutes } from "./routes/milestones"
 import { pullRoutes } from "./routes/pulls"
 import { pushRoutes } from "./routes/push"
-import { PORT } from "./lib/config"
+import { PORT, initWorkerConfig } from "./lib/config"
 import { processManager } from "./lib/process-manager"
+import { cloudRoutes } from "./routes/cloud"
 import { seedSystemAgents } from "./lib/system-agents"
 import { runMigrations } from "./db/migrate"
 import { resolve, join, dirname } from "node:path"
@@ -43,6 +44,7 @@ app.route("/api/settings", settingsRoutes)
 app.route("/api/git-hosts", gitHostRoutes)
 app.route("/api/health", health)
 app.route("/api/usage", usageRoutes)
+app.route("/api/cloud", cloudRoutes)
 app.route("/api/push", pushRoutes)
 app.route("/api/agents-md", globalAgentsMd)
 app.route("/api/custom-agents", globalCustomAgents)
@@ -151,7 +153,18 @@ seedSystemAgents().then(() => {
   logger.warn({ err }, "failed to seed system agents — continuing")
 })
 
-processManager.startAll().then(() => {
+import { eq } from "drizzle-orm"
+import { db } from "./db/index"
+import { settings } from "./db/schema"
+
+async function getSetting(key: string): Promise<string | undefined> {
+  const rows = await db.select().from(settings).where(eq(settings.key, key))
+  return rows[0]?.value
+}
+
+initWorkerConfig(getSetting).then(() => {
+  return processManager.startAll()
+}).then(() => {
   logger.info("all repos initialized")
 }).catch((err) => {
   logger.error({ err }, "failed to initialize repos")

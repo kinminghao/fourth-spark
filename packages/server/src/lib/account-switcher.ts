@@ -1,37 +1,107 @@
-import { loadAccounts, saveAccounts, readAuthAnthropic, writeAuthAnthropic, type StoredAccount, type AccountsFile } from "./auth-files"
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs"
+import { join } from "node:path"
+import { loadAccounts, saveAccounts, readAuthAnthropic, writeAuthAnthropic, withAuthLock, accountsOf, providerOf, applyToken, type StoredAccount, type AccountsFile } from "./auth-files"
+import { refreshToken, isStale as isTokenStale, RefreshRevokedError } from "./token-refresh"
 import { logger } from "../middleware/logger"
 
-const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
-const TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
-const TOKEN_EXPIRY_BUFFER_MS = 60_000
-const NETWORK_TIMEOUT_MS = 15_000
+const COOLDOWN_FILE = join("/tmp", "fourth-spark", "cooldown.json")
 
 const cooldown = new Map<string, number>()
+const cooldownPending = new Set<string>()
+const recoveryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function persistCooldown(): void {
+  const now = Date.now()
+  const snapshot: Record<string, number> = {}
+  for (const [id, until] of cooldown) if (until > now) snapshot[id] = until
+  try {
+    mkdirSync(join("/tmp", "fourth-spark"), { recursive: true })
+    writeFileSync(COOLDOWN_FILE, JSON.stringify(snapshot))
+  } catch {
+    // best-effort
+  }
+}
+
+function restoreCooldown(): void {
+  try {
+    const raw = readFileSync(COOLDOWN_FILE, "utf8")
+    const stored = JSON.parse(raw) as Record<string, number>
+    const now = Date.now()
+    for (const [id, until] of Object.entries(stored)) {
+      if (typeof until !== "number" || until <= now) continue
+      cooldown.set(id, until)
+      scheduleRecovery(id, until)
+    }
+    if (cooldown.size > 0) logger.info({ count: cooldown.size }, "restored cooldown state from disk")
+  } catch {
+    // no file or corrupt — start fresh
+  }
+}
+
+restoreCooldown()
 
 const RATE_LIMIT_RE = /rate limit|usage limit|limit reached|too many requests|out of (?:usage|quota)|5[- ]?hour|weekly limit|exceed/i
 
 export function isUsageLimit(message?: string): boolean {
   if (!message) return false
+  if (/overloaded_error/i.test(message)) return false
   return RATE_LIMIT_RE.test(message)
+}
+
+const RESET_DURATION_RE = /(\d+)\s*(?:hour|小时|h)/i
+const RESET_MINUTES_RE = /(\d+)\s*(?:minute|分钟|min)/i
+
+export function parseResetMsFromMessage(message?: string): number | undefined {
+  if (!message) return undefined
+  const hours = message.match(RESET_DURATION_RE)
+  if (hours) return Date.now() + Number(hours[1]) * 3600_000
+  const minutes = message.match(RESET_MINUTES_RE)
+  if (minutes) return Date.now() + Number(minutes[1]) * 60_000
+  return undefined
+}
+
+function scheduleRecovery(id: string, until: number): void {
+  const existing = recoveryTimers.get(id)
+  if (existing) clearTimeout(existing)
+  const timer = setTimeout(() => {
+    recoveryTimers.delete(id)
+    cooldown.delete(id)
+    cooldownPending.delete(id)
+    logger.info({ id }, "account cooldown expired, rejoining selection")
+  }, Math.max(0, until - Date.now()))
+  timer.unref?.()
+  recoveryTimers.set(id, timer)
 }
 
 export function markCooldown(id: string, untilMs?: number): void {
   if (typeof untilMs === "number" && Number.isFinite(untilMs)) {
+    cooldownPending.delete(id)
     cooldown.set(id, untilMs)
+    scheduleRecovery(id, untilMs)
+    persistCooldown()
     logger.info({ id, until: new Date(untilMs).toISOString() }, "account cooldown set")
   } else {
-    cooldown.set(id, Date.now() + 30 * 60_000)
-    logger.info({ id }, "account cooldown set (default 30min)")
+    cooldown.delete(id)
+    cooldownPending.add(id)
+    logger.info({ id }, "account cooldown set (unknown deadline)")
   }
 }
 
 export function clearCooldown(id: string): void {
+  const timer = recoveryTimers.get(id)
+  if (timer) {
+    clearTimeout(timer)
+    recoveryTimers.delete(id)
+  }
+  cooldownPending.delete(id)
   if (cooldown.delete(id)) {
+    persistCooldown()
     logger.info({ id }, "account cooldown cleared")
   }
 }
 
 function isCooled(id: string): boolean {
+  if (cooldownPending.has(id)) return true
   const until = cooldown.get(id)
   if (typeof until !== "number") return false
   if (until <= Date.now()) {
@@ -41,31 +111,13 @@ function isCooled(id: string): boolean {
   return true
 }
 
-function isStale(account: StoredAccount): boolean {
-  return !account.access || !account.expires || account.expires < Date.now() + TOKEN_EXPIRY_BUFFER_MS
-}
-
-async function refreshToken(refresh: string): Promise<{ access: string; refresh: string; expires: number }> {
-  const res = await fetch(TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json, text/plain, */*", "User-Agent": "axios/1.13.6" },
-    body: JSON.stringify({ grant_type: "refresh_token", refresh_token: refresh, client_id: CLIENT_ID }),
-    signal: AbortSignal.timeout(NETWORK_TIMEOUT_MS),
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => "")
-    throw new Error(`token refresh failed (${res.status}): ${body.slice(0, 200)}`)
-  }
-  const json = (await res.json()) as { access_token: string; refresh_token: string; expires_in: number }
-  return { access: json.access_token, refresh: json.refresh_token, expires: Date.now() + json.expires_in * 1000 }
-}
-
 function pickNext(file: AccountsFile, activeId?: string): StoredAccount | undefined {
-  const candidates = file.accounts.filter(
+  const pool = accountsOf(file, "anthropic")
+  const candidates = pool.filter(
     (a) => a.id !== activeId && !isCooled(a.id) && !a.excluded && !a.needsReauth,
   )
   if (candidates.length === 0) return undefined
-  const order = file.accounts.map((a) => a.id)
+  const order = pool.map((a) => a.id)
   const start = activeId ? order.indexOf(activeId) : -1
   for (let offset = 1; offset <= order.length; offset++) {
     const id = order[(start + offset + order.length) % order.length]
@@ -76,40 +128,56 @@ function pickNext(file: AccountsFile, activeId?: string): StoredAccount | undefi
 }
 
 export async function switchToAccount(targetId: string): Promise<StoredAccount> {
-  const file = await loadAccounts()
-  const index = file.accounts.findIndex((a) => a.id === targetId)
-  if (index < 0) throw new Error("account not found")
-  if (file.accounts[index].needsReauth) throw new Error("account needs reauth")
+  return withAuthLock(async () => {
+    const file = await loadAccounts()
+    const index = file.accounts.findIndex((a) => a.id === targetId)
+    if (index < 0) throw new Error("account not found")
 
-  const outAuth = await readAuthAnthropic()
-  if (file.activeId && file.activeId !== targetId && outAuth?.refresh) {
-    const outIdx = file.accounts.findIndex((a) => a.id === file.activeId)
-    if (outIdx >= 0) {
-      file.accounts[outIdx].refresh = outAuth.refresh
-      file.accounts[outIdx].access = outAuth.access
-      file.accounts[outIdx].expires = outAuth.expires
+    const provider = providerOf(file.accounts[index])
+    if (provider !== "anthropic") throw new Error("该账号与目标 provider 不一致,拒绝写入 Claude 登录态")
+    if (file.accounts[index].needsReauth) throw new Error("account needs reauth")
+
+    const outAuth = await readAuthAnthropic()
+    if (file.activeId && file.activeId !== targetId && outAuth?.refresh) {
+      const outIdx = file.accounts.findIndex((a) => a.id === file.activeId)
+      if (outIdx >= 0) {
+        applyToken(file.accounts[outIdx], { refresh: outAuth.refresh, access: outAuth.access, expires: outAuth.expires })
+      }
     }
-  }
 
-  let account = file.accounts[index]
-  if (isStale(account)) {
-    try {
-      const fresh = await refreshToken(account.refresh)
-      account.refresh = fresh.refresh
-      account.access = fresh.access
-      account.expires = fresh.expires
-      delete account.needsReauth
-    } catch (err) {
-      logger.warn({ err, id: targetId }, "failed to refresh target account token")
-      throw err
+    let account = file.accounts[index]
+    if (isTokenStale(account)) {
+      try {
+        const fresh = await refreshToken(account.refresh)
+        applyToken(account, fresh)
+      } catch (err) {
+        if (err instanceof RefreshRevokedError) {
+          const latest = await loadAccounts()
+          const rec = latest.accounts.find((a) => a.id === targetId)
+          if (rec && !rec.needsReauth && rec.refresh !== err.refresh) {
+            logger.info({ id: targetId }, "adopted foreign rotation during switch")
+            applyToken(account, { refresh: rec.refresh, access: rec.access, expires: rec.expires })
+          } else {
+            if (rec && !rec.needsReauth) {
+              rec.needsReauth = true
+              await saveAccounts(latest)
+            }
+            logger.warn({ id: targetId }, "account refresh revoked, needs reauth")
+            throw err
+          }
+        } else {
+          logger.warn({ err, id: targetId }, "failed to refresh target account token")
+          throw err
+        }
+      }
     }
-  }
 
-  file.activeId = targetId
-  await saveAccounts(file)
-  await writeAuthAnthropic({ refresh: account.refresh, access: account.access, expires: account.expires })
-  logger.info({ id: targetId, label: account.label }, "switched active account")
-  return account
+    file.activeId = targetId
+    await saveAccounts(file)
+    await writeAuthAnthropic({ refresh: account.refresh, access: account.access, expires: account.expires })
+    logger.info({ id: targetId, label: account.label }, "switched active account")
+    return account
+  })
 }
 
 export type SwitchResult = { switched: true; from?: string; to: string; label: string } | { switched: false; reason: string }
@@ -118,7 +186,7 @@ export async function autoSwitch(currentActiveId?: string): Promise<SwitchResult
   if (currentActiveId) markCooldown(currentActiveId)
 
   const file = await loadAccounts()
-  if (file.accounts.length <= 1) return { switched: false, reason: "only one account" }
+  if (accountsOf(file, "anthropic").length <= 1) return { switched: false, reason: "only one account" }
 
   const next = pickNext(file, currentActiveId)
   if (!next) return { switched: false, reason: "no available accounts" }
