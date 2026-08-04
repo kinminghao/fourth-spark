@@ -18,15 +18,14 @@ function formatElapsed(ts: number): string {
   return `${Math.floor(m / 60)} 小时前`
 }
 
-type Tab = "usage" | "git" | "models" | "custom-agents" | "agents" | "cloud" | "server"
+type Tab = "usage" | "git" | "models" | "custom-agents" | "agents" | "server"
 
 const BASE_TABS: { id: Tab; label: string; icon: typeof Zap }[] = [
-  { id: "usage", label: "订阅额度", icon: Zap },
+  { id: "usage", label: "Claude 账号", icon: Zap },
   { id: "git", label: "Git 源站", icon: GitBranch },
   { id: "models", label: "模型", icon: Cpu },
   { id: "custom-agents", label: "Custom Agents", icon: Bot },
   { id: "agents", label: "AGENTS.md", icon: FileText },
-  { id: "cloud", label: "账号池", icon: Cloud },
 ]
 
 const SERVER_TAB: { id: Tab; label: string; icon: typeof Zap } = {
@@ -1379,6 +1378,51 @@ function ServerSection() {
   )
 }
 
+type AccountMode = "local" | "cloud"
+
+function AccountSection() {
+  const [mode, setMode] = useState<AccountMode>("local")
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    api.getCloudStatus()
+      .then((s) => setMode(s.mode === "worker" ? "cloud" : "local"))
+      .catch(() => {})
+      .finally(() => setLoaded(true))
+  }, [])
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 rounded-lg border border-line bg-base p-1">
+        <button
+          type="button"
+          onClick={() => setMode("local")}
+          className={clsx(
+            "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+            mode === "local" ? "bg-surface text-fg shadow-sm" : "text-fg-4 hover:text-fg-3",
+          )}
+        >
+          <Zap className="h-3.5 w-3.5" />
+          本地模式
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("cloud")}
+          className={clsx(
+            "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+            mode === "cloud" ? "bg-surface text-fg shadow-sm" : "text-fg-4 hover:text-fg-3",
+          )}
+        >
+          <Cloud className="h-3.5 w-3.5" />
+          账号池
+        </button>
+      </div>
+      {loaded && mode === "local" && <UsageSection />}
+      {loaded && mode === "cloud" && <CloudPoolSection />}
+    </div>
+  )
+}
+
 function CloudPoolSection() {
   const [url, setUrl] = useState("")
   const [workerId, setWorkerId] = useState("")
@@ -1576,12 +1620,11 @@ export function SettingsPage() {
         </div>
 
         <div className="mt-4">
-          {tab === "usage" && <UsageSection />}
+          {tab === "usage" && <AccountSection />}
           {tab === "git" && <GitHostSection />}
           {tab === "models" && <ModelManagementSection />}
           {tab === "custom-agents" && <CustomAgentsSection />}
           {tab === "agents" && <AgentsMdSection />}
-          {tab === "cloud" && <CloudPoolSection />}
           {tab === "server" && <ServerSection />}
         </div>
       </div>
