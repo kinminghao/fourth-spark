@@ -231,11 +231,11 @@ export function createOpenCodeClient(baseUrl: string, directory: string): OpenCo
     },
 
     replyQuestion(requestID, answers) {
-      return send("POST", "/question/reply", { directory }, { requestID, answers })
+      return send("POST", `/question/${requestID}/reply`, { directory }, { answers })
     },
 
     rejectQuestion(requestID) {
-      return send("POST", "/question/reject", { directory }, { requestID })
+      return send("POST", `/question/${requestID}/reject`, { directory })
     },
 
     listAgents() {
