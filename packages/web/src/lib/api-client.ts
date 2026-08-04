@@ -843,11 +843,13 @@ export async function getCloudStatus(): Promise<CloudStatus> {
 }
 
 export async function testMasterConnection(url: string): Promise<boolean> {
-  const target = url.replace(/\/+$/, "")
-  if (!target) return false
   try {
-    const res = await fetch(`${target}/v1/health`, { signal: AbortSignal.timeout(5_000) })
-    return res.ok
+    const res = await apiFetch<{ connected: boolean }>("/api/cloud/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    })
+    return res.connected
   } catch {
     return false
   }
