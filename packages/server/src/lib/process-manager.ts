@@ -8,7 +8,10 @@ import { syncSessionsList, syncMessagesList } from "../db/sync"
 import { createOpenCodeClient, type OpenCodeClient } from "./opencode"
 import { sessionMonitor } from "./session-monitor"
 import { logger } from "../middleware/logger"
-import { PORT } from "./config"
+import { PORT, isWorkerMode, getWorkerConfig } from "./config"
+import { createLeaseClient } from "./lease-client"
+import { createLeaseKeeper, type LeaseKeeper } from "./lease-keeper"
+import { createLeaseStrategy } from "./lease-strategy"
 
 // ---------------------------------------------------------------------------
 // Port allocation
@@ -271,6 +274,7 @@ interface ManagedRepo {
 // ---------------------------------------------------------------------------
 
 const managed = new Map<string, ManagedRepo>()
+let activeLeaseKeeper: LeaseKeeper | undefined
 
 /** In-flight start() promises — prevents concurrent spawn for the same repoId. */
 const startingLocks = new Map<string, Promise<OpenCodeClient>>()
@@ -450,8 +454,23 @@ export const processManager = {
     return managed.has(repoId)
   },
 
-  /** Start all repos from the database. Called once on server boot. */
   async startAll(): Promise<void> {
+    if (isWorkerMode()) {
+      const cfg = getWorkerConfig()!
+      logger.info({ masterUrl: cfg.masterUrl, workerId: cfg.workerId }, "cloud worker mode: initializing")
+      const client = createLeaseClient(cfg.masterUrl, cfg.workerId)
+      const healthy = await client.healthCheck()
+      if (healthy) logger.info("cloud worker: master health check passed")
+      else logger.warn("cloud worker: master health check failed, lease-keeper will retry")
+
+      const keeper = createLeaseKeeper(client)
+      activeLeaseKeeper = keeper
+      await keeper.startup().catch((err) => logger.warn({ err }, "cloud worker: startup lease failed"))
+
+      const strategy = createLeaseStrategy(client)
+      sessionMonitor.setLeaseStrategy(strategy)
+    }
+
     const adopted = await adoptOrphans()
     const allRepos = await db.select().from(repos)
     logger.info({ count: allRepos.length, adopted: adopted.size }, "starting opencode for all repos")
@@ -466,9 +485,12 @@ export const processManager = {
     sessionMonitor.start()
   },
 
-  /** Stop all managed processes. Called on server shutdown. */
   async stopAll(): Promise<void> {
     sessionMonitor.stop()
+    if (activeLeaseKeeper) {
+      activeLeaseKeeper.dispose()
+      activeLeaseKeeper = undefined
+    }
     const ids = [...managed.keys()]
     for (const id of ids) {
       await this.stop(id)

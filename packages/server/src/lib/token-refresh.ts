@@ -1,4 +1,5 @@
 import { logger } from "../middleware/logger"
+import { isWorkerMode } from "./config"
 
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 const TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
@@ -71,6 +72,7 @@ async function doRefreshToken(refresh: string): Promise<RefreshResult> {
 }
 
 export function refreshToken(refresh: string): Promise<RefreshResult> {
+  if (isWorkerMode()) throw new Error("worker mode must not refresh tokens locally — lease from master instead")
   const existing = inflightRefresh.get(refresh)
   if (existing) return existing
   const promise = doRefreshToken(refresh).finally(() => {

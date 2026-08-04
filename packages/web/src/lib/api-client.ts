@@ -828,6 +828,32 @@ export async function deleteSetting(key: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Cloud Worker API — /api/cloud
+// ---------------------------------------------------------------------------
+
+export interface CloudStatus {
+  mode: string
+  masterUrl?: string
+  workerId?: string
+  connected?: boolean
+}
+
+export async function getCloudStatus(): Promise<CloudStatus> {
+  return apiFetch<CloudStatus>("/api/cloud/status")
+}
+
+export async function testMasterConnection(url: string): Promise<boolean> {
+  const target = url.replace(/\/+$/, "")
+  if (!target) return false
+  try {
+    const res = await fetch(`${target}/v1/health`, { signal: AbortSignal.timeout(5_000) })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Git Host API — /api/git-hosts
 // ---------------------------------------------------------------------------
 

@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir, rename } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join, dirname } from "node:path"
 import { withFileLock } from "./lockfile"
+import { SENTINEL_REFRESH } from "./lease-constants"
 
 export type ProviderId = "anthropic" | "openai"
 
@@ -36,7 +37,7 @@ export function accountsOf(file: AccountsFile, provider: ProviderId): StoredAcco
 }
 
 export function applyToken(record: StoredAccount, token: { refresh: string; access?: string; expires?: number }): StoredAccount {
-  if (token.refresh !== record.refresh) record.refreshMintedAt = Date.now()
+  if (token.refresh !== SENTINEL_REFRESH && token.refresh !== record.refresh) record.refreshMintedAt = Date.now()
   record.refresh = token.refresh
   record.access = token.access
   record.expires = token.expires
@@ -107,7 +108,20 @@ export async function readAuthAnthropic(): Promise<{ access?: string; refresh?: 
   return undefined
 }
 
-export async function writeAuthAnthropic(token: { refresh: string; access?: string; expires?: number }): Promise<void> {
+export type TokenWrite =
+  | { kind: "full"; refresh: string; access?: string; expires?: number }
+  | { kind: "lease"; access: string; expires: number }
+
+function resolveRefresh(write: TokenWrite | { refresh: string; access?: string; expires?: number }): { refresh: string; access?: string; expires?: number } {
+  if (!("kind" in write)) return write
+  switch (write.kind) {
+    case "full": return { refresh: write.refresh, access: write.access, expires: write.expires }
+    case "lease": return { refresh: SENTINEL_REFRESH, access: write.access, expires: write.expires }
+  }
+}
+
+export async function writeAuthAnthropic(write: TokenWrite | { refresh: string; access?: string; expires?: number }): Promise<void> {
+  const token = resolveRefresh(write)
   const path = await resolveAuthJsonPath()
   let auth: AuthJson
   try {
@@ -121,6 +135,15 @@ export async function writeAuthAnthropic(token: { refresh: string; access?: stri
   }
   auth["anthropic"] = { type: "oauth", access: token.access ?? "", refresh: token.refresh, expires: token.expires ?? 0 }
   await atomicWrite(path, auth)
+}
+
+export async function recordLeasedActiveId(id: string): Promise<void> {
+  await withAuthLock(async () => {
+    const file = await loadAccounts()
+    if (file.activeId === id) return
+    file.activeId = id
+    await saveAccounts(file)
+  })
 }
 
 // ---------------------------------------------------------------------------
