@@ -1441,6 +1441,7 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
   const [accounts, setAccounts] = useState<api.AccountUsage[]>([])
   const [loading, setLoading] = useState(true)
   const [switching, setSwitching] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     api.fetchUsage()
@@ -1451,11 +1452,14 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
 
   const handleSwitch = async (id: string) => {
     setSwitching(id)
+    setError(null)
     try {
       await api.switchUsageAccount(id)
       onSwitched()
       onClose()
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(msg || "切换失败")
       setSwitching(null)
     }
   }
@@ -1528,6 +1532,13 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
                 </div>
               </button>
             ))}
+                     </div>
+        )}
+
+        {error && (
+          <div className="mt-3 flex items-center gap-1.5 rounded-md border border-red-400/30 bg-red-400/5 px-3 py-2">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-400" />
+            <span className="text-xs text-red-400">{error}</span>
           </div>
         )}
       </div>
@@ -1565,9 +1576,10 @@ function CloudPoolSection({ onStatusChange }: { onStatusChange?: (s: api.CloudSt
     return () => { cancelled = true }
   }, [])
 
-  const dirty = url !== savedUrl || workerId !== savedWorkerId
   const mode = status?.mode ?? (savedUrl ? "worker" : "local")
   const isWorker = mode === "worker"
+  const needsReload = !isWorker && !!url.trim() && !!workerId.trim()
+  const dirty = url !== savedUrl || workerId !== savedWorkerId || needsReload
 
   const testConnection = async () => {
     const target = url.replace(/\/+$/, "")
