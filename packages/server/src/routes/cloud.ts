@@ -50,6 +50,25 @@ cloudRoutes.get("/status", async (c) => {
   })
 })
 
+cloudRoutes.post("/reload", async (c) => {
+  await processManager.reloadCloudPool()
+  const cfg = getWorkerConfig()
+  if (!cfg) return c.json({ mode: "local", defaultWorkerId: getDefaultWorkerId() })
+
+  const connected = await probeMaster(cfg.masterUrl)
+  const heldId = processManager.getHeldAccountId()
+  const heldAccount = heldId ? await resolveHeldAccount(cfg.masterUrl, heldId) : undefined
+
+  return c.json({
+    mode: "worker",
+    masterUrl: cfg.masterUrl,
+    workerId: cfg.workerId,
+    connected,
+    heldAccount,
+    defaultWorkerId: getDefaultWorkerId(),
+  })
+})
+
 cloudRoutes.post("/test", async (c) => {
   const body = await c.req.json<{ url?: string }>().catch(() => null)
   if (!body?.url || typeof body.url !== "string") return c.json({ error: "url is required" }, 400)

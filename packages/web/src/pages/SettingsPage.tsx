@@ -1477,7 +1477,7 @@ function CloudPoolSection() {
       setSavedWorkerId(trimmedId)
       setUrl(normalized)
       setWorkerId(trimmedId)
-      const fresh = await api.getCloudStatus().catch(() => null)
+      const fresh = await api.reloadCloudPool().catch(() => null)
       if (fresh) setStatus(fresh)
     } finally {
       setSaving(false)

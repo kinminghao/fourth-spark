@@ -844,6 +844,10 @@ export async function getCloudStatus(): Promise<CloudStatus> {
   return apiFetch<CloudStatus>("/api/cloud/status")
 }
 
+export async function reloadCloudPool(): Promise<CloudStatus> {
+  return apiFetch<CloudStatus>("/api/cloud/reload", { method: "POST" })
+}
+
 export async function testMasterConnection(url: string): Promise<boolean> {
   try {
     const res = await apiFetch<{ connected: boolean }>("/api/cloud/test", {
