@@ -22,7 +22,7 @@ usageRoutes.post("/switch", async (c) => {
     const cfg = getWorkerConfig()
     if (!cfg) return c.json({ error: "worker config not available" }, 500)
     const client = createLeaseClient(cfg.masterUrl, cfg.workerId)
-    const outcome = await client.lease({ reason: "prelease", preferredAccountIdPrefix: body.accountId, attempts: 1 })
+    const outcome = await client.lease({ reason: "prelease", preferredAccountIdPrefix: body.accountId, attempts: 3 })
     if (!outcome.ok) {
       const detail = outcome.failure.kind === "refused" ? outcome.failure.refused : outcome.failure.kind
       return c.json({ error: `master refused: ${detail}` }, 400)
