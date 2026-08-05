@@ -517,6 +517,10 @@ export const processManager = {
     return activeLeaseKeeper?.heldAccountId()
   },
 
+  adoptHeldAccount(accountId: string): void {
+    activeLeaseKeeper?.adoptAccount(accountId)
+  },
+
   async reloadCloudPool(): Promise<void> {
     if (activeLeaseKeeper) {
       activeLeaseKeeper.dispose()

@@ -4,6 +4,7 @@ import { switchToAccount } from "../lib/account-switcher"
 import { isWorkerMode, getWorkerConfig } from "../lib/config"
 import { createLeaseClient } from "../lib/lease-client"
 import { writeLease } from "../lib/lease-writer"
+import { processManager } from "../lib/process-manager"
 
 export const usageRoutes = new Hono()
 
@@ -31,6 +32,7 @@ usageRoutes.post("/switch", async (c) => {
       return c.json({ error: "master returned stale lease" }, 502)
     }
     await writeLease({ access: outcome.lease.access, expires: outcome.lease.expiresAt, accountId: outcome.lease.accountId })
+    processManager.adoptHeldAccount(outcome.lease.accountId)
     const result = await collectUsage()
     return c.json(result)
   }
