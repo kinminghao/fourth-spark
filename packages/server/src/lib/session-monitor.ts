@@ -521,7 +521,7 @@ export const sessionMonitor = {
     logger.info("session monitor stopped")
   },
 
-  setLeaseStrategy(strategy: LeaseStrategy): void {
+  setLeaseStrategy(strategy: LeaseStrategy | undefined): void {
     leaseStrategy = strategy
   },
 }

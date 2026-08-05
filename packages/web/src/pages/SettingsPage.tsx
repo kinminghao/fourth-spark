@@ -1477,6 +1477,8 @@ function CloudPoolSection() {
       setSavedWorkerId(trimmedId)
       setUrl(normalized)
       setWorkerId(trimmedId)
+      const fresh = await api.getCloudStatus().catch(() => null)
+      if (fresh) setStatus(fresh)
     } finally {
       setSaving(false)
     }
@@ -1584,7 +1586,7 @@ function CloudPoolSection() {
       </div>
 
       <p className="mt-4 text-[11px] text-fg-5">
-        保存后需重启 Server 生效。清空 Master URL 可切回本地模式。
+        清空 Master URL 可切回本地模式。
       </p>
     </section>
   )

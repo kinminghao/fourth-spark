@@ -3,12 +3,12 @@ import { eq } from "drizzle-orm"
 import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync, openSync } from "node:fs"
 import { join } from "node:path"
 import { db } from "../db/index"
-import { repos } from "../db/schema"
+import { repos, settings } from "../db/schema"
 import { syncSessionsList, syncMessagesList } from "../db/sync"
 import { createOpenCodeClient, type OpenCodeClient } from "./opencode"
 import { sessionMonitor } from "./session-monitor"
 import { logger } from "../middleware/logger"
-import { PORT, isWorkerMode, getWorkerConfig } from "./config"
+import { PORT, isWorkerMode, getWorkerConfig, reloadWorkerConfig } from "./config"
 import { createLeaseClient } from "./lease-client"
 import { createLeaseKeeper, type LeaseKeeper } from "./lease-keeper"
 import { createLeaseStrategy } from "./lease-strategy"
@@ -515,5 +515,40 @@ export const processManager = {
 
   getHeldAccountId(): string | undefined {
     return activeLeaseKeeper?.heldAccountId()
+  },
+
+  async reloadCloudPool(): Promise<void> {
+    if (activeLeaseKeeper) {
+      activeLeaseKeeper.dispose()
+      activeLeaseKeeper = undefined
+      logger.info("cloud pool: disposed previous lease-keeper")
+    }
+    sessionMonitor.setLeaseStrategy(undefined)
+
+    const getSetting = async (key: string) => {
+      const rows = await db.select().from(settings).where(eq(settings.key, key))
+      return rows[0]?.value
+    }
+    await reloadWorkerConfig(getSetting)
+
+    if (!isWorkerMode()) {
+      logger.info("cloud pool: switched to local mode")
+      return
+    }
+
+    const cfg = getWorkerConfig()!
+    logger.info({ masterUrl: cfg.masterUrl, workerId: cfg.workerId }, "cloud pool: reconnecting")
+    const client = createLeaseClient(cfg.masterUrl, cfg.workerId)
+    const healthy = await client.healthCheck()
+    if (healthy) logger.info("cloud pool: master health check passed")
+    else logger.warn("cloud pool: master health check failed, lease-keeper will retry")
+
+    const keeper = createLeaseKeeper(client)
+    activeLeaseKeeper = keeper
+    await keeper.startup().catch((err) => logger.warn({ err }, "cloud pool: startup lease failed"))
+
+    const strategy = createLeaseStrategy(client)
+    sessionMonitor.setLeaseStrategy(strategy)
+    logger.info("cloud pool: reload complete")
   },
 }
