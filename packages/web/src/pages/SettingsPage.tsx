@@ -1382,13 +1382,24 @@ type AccountMode = "local" | "cloud"
 
 function AccountSection() {
   const [mode, setMode] = useState<AccountMode>("local")
+  const [isWorker, setIsWorker] = useState(false)
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     api.getCloudStatus()
-      .then((s) => setMode(s.mode === "worker" ? "cloud" : "local"))
+      .then((s) => {
+        const worker = s.mode === "worker"
+        setIsWorker(worker)
+        setMode(worker ? "cloud" : "local")
+      })
       .catch(() => {})
       .finally(() => setLoaded(true))
+  }, [])
+
+  const handleStatusChange = useCallback((s: api.CloudStatus) => {
+    const worker = s.mode === "worker"
+    setIsWorker(worker)
+    if (worker) setMode("cloud")
   }, [])
 
   return (
@@ -1396,11 +1407,14 @@ function AccountSection() {
       <div className="flex gap-1 rounded-lg border border-line bg-base p-1">
         <button
           type="button"
-          onClick={() => setMode("local")}
+          onClick={() => { if (!isWorker) setMode("local") }}
+          disabled={isWorker}
           className={clsx(
             "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
             mode === "local" ? "bg-surface text-fg shadow-sm" : "text-fg-4 hover:text-fg-3",
+            isWorker && mode !== "local" && "cursor-not-allowed opacity-40",
           )}
+          title={isWorker ? "需先断开账号池连接" : undefined}
         >
           <Zap className="h-3.5 w-3.5" />
           本地模式
@@ -1418,12 +1432,110 @@ function AccountSection() {
         </button>
       </div>
       {loaded && mode === "local" && <UsageSection />}
-      {loaded && mode === "cloud" && <CloudPoolSection />}
+      {loaded && mode === "cloud" && <CloudPoolSection onStatusChange={handleStatusChange} />}
     </div>
   )
 }
 
-function CloudPoolSection() {
+function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSwitched: () => void }) {
+  const [accounts, setAccounts] = useState<api.AccountUsage[]>([])
+  const [loading, setLoading] = useState(true)
+  const [switching, setSwitching] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.fetchUsage()
+      .then((r) => setAccounts(r.accounts))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleSwitch = async (id: string) => {
+    setSwitching(id)
+    try {
+      await api.switchUsageAccount(id)
+      onSwitched()
+      onClose()
+    } catch {
+      setSwitching(null)
+    }
+  }
+
+  const fiveHour = (a: api.AccountUsage) => a.usage?.five_hour
+  const sevenDay = (a: api.AccountUsage) => a.usage?.seven_day
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-xl border border-line bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-fg">切换账号</h2>
+          <button type="button" onClick={onClose} className="rounded-md p-1 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="h-5 w-5 fs-spin text-fg-4" />
+          </div>
+        ) : accounts.length === 0 ? (
+          <p className="py-10 text-center text-xs text-fg-4">暂无可用账号</p>
+        ) : (
+          <div className="mt-3 space-y-1.5">
+            {accounts.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                disabled={switching !== null}
+                onClick={() => { if (!a.active) void handleSwitch(a.id) }}
+                className={clsx(
+                  "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                  a.active
+                    ? "border-blue-500/40 bg-blue-500/5"
+                    : "border-line hover:bg-elevated",
+                  switching === a.id && "opacity-60",
+                )}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-xs font-medium text-fg">{a.label}</span>
+                    {a.active && <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-blue-500">当前</span>}
+                    {switching === a.id && <Loader2 className="h-3 w-3 fs-spin text-blue-500" />}
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-4 text-right">
+                  <div className="w-20">
+                    <div className="text-[10px] text-fg-5">5 小时</div>
+                    {fiveHour(a) ? (
+                      <>
+                        <div className={clsx("text-xs font-medium", (fiveHour(a)!.utilization) > 80 ? "text-red-400" : "text-fg-3")}>{Math.round(fiveHour(a)!.utilization)}%</div>
+                        {fiveHour(a)!.resets_at && <div className="text-[9px] text-fg-5">{formatReset(fiveHour(a)!.resets_at)}</div>}
+                      </>
+                    ) : (
+                      <div className="text-[10px] text-fg-5">—</div>
+                    )}
+                  </div>
+                  <div className="w-20">
+                    <div className="text-[10px] text-fg-5">7 天</div>
+                    {sevenDay(a) ? (
+                      <>
+                        <div className={clsx("text-xs font-medium", (sevenDay(a)!.utilization) > 80 ? "text-red-400" : "text-fg-3")}>{Math.round(sevenDay(a)!.utilization)}%</div>
+                        {sevenDay(a)!.resets_at && <div className="text-[9px] text-fg-5">{formatReset(sevenDay(a)!.resets_at)}</div>}
+                      </>
+                    ) : (
+                      <div className="text-[10px] text-fg-5">—</div>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CloudPoolSection({ onStatusChange }: { onStatusChange?: (s: api.CloudStatus) => void }) {
   const [url, setUrl] = useState("")
   const [workerId, setWorkerId] = useState("")
   const [savedUrl, setSavedUrl] = useState("")
@@ -1432,6 +1544,7 @@ function CloudPoolSection() {
   const [result, setResult] = useState<"ok" | "fail" | null>(null)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<api.CloudStatus | null>(null)
+  const [showSwitchModal, setShowSwitchModal] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -1478,7 +1591,10 @@ function CloudPoolSection() {
       setUrl(normalized)
       setWorkerId(trimmedId)
       const fresh = await api.reloadCloudPool().catch(() => null)
-      if (fresh) setStatus(fresh)
+      if (fresh) {
+        setStatus(fresh)
+        onStatusChange?.(fresh)
+      }
     } finally {
       setSaving(false)
     }
@@ -1524,7 +1640,13 @@ function CloudPoolSection() {
             <User className="h-3.5 w-3.5 shrink-0 text-blue-500" />
             <span className="text-xs text-fg-4">当前账号</span>
             <span className="min-w-0 truncate text-xs font-medium text-fg">{status.heldAccount.label}</span>
-            <span className="ml-auto rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">{status.heldAccount.id.slice(0, 8)}</span>
+            <button
+              type="button"
+              onClick={() => setShowSwitchModal(true)}
+              className="ml-auto rounded-md border border-line px-2 py-0.5 text-[10px] font-medium text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3"
+            >
+              切换账号
+            </button>
           </div>
         )}
       </div>
@@ -1588,6 +1710,19 @@ function CloudPoolSection() {
       <p className="mt-4 text-[11px] text-fg-5">
         清空 Master URL 可切回本地模式。
       </p>
+
+      {showSwitchModal && (
+        <AccountSwitchModal
+          onClose={() => setShowSwitchModal(false)}
+          onSwitched={async () => {
+            const fresh = await api.getCloudStatus().catch(() => null)
+            if (fresh) {
+              setStatus(fresh)
+              onStatusChange?.(fresh)
+            }
+          }}
+        />
+      )}
     </section>
   )
 }
