@@ -33,6 +33,7 @@ export interface AccountUsage {
   usage?: UsageResponse
   error?: string
   needsReauth?: boolean
+  holders?: string[]
 }
 
 export interface UsageResult {
@@ -132,6 +133,7 @@ function snapshotToUsageResult(view: UsageSnapshotView, activeId?: string): Usag
       active: activeId ? a.idPrefix === activeId.slice(0, a.idPrefix.length) : false,
       excluded: a.excluded,
       needsReauth: a.needsReauth || undefined,
+      holders: a.holders,
       usage,
       error: a.coolingDown ? "额度冷却中" : undefined,
     }
