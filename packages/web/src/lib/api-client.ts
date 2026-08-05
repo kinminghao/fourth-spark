@@ -926,6 +926,7 @@ export interface AccountUsage {
   usage?: UsageResponse
   error?: string
   needsReauth?: boolean
+  holders?: string[]
 }
 
 export interface UsageResult {

@@ -15,6 +15,7 @@ export type UsageAccountView = {
   coolingDown: boolean
   excluded: boolean
   needsReauth: boolean
+  holders?: string[]
   expiresAt?: number
 }
 
@@ -65,9 +66,13 @@ function parseAccount(raw: unknown): UsageAccountView | undefined {
     windows.push(parsed)
   }
   if (r.expiresAt !== undefined && (typeof r.expiresAt !== "number" || !Number.isFinite(r.expiresAt))) return undefined
+  const holders = Array.isArray(r.holders) && r.holders.every((h: unknown) => typeof h === "string")
+    ? (r.holders as string[])
+    : undefined
   return {
     idPrefix: r.idPrefix, label: r.label, windows, hasUsage: r.hasUsage,
     coolingDown: r.coolingDown, excluded: r.excluded, needsReauth: r.needsReauth,
+    ...(holders && holders.length > 0 ? { holders } : {}),
     ...(typeof r.expiresAt === "number" ? { expiresAt: r.expiresAt } : {}),
   }
 }
