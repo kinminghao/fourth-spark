@@ -2,6 +2,10 @@ import { Hono } from "hono"
 import { eq } from "drizzle-orm"
 import { db } from "../db/index"
 import { settings } from "../db/schema"
+import { processManager } from "../lib/process-manager"
+import { logger } from "../middleware/logger"
+
+const CLOUD_KEYS = new Set(["cloud_master_url", "cloud_worker_id"])
 
 export const settingsRoutes = new Hono()
 
@@ -21,6 +25,13 @@ settingsRoutes.put("/:key", async (c) => {
   const now = Date.now()
   await db.insert(settings).values({ key, value: body.value, updatedAt: now })
     .onConflictDoUpdate({ target: settings.key, set: { value: body.value, updatedAt: now } })
+
+  if (CLOUD_KEYS.has(key)) {
+    processManager.reloadCloudPool().catch((err) =>
+      logger.error({ err }, "cloud pool reload failed after settings update"),
+    )
+  }
+
   return c.json({ ok: true })
 })
 

@@ -42,7 +42,7 @@ export const APNS_PRODUCTION = process.env.APNS_PRODUCTION === "true"
 // Cloud Worker mode (optional — connects to a claude-accounts-pool master)
 // ---------------------------------------------------------------------------
 // Priority: DB settings > env vars > not configured (local mode).
-// Resolved once at startup and cached — mode switch requires server restart.
+// Resolved at startup and cached; reloadable at runtime via reloadWorkerConfig().
 
 const WORKER_ID_PATTERN = /^[A-Za-z0-9._-]{1,64}$/
 
@@ -88,6 +88,17 @@ export function isWorkerMode(): boolean {
 
 export function getWorkerConfig(): WorkerConfig | null {
   return workerConfigCache ?? null
+}
+
+/** Re-read cloud worker config from DB and update the in-memory cache. */
+export async function reloadWorkerConfig(getSetting: (key: string) => Promise<string | undefined>): Promise<void> {
+  const dbUrl = await getSetting("cloud_master_url")
+  const dbId = await getSetting("cloud_worker_id")
+  if (dbUrl && isHttpUrl(dbUrl) && dbId && WORKER_ID_PATTERN.test(dbId)) {
+    workerConfigCache = { masterUrl: dbUrl.replace(/\/+$/, ""), workerId: dbId }
+    return
+  }
+  workerConfigCache = resolveWorkerConfigFromEnv()
 }
 
 import { hostname } from "node:os"
