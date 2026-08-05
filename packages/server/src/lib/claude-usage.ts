@@ -203,7 +203,7 @@ export function retagActiveInCache(newActiveId: string): UsageResult | null {
     activeId: newActiveId,
     accounts: usageCache.result.accounts.map((a) => ({
       ...a,
-      active: a.id === newActiveId,
+      active: a.id === newActiveId || newActiveId.startsWith(a.id),
     })),
   }
   usageCache = { result: updated, fetchedAt: usageCache.fetchedAt }

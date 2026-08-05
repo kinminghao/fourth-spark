@@ -33,7 +33,7 @@ usageRoutes.post("/switch", async (c) => {
     }
     await writeLease({ access: outcome.lease.access, expires: outcome.lease.expiresAt, accountId: outcome.lease.accountId })
     processManager.adoptHeldAccount(outcome.lease.accountId)
-    const result = await collectUsage()
+    const result = retagActiveInCache(outcome.lease.accountId) ?? await collectUsage()
     return c.json(result)
   }
 
