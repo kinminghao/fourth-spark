@@ -22,6 +22,7 @@ import { pullRoutes } from "./routes/pulls"
 import { pushRoutes } from "./routes/push"
 import { PORT, initWorkerConfig } from "./lib/config"
 import { processManager } from "./lib/process-manager"
+import { initRegistry } from "./core/registry"
 import { cloudRoutes } from "./routes/cloud"
 import { seedSystemAgents } from "./lib/system-agents"
 import { runMigrations } from "./db/migrate"
@@ -120,6 +121,7 @@ if (existsSync(join(STATIC_DIR, "index.html"))) {
 // ---------------------------------------------------------------------------
 // Startup — sync database schema, then spawn opencode for all repos
 // ---------------------------------------------------------------------------
+const registry = initRegistry()
 logger.info({ port: PORT }, "fourth-spark server starting")
 
 // Auto-detect dev vs prod and sync schema accordingly.
