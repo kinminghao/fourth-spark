@@ -1,10 +1,17 @@
 import { autoSwitch, getActiveId, isUsageLimit, clearCooldown, markCooldown as markCooldownWithReset, parseResetMsFromMessage } from "./account-switcher"
 import type { OpenCodeClient, SessionStatus, Message, Todo } from "./opencode"
-import { notify } from "./notify"
-import { pushNotify } from "./apns"
+import { getRegistry } from "../core/registry"
+import type { NotifyEvent } from "../core/types"
 import { logger } from "../middleware/logger"
 import { DEFAULT_VARIANT, isWorkerMode } from "./config"
 import type { LeaseStrategy } from "./lease-strategy"
+
+function emitNotification(event: NotifyEvent): void {
+  const { notifications } = getRegistry()
+  for (const ch of notifications) {
+    ch.send(event).catch((err) => logger.debug({ err, channel: ch.id }, "notification send failed"))
+  }
+}
 
 const POLL_INTERVAL_MS = 3_000
 const RECENT_SWITCH_GUARD_MS = 5_000
@@ -47,13 +54,26 @@ function emitTransition(sessionId: string, from: string, to: string): void {
   const toLabel = STATUS_LABELS[to] ?? to
   const sid = sessionId.slice(-8)
   if (from === "idle" && to === "busy") {
-    notify("Session 开始", `[${sid}] 开始运行`)
+    emitNotification({
+      type: "session_start",
+      title: "Session 开始",
+      body: `[${sid}] 开始运行`,
+      sessionId,
+    })
   } else if (to === "idle" && from !== "idle") {
-    notify("Session 完成", `[${sid}] ${fromLabel} → ${toLabel}`)
-    pushNotify("✅ 任务完成", `Session [${sid}] 已完成`, { sessionId }).catch(() => {})
+    emitNotification({
+      type: "session_complete",
+      title: "Session 完成",
+      body: `[${sid}] ${fromLabel} → ${toLabel}`,
+      sessionId,
+    })
   } else if (to === "retry") {
-    notify("Session 重试", `[${sid}] ${fromLabel} → ${toLabel}`)
-    pushNotify("❌ 执行出错", `Session [${sid}] 需要重试`, { sessionId }).catch(() => {})
+    emitNotification({
+      type: "session_error",
+      title: "Session 重试",
+      body: `[${sid}] ${fromLabel} → ${toLabel}`,
+      sessionId,
+    })
   }
 }
 
@@ -452,11 +472,21 @@ async function pollOnce(): Promise<void> {
           if (ok) {
             lastSwitchAt = Date.now()
             logger.info({ sessionId }, "worker: lease switch succeeded, reprompting")
-            notify("账号切换", "已从 Master 获取新账号并自动重试")
+            emitNotification({
+              type: "account_switched",
+              title: "账号切换",
+              body: "已从 Master 获取新账号并自动重试",
+              sessionId,
+            })
             await repromptSession(client, sessionId)
           } else {
             logger.warn({ sessionId }, "worker: lease switch failed")
-            notify("账号切换失败", "云端账号池暂无可用账号")
+            emitNotification({
+              type: "account_switch_failed",
+              title: "账号切换失败",
+              body: "云端账号池暂无可用账号",
+              sessionId,
+            })
           }
         } else {
           const resetMs = parseResetMsFromMessage(message)
@@ -467,11 +497,21 @@ async function pollOnce(): Promise<void> {
           if (result.switched) {
             lastSwitchAt = Date.now()
             logger.info({ from: result.from, to: result.to, label: result.label }, "account switched successfully")
-            notify("账号切换", `已切换到「${result.label}」并自动重试`)
+            emitNotification({
+              type: "account_switched",
+              title: "账号切换",
+              body: `已切换到「${result.label}」并自动重试`,
+              sessionId,
+            })
             await repromptSession(client, sessionId)
           } else {
             logger.warn({ reason: result.reason, sessionId }, "account switch failed, session remains in retry")
-            notify("账号切换失败", `所有账号不可用: ${result.reason}`)
+            emitNotification({
+              type: "account_switch_failed",
+              title: "账号切换失败",
+              body: `所有账号不可用: ${result.reason}`,
+              sessionId,
+            })
           }
         }
       }

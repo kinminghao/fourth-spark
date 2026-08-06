@@ -5,6 +5,8 @@ import type {
   AccountPool,
   AgentRuntime,
 } from "./types"
+import { desktopNotificationChannel } from "../lib/notify"
+import { apnsNotificationChannel } from "../lib/apns"
 
 export interface PluginRegistry {
   runtime?: AgentRuntime
@@ -18,7 +20,7 @@ let instance: PluginRegistry | undefined
 
 export function createDefaultRegistry(): PluginRegistry {
   return {
-    notifications: [],
+    notifications: [desktopNotificationChannel, apnsNotificationChannel],
     mcpTools: [],
     gitPlatforms: new Map(),
   }
