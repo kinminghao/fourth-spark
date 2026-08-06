@@ -75,7 +75,7 @@ interface SessionState {
   addLink: (sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
   removeLink: (sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
   deleteSession: (id: string) => Promise<void>
-  sendMessage: (content: string, model?: string) => Promise<void>
+  sendMessage: (content: string, model?: string) => Promise<boolean>
   replyQuestion: (answers: string[][]) => Promise<void>
   rejectQuestion: () => Promise<void>
   abortSession: () => Promise<void>
@@ -308,7 +308,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   sendMessage: async (content, model?) => {
     const repoId = getRepoId()
     const sessionId = get().activeSessionId
-    if (!repoId || !sessionId) return
+    if (!repoId || !sessionId) return false
     const session = get().sessions.find((s) => s.id === sessionId)
     const wasBusy = get().sessionStatuses[sessionId] === "busy"
     set({ sendError: null })
@@ -320,6 +320,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (wasBusy) {
         _pendingQueueMarks[sessionId] = (_pendingQueueMarks[sessionId] || 0) + 1
       }
+      return true
     } catch (error) {
       set({
         sendError:
@@ -328,6 +329,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (!wasBusy) {
         get().setSessionStatus(sessionId, "idle")
       }
+      return false
     }
   },
 
