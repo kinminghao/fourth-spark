@@ -172,7 +172,7 @@ sessions.get("/", async (c) => {
       syncSessionsList(list)
       const ids = list.map((s) => s.id)
       const dbRows = ids.length > 0
-        ? await db.select({ id: sessionsTable.id, issueId: sessionsTable.issueId, title: sessionsTable.title, parentId: sessionsTable.parentId }).from(sessionsTable).where(inArray(sessionsTable.id, ids))
+        ? await db.select({ id: sessionsTable.id, issueId: sessionsTable.issueId, title: sessionsTable.title, parentId: sessionsTable.parentId, completedAt: sessionsTable.completedAt }).from(sessionsTable).where(inArray(sessionsTable.id, ids))
         : []
       const dbMap = new Map(dbRows.map((r) => [r.id, r]))
       return c.json(list.map((s) => {
@@ -182,6 +182,7 @@ sessions.get("/", async (c) => {
           issueId: row?.issueId ?? null,
           ...(row?.title ? { title: row.title } : {}),
           ...(row?.parentId && !s.parentID ? { parentID: row.parentId } : {}),
+          ...(row?.completedAt ? { completedAt: row.completedAt } : {}),
         }
       }))
     } catch (err) {
@@ -341,11 +342,12 @@ sessions.get("/:id/todos", async (c) => {
 
 sessions.patch("/:id", async (c) => {
   const sessionId = c.req.param("id")
-  const body = await c.req.json<{ issueId?: string | null; title?: string }>().catch(() => null)
+  const body = await c.req.json<{ issueId?: string | null; title?: string; completedAt?: number | null }>().catch(() => null)
   if (!body) return c.json({ error: "empty body" }, 400)
   const updates: Record<string, unknown> = {}
   if ("issueId" in body) updates.issueId = body.issueId ?? null
   if ("title" in body && typeof body.title === "string") updates.title = body.title
+  if ("completedAt" in body) updates.completedAt = body.completedAt ?? null
   if (Object.keys(updates).length > 0) {
     await db.update(sessionsTable).set(updates).where(eq(sessionsTable.id, sessionId))
   }

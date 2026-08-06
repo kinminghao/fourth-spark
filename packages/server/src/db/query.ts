@@ -100,6 +100,7 @@ function sessionRowToApi(row: SessionRow) {
       reasoning: row.tokensReasoning,
       cache: { read: row.tokensCacheRead, write: row.tokensCacheWrite },
     },
+    completedAt: row.completedAt ?? undefined,
     time: { created: row.timeCreated, updated: row.timeUpdated },
   }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Check, ChevronRight, Copy, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { Check, CheckCircle2, ChevronRight, Copy, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import type { Session } from "../lib/api-client"
 import { useSessionStore, EMPTY_TODOS, EMPTY_MESSAGES } from "../stores/session-store"
@@ -61,17 +61,18 @@ function statusDotClass(status: string | undefined): string {
 
 function SessionItem({
   session, isActive, isConfirming,
-  onSelect, onDelete, onConfirm, onCancelConfirm, onRename,
+  onSelect, onDelete, onConfirm, onCancelConfirm, onRename, onToggleComplete,
   status, issue, linkedItems,
 }: {
   session: Session; isActive: boolean; isConfirming: boolean
   onSelect: () => void; onDelete: () => void; onConfirm: () => void; onCancelConfirm: () => void
-  onRename: (title: string) => void
+  onRename: (title: string) => void; onToggleComplete: () => void
   status: string | undefined
   issue?: { number: number; title: string; state: string }
   linkedItems?: Array<{ number: number; state: string; type: "issue" | "pr"; mergedAt?: number | null }>
 }) {
   const draft = useDraftStore((s) => s.drafts[session.id])
+  const isCompleted = !!session.completedAt
   const when = formatWhen(session)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState("")
@@ -92,7 +93,7 @@ function SessionItem({
   }
 
   /* ---- iOS-style swipe-to-reveal (mobile) ---- */
-  const REVEAL_W = 144
+  const REVEAL_W = 192
   const [swipeX, setSwipeX] = useState(0)
   const [snap, setSnap] = useState(false)
   const touch = useRef({ x0: 0, y0: 0, base: 0, dir: null as "h" | "v" | null, on: false })
@@ -141,6 +142,13 @@ function SessionItem({
           <>
             <button
               type="button"
+              onClick={() => { onToggleComplete(); closeSwipe() }}
+              className={clsx("flex w-12 items-center justify-center text-white", isCompleted ? "bg-neutral-500 active:bg-neutral-600" : "bg-emerald-500 active:bg-emerald-600")}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
               onClick={() => { startEditing(); closeSwipe() }}
               className="flex w-12 items-center justify-center bg-amber-500 text-white active:bg-amber-600"
             >
@@ -168,6 +176,7 @@ function SessionItem({
         className={clsx(
           "group relative rounded-md border-l-2",
           isActive ? "border-blue-500 bg-elevated" : "border-transparent bg-surface hover:bg-elevated/50",
+          isCompleted && !isActive && "opacity-50",
           snap && "transition-transform duration-200 ease-out",
         )}
         style={{
@@ -187,6 +196,7 @@ function SessionItem({
           <div className="flex items-center gap-2">
             <span className={clsx("h-1.5 w-1.5 shrink-0 rounded-full", statusDotClass(status))} />
             <span className="min-w-0 truncate font-mono text-xs text-fg-3">{session.agent?.trim() || "默认"}</span>
+            {isCompleted && <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-400" />}
             {when && <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-fg-5">{when}</span>}
           </div>
           {editing ? (
@@ -255,6 +265,14 @@ function SessionItem({
           <span className="absolute right-1.5 top-1.5 hidden items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 md:flex">
             <button
               type="button"
+              onClick={onToggleComplete}
+              title={isCompleted ? "取消完成" : "标记完成"}
+              className={clsx("rounded p-1", isCompleted ? "text-emerald-400 hover:text-emerald-300" : "text-fg-5 hover:text-emerald-400")}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
               onClick={startEditing}
               title="重命名"
               className="rounded p-1 text-fg-5 hover:text-fg-2"
@@ -320,9 +338,12 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
   const sessions = useSessionStore((s) => s.sessions)
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
   const statuses = useSessionStore((s) => s.sessionStatuses)
+  const sessionFilter = useSessionStore((s) => s.sessionFilter)
+  const setSessionFilter = useSessionStore((s) => s.setSessionFilter)
   const setActiveSession = useSessionStore((s) => s.setActiveSession)
   const deleteSession = useSessionStore((s) => s.deleteSession)
   const renameSession = useSessionStore((s) => s.renameSession)
+  const toggleSessionComplete = useSessionStore((s) => s.toggleSessionComplete)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const issues = useIssueStore((s) => s.issues)
   const syncing = useIssueStore((s) => s.syncing)
@@ -332,7 +353,12 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
   const allSessionLinks = useSessionStore((s) => s.allSessionLinks)
 
   const topLevel = [...sessions]
-    .filter((s) => !s.parentID)
+    .filter((s) => {
+      if (s.parentID) return false
+      if (sessionFilter === "active") return !s.completedAt
+      if (sessionFilter === "completed") return !!s.completedAt
+      return true
+    })
     .sort((a, b) => sessionTime(b) - sessionTime(a))
 
   const issueMap = new Map(issues.map((i) => [i.id, i]))
@@ -405,6 +431,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
             onConfirm={() => setConfirmingId(session.id)}
             onCancelConfirm={() => setConfirmingId(null)}
             onRename={(title) => void renameSession(session.id, title)}
+            onToggleComplete={() => void toggleSessionComplete(session.id)}
           />
         )
       })}
@@ -481,6 +508,23 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
             </button>
           )}
         </div>
+        {activeRepoId && (
+          <div className="flex gap-1 border-b border-line px-3 py-1.5">
+            {([["all", "全部"], ["active", "进行中"], ["completed", "已完成"]] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setSessionFilter(key)}
+                className={clsx(
+                  "rounded-md px-2 py-0.5 font-mono text-[11px] transition-colors",
+                  sessionFilter === key ? "bg-elevated text-fg-2" : "text-fg-5 hover:text-fg-3",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto px-2 py-2">
           {!activeRepoId ? (
             <p className="px-2 py-6 text-center font-mono text-xs text-fg-5">请先选择一个仓库</p>

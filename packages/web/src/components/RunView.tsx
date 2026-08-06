@@ -756,7 +756,7 @@ export function RunView({
             messages.map((message, index) => (
               <Fragment key={message.id}>
                 {index > 0 && message.role === "user" && (
-                  <div className="border-t border-line/70" />
+                  <div className="border-t border-line" />
                 )}
                 <div data-message-id={message.id}>
                   <ExecutionBlock message={message} isStreaming={busy && index === messages.length - 1} queued={queuedIds.includes(message.id)} />
