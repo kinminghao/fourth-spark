@@ -1,9 +1,10 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
-import { Box, Check, ChevronDown, CircleDot, GitBranch, GitPullRequest, Loader2, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
+import { Box, Check, ChevronDown, ChevronsLeft, ChevronsRight, CircleDot, GitBranch, GitPullRequest, Loader2, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
 import clsx from "clsx"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useThemeStore } from "../stores/theme-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
+import { useLayoutStore } from "../stores/layout-store"
 import { listBranches, checkoutBranch, type BranchList } from "../lib/api-client"
 
 const NAV_ITEMS = [
@@ -250,25 +251,56 @@ function Header() {
 
 function Sidebar() {
   const repoName = useRepoStore(selectActiveRepoName)
+  const collapsed = useLayoutStore((s) => s.navCollapsed)
+  const toggle = useLayoutStore((s) => s.toggleNav)
+
   return (
-    <nav className="hidden w-48 shrink-0 flex-col border-r border-line bg-surface py-2 md:flex">
-      {NAV_ITEMS.map((item) => (
-        <NavLink
-          key={item.segment}
-          to={navPath(item.segment, item.global, repoName)}
-          className={({ isActive }) =>
-            clsx(
-              "mx-2 flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
-              isActive
-                ? "bg-blue-500/10 font-medium text-blue-600"
-                : "text-fg-3 hover:bg-elevated hover:text-fg",
-            )
-          }
-        >
-          <item.icon className="h-4 w-4 shrink-0" />
-          {item.label}
-        </NavLink>
-      ))}
+    <nav
+      className={clsx(
+        "hidden shrink-0 flex-col border-r border-line bg-surface py-2 transition-[width] duration-200 ease-in-out md:flex",
+        collapsed ? "w-14" : "w-48",
+      )}
+    >
+      <div className="flex flex-1 flex-col">
+        {NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.segment}
+            to={navPath(item.segment, item.global, repoName)}
+            title={collapsed ? item.label : undefined}
+            className={({ isActive }) =>
+              clsx(
+                "mx-2 flex items-center rounded-md py-2 text-sm transition-colors",
+                collapsed ? "justify-center px-2" : "gap-2.5 px-3",
+                isActive
+                  ? "bg-blue-500/10 font-medium text-blue-600"
+                  : "text-fg-3 hover:bg-elevated hover:text-fg",
+              )
+            }
+          >
+            <item.icon className="h-4 w-4 shrink-0" />
+            <span
+              className={clsx(
+                "truncate transition-[opacity,max-width] duration-200 ease-in-out",
+                collapsed ? "max-w-0 opacity-0" : "max-w-[8rem] opacity-100",
+              )}
+            >
+              {item.label}
+            </span>
+          </NavLink>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={toggle}
+        title={collapsed ? "展开导航" : "收起导航"}
+        className="mx-2 flex items-center justify-center rounded-md py-2 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+      >
+        {collapsed
+          ? <ChevronsRight className="h-4 w-4" />
+          : <ChevronsLeft className="h-4 w-4" />
+        }
+      </button>
     </nav>
   )
 }
