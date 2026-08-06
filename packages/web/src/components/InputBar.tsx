@@ -85,14 +85,16 @@ export function InputBar() {
     setValue(activeSessionId ? useDraftStore.getState().drafts[activeSessionId] ?? "" : "")
   }, [activeSessionId])
 
-  const submit = () => {
+  const submit = async () => {
     const text = value.trim()
     if (!text || disabled) {
       return
     }
-    void sendMessage(text, selectedModel || undefined)
-    setValue("")
-    if (activeSessionId) clearDraft(activeSessionId)
+    const ok = await sendMessage(text, selectedModel || undefined)
+    if (ok) {
+      setValue("")
+      if (activeSessionId) clearDraft(activeSessionId)
+    }
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
