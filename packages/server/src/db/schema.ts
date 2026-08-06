@@ -106,6 +106,7 @@ export const sessions = pgTable("sessions", {
   tokensCacheRead: bigint("tokens_cache_read", { mode: "number" }).notNull().default(0),
   tokensCacheWrite: bigint("tokens_cache_write", { mode: "number" }).notNull().default(0),
   userId: text("user_id"),
+  completedAt: bigint("completed_at", { mode: "number" }),
   timeCreated: bigint("time_created", { mode: "number" }).notNull(),
   timeUpdated: bigint("time_updated", { mode: "number" }).notNull(),
 }, (t) => [

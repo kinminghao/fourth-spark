@@ -42,6 +42,7 @@ export interface Session {
   cost?: number
   tokens?: SessionTokens
   model?: { providerID?: string; modelID?: string; variant?: string }
+  completedAt?: number
 }
 
 export interface Issue {
@@ -767,6 +768,13 @@ export async function renameSession(repoId: string, sessionId: string, title: st
   await apiFetch<void>(
     `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`,
     { method: "PATCH", body: JSON.stringify({ title }) },
+  )
+}
+
+export async function updateSessionCompleted(repoId: string, sessionId: string, completedAt: number | null): Promise<void> {
+  await apiFetch<void>(
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "PATCH", body: JSON.stringify({ completedAt }) },
   )
 }
 
