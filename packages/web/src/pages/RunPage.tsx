@@ -731,7 +731,7 @@ export function RunPage() {
             "absolute left-full top-1/2 z-20 flex h-14 w-4 -translate-y-1/2 items-center justify-center rounded-r-md border-y border-r border-line text-fg-5 transition-all duration-200 hover:bg-elevated hover:text-fg-3",
             sessionPanelCollapsed
               ? "bg-surface opacity-80 hover:w-5 hover:opacity-100"
-              : "bg-surface/80 opacity-0 hover:opacity-100",
+              : "bg-surface/80 opacity-40 hover:opacity-100",
           )}
         >
           {sessionPanelCollapsed
