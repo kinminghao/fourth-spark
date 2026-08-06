@@ -8,6 +8,8 @@
 import { create } from "zustand"
 import * as api from "../lib/api-client"
 import type { Message, MessagePart, Session, Todo, SessionLinks, SessionLinkSummary } from "../lib/api-client"
+
+export type SessionFilter = "all" | "active" | "completed"
 import { isQuestionTool, isQuestionPending, getPartText } from "../lib/message-parts"
 import { useRepoStore } from "./repo-store"
 import { useToastStore } from "./toast-store"
@@ -58,10 +60,13 @@ interface SessionState {
   queuedMessageIds: Record<string, string[]>
   sessionLinks: Record<string, SessionLinks>
   allSessionLinks: Record<string, SessionLinkSummary>
+  sessionFilter: SessionFilter
   loadingSessions: boolean
   loadError: string | null
   sendError: string | null
 
+  setSessionFilter: (filter: SessionFilter) => void
+  toggleSessionComplete: (id: string) => Promise<void>
   loadSessions: () => Promise<void>
   createSession: (message: string, agent?: string, model?: string, variant?: string, issueId?: string, customAgentId?: string) => Promise<Session | null>
   setActiveSession: (id: string) => Promise<void>
@@ -104,9 +109,30 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   queuedMessageIds: {},
   sessionLinks: {},
   allSessionLinks: {},
+  sessionFilter: "all",
   loadingSessions: false,
   loadError: null,
   sendError: null,
+
+  setSessionFilter: (filter) => set({ sessionFilter: filter }),
+
+  toggleSessionComplete: async (id) => {
+    const repoId = getRepoId()
+    if (!repoId) return
+    const session = get().sessions.find((s) => s.id === id)
+    if (!session) return
+    const completedAt = session.completedAt ? null : Date.now()
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === id ? { ...s, completedAt: completedAt ?? undefined } : s,
+      ),
+    }))
+    try {
+      await api.updateSessionCompleted(repoId, id, completedAt)
+    } catch {
+      await get().loadSessions()
+    }
+  },
 
   loadSessions: async () => {
     const repoId = getRepoId()
