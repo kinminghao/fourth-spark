@@ -1,10 +1,9 @@
-import { autoSwitch, getActiveId, isUsageLimit, clearCooldown, markCooldown as markCooldownWithReset, parseResetMsFromMessage } from "./account-switcher"
+import { isUsageLimit } from "./account-switcher"
 import type { OpenCodeClient, SessionStatus, Message, Todo } from "./opencode"
 import { getRegistry } from "../core/registry"
 import type { NotifyEvent } from "../core/types"
 import { logger } from "../middleware/logger"
-import { DEFAULT_VARIANT, isWorkerMode } from "./config"
-import type { LeaseStrategy } from "./lease-strategy"
+import { DEFAULT_VARIANT } from "./config"
 
 function emitNotification(event: NotifyEvent): void {
   const { notifications } = getRegistry()
@@ -40,7 +39,6 @@ const prevStatuses = new Map<string, string>()
 let lastSwitchAt = 0
 let timer: ReturnType<typeof setInterval> | undefined
 const entries: ManagedEntry[] = []
-let leaseStrategy: LeaseStrategy | undefined
 
 const STATUS_LABELS: Record<string, string> = { idle: "完成", busy: "运行中", retry: "重试中" }
 
@@ -399,7 +397,13 @@ async function pollOnce(): Promise<void> {
         if (!currentIds.has(sessionId) && prev !== "idle") {
           prevStatuses.set(sessionId, "idle")
           emitTransition(sessionId, prev, "idle")
-          if (!isWorkerMode()) clearCooldown(await getActiveId() ?? "")
+          {
+            const pool = getRegistry().accountPool
+            if (pool?.release) {
+              const id = await pool.getActiveId()
+              if (id) await pool.release(id)
+            }
+          }
 
           if (prev === "busy") {
             const shouldContinue = await detectTruncation(client, sessionId)
@@ -423,7 +427,13 @@ async function pollOnce(): Promise<void> {
         prevStatuses.set(sessionId, status.type)
 
         if (status.type === "idle") {
-          if (!isWorkerMode()) clearCooldown(await getActiveId() ?? "")
+          {
+            const pool = getRegistry().accountPool
+            if (pool?.release) {
+              const id = await pool.getActiveId()
+              if (id) await pool.release(id)
+            }
+          }
 
           if (prev === "busy") {
             const shouldContinue = await detectTruncation(client, sessionId)
@@ -466,53 +476,32 @@ async function pollOnce(): Promise<void> {
 
         logger.info({ sessionId, repoId, message: message.slice(0, 120) }, "rate limit detected, switching account")
 
-        if (isWorkerMode() && leaseStrategy) {
-          const activeId = await getActiveId()
-          const ok = await leaseStrategy.onLimit({ accountId: activeId ?? "", message })
-          if (ok) {
-            lastSwitchAt = Date.now()
-            logger.info({ sessionId }, "worker: lease switch succeeded, reprompting")
-            emitNotification({
-              type: "account_switched",
-              title: "账号切换",
-              body: "已从 Master 获取新账号并自动重试",
-              sessionId,
-            })
-            await repromptSession(client, sessionId)
-          } else {
-            logger.warn({ sessionId }, "worker: lease switch failed")
-            emitNotification({
-              type: "account_switch_failed",
-              title: "账号切换失败",
-              body: "云端账号池暂无可用账号",
-              sessionId,
-            })
-          }
+        const pool = getRegistry().accountPool
+        if (!pool) {
+          logger.warn({ sessionId }, "no account pool configured, cannot switch")
+          continue
+        }
+        const activeId = await pool.getActiveId()
+        await pool.reportLimit({ accountId: activeId ?? "", message })
+        const result = await pool.acquire({ reason: "ratelimit", currentAccountId: activeId ?? "" })
+        if (result.ok) {
+          lastSwitchAt = Date.now()
+          logger.info({ from: activeId, to: result.accountId, sessionId }, "account switched successfully")
+          emitNotification({
+            type: "account_switched",
+            title: "账号切换",
+            body: "已切换到新账号并自动重试",
+            sessionId,
+          })
+          await repromptSession(client, sessionId)
         } else {
-          const resetMs = parseResetMsFromMessage(message)
-          const activeId = await getActiveId()
-          if (activeId) markCooldownWithReset(activeId, resetMs)
-          const result = await autoSwitch(activeId)
-
-          if (result.switched) {
-            lastSwitchAt = Date.now()
-            logger.info({ from: result.from, to: result.to, label: result.label }, "account switched successfully")
-            emitNotification({
-              type: "account_switched",
-              title: "账号切换",
-              body: `已切换到「${result.label}」并自动重试`,
-              sessionId,
-            })
-            await repromptSession(client, sessionId)
-          } else {
-            logger.warn({ reason: result.reason, sessionId }, "account switch failed, session remains in retry")
-            emitNotification({
-              type: "account_switch_failed",
-              title: "账号切换失败",
-              body: `所有账号不可用: ${result.reason}`,
-              sessionId,
-            })
-          }
+          logger.warn({ reason: result.reason, sessionId }, "account switch failed, session remains in retry")
+          emitNotification({
+            type: "account_switch_failed",
+            title: "账号切换失败",
+            body: `所有账号不可用: ${result.reason}`,
+            sessionId,
+          })
         }
       }
     }
@@ -559,9 +548,5 @@ export const sessionMonitor = {
     todoFingerprints.clear()
     userAborted.clear()
     logger.info("session monitor stopped")
-  },
-
-  setLeaseStrategy(strategy: LeaseStrategy | undefined): void {
-    leaseStrategy = strategy
   },
 }

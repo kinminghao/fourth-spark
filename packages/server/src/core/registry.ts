@@ -13,6 +13,7 @@ import {
   giteaPlatformFactory,
   gitlabPlatformFactory,
 } from "../lib/git-provider"
+import { localAccountPool } from "../lib/local-account-pool"
 
 export interface PluginRegistry {
   runtime?: AgentRuntime
@@ -26,6 +27,7 @@ let instance: PluginRegistry | undefined
 
 export function createDefaultRegistry(): PluginRegistry {
   return {
+    accountPool: localAccountPool,
     notifications: [desktopNotificationChannel, apnsNotificationChannel],
     mcpTools: [gitToolProvider],
     gitPlatforms: new Map([

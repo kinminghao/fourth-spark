@@ -9,9 +9,57 @@ import { createOpenCodeClient, type OpenCodeClient } from "./opencode"
 import { sessionMonitor } from "./session-monitor"
 import { logger } from "../middleware/logger"
 import { PORT, isWorkerMode, getWorkerConfig, reloadWorkerConfig } from "./config"
-import { createLeaseClient } from "./lease-client"
+import { createLeaseClient, type LeaseClient, type LeaseFailure } from "./lease-client"
 import { createLeaseKeeper, type LeaseKeeper } from "./lease-keeper"
-import { createLeaseStrategy } from "./lease-strategy"
+import { writeLease } from "./lease-writer"
+import { parseResetMsFromMessage } from "./account-switcher"
+import { getRegistry } from "../core/registry"
+import { localAccountPool } from "./local-account-pool"
+import type { AccountPool, AcquireResult } from "../core/types"
+
+const LEASE_FAILURE_MESSAGES: Record<LeaseFailure["kind"], string> = {
+  "no-account": "云端账号池暂无可用账号",
+  unreachable: "连不上云端账号池，无法切号",
+  "bad-response": "云端账号池返回了无法识别的响应",
+  refused: "云端账号池拒绝了本次租借请求",
+}
+
+function createLeaseAccountPool(leaseClient: LeaseClient, keeper: LeaseKeeper): AccountPool {
+  return {
+    async acquire(ctx): Promise<AcquireResult> {
+      const outcome = await leaseClient.lease({
+        reason: "ratelimit",
+        ...(ctx.currentAccountId ? { currentAccountId: ctx.currentAccountId } : {}),
+      })
+      if (!outcome.ok) {
+        return { ok: false, reason: LEASE_FAILURE_MESSAGES[outcome.failure.kind] }
+      }
+      const { lease } = outcome
+      if (lease.expiresAt <= Date.now()) {
+        return { ok: false, reason: "stale lease" }
+      }
+      await writeLease({ access: lease.access, expires: lease.expiresAt, accountId: lease.accountId })
+      keeper.adoptAccount(lease.accountId)
+      return {
+        ok: true,
+        accountId: lease.accountId,
+        credential: { access: lease.access },
+        expiresAt: lease.expiresAt,
+      }
+    },
+    async reportLimit(ctx): Promise<void> {
+      const resetsAt = parseResetMsFromMessage(ctx.message)
+      await leaseClient.reportRateLimit({
+        accountId: ctx.accountId,
+        headers: {},
+        ...(resetsAt !== undefined ? { resetsAt } : {}),
+      })
+    },
+    async getActiveId(): Promise<string | undefined> {
+      return keeper.heldAccountId()
+    },
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Port allocation
@@ -467,8 +515,7 @@ export const processManager = {
       activeLeaseKeeper = keeper
       await keeper.startup().catch((err) => logger.warn({ err }, "cloud worker: startup lease failed"))
 
-      const strategy = createLeaseStrategy(client)
-      sessionMonitor.setLeaseStrategy(strategy)
+      getRegistry().accountPool = createLeaseAccountPool(client, keeper)
     }
 
     const adopted = await adoptOrphans()
@@ -527,7 +574,7 @@ export const processManager = {
       activeLeaseKeeper = undefined
       logger.info("cloud pool: disposed previous lease-keeper")
     }
-    sessionMonitor.setLeaseStrategy(undefined)
+    getRegistry().accountPool = localAccountPool
 
     const getSetting = async (key: string) => {
       const rows = await db.select().from(settings).where(eq(settings.key, key))
@@ -551,8 +598,7 @@ export const processManager = {
     activeLeaseKeeper = keeper
     await keeper.startup().catch((err) => logger.warn({ err }, "cloud pool: startup lease failed"))
 
-    const strategy = createLeaseStrategy(client)
-    sessionMonitor.setLeaseStrategy(strategy)
+    getRegistry().accountPool = createLeaseAccountPool(client, keeper)
     logger.info("cloud pool: reload complete")
   },
 }
