@@ -7,6 +7,7 @@ import { parseGitUrl } from "../lib/git-url"
 import { getHostInfo, createGitIssueClient, type GitIssueClient, type GitIssue, type GitComment, type GitPullRequest } from "../lib/git-provider"
 import { processManager } from "../lib/process-manager"
 import { logger } from "../middleware/logger"
+import type { McpToolProvider, ToolContext } from "../core/types"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -124,12 +125,7 @@ async function linkSessionTarget(repoId: string, type: "issue" | "pr", targetId:
 // MCP Server Factory — called per-request by createMcpHandler
 // ---------------------------------------------------------------------------
 
-export function buildGitMcpServer(repoId: string): McpServer {
-  const server = new McpServer({
-    name: "fourth-spark-git",
-    version: "1.0.0",
-  })
-
+function registerGitTools(server: McpServer, repoId: string): void {
   // ── get_repo_info ────────────────────────────────────────────────────────
   server.registerTool(
     "get_repo_info",
@@ -450,6 +446,20 @@ export function buildGitMcpServer(repoId: string): McpServer {
       }
     },
   )
+}
 
+export const gitToolProvider: McpToolProvider = {
+  id: "fourth-spark-git",
+  register(server, context: ToolContext) {
+    registerGitTools(server as McpServer, context.repoId)
+  },
+}
+
+export function buildGitMcpServer(repoId: string): McpServer {
+  const server = new McpServer({
+    name: "fourth-spark-git",
+    version: "1.0.0",
+  })
+  gitToolProvider.register(server, { repoId })
   return server
 }

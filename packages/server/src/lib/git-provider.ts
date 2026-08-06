@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm"
 import { db } from "../db/index"
 import { gitHosts } from "../db/schema"
+import type { GitPlatformFactory } from "../core/types"
 
 const ENV_TOKEN = process.env.GITEA_TOKEN ?? ""
 
@@ -314,4 +315,19 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
       }
     },
   }
+}
+
+export const githubPlatformFactory: GitPlatformFactory = {
+  platform: "github",
+  createClient: (host, owner, repo, token) => createGitIssueClient(host, owner, repo, token, "github"),
+}
+
+export const giteaPlatformFactory: GitPlatformFactory = {
+  platform: "gitea",
+  createClient: (host, owner, repo, token) => createGitIssueClient(host, owner, repo, token, "gitea"),
+}
+
+export const gitlabPlatformFactory: GitPlatformFactory = {
+  platform: "gitlab",
+  createClient: (host, owner, repo, token) => createGitIssueClient(host, owner, repo, token, "gitlab"),
 }

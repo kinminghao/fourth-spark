@@ -7,6 +7,12 @@ import type {
 } from "./types"
 import { desktopNotificationChannel } from "../lib/notify"
 import { apnsNotificationChannel } from "../lib/apns"
+import { gitToolProvider } from "../mcp/git-tools"
+import {
+  githubPlatformFactory,
+  giteaPlatformFactory,
+  gitlabPlatformFactory,
+} from "../lib/git-provider"
 
 export interface PluginRegistry {
   runtime?: AgentRuntime
@@ -21,8 +27,12 @@ let instance: PluginRegistry | undefined
 export function createDefaultRegistry(): PluginRegistry {
   return {
     notifications: [desktopNotificationChannel, apnsNotificationChannel],
-    mcpTools: [],
-    gitPlatforms: new Map(),
+    mcpTools: [gitToolProvider],
+    gitPlatforms: new Map([
+      ["github", githubPlatformFactory],
+      ["gitea", giteaPlatformFactory],
+      ["gitlab", gitlabPlatformFactory],
+    ]),
   }
 }
 
