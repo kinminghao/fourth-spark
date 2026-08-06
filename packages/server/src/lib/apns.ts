@@ -5,6 +5,7 @@ import { db } from "../db/index"
 import { deviceTokens } from "../db/schema"
 import { APNS_KEY_ID, APNS_TEAM_ID, APNS_KEY_PATH, APNS_BUNDLE_ID, APNS_PRODUCTION } from "./config"
 import { logger } from "../middleware/logger"
+import type { NotificationChannel, NotifyEvent } from "../core/types"
 
 const SANDBOX_HOST = "https://api.sandbox.push.apple.com"
 const PRODUCTION_HOST = "https://api.push.apple.com"
@@ -98,4 +99,13 @@ export async function pushNotify(title: string, body: string, data?: Record<stri
   logger.info({ count: tokens.length, title }, "APNs: sending push")
 
   await Promise.allSettled(tokens.map((t) => sendToDevice(t.token, { sessionId: data?.sessionId ?? "", title, body })))
+}
+
+export const apnsNotificationChannel: NotificationChannel = {
+  id: "apns",
+  async send(event: NotifyEvent): Promise<void> {
+    const data: Record<string, string> = { ...(event.data ?? {}) }
+    if (event.sessionId && !data.sessionId) data.sessionId = event.sessionId
+    await pushNotify(event.title, event.body, data)
+  },
 }

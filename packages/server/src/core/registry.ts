@@ -5,6 +5,15 @@ import type {
   AccountPool,
   AgentRuntime,
 } from "./types"
+import { desktopNotificationChannel } from "../lib/notify"
+import { apnsNotificationChannel } from "../lib/apns"
+import { gitToolProvider } from "../mcp/git-tools"
+import {
+  githubPlatformFactory,
+  giteaPlatformFactory,
+  gitlabPlatformFactory,
+} from "../lib/git-provider"
+import { localAccountPool } from "../lib/local-account-pool"
 
 export interface PluginRegistry {
   runtime?: AgentRuntime
@@ -18,9 +27,14 @@ let instance: PluginRegistry | undefined
 
 export function createDefaultRegistry(): PluginRegistry {
   return {
-    notifications: [],
-    mcpTools: [],
-    gitPlatforms: new Map(),
+    accountPool: localAccountPool,
+    notifications: [desktopNotificationChannel, apnsNotificationChannel],
+    mcpTools: [gitToolProvider],
+    gitPlatforms: new Map([
+      ["github", githubPlatformFactory],
+      ["gitea", giteaPlatformFactory],
+      ["gitlab", gitlabPlatformFactory],
+    ]),
   }
 }
 
