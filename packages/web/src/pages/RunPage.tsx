@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Pencil, Plus, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import type { Session } from "../lib/api-client"
 import { useSessionStore, EMPTY_TODOS, EMPTY_MESSAGES } from "../stores/session-store"
@@ -300,41 +300,8 @@ function SessionItem({
   )
 }
 
-function IssueRow({ issue, indent, selected, badge, onClick }: {
-  issue: { id: string; number: number; title: string; state: string }
-  indent?: boolean; selected?: boolean; badge?: number; onClick: () => void
-}) {
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={onClick}
-        className={clsx(
-          "group flex w-full items-center gap-2 rounded-md py-1.5 text-left transition-colors",
-          indent ? "pl-6 pr-2.5" : "px-2.5",
-          selected ? "bg-blue-500/10" : "hover:bg-elevated/50",
-        )}
-      >
-        <span className={clsx(
-          "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium",
-          issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-        )}>
-          #{issue.number}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-xs text-fg-3">{issue.title}</span>
-        {badge != null && badge > 0 && (
-          <span className="shrink-0 rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">{badge}</span>
-        )}
-      </button>
-    </li>
-  )
-}
-
 function SessionPanel({ onClose }: { onClose?: () => void }) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
-  const [search, setSearch] = useState("")
-  const [issueSearch, setIssueSearch] = useState("")
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const sessions = useSessionStore((s) => s.sessions)
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
@@ -347,10 +314,6 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
   const toggleSessionComplete = useSessionStore((s) => s.toggleSessionComplete)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const issues = useIssueStore((s) => s.issues)
-  const syncing = useIssueStore((s) => s.syncing)
-  const syncIssues = useIssueStore((s) => s.syncIssues)
-  const matchingParentId = useIssueStore((s) => s.matchingParentId)
-  const matchingCandidateId = useIssueStore((s) => s.matchingCandidateId)
   const allSessionLinks = useSessionStore((s) => s.allSessionLinks)
 
   const topLevel = [...sessions]
@@ -363,51 +326,6 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
     .sort((a, b) => sessionTime(b) - sessionTime(a))
 
   const issueMap = new Map(issues.map((i) => [i.id, i]))
-  const sessionsPerIssue = new Map<string, number>()
-  for (const s of topLevel) {
-    if (s.issueId) {
-      sessionsPerIssue.set(s.issueId, (sessionsPerIssue.get(s.issueId) ?? 0) + 1)
-    }
-  }
-
-  const openIssues = issues.filter((i) => i.state === "open")
-  const childrenOf = new Map<string, typeof openIssues>()
-  const rootIssues = openIssues.filter((i) => {
-    if (i.parentId) {
-      const list = childrenOf.get(i.parentId) ?? []
-      list.push(i)
-      childrenOf.set(i.parentId, list)
-      return false
-    }
-    return true
-  })
-
-  const allEpics = rootIssues.filter((i) => childrenOf.has(i.id))
-  const allStrayIssues = rootIssues.filter((i) => !childrenOf.has(i.id))
-
-  const iq = issueSearch.trim().toLowerCase()
-  const issueMatches = (i: { number: number; title: string }) =>
-    `#${i.number} ${i.title}`.toLowerCase().includes(iq)
-
-  const epics = !iq
-    ? allEpics
-    : allEpics.filter((i) => {
-        if (issueMatches(i)) return true
-        const children = childrenOf.get(i.id) ?? []
-        return children.some(issueMatches)
-      })
-  const strayIssues = !iq
-    ? allStrayIssues
-    : allStrayIssues.filter(issueMatches)
-
-  const toggleExpand = (id: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
   const renderSessionList = (list: Session[]) => (
     <ul className="space-y-0.5">
       {list.map((session) => {
@@ -438,60 +356,6 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
       })}
     </ul>
   )
-
-  const handleIssueClick = (issueId: string) => {
-    if (matchingParentId) {
-      useIssueStore.getState().setMatchCandidate(issueId)
-    } else {
-      useIssueStore.getState().setPreviewIssue(issueId)
-      useSessionStore.setState({ activeSessionId: null })
-    }
-    onClose?.()
-  }
-
-  if (matchingParentId) {
-    const parent = issueMap.get(matchingParentId)
-    const q = search.toLowerCase()
-    const filtered = issues.filter((i) =>
-      i.state === "open" && i.id !== matchingParentId && (!q || `#${i.number} ${i.title}`.toLowerCase().includes(q))
-    )
-
-    return (
-      <div className="flex h-full w-80 shrink-0 flex-col border-r border-line bg-surface">
-        <div className="border-b border-line px-3 py-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">选择子任务</span>
-          {parent && <p className="mt-0.5 truncate font-mono text-[10px] text-fg-5">父: #{parent.number} {parent.title}</p>}
-        </div>
-        <div className="border-b border-line px-3 py-2">
-          <div className="flex items-center gap-2 rounded-md border border-line bg-base px-2 py-1">
-            <Search className="h-3.5 w-3.5 text-fg-5" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索 issue..."
-              className="min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-fg-6 focus:outline-none"
-            />
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto px-2 py-2">
-          <ul className="space-y-0.5">
-            {filtered.map((issue) => (
-              <IssueRow
-                key={issue.id}
-                issue={issue}
-                selected={issue.id === matchingCandidateId}
-                onClick={() => handleIssueClick(issue.id)}
-              />
-            ))}
-          </ul>
-          {filtered.length === 0 && (
-            <p className="px-2 py-4 text-center font-mono text-xs text-fg-5">无匹配结果</p>
-          )}
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="flex h-full w-80 shrink-0 flex-col border-r border-line bg-surface">
@@ -535,103 +399,6 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
             <div>
               {renderSessionList(topLevel)}
             </div>
-          )}
-        </div>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col border-t border-line">
-        <div className="flex items-center justify-between border-b border-line px-3 py-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">Issues</span>
-          {activeRepoId && (
-            <button
-              type="button"
-              onClick={() => void syncIssues()}
-              disabled={syncing}
-              title="同步 Issues"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"
-            >
-              <RefreshCw className={clsx("h-3.5 w-3.5", syncing && "animate-spin")} />
-            </button>
-          )}
-        </div>
-        <div className="border-b border-line px-3 py-2">
-          <div className="flex items-center gap-2 rounded-md border border-line bg-base px-2 py-1">
-            <Search className="h-3.5 w-3.5 shrink-0 text-fg-5" />
-            <input
-              type="text"
-              value={issueSearch}
-              onChange={(e) => setIssueSearch(e.target.value)}
-              placeholder="搜索 issue..."
-              className="min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-fg-6 focus:outline-none"
-            />
-            {issueSearch && (
-              <button
-                type="button"
-                onClick={() => setIssueSearch("")}
-                className="shrink-0 text-fg-5 hover:text-fg-3"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto px-2 py-2">
-          {!activeRepoId ? (
-            <p className="px-2 py-4 text-center font-mono text-xs text-fg-5">请先选择一个仓库</p>
-          ) : issues.length === 0 ? (
-            <p className="px-2 py-4 text-center font-mono text-xs text-fg-5">点击 ↻ 同步 Issues</p>
-          ) : epics.length === 0 && strayIssues.length === 0 ? (
-            <p className="px-2 py-4 text-center font-mono text-xs text-fg-5">无匹配 Issue</p>
-          ) : (
-            <ul className="space-y-0.5">
-              {epics.map((issue) => {
-                const allChildren = childrenOf.get(issue.id) ?? []
-                const visibleChildren = iq ? allChildren.filter(issueMatches) : allChildren
-                const isExpanded = expanded.has(issue.id) || !!iq
-                return (
-                  <li key={issue.id}>
-                    <div className="flex items-center">
-                      <button
-                        type="button"
-                        onClick={() => toggleExpand(issue.id)}
-                        className="flex h-6 w-5 shrink-0 items-center justify-center text-fg-5"
-                      >
-                        <ChevronRight className={clsx("h-3 w-3 transition-transform", isExpanded && "rotate-90")} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleIssueClick(issue.id)}
-                        className="flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pr-2.5 text-left transition-colors hover:bg-elevated/50"
-                      >
-                        <span className={clsx(
-                          "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
-                          issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-                        )}>
-                          #{issue.number}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-xs font-medium text-fg-2">{issue.title}</span>
-                        <span className="shrink-0 rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">{allChildren.length}</span>
-                      </button>
-                    </div>
-                    {isExpanded && visibleChildren.length > 0 && (
-                      <ul className="space-y-0.5">
-                        {visibleChildren.map((child) => (
-                          <IssueRow key={child.id} issue={child} indent onClick={() => handleIssueClick(child.id)} />
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                )
-              })}
-              {strayIssues.map((issue) => (
-                <IssueRow
-                  key={issue.id}
-                  issue={issue}
-                  badge={sessionsPerIssue.get(issue.id)}
-                  onClick={() => handleIssueClick(issue.id)}
-                />
-              ))}
-            </ul>
           )}
         </div>
       </div>
