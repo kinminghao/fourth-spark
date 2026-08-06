@@ -5,6 +5,7 @@ import type { Session } from "../lib/api-client"
 import { useSessionStore, EMPTY_TODOS, EMPTY_MESSAGES } from "../stores/session-store"
 import { useRepoStore } from "../stores/repo-store"
 import { useIssueStore } from "../stores/issue-store"
+import { useDraftStore } from "../stores/draft-store"
 import { useLayoutStore } from "../stores/layout-store"
 import { RunView } from "../components/RunView"
 import { SidePanel } from "../components/SidePanel"
@@ -71,6 +72,7 @@ function SessionItem({
   issue?: { number: number; title: string; state: string }
   linkedItems?: Array<{ number: number; state: string; type: "issue" | "pr"; mergedAt?: number | null }>
 }) {
+  const draft = useDraftStore((s) => s.drafts[session.id])
   const isCompleted = !!session.completedAt
   const when = formatWhen(session)
   const [editing, setEditing] = useState(false)
@@ -245,6 +247,11 @@ function SessionItem({
                 </div>
               )}
               <span className="block truncate text-sm text-fg-2">{session.title?.trim() || "未命名运行"}</span>
+              {draft && (
+                <span className="mt-0.5 block truncate text-xs text-amber-400/80">
+                  ✏️ {draft}
+                </span>
+              )}
             </div>
           )}
         </button>
