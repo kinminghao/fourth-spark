@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react"
-import { Check, CheckCircle2, ChevronRight, Copy, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import type { Session } from "../lib/api-client"
 import { useSessionStore, EMPTY_TODOS, EMPTY_MESSAGES } from "../stores/session-store"
 import { useRepoStore } from "../stores/repo-store"
 import { useIssueStore } from "../stores/issue-store"
 import { useDraftStore } from "../stores/draft-store"
+import { useLayoutStore } from "../stores/layout-store"
 import { RunView } from "../components/RunView"
 import { SidePanel } from "../components/SidePanel"
 import { useSwipeDrawer } from "../hooks/use-swipe-drawer"
@@ -668,6 +669,8 @@ export function RunPage() {
 
   const isXl = useIsXl()
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
+  const sessionPanelCollapsed = useLayoutStore((s) => s.sessionPanelCollapsed)
+  const toggleSessionPanel = useLayoutStore((s) => s.toggleSessionPanel)
   const todos = useSessionStore((s) => {
     const id = s.activeSessionId
     return id ? (s.todos[id] ?? EMPTY_TODOS) : EMPTY_TODOS
@@ -707,9 +710,35 @@ export function RunPage() {
 
   return (
     <div className="flex min-h-0 flex-1" {...swipeHandlers}>
-      {/* Desktop left sidebar — always visible at md+ */}
-      <div className="hidden shrink-0 md:flex">
-        <SessionPanel />
+      {/* Desktop left sidebar — collapsible at md+ */}
+      <div className="relative hidden shrink-0 md:flex">
+        <div
+          className={clsx(
+            "overflow-hidden transition-[width] duration-200 ease-in-out",
+            sessionPanelCollapsed ? "w-0" : "w-80",
+          )}
+        >
+          <div className="h-full w-80">
+            <SessionPanel />
+          </div>
+        </div>
+        {/* Edge toggle handle — vertical tab on the panel/content boundary */}
+        <button
+          type="button"
+          onClick={toggleSessionPanel}
+          title={sessionPanelCollapsed ? "展开运行记录" : "收起运行记录"}
+          className={clsx(
+            "absolute left-full top-1/2 z-20 flex h-14 w-4 -translate-y-1/2 items-center justify-center rounded-r-md border-y border-r border-line text-fg-5 transition-all duration-200 hover:bg-elevated hover:text-fg-3",
+            sessionPanelCollapsed
+              ? "bg-surface opacity-80 hover:w-5 hover:opacity-100"
+              : "bg-surface/80 opacity-0 hover:opacity-100",
+          )}
+        >
+          {sessionPanelCollapsed
+            ? <ChevronRight className="h-3 w-3" />
+            : <ChevronLeft className="h-3 w-3" />
+          }
+        </button>
       </div>
 
       {/* Mobile left drawer — Session list */}
