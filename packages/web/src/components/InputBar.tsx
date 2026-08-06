@@ -9,6 +9,7 @@ import { ArrowUp } from "lucide-react"
 import clsx from "clsx"
 import { useSessionStore, EMPTY_MESSAGES } from "../stores/session-store"
 import { useRepoStore } from "../stores/repo-store"
+import { useDraftStore } from "../stores/draft-store"
 import { classifyPart, isQuestionPending } from "../lib/message-parts"
 import type { ModelInfo } from "../lib/api-client"
 import { getSettings, listModels } from "../lib/api-client"
@@ -44,6 +45,8 @@ export function InputBar() {
     return id ? state.sessionStatuses[id] : undefined
   })
   const sendMessage = useSessionStore((state) => state.sendMessage)
+  const setDraft = useDraftStore((s) => s.setDraft)
+  const clearDraft = useDraftStore((s) => s.clearDraft)
   const hasPendingQuestion = useHasPendingQuestion()
 
   useEffect(() => {
@@ -79,7 +82,7 @@ export function InputBar() {
   }, [value])
 
   useEffect(() => {
-    setValue("")
+    setValue(activeSessionId ? useDraftStore.getState().drafts[activeSessionId] ?? "" : "")
   }, [activeSessionId])
 
   const submit = () => {
@@ -89,6 +92,7 @@ export function InputBar() {
     }
     void sendMessage(text, selectedModel || undefined)
     setValue("")
+    if (activeSessionId) clearDraft(activeSessionId)
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -133,7 +137,11 @@ export function InputBar() {
           rows={2}
           value={value}
           disabled={disabled}
-          onChange={(event) => setValue(event.target.value)}
+          onChange={(event) => {
+            const v = event.target.value
+            setValue(v)
+            if (activeSessionId) setDraft(activeSessionId, v)
+          }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className="flex-1 resize-none bg-transparent font-mono text-sm leading-6 text-fg placeholder:text-fg-6 focus:outline-none disabled:cursor-not-allowed"
