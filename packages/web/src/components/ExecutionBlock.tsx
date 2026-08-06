@@ -90,18 +90,33 @@ export function ExecutionBlock({ message, isStreaming, queued }: { message: Mess
 
   if (isUser) {
     const prompt = parts.map(getPartText).join("").trim()
+    const createdAt = message.time?.created
+    const timeStr = createdAt
+      ? new Date(createdAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : null
     return (
-      <div className="fs-fade-in flex items-start gap-2 font-mono text-sm">
-        <span className="shrink-0 select-none text-emerald-400">❯</span>
-        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-fg-2">
-          {prompt || "…"}
-        </span>
-        {queued && (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded border border-amber-500/30 px-1.5 py-0.5 text-xs text-amber-400">
-            <span className="leading-none">○</span>
-            <span>queued</span>
+      <div className="fs-fade-in rounded-r-md border-l-2 border-emerald-500/40 bg-emerald-500/[0.04] px-3 py-2 font-mono">
+        <div className="mb-1 flex items-center gap-2 text-[11px]">
+          <span className="font-medium text-emerald-400">You</span>
+          {timeStr && (
+            <>
+              <span className="text-fg-6">·</span>
+              <span className="text-fg-5">{timeStr}</span>
+            </>
+          )}
+          {queued && (
+            <span className="inline-flex items-center gap-1 rounded border border-amber-500/30 px-1.5 py-0.5 text-xs text-amber-400">
+              <span className="leading-none">○</span>
+              <span>queued</span>
+            </span>
+          )}
+        </div>
+        <div className="flex items-start gap-2 text-sm">
+          <span className="shrink-0 select-none text-emerald-400">❯</span>
+          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-fg">
+            {prompt || "…"}
           </span>
-        )}
+        </div>
       </div>
     )
   }
