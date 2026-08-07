@@ -1,6 +1,5 @@
 import { Hono } from "hono"
 import { workspaceManager } from "../lib/workspace-manager"
-import { processManager } from "../lib/process-manager"
 import { logger } from "../middleware/logger"
 
 export const workspaceRoutes = new Hono()
@@ -19,7 +18,6 @@ workspaceRoutes.get("/", async (c) => {
       ...ws,
       diskUsage,
       merged,
-      running: processManager.isWorkspaceRunning(ws.id),
     }
   }))
   return c.json(augmented)
@@ -27,11 +25,6 @@ workspaceRoutes.get("/", async (c) => {
 
 workspaceRoutes.delete("/:id", async (c) => {
   const workspaceId = c.req.param("id")
-  try {
-    await processManager.stopWorkspace(workspaceId)
-  } catch (err) {
-    logger.warn({ err, workspaceId }, "failed to stop workspace opencode before removal")
-  }
   try {
     await workspaceManager.remove(workspaceId)
   } catch (err) {
@@ -62,7 +55,6 @@ workspaceRoutes.post("/cleanup", async (c) => {
       continue
     }
     try {
-      await processManager.stopWorkspace(ws.id)
       await workspaceManager.remove(ws.id)
       removed.push(ws.id)
     } catch (err) {

@@ -99,7 +99,7 @@ export interface OpenCodeClient {
   readonly directory: string
 
   listSessions(): Promise<Session[]>
-  createSession(opts: { agent?: string; title?: string }): Promise<Session>
+  createSession(opts: { agent?: string; title?: string; directory?: string }): Promise<Session>
   getSession(sessionId: string): Promise<Session>
   deleteSession(sessionId: string): Promise<void>
   getMessages(sessionId: string): Promise<Message[]>
@@ -183,7 +183,8 @@ export function createOpenCodeClient(baseUrl: string, directory: string): OpenCo
     },
 
     createSession(opts) {
-      return postJson<Session>("/session", { directory }, { title: opts.title, agent: opts.agent })
+      const dir = opts.directory ?? directory
+      return postJson<Session>("/session", { directory: dir }, { title: opts.title, agent: opts.agent })
     },
 
     getSession(sessionId) {
