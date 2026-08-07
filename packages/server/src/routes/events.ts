@@ -162,7 +162,6 @@ events.get("/:id/events", (c) => {
 globalEvents.get("/", (c) => {
   const repoId = c.req.param("repoId")
   const repoClient = processManager.requireClient(repoId)
-  const unscoped = createOpenCodeClient(repoClient.baseUrl, undefined as unknown as string)
 
   return streamSSE(c, async (stream) => {
     const controller = new AbortController()
@@ -174,7 +173,12 @@ globalEvents.get("/", (c) => {
 
     let upstream: Response
     try {
-      upstream = await unscoped.eventStream(controller.signal)
+      upstream = await fetch(`${repoClient.baseUrl}/event`, {
+        method: "GET",
+        headers: { Accept: "text/event-stream" },
+        signal: controller.signal,
+      })
+      if (!upstream.ok) throw new Error(`OpenCode /event responded ${upstream.status}`)
     } catch (err) {
       logger.error({ err, repoId }, "Global SSE proxy failed to connect to OpenCode")
       await stream.writeSSE({ event: "error", data: JSON.stringify({ error: "OpenCode event stream unavailable" }) })
