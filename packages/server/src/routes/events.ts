@@ -1,8 +1,23 @@
 import { Hono } from "hono"
 import { streamSSE, type SSEStreamingApi } from "hono/streaming"
+import { eq } from "drizzle-orm"
 import { processManager } from "../lib/process-manager"
 import { logger } from "../middleware/logger"
 import { syncSseEvent } from "../db/sync"
+import { db } from "../db/index"
+import { sessions as sessionsTable } from "../db/schema"
+import type { OpenCodeClient } from "../lib/opencode"
+
+async function resolveSessionClient(repoId: string | undefined, sessionId: string): Promise<OpenCodeClient> {
+  const [row] = await db.select({ workspaceId: sessionsTable.workspaceId })
+    .from(sessionsTable)
+    .where(eq(sessionsTable.id, sessionId))
+  if (row?.workspaceId) {
+    const client = processManager.getWorkspaceClient(row.workspaceId)
+    if (client) return client
+  }
+  return processManager.requireClient(repoId)
+}
 
 export const events = new Hono()
 export const globalEvents = new Hono()
@@ -78,7 +93,6 @@ async function forwardBlockGlobal(block: string, stream: SSEStreamingApi): Promi
 events.get("/:id/events", (c) => {
   const repoId = c.req.param("repoId")
   const sessionId = c.req.param("id")
-  const client = processManager.requireClient(repoId)
 
   return streamSSE(c, async (stream) => {
     const controller = new AbortController()
@@ -87,6 +101,15 @@ events.get("/:id/events", (c) => {
       closed = true
       controller.abort()
     })
+
+    let client: OpenCodeClient
+    try {
+      client = await resolveSessionClient(repoId, sessionId)
+    } catch (err) {
+      logger.error({ err, sessionId, repoId }, "SSE proxy could not resolve client")
+      await stream.writeSSE({ event: "error", data: JSON.stringify({ error: "OpenCode process not running" }) })
+      return
+    }
 
     let upstream: Response
     try {

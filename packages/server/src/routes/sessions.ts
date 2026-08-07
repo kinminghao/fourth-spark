@@ -2,13 +2,14 @@ import { Hono } from "hono"
 import { eq, and, asc, desc, inArray } from "drizzle-orm"
 import { processManager } from "../lib/process-manager"
 import { sessionMonitor } from "../lib/session-monitor"
+import { workspaceManager } from "../lib/workspace-manager"
 import { DEFAULT_VARIANT } from "../lib/config"
 import { syncSessionsList, syncMessagesList } from "../db/sync"
 import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFromDB, getTodosFromDB } from "../db/query"
 import { db } from "../db/index"
-import { sessions as sessionsTable, issues, issueComments, customAgents, customAgentFragments, promptFragments, sessionLinks, pullRequests } from "../db/schema"
+import { sessions as sessionsTable, issues, issueComments, customAgents, customAgentFragments, promptFragments, sessionLinks, pullRequests, repos } from "../db/schema"
 import { logger } from "../middleware/logger"
-import type { SessionStatus } from "../lib/opencode"
+import type { OpenCodeClient, SessionStatus } from "../lib/opencode"
 
 export const sessions = new Hono()
 
@@ -39,6 +40,17 @@ async function collectAncestorChain(issueId: string) {
   }
 
   return chain.reverse()
+}
+
+async function getClientForSession(repoId: string | undefined, sessionId: string): Promise<OpenCodeClient> {
+  const [row] = await db.select({ workspaceId: sessionsTable.workspaceId })
+    .from(sessionsTable)
+    .where(eq(sessionsTable.id, sessionId))
+  if (row?.workspaceId) {
+    const client = processManager.getWorkspaceClient(row.workspaceId)
+    if (client) return client
+  }
+  return processManager.requireClient(repoId)
 }
 
 export async function buildIssueContext(issueId: string): Promise<string | null> {
@@ -86,7 +98,14 @@ export async function buildIssueContext(issueId: string): Promise<string | null>
 
 sessions.post("/", async (c) => {
   const repoId = c.req.param("repoId")
-  const client = processManager.requireClient(repoId)
+  if (!repoId) {
+    return c.json({ error: "Missing repoId", status: 400 }, 400)
+  }
+  const [repo] = await db.select().from(repos).where(eq(repos.id, repoId))
+  if (!repo) {
+    return c.json({ error: "Repo not found", status: 404 }, 404)
+  }
+
   const body = await c.req.json<{ message?: string; agent?: string; model?: string; variant?: string; title?: string; issueId?: string; customAgentId?: string }>().catch(() => null)
   if (!body) {
     return c.json({ error: "Request body is required", status: 400 }, 400)
@@ -138,11 +157,22 @@ sessions.post("/", async (c) => {
   if (message) parts.push(message)
   const prompt = parts.join("\n\n---\n\n")
 
+  const workspace = await workspaceManager.create(repoId, repo.localPath)
+  let client: OpenCodeClient
+  try {
+    client = await processManager.startWorkspace(workspace.id, workspace.localPath, repoId)
+  } catch (err) {
+    logger.error({ err, workspaceId: workspace.id, repoId }, "failed to start workspace opencode, cleaning up")
+    await workspaceManager.remove(workspace.id).catch(() => {})
+    throw err
+  }
+
   const session = await client.createSession({ agent, title: body.title })
   const now = Date.now()
   await db.insert(sessionsTable).values({
     id: session.id,
     title: session.title ?? body.title ?? "",
+    workspaceId: workspace.id,
     issueId: body.issueId ?? null,
     customAgentId,
     agent: agent ?? null,
@@ -150,7 +180,7 @@ sessions.post("/", async (c) => {
     timeUpdated: now,
   }).onConflictDoUpdate({
     target: sessionsTable.id,
-    set: { issueId: body.issueId ?? null, customAgentId, timeUpdated: now },
+    set: { workspaceId: workspace.id, issueId: body.issueId ?? null, customAgentId, timeUpdated: now },
   })
   try {
     await client.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT })
@@ -160,7 +190,7 @@ sessions.post("/", async (c) => {
     await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id)).catch(() => {})
     throw err
   }
-  return c.json({ ...session, agent, issueId: body.issueId ?? null, customAgentId }, 201)
+  return c.json({ ...session, agent, issueId: body.issueId ?? null, customAgentId, workspaceId: workspace.id }, 201)
 })
 
 sessions.get("/", async (c) => {
@@ -241,7 +271,12 @@ sessions.get("/status", async (c) => {
 sessions.get("/:id", async (c) => {
   const repoId = c.req.param("repoId")
   const sessionId = c.req.param("id")
-  const client = processManager.getClient(repoId)
+  let client: OpenCodeClient | null = null
+  try {
+    client = await getClientForSession(repoId, sessionId)
+  } catch {
+    client = null
+  }
   if (client) {
     try {
       const live = await client.getSession(sessionId)
@@ -260,13 +295,13 @@ sessions.get("/:id", async (c) => {
 })
 
 sessions.delete("/:id", async (c) => {
-  const client = processManager.requireClient(c.req.param("repoId"))
+  const client = await getClientForSession(c.req.param("repoId"), c.req.param("id"))
   await client.deleteSession(c.req.param("id"))
   return c.json({ ok: true })
 })
 
 sessions.post("/:id/prompt", async (c) => {
-  const client = processManager.requireClient(c.req.param("repoId"))
+  const client = await getClientForSession(c.req.param("repoId"), c.req.param("id"))
   const body = await c.req.json<{ content?: string; agent?: string; model?: string; variant?: string }>().catch(() => null)
   if (!body || typeof body.content !== "string" || body.content.length === 0) {
     return c.json({ error: "Body must include a non-empty 'content' string", status: 400 }, 400)
@@ -276,16 +311,16 @@ sessions.post("/:id/prompt", async (c) => {
 })
 
 sessions.post("/:id/abort", async (c) => {
-  const client = processManager.requireClient(c.req.param("repoId"))
   const sessionId = c.req.param("id")
+  const client = await getClientForSession(c.req.param("repoId"), sessionId)
   sessionMonitor.markAborted(sessionId)
   await client.abort(sessionId)
   return c.json({ ok: true })
 })
 
 sessions.post("/:id/questions/reply", async (c) => {
-  const client = processManager.requireClient(c.req.param("repoId"))
   const sessionId = c.req.param("id")
+  const client = await getClientForSession(c.req.param("repoId"), sessionId)
   const body = await c.req.json<{ answers?: string[][] }>().catch(() => null)
   if (!body?.answers || !Array.isArray(body.answers)) {
     return c.json({ error: "'answers' must be an array of string arrays", status: 400 }, 400)
@@ -300,8 +335,8 @@ sessions.post("/:id/questions/reply", async (c) => {
 })
 
 sessions.post("/:id/questions/reject", async (c) => {
-  const client = processManager.requireClient(c.req.param("repoId"))
   const sessionId = c.req.param("id")
+  const client = await getClientForSession(c.req.param("repoId"), sessionId)
   const pending = await client.listQuestions()
   const match = pending.find((q) => q.sessionID === sessionId)
   if (!match) {
@@ -314,7 +349,12 @@ sessions.post("/:id/questions/reject", async (c) => {
 sessions.get("/:id/messages", async (c) => {
   const repoId = c.req.param("repoId")
   const id = c.req.param("id")
-  const client = processManager.getClient(repoId)
+  let client: OpenCodeClient | null = null
+  try {
+    client = await getClientForSession(repoId, id)
+  } catch {
+    client = null
+  }
   if (client) {
     try {
       const msgs = await client.getMessages(id)
@@ -329,15 +369,21 @@ sessions.get("/:id/messages", async (c) => {
 
 sessions.get("/:id/todos", async (c) => {
   const repoId = c.req.param("repoId")
-  const client = processManager.getClient(repoId)
+  const id = c.req.param("id")
+  let client: OpenCodeClient | null = null
+  try {
+    client = await getClientForSession(repoId, id)
+  } catch {
+    client = null
+  }
   if (client) {
     try {
-      return c.json(await client.getTodos(c.req.param("id")))
+      return c.json(await client.getTodos(id))
     } catch (err) {
       logger.warn({ err, repoId }, "opencode unavailable for getTodos, falling back to DB")
     }
   }
-  return c.json(await getTodosFromDB(c.req.param("id")))
+  return c.json(await getTodosFromDB(id))
 })
 
 sessions.patch("/:id", async (c) => {
@@ -400,11 +446,17 @@ sessions.delete("/:id/links", async (c) => {
 
 sessions.get("/:id/status", async (c) => {
   const repoId = c.req.param("repoId")
-  const client = processManager.getClient(repoId)
+  const id = c.req.param("id")
+  let client: OpenCodeClient | null = null
+  try {
+    client = await getClientForSession(repoId, id)
+  } catch {
+    client = null
+  }
   if (client) {
     try {
       const all = await client.getSessionStatus()
-      const status: SessionStatus = all[c.req.param("id")] ?? { type: "idle" }
+      const status: SessionStatus = all[id] ?? { type: "idle" }
       return c.json(status)
     } catch {
       // Process down → session is idle

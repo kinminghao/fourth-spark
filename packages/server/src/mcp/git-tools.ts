@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { eq } from "drizzle-orm"
 import { db } from "../db/index"
-import { repos, issues, issueComments, pullRequests, sessionLinks } from "../db/schema"
+import { repos, issues, issueComments, pullRequests, sessionLinks, sessions as sessionsTable, workspaces } from "../db/schema"
 import { parseGitUrl } from "../lib/git-url"
 import { getHostInfo, createGitIssueClient, type GitIssueClient, type GitIssue, type GitComment, type GitPullRequest } from "../lib/git-provider"
 import { processManager } from "../lib/process-manager"
@@ -103,6 +103,37 @@ async function findBusySessionId(repoId: string): Promise<string | null> {
     logger.warn({ err, repoId }, "failed to find busy session for auto-link")
   }
   return null
+}
+
+async function renameWorkspaceBranch(repoId: string, head: string): Promise<void> {
+  const sessionId = await findBusySessionId(repoId)
+  if (!sessionId) return
+
+  const [session] = await db.select({ workspaceId: sessionsTable.workspaceId })
+    .from(sessionsTable).where(eq(sessionsTable.id, sessionId))
+  if (!session?.workspaceId) return
+
+  const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, session.workspaceId))
+  if (!workspace || !workspace.branch.startsWith("ws/")) return
+  if (workspace.branch === head) return
+
+  const cwd = workspace.localPath
+
+  const renameResult = Bun.spawnSync(["git", "branch", "-m", workspace.branch, head], { cwd })
+  if (renameResult.exitCode !== 0) {
+    const stderr = renameResult.stderr.toString().trim()
+    logger.warn({ repoId, from: workspace.branch, to: head, stderr }, "MCP: branch rename failed, continuing with original name")
+    return
+  }
+
+  const pushResult = Bun.spawnSync(["git", "push", "-u", "origin", head], { cwd })
+  if (pushResult.exitCode !== 0) {
+    const stderr = pushResult.stderr.toString().trim()
+    logger.warn({ repoId, branch: head, stderr }, "MCP: push after rename failed")
+  }
+
+  await db.update(workspaces).set({ branch: head, updatedAt: Date.now() }).where(eq(workspaces.id, workspace.id))
+  logger.info({ repoId, from: workspace.branch, to: head }, "MCP: renamed workspace branch for PR")
 }
 
 async function linkSessionTarget(repoId: string, type: "issue" | "pr", targetId: string): Promise<void> {
@@ -347,6 +378,8 @@ function registerGitTools(server: McpServer, repoId: string): void {
     async ({ title, body, head, base, issue_number }) => {
       try {
         const { client } = await getClientForRepo(repoId)
+
+        await renameWorkspaceBranch(repoId, head)
 
         let prBody = body ?? ""
         if (issue_number) {

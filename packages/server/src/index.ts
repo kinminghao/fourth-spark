@@ -20,6 +20,7 @@ import { tagRoutes } from "./routes/tags"
 import { milestoneRoutes } from "./routes/milestones"
 import { pullRoutes } from "./routes/pulls"
 import { pushRoutes } from "./routes/push"
+import { workspaceRoutes } from "./routes/workspaces"
 import { PORT, initWorkerConfig } from "./lib/config"
 import { processManager } from "./lib/process-manager"
 import { initRegistry } from "./core/registry"
@@ -72,6 +73,7 @@ repoScoped.route("/milestones", milestoneRoutes)
 repoScoped.route("/pulls", pullRoutes)
 repoScoped.route("/mcp", mcpRoute)
 repoScoped.route("/health", repoHealth)
+repoScoped.route("/workspaces", workspaceRoutes)
 
 app.route("/api/repos/:repoId", repoScoped)
 

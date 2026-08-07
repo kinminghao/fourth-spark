@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm"
 import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync, openSync } from "node:fs"
 import { join } from "node:path"
 import { db } from "../db/index"
-import { repos, settings } from "../db/schema"
+import { repos, settings, workspaces } from "../db/schema"
 import { syncSessionsList, syncMessagesList } from "../db/sync"
 import { createOpenCodeClient, type OpenCodeClient } from "./opencode"
 import { sessionMonitor } from "./session-monitor"
@@ -92,6 +92,7 @@ interface PidRecord {
   pid: number
   port: number
   repoId: string
+  workspaceId?: string
 }
 
 function readPidFile(): PidRecord[] {
@@ -110,6 +111,9 @@ function writePidFile(): void {
     const records: PidRecord[] = []
     for (const entry of managed.values()) {
       records.push({ pid: entry.process.pid, port: entry.port, repoId: entry.id })
+    }
+    for (const entry of workspaceManaged.values()) {
+      records.push({ pid: entry.process.pid, port: entry.port, repoId: entry.repoId ?? "", workspaceId: entry.id })
     }
     writeFileSync(PID_FILE, JSON.stringify(records, null, 2))
   } catch (err) {
@@ -158,39 +162,54 @@ async function verifyOpenCodeIdentity(port: number, expectedDir: string): Promis
   }
 }
 
-async function adoptOrphans(): Promise<Map<string, PidRecord>> {
-  const adopted = new Map<string, PidRecord>()
+interface AdoptionResult {
+  repos: Map<string, PidRecord>
+  workspaces: Map<string, PidRecord>
+}
+
+async function adoptOrphans(): Promise<AdoptionResult> {
+  const adopted: AdoptionResult = { repos: new Map(), workspaces: new Map() }
   const oldRecords = readPidFile()
   if (oldRecords.length === 0) return adopted
 
   const allRepos = await db.select().from(repos)
   const repoPathMap = new Map(allRepos.map((r) => [r.id, r.localPath]))
+  const allWorkspaces = await db.select().from(workspaces)
+  const workspacePathMap = new Map(allWorkspaces.map((w) => [w.id, w.localPath]))
 
   for (const record of oldRecords) {
     const alive = await isProcessAlive(record.pid)
     if (!alive) {
-      logger.info({ pid: record.pid, repoId: record.repoId }, "orphan process already dead, skipping")
+      logger.info({ pid: record.pid, repoId: record.repoId, workspaceId: record.workspaceId }, "orphan process already dead, skipping")
       continue
     }
 
-    const expectedDir = repoPathMap.get(record.repoId)
+    const expectedDir = record.workspaceId
+      ? workspacePathMap.get(record.workspaceId)
+      : repoPathMap.get(record.repoId)
     if (!expectedDir) {
       killPid(record.pid)
-      logger.info({ pid: record.pid, repoId: record.repoId }, "orphan repo no longer in DB, killed")
+      logger.info({ pid: record.pid, repoId: record.repoId, workspaceId: record.workspaceId }, "orphan no longer in DB, killed")
       continue
     }
 
     const verified = await verifyOpenCodeIdentity(record.port, expectedDir)
     if (verified) {
-      adopted.set(record.repoId, record)
-      logger.info({ pid: record.pid, port: record.port, repoId: record.repoId }, "adopted live orphan process")
+      if (record.workspaceId) {
+        adopted.workspaces.set(record.workspaceId, record)
+      } else {
+        adopted.repos.set(record.repoId, record)
+      }
+      logger.info({ pid: record.pid, port: record.port, repoId: record.repoId, workspaceId: record.workspaceId }, "adopted live orphan process")
     } else {
       killPid(record.pid)
-      logger.info({ pid: record.pid, repoId: record.repoId }, "orphan identity verification failed, killed")
+      logger.info({ pid: record.pid, repoId: record.repoId, workspaceId: record.workspaceId }, "orphan identity verification failed, killed")
     }
   }
 
-  const adoptedPids = new Set([...adopted.values()].map((r) => r.pid))
+  const adoptedPids = new Set<number>()
+  for (const r of adopted.repos.values()) adoptedPids.add(r.pid)
+  for (const r of adopted.workspaces.values()) adoptedPids.add(r.pid)
   try {
     const result = Bun.spawnSync(["pgrep", "-f", "opencode serve --port"])
     const output = result.stdout.toString().trim()
@@ -208,8 +227,9 @@ async function adoptOrphans(): Promise<Map<string, PidRecord>> {
   } catch {
   }
 
-  if (adopted.size > 0) {
-    logger.info({ count: adopted.size }, "adopted live opencode processes from previous run")
+  const totalAdopted = adopted.repos.size + adopted.workspaces.size
+  if (totalAdopted > 0) {
+    logger.info({ repos: adopted.repos.size, workspaces: adopted.workspaces.size }, "adopted live opencode processes from previous run")
   }
 
   return adopted
@@ -315,22 +335,24 @@ interface ManagedRepo {
   port: number
   process: Subprocess
   client: OpenCodeClient
+  repoId?: string
 }
 
 // ---------------------------------------------------------------------------
-// ProcessManager — one opencode process per repo
+// ProcessManager — one opencode process per repo, plus per-workspace processes
 // ---------------------------------------------------------------------------
 
 const managed = new Map<string, ManagedRepo>()
+const workspaceManaged = new Map<string, ManagedRepo>()
 let activeLeaseKeeper: LeaseKeeper | undefined
 
-/** In-flight start() promises — prevents concurrent spawn for the same repoId. */
 const startingLocks = new Map<string, Promise<OpenCodeClient>>()
+const workspaceStartingLocks = new Map<string, Promise<OpenCodeClient>>()
 
-/** Ports currently claimed by this manager (to avoid double-assign). */
 function usedPorts(): Set<number> {
   const set = new Set<number>()
   for (const entry of managed.values()) set.add(entry.port)
+  for (const entry of workspaceManaged.values()) set.add(entry.port)
   return set
 }
 
@@ -426,6 +448,65 @@ async function initialSync(client: OpenCodeClient, repoId: string): Promise<void
   logger.info({ repoId, count: sessionList.length }, "initial session sync complete")
 }
 
+async function spawnOpenCodeForWorkspace(
+  workspaceId: string,
+  localPath: string,
+  repoId: string,
+  port: number,
+): Promise<ManagedRepo> {
+  logger.info({ workspaceId, repoId, localPath, port }, "spawning opencode serve (workspace)")
+
+  injectMcpConfig(localPath, repoId)
+
+  mkdirSync(PID_DIR, { recursive: true })
+  const logFile = join(PID_DIR, `opencode-ws-${workspaceId.slice(0, 8)}.log`)
+  const logFd = openSync(logFile, "a")
+  logger.info({ workspaceId, logFile }, "opencode workspace debug log enabled")
+
+  const proc = Bun.spawn([
+    "opencode", "serve",
+    "--port", String(port),
+    "--hostname", "127.0.0.1",
+    "--print-logs",
+    "--log-level", "DEBUG",
+  ], {
+    cwd: localPath,
+    stdout: logFd,
+    stderr: logFd,
+    detached: true,
+    env: {
+      ...process.env,
+      PORT: String(port),
+    },
+  })
+  proc.unref()
+
+  const baseUrl = `http://127.0.0.1:${port}`
+  const client = createOpenCodeClient(baseUrl, localPath)
+
+  const ready = await waitForReady(port)
+  if (!ready) {
+    proc.kill()
+    throw new Error(`opencode serve did not become ready on port ${port} for workspace ${workspaceId}`)
+  }
+
+  logger.info({ workspaceId, port }, "opencode serve ready (workspace)")
+
+  await db.update(workspaces)
+    .set({ port, status: "active", updatedAt: Date.now() })
+    .where(eq(workspaces.id, workspaceId))
+
+  const entry: ManagedRepo = { id: workspaceId, localPath, port, process: proc, client, repoId }
+  workspaceManaged.set(workspaceId, entry)
+  writePidFile()
+
+  initialSync(client, repoId).catch((err) => {
+    logger.error({ err, workspaceId, repoId }, "initial session sync failed (workspace)")
+  })
+
+  return entry
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -502,6 +583,58 @@ export const processManager = {
     return managed.has(repoId)
   },
 
+  async startWorkspace(workspaceId: string, localPath: string, repoId: string): Promise<OpenCodeClient> {
+    const existing = workspaceManaged.get(workspaceId)
+    if (existing) return existing.client
+
+    const inflight = workspaceStartingLocks.get(workspaceId)
+    if (inflight) return inflight
+
+    const promise = (async () => {
+      try {
+        const port = await allocatePort()
+        const entry = await spawnOpenCodeForWorkspace(workspaceId, localPath, repoId, port)
+        sessionMonitor.register(`ws:${workspaceId}`, entry.client)
+        return entry.client
+      } finally {
+        workspaceStartingLocks.delete(workspaceId)
+      }
+    })()
+
+    workspaceStartingLocks.set(workspaceId, promise)
+    return promise
+  },
+
+  async stopWorkspace(workspaceId: string): Promise<void> {
+    const entry = workspaceManaged.get(workspaceId)
+    if (!entry) return
+    sessionMonitor.unregister(`ws:${workspaceId}`)
+    logger.info({ workspaceId, port: entry.port }, "stopping opencode serve (workspace)")
+    entry.process.kill()
+    workspaceManaged.delete(workspaceId)
+    writePidFile()
+    removeMcpConfig(entry.localPath)
+    await db.update(workspaces)
+      .set({ port: null, status: "inactive", updatedAt: Date.now() })
+      .where(eq(workspaces.id, workspaceId))
+  },
+
+  getWorkspaceClient(workspaceId: string | undefined): OpenCodeClient | null {
+    if (!workspaceId) return null
+    return workspaceManaged.get(workspaceId)?.client ?? null
+  },
+
+  requireWorkspaceClient(workspaceId: string | undefined): OpenCodeClient {
+    if (!workspaceId) throw new Error("Missing workspaceId")
+    const client = workspaceManaged.get(workspaceId)?.client
+    if (!client) throw new Error(`Workspace ${workspaceId} is not running`)
+    return client
+  },
+
+  isWorkspaceRunning(workspaceId: string): boolean {
+    return workspaceManaged.has(workspaceId)
+  },
+
   async startAll(): Promise<void> {
     if (isWorkerMode()) {
       const cfg = getWorkerConfig()!
@@ -520,15 +653,31 @@ export const processManager = {
 
     const adopted = await adoptOrphans()
     const allRepos = await db.select().from(repos)
-    logger.info({ count: allRepos.length, adopted: adopted.size }, "starting opencode for all repos")
+    logger.info({ count: allRepos.length, adopted: adopted.repos.size }, "starting opencode for all repos")
     for (const repo of allRepos) {
       try {
-        await this.start(repo.id, repo.localPath, adopted)
+        await this.start(repo.id, repo.localPath, adopted.repos)
       } catch (err) {
         logger.error({ err, repoId: repo.id, localPath: repo.localPath }, "failed to start opencode for repo")
         await db.update(repos).set({ status: "error", updatedAt: Date.now() }).where(eq(repos.id, repo.id))
       }
     }
+
+    const allWorkspaces = await db.select().from(workspaces)
+    logger.info({ count: allWorkspaces.length, adopted: adopted.workspaces.size }, "adopting workspaces from previous run")
+    for (const ws of allWorkspaces) {
+      const record = adopted.workspaces.get(ws.id)
+      if (!record) continue
+      const baseUrl = `http://127.0.0.1:${record.port}`
+      const client = createOpenCodeClient(baseUrl, ws.localPath)
+      const fakeProc = { pid: record.pid, kill: () => killPid(record.pid) } as unknown as Subprocess
+      const entry: ManagedRepo = { id: ws.id, localPath: ws.localPath, port: record.port, process: fakeProc, client, repoId: ws.repoId }
+      workspaceManaged.set(ws.id, entry)
+      writePidFile()
+      sessionMonitor.register(`ws:${ws.id}`, client)
+      logger.info({ workspaceId: ws.id, port: record.port, pid: record.pid }, "reusing adopted workspace opencode process")
+    }
+
     sessionMonitor.start()
   },
 
@@ -537,6 +686,10 @@ export const processManager = {
     if (activeLeaseKeeper) {
       activeLeaseKeeper.dispose()
       activeLeaseKeeper = undefined
+    }
+    const workspaceIds = [...workspaceManaged.keys()]
+    for (const id of workspaceIds) {
+      await this.stopWorkspace(id)
     }
     const ids = [...managed.keys()]
     for (const id of ids) {
@@ -549,6 +702,14 @@ export const processManager = {
    * Last-resort for `exit` handler where async is not available.
    */
   killAllSync(): void {
+    for (const entry of workspaceManaged.values()) {
+      try {
+        process.kill(entry.process.pid, "SIGKILL")
+      } catch {
+        // already dead
+      }
+    }
+    workspaceManaged.clear()
     for (const entry of managed.values()) {
       try {
         process.kill(entry.process.pid, "SIGKILL")
