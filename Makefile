@@ -29,13 +29,13 @@ run: db
 	@echo "  make stop    — stop all"
 
 db:
-	@docker-compose up -d postgres
+	@docker compose up -d postgres
 	@echo "Waiting for PostgreSQL..."
 	@until docker exec fourth-spark-db pg_isready -U fourth_spark -q 2>/dev/null; do sleep 0.5; done
 	@echo "PostgreSQL ready"
 
 db-stop:
-	docker-compose down
+	docker compose down
 
 db-push:
 	cd packages/server && bunx drizzle-kit push
@@ -75,7 +75,7 @@ stop:
 	-@pkill -f 'vite.*--port 5173' 2>/dev/null
 	-@pkill -f 'opencode serve --port' 2>/dev/null
 	-@rm -f /tmp/fourth-spark/pid-map.json
-	docker-compose down
+	docker compose down
 	@echo "All stopped"
 
 stop-opencode:

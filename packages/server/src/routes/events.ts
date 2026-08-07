@@ -162,18 +162,9 @@ events.get("/:id/events", (c) => {
 globalEvents.get("/", (c) => {
   const repoId = c.req.param("repoId")
   const repoClient = processManager.requireClient(repoId)
+  const unscoped = createOpenCodeClient(repoClient.baseUrl, undefined as unknown as string)
 
   return streamSSE(c, async (stream) => {
-    const clients = [repoClient]
-    try {
-      const repoWorkspaces = await workspaceManager.listByRepo(repoId!)
-      for (const ws of repoWorkspaces) {
-        clients.push(createOpenCodeClient(repoClient.baseUrl, ws.localPath))
-      }
-    } catch {
-      // fallback to repo client only
-    }
-
     const controller = new AbortController()
     let closed = false
     stream.onAbort(() => {
@@ -181,17 +172,18 @@ globalEvents.get("/", (c) => {
       controller.abort()
     })
 
-    const upstreams: Response[] = []
-    for (const cl of clients) {
-      try {
-        upstreams.push(await cl.eventStream(controller.signal))
-      } catch (err) {
-        logger.warn({ err, repoId }, "Global SSE: failed to connect to one event stream, skipping")
-      }
-    }
-    if (upstreams.length === 0) {
-      logger.error({ repoId }, "Global SSE proxy failed to connect to any OpenCode event stream")
+    let upstream: Response
+    try {
+      upstream = await unscoped.eventStream(controller.signal)
+    } catch (err) {
+      logger.error({ err, repoId }, "Global SSE proxy failed to connect to OpenCode")
       await stream.writeSSE({ event: "error", data: JSON.stringify({ error: "OpenCode event stream unavailable" }) })
+      return
+    }
+
+    const responseBody = upstream.body
+    if (!responseBody) {
+      await stream.writeSSE({ event: "error", data: JSON.stringify({ error: "OpenCode event stream had no body" }) })
       return
     }
 
@@ -202,41 +194,32 @@ globalEvents.get("/", (c) => {
       })
     }, HEARTBEAT_MS)
 
-    async function readUpstream(upstream: Response) {
-      const body = upstream.body
-      if (!body) return
-      const reader = body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ""
-      try {
-        while (!closed) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          let boundary = buffer.indexOf(SSE_DELIMITER)
-          while (boundary !== -1) {
-            const block = buffer.slice(0, boundary)
-            buffer = buffer.slice(boundary + SSE_DELIMITER.length)
-            await forwardBlockGlobal(block, stream)
-            boundary = buffer.indexOf(SSE_DELIMITER)
-          }
-        }
-        buffer += decoder.decode()
-        if (buffer.trim()) {
-          await forwardBlockGlobal(buffer, stream)
-        }
-      } catch (err) {
-        if (!closed) logger.warn({ err, repoId }, "Global SSE upstream read error")
-      } finally {
-        await reader.cancel().catch(() => {})
-      }
-    }
-
+    const reader = responseBody.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
     try {
-      await Promise.all(upstreams.map(readUpstream))
+      while (!closed) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let boundary = buffer.indexOf(SSE_DELIMITER)
+        while (boundary !== -1) {
+          const block = buffer.slice(0, boundary)
+          buffer = buffer.slice(boundary + SSE_DELIMITER.length)
+          await forwardBlockGlobal(block, stream)
+          boundary = buffer.indexOf(SSE_DELIMITER)
+        }
+      }
+      buffer += decoder.decode()
+      if (buffer.trim()) {
+        await forwardBlockGlobal(buffer, stream)
+      }
+    } catch (err) {
+      if (!closed) logger.error({ err, repoId }, "Global SSE proxy stream error")
     } finally {
       clearInterval(heartbeat)
       controller.abort()
+      await reader.cancel().catch((err) => logger.debug({ err, repoId }, "Global SSE reader cancel failed"))
     }
   })
 })
