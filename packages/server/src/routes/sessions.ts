@@ -161,15 +161,23 @@ sessions.post("/", async (c) => {
 
   const repoClient = processManager.requireClient(repoId)
 
-  const workspace = await workspaceManager.create(repoId, repo.localPath)
-  const wsClient = createOpenCodeClient(repoClient.baseUrl, workspace.localPath)
+  let client = repoClient
+  let workspaceId: string | null = null
+
+  if (repo.worktreeEnabled) {
+    const workspace = await workspaceManager.create(repoId, repo.localPath)
+    workspaceId = workspace.id
+    client = createOpenCodeClient(repoClient.baseUrl, workspace.localPath)
+  }
 
   let session
   try {
-    session = await wsClient.createSession({ agent, title: body.title })
+    session = await client.createSession({ agent, title: body.title })
   } catch (err) {
-    logger.error({ err, workspaceId: workspace.id, repoId }, "createSession failed, cleaning up workspace")
-    await workspaceManager.remove(workspace.id).catch(() => {})
+    if (workspaceId) {
+      logger.error({ err, workspaceId, repoId }, "createSession failed, cleaning up workspace")
+      await workspaceManager.remove(workspaceId).catch(() => {})
+    }
     throw err
   }
 
@@ -177,7 +185,7 @@ sessions.post("/", async (c) => {
   await db.insert(sessionsTable).values({
     id: session.id,
     title: session.title ?? body.title ?? "",
-    workspaceId: workspace.id,
+    workspaceId,
     issueId: body.issueId ?? null,
     customAgentId,
     agent: agent ?? null,
@@ -185,18 +193,18 @@ sessions.post("/", async (c) => {
     timeUpdated: now,
   }).onConflictDoUpdate({
     target: sessionsTable.id,
-    set: { workspaceId: workspace.id, issueId: body.issueId ?? null, customAgentId, timeUpdated: now },
+    set: { workspaceId, issueId: body.issueId ?? null, customAgentId, timeUpdated: now },
   })
   try {
-    await wsClient.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT })
+    await client.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT })
   } catch (err) {
     logger.error({ err, sessionId: session.id, agent, model }, "prompt failed after session creation, cleaning up")
-    await wsClient.deleteSession(session.id).catch(() => {})
+    await client.deleteSession(session.id).catch(() => {})
     await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id)).catch(() => {})
-    await workspaceManager.remove(workspace.id).catch(() => {})
+    if (workspaceId) await workspaceManager.remove(workspaceId).catch(() => {})
     throw err
   }
-  return c.json({ ...session, agent, issueId: body.issueId ?? null, customAgentId, workspaceId: workspace.id }, 201)
+  return c.json({ ...session, agent, issueId: body.issueId ?? null, customAgentId, workspaceId }, 201)
 })
 
 sessions.get("/", async (c) => {

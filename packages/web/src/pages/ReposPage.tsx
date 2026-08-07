@@ -388,6 +388,22 @@ export function ReposPage() {
                   <div className="mt-3 flex items-center gap-2">
                     <button
                       type="button"
+                      onClick={async () => {
+                        await api.toggleWorktree(repo.id, !repo.worktreeEnabled)
+                        loadRepos()
+                      }}
+                      className={clsx(
+                        "flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+                        repo.worktreeEnabled
+                          ? "border-violet-500/30 text-violet-600 hover:bg-violet-500/10"
+                          : "border-line text-fg-4 hover:bg-elevated hover:text-fg-2",
+                      )}
+                      title={repo.worktreeEnabled ? "Worktree 已开启" : "Worktree 已关闭"}
+                    >
+                      <GitBranch className="h-3 w-3" />Worktree
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setAgentsMdRepo({ id: repo.id, name: repo.name })}
                       className="flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-line px-2.5 text-xs font-medium text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
                     >
@@ -452,7 +468,7 @@ export function ReposPage() {
                     )}
                   </div>
 
-                  <WorkspacesSection repoId={repo.id} />
+                  {repo.worktreeEnabled && <WorkspacesSection repoId={repo.id} />}
                 </div>
               )
             })}

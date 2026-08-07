@@ -96,6 +96,7 @@ repoRoutes.get("/", async (c) => {
   // Augment with live running status.
   const result = all.map((r) => ({
     ...r,
+    worktreeEnabled: Boolean(r.worktreeEnabled),
     running: processManager.isRunning(r.id),
     branch: getBranch(r.localPath),
   }))
@@ -106,7 +107,7 @@ repoRoutes.get("/", async (c) => {
 repoRoutes.get("/:id", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
-  return c.json({ ...repo, running: processManager.isRunning(repo.id), branch: getBranch(repo.localPath) })
+  return c.json({ ...repo, worktreeEnabled: Boolean(repo.worktreeEnabled), running: processManager.isRunning(repo.id), branch: getBranch(repo.localPath) })
 })
 
 // DELETE /api/repos/:id — stop the opencode process and remove the repo.
@@ -215,4 +216,14 @@ repoRoutes.post("/:id/pull", async (c) => {
     const msg = err instanceof Error ? err.message : "Failed to pull"
     return c.json({ error: msg, status: 500 }, 500)
   }
+})
+
+repoRoutes.patch("/:id/worktree", async (c) => {
+  const id = c.req.param("id")
+  const body = await c.req.json<{ enabled: boolean }>().catch(() => null)
+  if (!body || typeof body.enabled !== "boolean") {
+    return c.json({ error: "'enabled' boolean is required" }, 400)
+  }
+  await db.update(repos).set({ worktreeEnabled: body.enabled ? 1 : 0, updatedAt: Date.now() }).where(eq(repos.id, id))
+  return c.json({ ok: true, worktreeEnabled: body.enabled })
 })

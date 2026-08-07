@@ -20,6 +20,7 @@ export interface Repo {
   status: string
   running: boolean
   branch: string | null
+  worktreeEnabled: boolean
   createdAt: number
   updatedAt: number
 }
@@ -346,6 +347,13 @@ export async function removeWorkspace(repoId: string, workspaceId: string): Prom
 export async function cleanupWorkspaces(repoId: string): Promise<{ removed: number }> {
   return apiFetch<{ removed: number }>(`${repoBase(repoId)}/workspaces/cleanup`, {
     method: "POST",
+  })
+}
+
+export async function toggleWorktree(repoId: string, enabled: boolean): Promise<void> {
+  await apiFetch(`/api/repos/${repoId}/worktree`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
   })
 }
 

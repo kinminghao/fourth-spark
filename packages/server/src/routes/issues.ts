@@ -458,15 +458,21 @@ issueRoutes.post("/:number/polish", async (c) => {
 
   const prompt = parts.join("\n\n---\n\n")
 
-  const workspace = await workspaceManager.create(repoId, repo.localPath)
-  const wsClient = createOpenCodeClient(repoClient.baseUrl, workspace.localPath)
+  let client = repoClient
+  let workspaceId: string | null = null
 
-  const session = await wsClient.createSession({ agent: agent.baseAgent })
+  if (repo.worktreeEnabled) {
+    const workspace = await workspaceManager.create(repoId, repo.localPath)
+    workspaceId = workspace.id
+    client = createOpenCodeClient(repoClient.baseUrl, workspace.localPath)
+  }
+
+  const session = await client.createSession({ agent: agent.baseAgent })
   const now = Date.now()
   await db.insert(sessionsTable).values({
     id: session.id,
     title: `润色评论 #${number}`,
-    workspaceId: workspace.id,
+    workspaceId,
     issueId: iid,
     customAgentId: COMMENT_POLISHER_ID,
     agent: agent.baseAgent,
@@ -474,20 +480,20 @@ issueRoutes.post("/:number/polish", async (c) => {
     timeUpdated: now,
   }).onConflictDoUpdate({
     target: sessionsTable.id,
-    set: { workspaceId: workspace.id, issueId: iid, customAgentId: COMMENT_POLISHER_ID, timeUpdated: now },
+    set: { workspaceId, issueId: iid, customAgentId: COMMENT_POLISHER_ID, timeUpdated: now },
   })
 
   try {
-    await wsClient.prompt(session.id, prompt, { agent: agent.baseAgent, model: agent.model ?? undefined, variant: DEFAULT_VARIANT })
+    await client.prompt(session.id, prompt, { agent: agent.baseAgent, model: agent.model ?? undefined, variant: DEFAULT_VARIANT })
   } catch (err) {
     logger.error({ err, sessionId: session.id }, "polish prompt failed, cleaning up")
-    await wsClient.deleteSession(session.id).catch(() => {})
+    await client.deleteSession(session.id).catch(() => {})
     await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id)).catch(() => {})
-    await workspaceManager.remove(workspace.id).catch(() => {})
+    if (workspaceId) await workspaceManager.remove(workspaceId).catch(() => {})
     throw err
   }
 
-  return c.json({ sessionId: session.id, draftPath: filePath, workspaceId: workspace.id }, 201)
+  return c.json({ sessionId: session.id, draftPath: filePath, workspaceId }, 201)
 })
 
 // ---------------------------------------------------------------------------
