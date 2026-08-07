@@ -312,6 +312,44 @@ function repoBase(repoId: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Workspace API — /api/repos/:repoId/workspaces
+// ---------------------------------------------------------------------------
+
+export interface Workspace {
+  id: string
+  repoId: string
+  branch: string
+  localPath: string
+  baseBranch: string
+  status: string
+  port: number | null
+  createdAt: number
+  updatedAt: number
+  diskUsage: number
+  merged: boolean
+  running: boolean
+}
+
+export async function listWorkspaces(repoId: string): Promise<Workspace[]> {
+  return unwrapList<Workspace>(
+    await apiFetch<unknown>(`${repoBase(repoId)}/workspaces`),
+    "workspaces",
+  )
+}
+
+export async function removeWorkspace(repoId: string, workspaceId: string): Promise<void> {
+  await apiFetch<void>(`${repoBase(repoId)}/workspaces/${encodeURIComponent(workspaceId)}`, {
+    method: "DELETE",
+  })
+}
+
+export async function cleanupWorkspaces(repoId: string): Promise<{ removed: number }> {
+  return apiFetch<{ removed: number }>(`${repoBase(repoId)}/workspaces/cleanup`, {
+    method: "POST",
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Session API — /api/repos/:repoId/sessions
 // ---------------------------------------------------------------------------
 

@@ -13,6 +13,22 @@ export const repos = pgTable("repos", {
   uniqueIndex("repos_local_path_idx").on(t.localPath),
 ])
 
+export const workspaces = pgTable("workspaces", {
+  id: text("id").primaryKey(),
+  repoId: text("repo_id").notNull().references(() => repos.id, { onDelete: "cascade" }),
+  branch: text("branch").notNull(),
+  localPath: text("local_path").notNull(),
+  baseBranch: text("base_branch").notNull().default("main"),
+  status: text("status").notNull().default("active"),
+  port: integer("port"),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+}, (t) => [
+  index("workspaces_repo_idx").on(t.repoId),
+  uniqueIndex("workspaces_local_path_idx").on(t.localPath),
+  index("workspaces_status_idx").on(t.repoId, t.status),
+])
+
 export const milestones = pgTable("milestones", {
   id: text("id").primaryKey(),
   repoId: text("repo_id").notNull().references(() => repos.id, { onDelete: "cascade" }),
@@ -93,6 +109,7 @@ export const customAgentFragments = pgTable("custom_agent_fragments", {
 export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   parentId: text("parent_id"),
+  workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
   issueId: text("issue_id").references(() => issues.id, { onDelete: "set null" }),
   customAgentId: text("custom_agent_id").references(() => customAgents.id, { onDelete: "set null" }),
   title: text("title").notNull().default(""),
@@ -112,6 +129,7 @@ export const sessions = pgTable("sessions", {
 }, (t) => [
   index("sessions_user_idx").on(t.userId),
   index("sessions_time_created_idx").on(t.timeCreated),
+  index("sessions_workspace_idx").on(t.workspaceId),
   index("sessions_issue_idx").on(t.issueId),
   index("sessions_custom_agent_idx").on(t.customAgentId),
 ])

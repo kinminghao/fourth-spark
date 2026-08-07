@@ -1,10 +1,220 @@
-import { useState } from "react"
-import { ArrowDownToLine, Check, Circle, CircleDot, Copy, FileText, Play, Plus, Square, Trash2, X } from "lucide-react"
+import { useEffect, useState } from "react"
+import {
+  ArrowDownToLine,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Circle,
+  CircleDot,
+  Copy,
+  FileText,
+  GitBranch,
+  HardDrive,
+  Play,
+  Plus,
+  Square,
+  Trash2,
+  X,
+} from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
 import { useRepoStore } from "../stores/repo-store"
 import { AddRepoModal } from "../components/AddRepoModal"
 import { AgentsMdModal } from "../components/AgentsMdModal"
+
+const BYTES_PER_KB = 1024
+const BYTES_PER_MB = BYTES_PER_KB * 1024
+const BYTES_PER_GB = BYTES_PER_MB * 1024
+
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes <= 0) return "0 B"
+  if (bytes < BYTES_PER_KB) return `${bytes} B`
+  if (bytes < BYTES_PER_MB) return `${(bytes / BYTES_PER_KB).toFixed(1)} KB`
+  if (bytes < BYTES_PER_GB) return `${(bytes / BYTES_PER_MB).toFixed(1)} MB`
+  return `${(bytes / BYTES_PER_GB).toFixed(2)} GB`
+}
+
+const WS_BRANCH_PREFIX = "ws/"
+
+function WorkspacesSection({ repoId }: { repoId: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const [workspaces, setWorkspaces] = useState<api.Workspace[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [removingId, setRemovingId] = useState<string | null>(null)
+  const [cleaning, setCleaning] = useState(false)
+
+  const load = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const list = await api.listWorkspaces(repoId)
+      setWorkspaces(list)
+    } catch (err) {
+      setError(err instanceof api.ApiError ? err.message : "加载失败")
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    if (expanded && workspaces === null) {
+      void load()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded])
+
+  const handleRemove = async (id: string) => {
+    setRemovingId(id)
+    try {
+      await api.removeWorkspace(repoId, id)
+      await load()
+    } catch (err) {
+      setError(err instanceof api.ApiError ? err.message : "删除失败")
+    }
+    setRemovingId(null)
+  }
+
+  const handleCleanup = async () => {
+    setCleaning(true)
+    try {
+      await api.cleanupWorkspaces(repoId)
+      await load()
+    } catch (err) {
+      setError(err instanceof api.ApiError ? err.message : "清理失败")
+    }
+    setCleaning(false)
+  }
+
+  const count = workspaces?.length ?? 0
+  const totalDisk = workspaces?.reduce((sum, ws) => sum + (ws.diskUsage || 0), 0) ?? 0
+
+  return (
+    <div className="mt-3 border-t border-line pt-3">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs font-medium text-fg-3 transition-colors hover:text-fg-2"
+        >
+          {expanded ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
+          <GitBranch className="h-3 w-3 shrink-0 text-fg-5" />
+          <span>工作空间</span>
+          {workspaces !== null && (
+            <span className="text-fg-5">
+              ({count}) · {formatBytes(totalDisk)}
+            </span>
+          )}
+        </button>
+        {expanded && count > 0 && (
+          <button
+            type="button"
+            onClick={() => void handleCleanup()}
+            disabled={cleaning}
+            className="flex h-6 shrink-0 items-center gap-1 rounded border border-line px-2 text-xs text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-50"
+          >
+            {cleaning ? (
+              <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            ) : null}
+            清理已合并
+          </button>
+        )}
+      </div>
+
+      {expanded && (
+        <div className="mt-2">
+          {error && (
+            <div className="mb-2 flex items-center justify-between gap-2 rounded border border-red-500/30 bg-red-500/5 px-2 py-1 text-xs text-red-600">
+              <span className="truncate">{error}</span>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                className="shrink-0 rounded p-0.5 transition-colors hover:bg-red-500/10"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+
+          {loading && workspaces === null ? (
+            <div className="flex justify-center py-3">
+              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-fg-5 border-t-transparent" />
+            </div>
+          ) : count === 0 ? (
+            <p className="py-2 text-center text-xs text-fg-5">暂无工作空间</p>
+          ) : (
+            <ul className="space-y-1">
+              {workspaces?.map((ws) => {
+                const isTempBranch = ws.branch.startsWith(WS_BRANCH_PREFIX)
+                const branchTail = isTempBranch ? ws.branch.slice(WS_BRANCH_PREFIX.length) : ws.branch
+                const statusColor =
+                  ws.status === "active"
+                    ? "bg-emerald-500/10 text-emerald-600"
+                    : ws.status === "idle"
+                      ? "bg-amber-500/10 text-amber-600"
+                      : "bg-fg-6/30 text-fg-4"
+                const statusLabel =
+                  ws.status === "active"
+                    ? "活跃"
+                    : ws.status === "idle"
+                      ? "空闲"
+                      : ws.status === "merged"
+                        ? "已合并"
+                        : ws.status === "stale"
+                          ? "陈旧"
+                          : ws.status
+                const canDelete = ws.status !== "active"
+                return (
+                  <li
+                    key={ws.id}
+                    className="flex items-center gap-2 rounded-md border border-line bg-elevated/40 px-2 py-1.5 text-xs"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                      {ws.running && ws.port && (
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+                          title={`运行中 :${ws.port}`}
+                        />
+                      )}
+                      <span className="min-w-0 truncate font-mono">
+                        {isTempBranch && <span className="text-fg-5">{WS_BRANCH_PREFIX}</span>}
+                        <span className="text-fg-2">{branchTail}</span>
+                      </span>
+                    </div>
+                    <span
+                      className={clsx(
+                        "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                        statusColor,
+                      )}
+                    >
+                      {statusLabel}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-0.5 text-fg-5">
+                      <HardDrive className="h-2.5 w-2.5" />
+                      {formatBytes(ws.diskUsage)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void handleRemove(ws.id)}
+                      disabled={!canDelete || removingId === ws.id}
+                      title={canDelete ? "删除工作空间" : "活跃工作空间无法删除"}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-fg-5 transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-fg-5"
+                    >
+                      {removingId === ws.id ? (
+                        <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      ) : (
+                        <Trash2 className="h-3 w-3" />
+                      )}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function ReposPage() {
   const repos = useRepoStore((s) => s.repos)
@@ -241,6 +451,8 @@ export function ReposPage() {
                       </button>
                     )}
                   </div>
+
+                  <WorkspacesSection repoId={repo.id} />
                 </div>
               )
             })}
