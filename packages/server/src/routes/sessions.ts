@@ -195,10 +195,26 @@ sessions.post("/", async (c) => {
 
 sessions.get("/", async (c) => {
   const repoId = c.req.param("repoId")
-  const client = processManager.getClient(repoId)
-  if (client) {
+
+  const clients: OpenCodeClient[] = []
+  const repoClient = processManager.getClient(repoId)
+  if (repoClient) clients.push(repoClient)
+
+  const repoWorkspaces = await workspaceManager.listByRepo(repoId!)
+  for (const ws of repoWorkspaces) {
+    const wsClient = processManager.getWorkspaceClient(ws.id)
+    if (wsClient) clients.push(wsClient)
+  }
+
+  if (clients.length > 0) {
     try {
-      const list = await client.listSessions()
+      const allSessions = (await Promise.all(clients.map((cl) => cl.listSessions().catch(() => [])))).flat()
+      const seen = new Map<string, (typeof allSessions)[0]>()
+      for (const s of allSessions) {
+        if (!seen.has(s.id)) seen.set(s.id, s)
+      }
+      const list = [...seen.values()]
+
       syncSessionsList(list)
       const ids = list.map((s) => s.id)
       const dbRows = ids.length > 0
@@ -257,15 +273,25 @@ sessions.get("/all-links", async (c) => {
 
 sessions.get("/status", async (c) => {
   const repoId = c.req.param("repoId")
-  const client = processManager.getClient(repoId)
-  if (client) {
+  const merged: Record<string, SessionStatus> = {}
+
+  const clients: OpenCodeClient[] = []
+  const repoClient = processManager.getClient(repoId)
+  if (repoClient) clients.push(repoClient)
+  const repoWorkspaces = await workspaceManager.listByRepo(repoId!)
+  for (const ws of repoWorkspaces) {
+    const wsClient = processManager.getWorkspaceClient(ws.id)
+    if (wsClient) clients.push(wsClient)
+  }
+
+  for (const cl of clients) {
     try {
-      return c.json(await client.getSessionStatus())
+      Object.assign(merged, await cl.getSessionStatus())
     } catch {
-      // Process down → empty map
+      // process down — skip
     }
   }
-  return c.json({})
+  return c.json(merged)
 })
 
 sessions.get("/:id", async (c) => {
