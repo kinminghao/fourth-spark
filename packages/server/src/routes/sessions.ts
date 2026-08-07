@@ -152,7 +152,7 @@ sessions.post("/", async (c) => {
   if (repo.worktreeEnabled) {
     const workspace = await workspaceManager.create(repoId, repo.localPath)
     workspaceId = workspace.id
-    parts.unshift(`[WORKSPACE]\nYour working directory for this session is: ${workspace.localPath}\nYou are on branch: ${workspace.branch}\nAll file operations (read, write, edit, grep, glob) must use this directory as the base path.\nWhen committing, work within this directory.\n[/WORKSPACE]`)
+    parts.unshift(`[WORKSPACE]\nYour working directory for this session is: ${workspace.localPath}\nYou are on branch: ${workspace.branch} (this is a temporary branch name).\nAll file operations (read, write, edit, grep, glob) must use this directory as the base path.\nWhen committing, work within this directory.\nWhen creating a pull request, you MUST use a descriptive semantic branch name for the head parameter (e.g. "feature/add-auth", "fix/login-bug"), NOT the current temporary branch name "${workspace.branch}". The system will automatically rename the branch for you.\n[/WORKSPACE]`)
   }
 
   const prompt = parts.join("\n\n---\n\n")
