@@ -1,6 +1,10 @@
 import { Hono } from "hono"
+import { eq } from "drizzle-orm"
 import { streamSSE, type SSEStreamingApi } from "hono/streaming"
 import { processManager } from "../lib/process-manager"
+import { createOpenCodeClient } from "../lib/opencode"
+import { db } from "../db/index"
+import { sessions as sessionsTable, workspaces } from "../db/schema"
 import { logger } from "../middleware/logger"
 import { syncSseEvent } from "../db/sync"
 
@@ -78,9 +82,21 @@ async function forwardBlockGlobal(block: string, stream: SSEStreamingApi): Promi
 events.get("/:id/events", (c) => {
   const repoId = c.req.param("repoId")
   const sessionId = c.req.param("id")
-  const client = processManager.requireClient(repoId)
+  const repoClient = processManager.requireClient(repoId)
 
   return streamSSE(c, async (stream) => {
+    let client = repoClient
+    try {
+      const [row] = await db.select({ workspaceId: sessionsTable.workspaceId })
+        .from(sessionsTable).where(eq(sessionsTable.id, sessionId))
+      if (row?.workspaceId) {
+        const [ws] = await db.select({ localPath: workspaces.localPath })
+          .from(workspaces).where(eq(workspaces.id, row.workspaceId))
+        if (ws) client = createOpenCodeClient(repoClient.baseUrl, ws.localPath)
+      }
+    } catch {
+      // fallback to repo client
+    }
     const controller = new AbortController()
     let closed = false
     stream.onAbort(() => {
