@@ -3,7 +3,7 @@
   "mcp": {
     "fourth-spark-git": {
       "type": "remote",
-      "url": "http://127.0.0.1:3000/api/repos/41a98bf7-8384-42ea-b791-05557890f088/mcp"
+      "url": "http://127.0.0.1:3000/api/repos/db49a357-611a-4a01-a10b-9d35fa675d6b/mcp"
     }
   }
 }
