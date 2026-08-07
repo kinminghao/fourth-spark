@@ -277,11 +277,22 @@ sessions.get("/status", async (c) => {
   const repoId = c.req.param("repoId")
   const client = processManager.getClient(repoId)
   if (!client) return c.json({})
-  try {
-    return c.json(await client.getSessionStatus())
-  } catch {
-    return c.json({})
+
+  const clients = [client]
+  const repoWorkspaces = await workspaceManager.listByRepo(repoId!)
+  for (const ws of repoWorkspaces) {
+    clients.push(createOpenCodeClient(client.baseUrl, ws.localPath))
   }
+
+  const merged: Record<string, SessionStatus> = {}
+  for (const cl of clients) {
+    try {
+      Object.assign(merged, await cl.getSessionStatus())
+    } catch {
+      // skip unavailable
+    }
+  }
+  return c.json(merged)
 })
 
 sessions.get("/:id", async (c) => {

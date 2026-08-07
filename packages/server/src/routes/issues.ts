@@ -3,10 +3,12 @@ import { eq, and, desc, asc, inArray } from "drizzle-orm"
 import { mkdir, writeFile, readFile, unlink } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { db } from "../db/index"
-import { issues, issueComments, repos, tags, issueTags, milestones, sessions as sessionsTable, customAgents } from "../db/schema"
+import { issues, issueComments, repos, tags, issueTags, milestones, sessions as sessionsTable, customAgents, workspaces } from "../db/schema"
 import { parseGitUrl } from "../lib/git-url"
 import { createGitIssueClient, getHostInfo, GitApiError, type GitIssue, type GitComment } from "../lib/git-provider"
 import { processManager } from "../lib/process-manager"
+import { workspaceManager } from "../lib/workspace-manager"
+import { createOpenCodeClient } from "../lib/opencode"
 import { DEFAULT_VARIANT } from "../lib/config"
 import { COMMENT_POLISHER_ID } from "../lib/system-agents"
 import { buildIssueContext } from "./sessions"
@@ -434,7 +436,9 @@ issueRoutes.post("/:number/polish", async (c) => {
   const body = await c.req.json<{ draft: string }>().catch(() => null)
   if (!body?.draft?.trim()) return c.json({ error: "draft is required" }, 400)
 
-  const client = processManager.requireClient(repoId)
+  const repoClient = processManager.requireClient(repoId)
+  const [repo] = await db.select().from(repos).where(eq(repos.id, repoId))
+  if (!repo) return c.json({ error: "Repo not found" }, 404)
 
   await mkdir(DRAFT_DIR, { recursive: true })
   const filePath = draftPath(repoId, number)
@@ -453,11 +457,16 @@ issueRoutes.post("/:number/polish", async (c) => {
   parts.push(`请润色以下文件中的评论草稿内容: ${filePath}`)
 
   const prompt = parts.join("\n\n---\n\n")
-  const session = await client.createSession({ agent: agent.baseAgent })
+
+  const workspace = await workspaceManager.create(repoId, repo.localPath)
+  const wsClient = createOpenCodeClient(repoClient.baseUrl, workspace.localPath)
+
+  const session = await wsClient.createSession({ agent: agent.baseAgent })
   const now = Date.now()
   await db.insert(sessionsTable).values({
     id: session.id,
     title: `润色评论 #${number}`,
+    workspaceId: workspace.id,
     issueId: iid,
     customAgentId: COMMENT_POLISHER_ID,
     agent: agent.baseAgent,
@@ -465,19 +474,20 @@ issueRoutes.post("/:number/polish", async (c) => {
     timeUpdated: now,
   }).onConflictDoUpdate({
     target: sessionsTable.id,
-    set: { issueId: iid, customAgentId: COMMENT_POLISHER_ID, timeUpdated: now },
+    set: { workspaceId: workspace.id, issueId: iid, customAgentId: COMMENT_POLISHER_ID, timeUpdated: now },
   })
 
   try {
-    await client.prompt(session.id, prompt, { agent: agent.baseAgent, model: agent.model ?? undefined, variant: DEFAULT_VARIANT })
+    await wsClient.prompt(session.id, prompt, { agent: agent.baseAgent, model: agent.model ?? undefined, variant: DEFAULT_VARIANT })
   } catch (err) {
     logger.error({ err, sessionId: session.id }, "polish prompt failed, cleaning up")
-    await client.deleteSession(session.id).catch(() => {})
+    await wsClient.deleteSession(session.id).catch(() => {})
     await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id)).catch(() => {})
+    await workspaceManager.remove(workspace.id).catch(() => {})
     throw err
   }
 
-  return c.json({ sessionId: session.id, draftPath: filePath }, 201)
+  return c.json({ sessionId: session.id, draftPath: filePath, workspaceId: workspace.id }, 201)
 })
 
 // ---------------------------------------------------------------------------
