@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { eq, and, asc, desc, inArray } from "drizzle-orm"
+import { eq, and, asc, inArray } from "drizzle-orm"
 import { processManager } from "../lib/process-manager"
 import { sessionMonitor } from "../lib/session-monitor"
 import { workspaceManager } from "../lib/workspace-manager"
@@ -9,7 +9,7 @@ import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFrom
 import { db } from "../db/index"
 import { sessions as sessionsTable, issues, issueComments, customAgents, customAgentFragments, promptFragments, sessionLinks, pullRequests, repos } from "../db/schema"
 import { logger } from "../middleware/logger"
-import type { OpenCodeClient, SessionStatus } from "../lib/opencode"
+import type { SessionStatus } from "../lib/opencode"
 
 export const sessions = new Hono()
 
@@ -40,17 +40,6 @@ async function collectAncestorChain(issueId: string) {
   }
 
   return chain.reverse()
-}
-
-async function getClientForSession(repoId: string | undefined, sessionId: string): Promise<OpenCodeClient> {
-  const [row] = await db.select({ workspaceId: sessionsTable.workspaceId })
-    .from(sessionsTable)
-    .where(eq(sessionsTable.id, sessionId))
-  if (row?.workspaceId) {
-    const client = processManager.getWorkspaceClient(row.workspaceId)
-    if (client) return client
-  }
-  return processManager.requireClient(repoId)
 }
 
 export async function buildIssueContext(issueId: string): Promise<string | null> {
@@ -157,17 +146,19 @@ sessions.post("/", async (c) => {
   if (message) parts.push(message)
   const prompt = parts.join("\n\n---\n\n")
 
+  const client = processManager.requireClient(repoId)
+
   const workspace = await workspaceManager.create(repoId, repo.localPath)
-  let client: OpenCodeClient
+
+  let session
   try {
-    client = await processManager.startWorkspace(workspace.id, workspace.localPath, repoId)
+    session = await client.createSession({ agent, title: body.title, directory: workspace.localPath })
   } catch (err) {
-    logger.error({ err, workspaceId: workspace.id, repoId }, "failed to start workspace opencode, cleaning up")
+    logger.error({ err, workspaceId: workspace.id, repoId }, "createSession failed, cleaning up workspace")
     await workspaceManager.remove(workspace.id).catch(() => {})
     throw err
   }
 
-  const session = await client.createSession({ agent, title: body.title })
   const now = Date.now()
   await db.insert(sessionsTable).values({
     id: session.id,
@@ -188,6 +179,7 @@ sessions.post("/", async (c) => {
     logger.error({ err, sessionId: session.id, agent, model }, "prompt failed after session creation, cleaning up")
     await client.deleteSession(session.id).catch(() => {})
     await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id)).catch(() => {})
+    await workspaceManager.remove(workspace.id).catch(() => {})
     throw err
   }
   return c.json({ ...session, agent, issueId: body.issueId ?? null, customAgentId, workspaceId: workspace.id }, 201)
@@ -258,25 +250,18 @@ sessions.get("/all-links", async (c) => {
 sessions.get("/status", async (c) => {
   const repoId = c.req.param("repoId")
   const client = processManager.getClient(repoId)
-  if (client) {
-    try {
-      return c.json(await client.getSessionStatus())
-    } catch {
-      // Process down → empty map
-    }
+  if (!client) return c.json({})
+  try {
+    return c.json(await client.getSessionStatus())
+  } catch {
+    return c.json({})
   }
-  return c.json({})
 })
 
 sessions.get("/:id", async (c) => {
   const repoId = c.req.param("repoId")
   const sessionId = c.req.param("id")
-  let client: OpenCodeClient | null = null
-  try {
-    client = await getClientForSession(repoId, sessionId)
-  } catch {
-    client = null
-  }
+  const client = processManager.getClient(repoId)
   if (client) {
     try {
       const live = await client.getSession(sessionId)
@@ -295,13 +280,13 @@ sessions.get("/:id", async (c) => {
 })
 
 sessions.delete("/:id", async (c) => {
-  const client = await getClientForSession(c.req.param("repoId"), c.req.param("id"))
+  const client = processManager.requireClient(c.req.param("repoId"))
   await client.deleteSession(c.req.param("id"))
   return c.json({ ok: true })
 })
 
 sessions.post("/:id/prompt", async (c) => {
-  const client = await getClientForSession(c.req.param("repoId"), c.req.param("id"))
+  const client = processManager.requireClient(c.req.param("repoId"))
   const body = await c.req.json<{ content?: string; agent?: string; model?: string; variant?: string }>().catch(() => null)
   if (!body || typeof body.content !== "string" || body.content.length === 0) {
     return c.json({ error: "Body must include a non-empty 'content' string", status: 400 }, 400)
@@ -312,7 +297,7 @@ sessions.post("/:id/prompt", async (c) => {
 
 sessions.post("/:id/abort", async (c) => {
   const sessionId = c.req.param("id")
-  const client = await getClientForSession(c.req.param("repoId"), sessionId)
+  const client = processManager.requireClient(c.req.param("repoId"))
   sessionMonitor.markAborted(sessionId)
   await client.abort(sessionId)
   return c.json({ ok: true })
@@ -320,7 +305,7 @@ sessions.post("/:id/abort", async (c) => {
 
 sessions.post("/:id/questions/reply", async (c) => {
   const sessionId = c.req.param("id")
-  const client = await getClientForSession(c.req.param("repoId"), sessionId)
+  const client = processManager.requireClient(c.req.param("repoId"))
   const body = await c.req.json<{ answers?: string[][] }>().catch(() => null)
   if (!body?.answers || !Array.isArray(body.answers)) {
     return c.json({ error: "'answers' must be an array of string arrays", status: 400 }, 400)
@@ -336,7 +321,7 @@ sessions.post("/:id/questions/reply", async (c) => {
 
 sessions.post("/:id/questions/reject", async (c) => {
   const sessionId = c.req.param("id")
-  const client = await getClientForSession(c.req.param("repoId"), sessionId)
+  const client = processManager.requireClient(c.req.param("repoId"))
   const pending = await client.listQuestions()
   const match = pending.find((q) => q.sessionID === sessionId)
   if (!match) {
@@ -349,12 +334,7 @@ sessions.post("/:id/questions/reject", async (c) => {
 sessions.get("/:id/messages", async (c) => {
   const repoId = c.req.param("repoId")
   const id = c.req.param("id")
-  let client: OpenCodeClient | null = null
-  try {
-    client = await getClientForSession(repoId, id)
-  } catch {
-    client = null
-  }
+  const client = processManager.getClient(repoId)
   if (client) {
     try {
       const msgs = await client.getMessages(id)
@@ -370,12 +350,7 @@ sessions.get("/:id/messages", async (c) => {
 sessions.get("/:id/todos", async (c) => {
   const repoId = c.req.param("repoId")
   const id = c.req.param("id")
-  let client: OpenCodeClient | null = null
-  try {
-    client = await getClientForSession(repoId, id)
-  } catch {
-    client = null
-  }
+  const client = processManager.getClient(repoId)
   if (client) {
     try {
       return c.json(await client.getTodos(id))
@@ -447,12 +422,7 @@ sessions.delete("/:id/links", async (c) => {
 sessions.get("/:id/status", async (c) => {
   const repoId = c.req.param("repoId")
   const id = c.req.param("id")
-  let client: OpenCodeClient | null = null
-  try {
-    client = await getClientForSession(repoId, id)
-  } catch {
-    client = null
-  }
+  const client = processManager.getClient(repoId)
   if (client) {
     try {
       const all = await client.getSessionStatus()
