@@ -1475,9 +1475,9 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
   const sevenDay = (a: api.AccountUsage) => a.usage?.seven_day
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-xl border border-line bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center" onClick={onClose}>
+      <div className="flex max-h-[85vh] w-full flex-col rounded-t-2xl border border-line bg-surface p-4 shadow-2xl sm:mx-4 sm:max-w-lg sm:rounded-xl sm:p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between">
           <h2 className="text-sm font-semibold text-fg">切换账号</h2>
           <button type="button" onClick={onClose} className="rounded-md p-1 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3">
             <X className="h-4 w-4" />
@@ -1491,7 +1491,7 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
         ) : accounts.length === 0 ? (
           <p className="py-10 text-center text-xs text-fg-4">暂无可用账号</p>
         ) : (
-          <div className="mt-3 space-y-1.5">
+          <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto pb-[var(--safe-bottom)]">
             {accounts.map((a) => (
               <button
                 key={a.id}
@@ -1499,7 +1499,7 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
                 disabled={switching !== null}
                 onClick={() => { if (!a.active) void handleSwitch(a.id) }}
                 className={clsx(
-                  "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                  "flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors sm:gap-3",
                   a.active
                     ? "border-blue-500/40 bg-blue-500/5"
                     : "border-line hover:bg-elevated",
@@ -1513,24 +1513,24 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
                     {switching === a.id && <Loader2 className="h-3 w-3 fs-spin text-blue-500" />}
                   </div>
                 </div>
-                <div className="flex shrink-0 gap-4 text-right">
-                  <div className="w-20">
-                    <div className="text-[10px] text-fg-5">5 小时</div>
+                <div className="flex shrink-0 gap-2 text-right sm:gap-4">
+                  <div className="w-14 sm:w-20">
+                    <div className="text-[10px] text-fg-5">5h</div>
                     {fiveHour(a) ? (
                       <>
                         <div className={clsx("text-xs font-medium", (fiveHour(a)!.utilization) > 80 ? "text-red-400" : "text-fg-3")}>{Math.round(fiveHour(a)!.utilization)}%</div>
-                        {fiveHour(a)!.resets_at && <div className="text-[9px] text-fg-5">{formatReset(fiveHour(a)!.resets_at)}</div>}
+                        <div className="hidden text-[9px] text-fg-5 sm:block">{fiveHour(a)!.resets_at ? formatReset(fiveHour(a)!.resets_at) : ""}</div>
                       </>
                     ) : (
                       <div className="text-[10px] text-fg-5">—</div>
                     )}
                   </div>
-                  <div className="w-20">
-                    <div className="text-[10px] text-fg-5">7 天</div>
+                  <div className="w-14 sm:w-20">
+                    <div className="text-[10px] text-fg-5">7d</div>
                     {sevenDay(a) ? (
                       <>
                         <div className={clsx("text-xs font-medium", (sevenDay(a)!.utilization) > 80 ? "text-red-400" : "text-fg-3")}>{Math.round(sevenDay(a)!.utilization)}%</div>
-                        {sevenDay(a)!.resets_at && <div className="text-[9px] text-fg-5">{formatReset(sevenDay(a)!.resets_at)}</div>}
+                        <div className="hidden text-[9px] text-fg-5 sm:block">{sevenDay(a)!.resets_at ? formatReset(sevenDay(a)!.resets_at) : ""}</div>
                       </>
                     ) : (
                       <div className="text-[10px] text-fg-5">—</div>
@@ -1539,11 +1539,11 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
                 </div>
               </button>
             ))}
-                     </div>
+          </div>
         )}
 
         {error && (
-          <div className="mt-3 flex items-center gap-1.5 rounded-md border border-red-400/30 bg-red-400/5 px-3 py-2">
+          <div className="mt-3 flex shrink-0 items-center gap-1.5 rounded-md border border-red-400/30 bg-red-400/5 px-3 py-2">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-400" />
             <span className="text-xs text-red-400">{error}</span>
           </div>
