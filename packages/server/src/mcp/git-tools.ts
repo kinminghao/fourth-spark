@@ -5,7 +5,7 @@ import { db } from "../db/index"
 import { repos, issues, issueComments, pullRequests, sessionLinks, sessions as sessionsTable, workspaces } from "../db/schema"
 import { parseGitUrl } from "../lib/git-url"
 import { getHostInfo, createGitIssueClient, type GitIssueClient, type GitIssue, type GitComment, type GitPullRequest } from "../lib/git-provider"
-import { processManager } from "../lib/process-manager"
+import { runtimeManager } from "../lib/process-manager"
 import { logger } from "../middleware/logger"
 import type { McpToolProvider, ToolContext } from "../core/types"
 
@@ -93,7 +93,7 @@ function prToDb(repoId: string, pr: GitPullRequest) {
 
 async function findBusySessionId(repoId: string): Promise<string | null> {
   try {
-    const client = processManager.getClient(repoId)
+    const client = runtimeManager.getClient(repoId)
     if (!client) return null
     const statuses = await client.getSessionStatus()
     for (const [sessionId, status] of Object.entries(statuses)) {

@@ -22,7 +22,7 @@ import { pullRoutes } from "./routes/pulls"
 import { pushRoutes } from "./routes/push"
 import { workspaceRoutes } from "./routes/workspaces"
 import { PORT, initWorkerConfig } from "./lib/config"
-import { processManager } from "./lib/process-manager"
+import { runtimeManager } from "./lib/process-manager"
 import { initRegistry } from "./core/registry"
 import { cloudRoutes } from "./routes/cloud"
 import { seedSystemAgents } from "./lib/system-agents"
@@ -167,7 +167,7 @@ async function getSetting(key: string): Promise<string | undefined> {
 }
 
 initWorkerConfig(getSetting).then(() => {
-  return processManager.startAll()
+  return runtimeManager.startAll()
 }).then(() => {
   logger.info("all repos initialized")
 }).catch((err) => {
@@ -179,7 +179,7 @@ initWorkerConfig(getSetting).then(() => {
 // ---------------------------------------------------------------------------
 async function gracefulShutdown(signal: string) {
   logger.info({ signal }, "shutting down — stopping all opencode processes")
-  await processManager.stopAll()
+  await runtimeManager.stopAll()
   process.exit(0)
 }
 

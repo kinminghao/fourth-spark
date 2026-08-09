@@ -1,0 +1,544 @@
+// ---------------------------------------------------------------------------
+// StdioRuntimeClient — RuntimeClient backed by one `claude -p` subprocess per
+// session. Each subprocess speaks the Claude Code CLI stream-json protocol on
+// stdin/stdout; we translate its NDJSON into OpenCode-compatible SSE blocks
+// via ./event-adapter.ts and fan them out to all attached SSE consumers.
+//
+// Session state:
+//   * sessionInfo — durable metadata (id, title, createdAt) so listSessions()
+//     returns a session even after its subprocess exited.
+//   * managed    — subprocess + per-turn state, only alive while a turn is in
+//     flight (or waiting for the next user message on stream-json stdin).
+// ---------------------------------------------------------------------------
+
+import { type Subprocess } from "bun"
+
+import type { RuntimeClient } from "../../core/runtime-client"
+import {
+  RuntimeError,
+  type Agent,
+  type Message,
+  type MessagePart,
+  type PendingQuestion,
+  type ProviderListResponse,
+  type PromptOpts,
+  type Session,
+  type SessionStatus,
+  type Todo,
+} from "../../core/runtime-types"
+import { logger } from "../../middleware/logger"
+
+import {
+  type ClaudeSessionState,
+  claudeEventToSseBlocks,
+  createSessionState,
+} from "./event-adapter"
+
+const RUNTIME_ID = "claude-code"
+const EVENT_BUFFER_CAP = 1000
+
+// ---------------------------------------------------------------------------
+// Session bookkeeping
+// ---------------------------------------------------------------------------
+
+interface SessionInfo {
+  id: string
+  title?: string
+  createdAt: string
+  agent?: string
+}
+
+interface ManagedSession {
+  proc: Subprocess<"pipe", "pipe", "pipe">
+  status: SessionStatus["type"]
+  state: ClaudeSessionState
+  eventBuffer: string[]
+  eventListeners: Set<(block: string) => void>
+  messages: Message[]
+  messageIndex: Map<string, number>
+  todos: Todo[]
+  userCounter: number
+}
+
+// ---------------------------------------------------------------------------
+// Helpers — model ID extraction, todo parsing from TodoWrite tool_use input.
+// ---------------------------------------------------------------------------
+
+function extractClaudeModelId(model: string): string {
+  const slash = model.indexOf("/")
+  return slash > 0 ? model.slice(slash + 1) : model
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined
+}
+
+// ---------------------------------------------------------------------------
+// StdioRuntimeClient
+// ---------------------------------------------------------------------------
+
+export class StdioRuntimeClient implements RuntimeClient {
+  readonly directory: string
+  private readonly sessionInfo = new Map<string, SessionInfo>()
+  private readonly managed = new Map<string, ManagedSession>()
+  private readonly spawnedOnce = new Set<string>()
+  private readonly clientListeners = new Set<(block: string) => void>()
+
+  constructor(directory: string) {
+    this.directory = directory
+  }
+
+  withDirectory(directory: string): RuntimeClient {
+    return new StdioRuntimeClient(directory)
+  }
+
+  // -------------------------------------------------------------------------
+  // Session CRUD (in-memory; Claude Code stores its own copy under ~/.claude)
+  // -------------------------------------------------------------------------
+
+  async listSessions(): Promise<Session[]> {
+    return Array.from(this.sessionInfo.values()).map((s) => ({
+      id: s.id,
+      title: s.title,
+      createdAt: s.createdAt,
+    }))
+  }
+
+  async createSession(opts: { agent?: string; title?: string }): Promise<Session> {
+    const id = crypto.randomUUID()
+    const createdAt = new Date().toISOString()
+    const info: SessionInfo = { id, title: opts.title, createdAt, agent: opts.agent }
+    this.sessionInfo.set(id, info)
+    return { id, title: info.title, createdAt }
+  }
+
+  async getSession(sessionId: string): Promise<Session> {
+    const info = this.sessionInfo.get(sessionId)
+    if (!info) {
+      throw new RuntimeError(RUNTIME_ID, `Session ${sessionId} not found`, 404, "")
+    }
+    return { id: info.id, title: info.title, createdAt: info.createdAt }
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    const m = this.managed.get(sessionId)
+    if (m) {
+      try {
+        m.proc.kill()
+      } catch {
+        // already dead
+      }
+      this.managed.delete(sessionId)
+    }
+    this.sessionInfo.delete(sessionId)
+    this.spawnedOnce.delete(sessionId)
+  }
+
+  async getMessages(sessionId: string): Promise<Message[]> {
+    const m = this.managed.get(sessionId)
+    return m ? m.messages.slice() : []
+  }
+
+  async getTodos(sessionId: string): Promise<Todo[]> {
+    const m = this.managed.get(sessionId)
+    return m ? m.todos.slice() : []
+  }
+
+  async getSessionStatus(): Promise<Record<string, SessionStatus>> {
+    const out: Record<string, SessionStatus> = {}
+    for (const [id, m] of this.managed) {
+      out[id] = { type: m.status }
+    }
+    for (const id of this.sessionInfo.keys()) {
+      if (!(id in out)) out[id] = { type: "idle" }
+    }
+    return out
+  }
+
+  // -------------------------------------------------------------------------
+  // Prompt / abort — the core interaction. First prompt spawns the subprocess
+  // with --session-id; subsequent turns after an abort resume with --resume.
+  // -------------------------------------------------------------------------
+
+  async prompt(sessionId: string, content: string, opts?: PromptOpts): Promise<void> {
+    let m = this.managed.get(sessionId)
+    if (!m) {
+      m = await this.spawnSession(sessionId, opts)
+    }
+    m.status = "busy"
+
+    // Append the user turn to our in-memory transcript so the UI can render
+    // it before Claude's first token arrives.
+    m.userCounter += 1
+    const userMsgId = `claude-${sessionId.slice(0, 8)}-user-${m.userCounter}`
+    const userPart: MessagePart = { type: "text", content }
+    const userMsg: Message = { id: userMsgId, role: "user", parts: [userPart] }
+    m.messageIndex.set(userMsgId, m.messages.length)
+    m.messages.push(userMsg)
+
+    const line = JSON.stringify({ type: "user", content }) + "\n"
+    const stdin = m.proc.stdin
+    try {
+      stdin.write(line)
+      const flushed = stdin.flush()
+      if (flushed instanceof Promise) await flushed
+    } catch (err) {
+      logger.error({ err, sessionId }, "failed to write to claude subprocess stdin")
+      throw new RuntimeError(RUNTIME_ID, "Failed to write user message to Claude", 500, String(err))
+    }
+
+    this.emitClientBlock(this.buildSseBlock("session.status", { sessionID: sessionId, type: "busy" }))
+  }
+
+  async abort(sessionId: string): Promise<void> {
+    const m = this.managed.get(sessionId)
+    if (!m) return
+    try {
+      m.proc.kill()
+    } catch {
+      // already dead
+    }
+    m.status = "idle"
+    this.managed.delete(sessionId)
+    this.emitClientBlock(this.buildSseBlock("session.status", { sessionID: sessionId, type: "idle" }))
+  }
+
+  // -------------------------------------------------------------------------
+  // Event stream — a single ReadableStream that emits every SSE block we
+  // produce across every managed session. routes/events.ts filters by
+  // properties.sessionID, so we don't need per-session fan-out here.
+  // -------------------------------------------------------------------------
+
+  async eventStream(signal?: AbortSignal): Promise<Response> {
+    const encoder = new TextEncoder()
+    const client = this
+    let listener: ((block: string) => void) | null = null
+    let closed = false
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        listener = (block: string) => {
+          if (closed) return
+          try {
+            controller.enqueue(encoder.encode(block))
+          } catch {
+            closed = true
+          }
+        }
+        client.clientListeners.add(listener)
+      },
+      cancel() {
+        closed = true
+        if (listener) {
+          client.clientListeners.delete(listener)
+          listener = null
+        }
+      },
+    })
+
+    if (signal) {
+      const onAbort = () => {
+        closed = true
+        if (listener) {
+          client.clientListeners.delete(listener)
+          listener = null
+        }
+      }
+      if (signal.aborted) onAbort()
+      else signal.addEventListener("abort", onAbort, { once: true })
+    }
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    })
+  }
+
+  // -------------------------------------------------------------------------
+  // Interactive question protocol — Claude Code headless mode doesn't emit
+  // structured questions; we return empty arrays / no-ops so the routes layer
+  // stays uniform across runtimes.
+  // -------------------------------------------------------------------------
+
+  async listQuestions(): Promise<PendingQuestion[]> {
+    return []
+  }
+
+  async replyQuestion(_requestID: string, _answers: string[][]): Promise<void> {
+    // no-op: Claude Code headless mode has no interactive questions.
+  }
+
+  async rejectQuestion(_requestID: string): Promise<void> {
+    // no-op: see replyQuestion.
+  }
+
+  async listAgents(): Promise<Agent[]> {
+    return [{ id: "claude-code", name: "Claude Code" }]
+  }
+
+  async getProviders(): Promise<ProviderListResponse> {
+    return {
+      all: [
+        {
+          id: "anthropic",
+          name: "Anthropic",
+          models: {
+            "claude-sonnet-4-20250514": {
+              id: "claude-sonnet-4-20250514",
+              name: "Claude Sonnet 4",
+              status: "active",
+            },
+            "claude-opus-4-20250514": {
+              id: "claude-opus-4-20250514",
+              name: "Claude Opus 4",
+              status: "active",
+            },
+          },
+        },
+      ],
+      connected: ["anthropic"],
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Subprocess spawn + stdout reader
+  // -------------------------------------------------------------------------
+
+  private async spawnSession(sessionId: string, opts?: PromptOpts): Promise<ManagedSession> {
+    // Register the session lazily if the caller prompted without createSession.
+    if (!this.sessionInfo.has(sessionId)) {
+      this.sessionInfo.set(sessionId, { id: sessionId, createdAt: new Date().toISOString() })
+    }
+
+    const args = [
+      "claude", "-p",
+      "--input-format", "stream-json",
+      "--output-format", "stream-json",
+      "--permission-mode", "bypassPermissions",
+      "--include-partial-messages",
+      "--verbose",
+    ]
+    if (this.spawnedOnce.has(sessionId)) {
+      args.push("--resume", sessionId)
+    } else {
+      args.push("--session-id", sessionId)
+    }
+    const model = opts?.model
+    if (model) {
+      args.push("--model", extractClaudeModelId(model))
+    }
+
+    logger.info({ sessionId, cwd: this.directory, model }, "spawning claude subprocess")
+
+    const proc = Bun.spawn(args, {
+      cwd: this.directory,
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env },
+    }) as Subprocess<"pipe", "pipe", "pipe">
+
+    const state = createSessionState()
+    const managed: ManagedSession = {
+      proc,
+      status: "busy",
+      state,
+      eventBuffer: [],
+      eventListeners: new Set(),
+      messages: [],
+      messageIndex: new Map(),
+      todos: [],
+      userCounter: 0,
+    }
+    this.managed.set(sessionId, managed)
+    this.spawnedOnce.add(sessionId)
+
+    // Background readers — one for stdout (event stream) and one for stderr
+    // (debug logging only). Neither is awaited; both self-terminate on EOF.
+    this.readStdout(sessionId, managed).catch((err) => {
+      logger.error({ err, sessionId }, "claude stdout reader crashed")
+    })
+    this.readStderr(sessionId, managed).catch((err) => {
+      logger.warn({ err, sessionId }, "claude stderr reader crashed")
+    })
+    proc.exited.then((code) => {
+      const still = this.managed.get(sessionId)
+      if (still === managed) {
+        this.managed.delete(sessionId)
+        this.emitClientBlock(this.buildSseBlock("session.status", { sessionID: sessionId, type: "idle" }))
+        logger.info({ sessionId, code }, "claude subprocess exited")
+      }
+    }).catch(() => {
+      // exit signal already handled
+    })
+
+    return managed
+  }
+
+  private async readStdout(sessionId: string, m: ManagedSession): Promise<void> {
+    const reader = m.proc.stdout.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let idx = buffer.indexOf("\n")
+        while (idx !== -1) {
+          const line = buffer.slice(0, idx)
+          buffer = buffer.slice(idx + 1)
+          this.handleLine(sessionId, m, line)
+          idx = buffer.indexOf("\n")
+        }
+      }
+      const tail = buffer + decoder.decode()
+      if (tail.trim()) this.handleLine(sessionId, m, tail)
+    } finally {
+      try {
+        reader.releaseLock()
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  private async readStderr(sessionId: string, m: ManagedSession): Promise<void> {
+    const reader = m.proc.stderr.getReader()
+    const decoder = new TextDecoder()
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const text = decoder.decode(value, { stream: true }).trim()
+        if (text) logger.debug({ sessionId, stderr: text }, "claude stderr")
+      }
+    } finally {
+      try {
+        reader.releaseLock()
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Per-line dispatch — feed the NDJSON line to the adapter, forward blocks
+  // to listeners, sync our in-memory message/todo model, and toggle status.
+  // -------------------------------------------------------------------------
+
+  private handleLine(sessionId: string, m: ManagedSession, line: string): void {
+    const trimmed = line.trim()
+    if (!trimmed) return
+
+    const blocks = claudeEventToSseBlocks(trimmed, sessionId, m.state)
+    for (const block of blocks) {
+      this.pushBlock(m, block)
+      this.emitClientBlock(block)
+    }
+
+    this.syncFromState(m)
+    this.updateStatusFromLine(sessionId, m, trimmed)
+  }
+
+  private syncFromState(m: ManagedSession): void {
+    const id = m.state.ourMessageId
+    if (!id) return
+    const message: Message = {
+      id,
+      role: "assistant",
+      parts: m.state.currentParts.slice(),
+    }
+    if (m.state.lastModelId) {
+      message.info = { modelID: m.state.lastModelId, providerID: "anthropic" }
+    }
+    const idx = m.messageIndex.get(id)
+    if (idx === undefined) {
+      m.messageIndex.set(id, m.messages.length)
+      m.messages.push(message)
+    } else {
+      m.messages[idx] = message
+    }
+
+    // Rebuild todos from any TodoWrite tool_use parts we've seen so far in
+    // this message. The last TodoWrite wins, matching Claude semantics.
+    const todos: Todo[] = []
+    for (const part of m.state.currentParts) {
+      if (part.type !== "tool-invocation" || part.toolName !== "TodoWrite") continue
+      const input = asRecord(part.input)
+      if (!input || !Array.isArray(input.todos)) continue
+      todos.length = 0
+      for (let i = 0; i < input.todos.length; i++) {
+        const rec = asRecord(input.todos[i]) ?? {}
+        todos.push({
+          id: `todo-${i}`,
+          content: asString(rec.content) ?? "",
+          status: asString(rec.status) ?? "pending",
+          ...(asString(rec.priority) ? { priority: asString(rec.priority)! } : {}),
+        })
+      }
+    }
+    m.todos = todos
+  }
+
+  private updateStatusFromLine(sessionId: string, m: ManagedSession, line: string): void {
+    // Cheap prefix check to avoid double-parsing — the adapter has already
+    // parsed the JSON, but we need the top-level type to toggle status.
+    if (line.includes(`"type":"result"`)) {
+      m.status = "idle"
+    } else if (line.includes(`"type":"system"`) || line.includes(`"type":"assistant"`)) {
+      m.status = "busy"
+    }
+    // Suppress unused-var warning while keeping the sessionId parameter for
+    // symmetry with other private helpers.
+    void sessionId
+  }
+
+  private pushBlock(m: ManagedSession, block: string): void {
+    m.eventBuffer.push(block)
+    if (m.eventBuffer.length > EVENT_BUFFER_CAP) {
+      m.eventBuffer.splice(0, m.eventBuffer.length - EVENT_BUFFER_CAP)
+    }
+    for (const listener of m.eventListeners) listener(block)
+  }
+
+  private emitClientBlock(block: string): void {
+    for (const listener of this.clientListeners) {
+      try {
+        listener(block)
+      } catch {
+        // consumer error must not break the reader loop
+      }
+    }
+  }
+
+  private buildSseBlock(eventType: string, properties: Record<string, unknown>): string {
+    const data = { type: eventType, properties }
+    return `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`
+  }
+
+  // -------------------------------------------------------------------------
+  // Internal — used by ClaudeCodeProvider for teardown so it doesn't need to
+  // reach into private fields.
+  // -------------------------------------------------------------------------
+
+  killAll(): void {
+    for (const [id, m] of this.managed) {
+      try {
+        m.proc.kill()
+      } catch {
+        // already dead
+      }
+      this.managed.delete(id)
+    }
+  }
+}

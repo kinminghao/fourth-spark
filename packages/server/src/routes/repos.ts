@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm"
 import { basename } from "node:path"
 import { db } from "../db/index"
 import { repos } from "../db/schema"
-import { processManager } from "../lib/process-manager"
+import { runtimeManager } from "../lib/process-manager"
 import { existsSync } from "node:fs"
 
 export const repoRoutes = new Hono()
@@ -80,7 +80,7 @@ repoRoutes.post("/", async (c) => {
 
   // Start the opencode process for this repo.
   try {
-    await processManager.start(id, body.localPath)
+    await runtimeManager.start(id, body.localPath)
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to start opencode"
     return c.json({ id, name: body.name, status: "error", error: msg }, 201)
@@ -97,7 +97,7 @@ repoRoutes.get("/", async (c) => {
   const result = all.map((r) => ({
     ...r,
     worktreeEnabled: Boolean(r.worktreeEnabled),
-    running: processManager.isRunning(r.id),
+    running: runtimeManager.isRunning(r.id),
     branch: getBranch(r.localPath),
   }))
   return c.json(result)
@@ -107,13 +107,13 @@ repoRoutes.get("/", async (c) => {
 repoRoutes.get("/:id", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
-  return c.json({ ...repo, worktreeEnabled: Boolean(repo.worktreeEnabled), running: processManager.isRunning(repo.id), branch: getBranch(repo.localPath) })
+  return c.json({ ...repo, worktreeEnabled: Boolean(repo.worktreeEnabled), running: runtimeManager.isRunning(repo.id), branch: getBranch(repo.localPath) })
 })
 
 // DELETE /api/repos/:id — stop the opencode process and remove the repo.
 repoRoutes.delete("/:id", async (c) => {
   const id = c.req.param("id")
-  await processManager.stop(id)
+  await runtimeManager.stop(id)
   await db.delete(repos).where(eq(repos.id, id))
   return c.json({ ok: true })
 })
@@ -123,7 +123,7 @@ repoRoutes.post("/:id/start", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
   try {
-    await processManager.start(repo.id, repo.localPath)
+    await runtimeManager.start(repo.id, repo.localPath)
     return c.json({ ok: true, status: "active" })
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to start"
@@ -133,7 +133,7 @@ repoRoutes.post("/:id/start", async (c) => {
 
 // POST /api/repos/:id/stop — manually stop a running repo.
 repoRoutes.post("/:id/stop", async (c) => {
-  await processManager.stop(c.req.param("id"))
+  await runtimeManager.stop(c.req.param("id"))
   return c.json({ ok: true, status: "inactive" })
 })
 

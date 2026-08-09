@@ -1,6 +1,6 @@
 import { Hono } from "hono"
 import { eq, and, asc, inArray } from "drizzle-orm"
-import { processManager } from "../lib/process-manager"
+import { runtimeManager } from "../lib/process-manager"
 import { sessionMonitor } from "../lib/session-monitor"
 import { workspaceManager } from "../lib/workspace-manager"
 import { DEFAULT_VARIANT } from "../lib/config"
@@ -9,7 +9,7 @@ import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFrom
 import { db } from "../db/index"
 import { sessions as sessionsTable, issues, issueComments, customAgents, customAgentFragments, promptFragments, sessionLinks, pullRequests, repos } from "../db/schema"
 import { logger } from "../middleware/logger"
-import type { SessionStatus } from "../lib/opencode"
+import type { SessionStatus } from "../core/runtime-types"
 
 export const sessions = new Hono()
 
@@ -145,7 +145,7 @@ sessions.post("/", async (c) => {
   }
   if (message) parts.push(message)
 
-  const client = processManager.requireClient(repoId)
+  const client = runtimeManager.requireClient(repoId)
 
   let workspaceId: string | null = null
 
@@ -187,7 +187,7 @@ sessions.post("/", async (c) => {
 
 sessions.get("/", async (c) => {
   const repoId = c.req.param("repoId")
-  const client = processManager.getClient(repoId)
+  const client = runtimeManager.getClient(repoId)
   if (client) {
     try {
       const list = await client.listSessions()
@@ -249,7 +249,7 @@ sessions.get("/all-links", async (c) => {
 
 sessions.get("/status", async (c) => {
   const repoId = c.req.param("repoId")
-  const client = processManager.getClient(repoId)
+  const client = runtimeManager.getClient(repoId)
   if (client) {
     try {
       return c.json(await client.getSessionStatus())
@@ -263,7 +263,7 @@ sessions.get("/status", async (c) => {
 sessions.get("/:id", async (c) => {
   const repoId = c.req.param("repoId")
   const sessionId = c.req.param("id")
-  const client = processManager.getClient(repoId)
+  const client = runtimeManager.getClient(repoId)
   if (client) {
     try {
       const live = await client.getSession(sessionId)
@@ -282,13 +282,13 @@ sessions.get("/:id", async (c) => {
 })
 
 sessions.delete("/:id", async (c) => {
-  const client = processManager.requireClient(c.req.param("repoId"))
+  const client = runtimeManager.requireClient(c.req.param("repoId"))
   await client.deleteSession(c.req.param("id"))
   return c.json({ ok: true })
 })
 
 sessions.post("/:id/prompt", async (c) => {
-  const client = processManager.requireClient(c.req.param("repoId"))
+  const client = runtimeManager.requireClient(c.req.param("repoId"))
   const body = await c.req.json<{ content?: string; agent?: string; model?: string; variant?: string }>().catch(() => null)
   if (!body || typeof body.content !== "string" || body.content.length === 0) {
     return c.json({ error: "Body must include a non-empty 'content' string", status: 400 }, 400)
@@ -299,7 +299,7 @@ sessions.post("/:id/prompt", async (c) => {
 
 sessions.post("/:id/abort", async (c) => {
   const sessionId = c.req.param("id")
-  const client = processManager.requireClient(c.req.param("repoId"))
+  const client = runtimeManager.requireClient(c.req.param("repoId"))
   sessionMonitor.markAborted(sessionId)
   await client.abort(sessionId)
   return c.json({ ok: true })
@@ -307,7 +307,7 @@ sessions.post("/:id/abort", async (c) => {
 
 sessions.post("/:id/questions/reply", async (c) => {
   const sessionId = c.req.param("id")
-  const client = processManager.requireClient(c.req.param("repoId"))
+  const client = runtimeManager.requireClient(c.req.param("repoId"))
   const body = await c.req.json<{ answers?: string[][] }>().catch(() => null)
   if (!body?.answers || !Array.isArray(body.answers)) {
     return c.json({ error: "'answers' must be an array of string arrays", status: 400 }, 400)
@@ -323,7 +323,7 @@ sessions.post("/:id/questions/reply", async (c) => {
 
 sessions.post("/:id/questions/reject", async (c) => {
   const sessionId = c.req.param("id")
-  const client = processManager.requireClient(c.req.param("repoId"))
+  const client = runtimeManager.requireClient(c.req.param("repoId"))
   const pending = await client.listQuestions()
   const match = pending.find((q) => q.sessionID === sessionId)
   if (!match) {
@@ -336,7 +336,7 @@ sessions.post("/:id/questions/reject", async (c) => {
 sessions.get("/:id/messages", async (c) => {
   const repoId = c.req.param("repoId")
   const id = c.req.param("id")
-  const client = processManager.getClient(repoId)
+  const client = runtimeManager.getClient(repoId)
   if (client) {
     try {
       const msgs = await client.getMessages(id)
@@ -352,7 +352,7 @@ sessions.get("/:id/messages", async (c) => {
 sessions.get("/:id/todos", async (c) => {
   const repoId = c.req.param("repoId")
   const id = c.req.param("id")
-  const client = processManager.getClient(repoId)
+  const client = runtimeManager.getClient(repoId)
   if (client) {
     try {
       return c.json(await client.getTodos(id))
@@ -424,7 +424,7 @@ sessions.delete("/:id/links", async (c) => {
 sessions.get("/:id/status", async (c) => {
   const repoId = c.req.param("repoId")
   const id = c.req.param("id")
-  const client = processManager.getClient(repoId)
+  const client = runtimeManager.getClient(repoId)
   if (client) {
     try {
       const all = await client.getSessionStatus()

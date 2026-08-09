@@ -1,8 +1,7 @@
 import { Hono } from "hono"
 import { eq } from "drizzle-orm"
 import { streamSSE, type SSEStreamingApi } from "hono/streaming"
-import { processManager } from "../lib/process-manager"
-import { createOpenCodeClient } from "../lib/opencode"
+import { runtimeManager } from "../lib/process-manager"
 import { workspaceManager } from "../lib/workspace-manager"
 import { db } from "../db/index"
 import { sessions as sessionsTable, workspaces } from "../db/schema"
@@ -83,7 +82,7 @@ async function forwardBlockGlobal(block: string, stream: SSEStreamingApi): Promi
 events.get("/:id/events", (c) => {
   const repoId = c.req.param("repoId")
   const sessionId = c.req.param("id")
-  const repoClient = processManager.requireClient(repoId)
+  const repoClient = runtimeManager.requireClient(repoId)
 
   return streamSSE(c, async (stream) => {
     let client = repoClient
@@ -93,7 +92,7 @@ events.get("/:id/events", (c) => {
       if (row?.workspaceId) {
         const [ws] = await db.select({ localPath: workspaces.localPath })
           .from(workspaces).where(eq(workspaces.id, row.workspaceId))
-        if (ws) client = createOpenCodeClient(repoClient.baseUrl, ws.localPath)
+        if (ws) client = repoClient.withDirectory(ws.localPath)
       }
     } catch {
       // fallback to repo client
@@ -161,7 +160,7 @@ events.get("/:id/events", (c) => {
 // GET /api/repos/:repoId/events — global SSE proxy (all sessions, no filtering).
 globalEvents.get("/", (c) => {
   const repoId = c.req.param("repoId")
-  const client = processManager.requireClient(repoId)
+  const client = runtimeManager.requireClient(repoId)
 
   return streamSSE(c, async (stream) => {
     const controller = new AbortController()

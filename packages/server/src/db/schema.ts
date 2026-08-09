@@ -5,6 +5,7 @@ export const repos = pgTable("repos", {
   name: text("name").notNull(),
   gitUrl: text("git_url").notNull(),
   localPath: text("local_path").notNull(),
+  runtimeType: text("runtime_type").default("opencode"),
   port: integer("port"),
   status: text("status").notNull().default("inactive"),
   worktreeEnabled: integer("worktree_enabled").notNull().default(0),

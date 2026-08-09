@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import { workspaceManager } from "../lib/workspace-manager"
 import { logger } from "../middleware/logger"
-import { processManager } from "../lib/process-manager"
+import { runtimeManager } from "../lib/process-manager"
 import { db } from "../db/index"
 import { sessions as sessionsTable } from "../db/schema"
 import { eq, inArray } from "drizzle-orm"
@@ -25,7 +25,7 @@ workspaceRoutes.get("/", async (c) => {
     let status: "active" | "idle" | "merged" | "stale" = "idle"
 
     // 1. Check if any session is busy
-    const client = processManager.getClient(repoId)
+    const client = runtimeManager.getClient(repoId)
     if (client) {
       try {
         const sessionStatuses = await client.getSessionStatus()
@@ -78,7 +78,7 @@ workspaceRoutes.delete("/:id", async (c) => {
   const repoId = c.req.param("repoId")
 
   // Check if workspace has busy sessions before allowing deletion
-  const client = processManager.getClient(repoId)
+  const client = runtimeManager.getClient(repoId)
   if (client) {
     try {
       const sessionStatuses = await client.getSessionStatus()
@@ -130,7 +130,7 @@ workspaceRoutes.post("/cleanup", async (c) => {
     let status: "active" | "idle" | "merged" | "stale" = "idle"
 
     // Check if any session is busy
-    const client = processManager.getClient(repoId)
+    const client = runtimeManager.getClient(repoId)
     if (client) {
       try {
         const sessionStatuses = await client.getSessionStatus()

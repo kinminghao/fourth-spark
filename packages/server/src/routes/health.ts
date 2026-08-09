@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { processManager } from "../lib/process-manager"
+import { runtimeManager } from "../lib/process-manager"
 import { APP_VERSION } from "../lib/config"
 
 const REPO = "kinminghao/fourth-spark"
@@ -33,32 +33,25 @@ health.get("/", async (c) => {
   return c.json({ status: "ok", version: APP_VERSION, latestVersion })
 })
 
-// GET /api/repos/:repoId/health — reports whether the repo's opencode is reachable.
+// GET /api/repos/:repoId/health — reports whether the repo's runtime is reachable.
 export const repoHealth = new Hono()
-
-const PROBE_TIMEOUT_MS = 1500
 
 repoHealth.get("/", async (c) => {
   const repoId = c.req.param("repoId")
-  const client = processManager.getClient(repoId)
+  if (!repoId) return c.json({ status: "not_running", repoId: null })
+  const client = runtimeManager.getClient(repoId)
   if (!client) {
     return c.json({ status: "not_running", repoId })
   }
 
-  let reachable = false
-  try {
-    const res = await fetch(new URL("/agent", client.baseUrl), {
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    })
-    reachable = res.ok
-  } catch {
-    reachable = false
-  }
+  const health = await runtimeManager.healthCheck(repoId)
+  const port = typeof health.details?.port === "number" ? health.details.port : undefined
+  const url = port !== undefined ? `http://127.0.0.1:${port}` : undefined
 
   return c.json({
     status: "ok",
     repoId,
-    opencode: { url: client.baseUrl, reachable },
+    opencode: { url, reachable: health.reachable },
     workspace: client.directory,
   })
 })
