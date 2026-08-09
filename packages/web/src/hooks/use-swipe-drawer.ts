@@ -19,10 +19,23 @@ interface TouchState {
 /** Pixels of movement before we lock direction */
 const DIR_LOCK_PX = 8
 
+function hasHScrollableAncestor(el: EventTarget | null, root: Element): boolean {
+  let node = el instanceof Element ? el : null
+  while (node && node !== root) {
+    if (node.scrollWidth > node.clientWidth) {
+      const overflow = getComputedStyle(node).overflowX
+      if (overflow === "auto" || overflow === "scroll") return true
+    }
+    node = node.parentElement
+  }
+  return false
+}
+
 /**
  * Detects left/right swipe gestures from any starting position.
  *
  * - Discriminates horizontal vs vertical to avoid fighting page scroll.
+ * - Skips touches originating inside horizontally-scrollable elements.
  * - Designed for mobile — callers should gate on viewport width if needed.
  */
 export function useSwipeDrawer({
@@ -37,6 +50,7 @@ export function useSwipeDrawer({
   const onTouchStart = useCallback(
     (e: React.TouchEvent) => {
       if (disabled) return
+      if (hasHScrollableAncestor(e.target, e.currentTarget)) return
       const t = e.touches[0]
       touch.current = { x0: t.clientX, y0: t.clientY, dir: null, on: true }
       dxRef.current = 0
