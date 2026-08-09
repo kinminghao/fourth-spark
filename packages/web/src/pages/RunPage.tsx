@@ -94,7 +94,7 @@ function SessionItem({
   }
 
   /* ---- iOS-style swipe-to-reveal (mobile) ---- */
-  const REVEAL_W = 192
+  const REVEAL_W = 256
   const [swipeX, setSwipeX] = useState(0)
   const [snap, setSnap] = useState(false)
   const touch = useRef({ x0: 0, y0: 0, base: 0, dir: null as "h" | "v" | null, on: false })
@@ -127,15 +127,15 @@ function SessionItem({
     <li className="relative overflow-hidden rounded-md">
       {/* Swipe action buttons (mobile, behind content) */}
       <div
-        className="absolute right-0 top-0 bottom-0 flex md:hidden"
-        style={swipeX < 0 ? { zIndex: 10 } : undefined}
+        className="absolute right-0 top-0 bottom-0 flex overflow-hidden md:hidden"
+        style={{ width: Math.abs(swipeX), ...(swipeX < 0 ? { zIndex: 10 } : {}) }}
       >
         {isConfirming ? (
           <>
-            <button type="button" onClick={() => { onDelete(); closeSwipe() }} className="flex w-12 items-center justify-center bg-red-500 text-white active:bg-red-600">
+            <button type="button" onClick={() => { onDelete(); closeSwipe() }} className="flex flex-1 min-w-0 items-center justify-center bg-red-500 text-white active:bg-red-600">
               <Check className="h-4 w-4" />
             </button>
-            <button type="button" onClick={() => { onCancelConfirm(); closeSwipe() }} className="flex w-12 items-center justify-center bg-neutral-500 text-white active:bg-neutral-600">
+            <button type="button" onClick={() => { onCancelConfirm(); closeSwipe() }} className="flex flex-1 min-w-0 items-center justify-center bg-neutral-500 text-white active:bg-neutral-600">
               <X className="h-4 w-4" />
             </button>
           </>
@@ -144,14 +144,14 @@ function SessionItem({
             <button
               type="button"
               onClick={() => { onToggleComplete(); closeSwipe() }}
-              className={clsx("flex w-12 items-center justify-center text-white", isCompleted ? "bg-neutral-500 active:bg-neutral-600" : "bg-emerald-500 active:bg-emerald-600")}
+              className={clsx("flex flex-1 min-w-0 items-center justify-center text-white", isCompleted ? "bg-neutral-500 active:bg-neutral-600" : "bg-emerald-500 active:bg-emerald-600")}
             >
               <CheckCircle2 className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={() => { startEditing(); closeSwipe() }}
-              className="flex w-12 items-center justify-center bg-amber-500 text-white active:bg-amber-600"
+              className="flex flex-1 min-w-0 items-center justify-center bg-amber-500 text-white active:bg-amber-600"
             >
               <Pencil className="h-4 w-4" />
             </button>
@@ -161,11 +161,11 @@ function SessionItem({
                 copyText(JSON.stringify({ id: session.id, name: session.title?.trim() || "" }, null, 2))
                 closeSwipe()
               }}
-              className="flex w-12 items-center justify-center bg-blue-500 text-white active:bg-blue-600"
+              className="flex flex-1 min-w-0 items-center justify-center bg-blue-500 text-white active:bg-blue-600"
             >
               <Copy className="h-4 w-4" />
             </button>
-            <button type="button" onClick={() => onConfirm()} className="flex w-12 items-center justify-center bg-red-500 text-white active:bg-red-600">
+            <button type="button" onClick={() => onConfirm()} className="flex flex-1 min-w-0 items-center justify-center bg-red-500 text-white active:bg-red-600">
               <Trash2 className="h-4 w-4" />
             </button>
           </>
