@@ -274,7 +274,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
               </select>
             </label>
             {issues.length > 0 && (
-              <div ref={issueComboRef} className="relative flex min-w-0 flex-1 items-center gap-1.5 font-mono text-[11px] text-fg-4">
+              <div ref={issueComboRef} className="relative hidden min-w-0 flex-1 items-center gap-1.5 font-mono text-[11px] text-fg-4 sm:flex">
                 <span className="shrink-0">Issue</span>
                 <button
                   type="button"

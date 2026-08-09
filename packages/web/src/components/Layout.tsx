@@ -310,7 +310,7 @@ function BottomBar() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-line bg-surface pb-[var(--safe-bottom)] md:hidden">
       <div className="flex h-14 items-center justify-around">
-        {NAV_ITEMS.filter((item) => item.segment !== "issues").map((item) => (
+        {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.segment}
             to={navPath(item.segment, item.global, repoName)}
