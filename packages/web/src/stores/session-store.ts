@@ -12,6 +12,7 @@ import type { Message, MessagePart, Session, Todo, SessionLinks, SessionLinkSumm
 export type SessionFilter = "all" | "active" | "completed"
 import { isQuestionTool, isQuestionPending, getPartText } from "../lib/message-parts"
 import { useRepoStore } from "./repo-store"
+import { useAgentStore } from "./agent-store"
 import { useToastStore } from "./toast-store"
 
 function questionToastId(sessionId: string): string {
@@ -316,7 +317,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       get().setSessionStatus(sessionId, "busy")
     }
     try {
-      await api.sendMessage(repoId, sessionId, content, session?.agent, model)
+      const agentStore = useAgentStore.getState()
+      const validAgent = session?.agent && agentStore.loaded &&
+        agentStore.agents.some((a) => a.name === session.agent || a.id === session.agent)
+        ? session.agent : undefined
+      await api.sendMessage(repoId, sessionId, content, validAgent, model)
       if (wasBusy) {
         _pendingQueueMarks[sessionId] = (_pendingQueueMarks[sessionId] || 0) + 1
       }
