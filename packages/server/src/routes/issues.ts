@@ -461,7 +461,7 @@ issueRoutes.post("/:number/polish", async (c) => {
   let workspaceId: string | null = null
 
   if (repo.worktreeEnabled) {
-    const workspace = await workspaceManager.create(repoId, repo.localPath)
+    const workspace = await workspaceManager.create(repoId, repo.localPath, undefined, repo.runtimeType)
     workspaceId = workspace.id
     client = repoClient.withDirectory(workspace.localPath)
   }
