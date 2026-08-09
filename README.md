@@ -39,23 +39,23 @@ fourth-spark start              # 拉起 PostgreSQL + 后台启动
 
 ## 核心能力
 
-**Agent 对话** — SSE 流式渲染，工具调用可视化，Thinking 折叠展开，交互式 Question 应答，Todo 进度追踪，Token/Cost 实时统计，消息草稿自动保存
+**[Agent 对话](docs/features/agent-conversation.md)** — SSE 流式渲染，工具调用可视化，Thinking 折叠展开，交互式 Question 应答，Todo 进度追踪，Token/Cost 实时统计，消息草稿自动保存
 
-**Workspace 隔离** — 为每个任务创建独立的 Git Worktree，自动 symlink AGENTS.md，支持状态追踪（active / idle / merged / stale）、磁盘用量监控、批量清理已合并分支
+**[Workspace 隔离](docs/features/workspace-isolation.md)** — 为每个任务创建独立的 Git Worktree，自动 symlink AGENTS.md，支持状态追踪（active / idle / merged / stale）、磁盘用量监控、批量清理已合并分支
 
-**多仓库管理** — 注册多个 Git 仓库，独立运行 Agent 进程，支持启停、代码拉取、分支切换，Worktree 开关按仓库配置
+**[多仓库管理](docs/features/repo-management.md)** — 注册多个 Git 仓库，独立运行 Agent 进程，支持启停、代码拉取、分支切换，Worktree 开关按仓库配置
 
-**Git 平台集成** — 通过 MCP 统一管理 GitHub / Gitea / GitLab 的 Issue、PR、Milestone、标签；支持 Issue 子任务 / Epic 树、PR-Issue 关联、评论管理；创建 Issue/PR 时自动关联当前 Session
+**[Git 平台集成](docs/features/git-integration.md)** — 通过 MCP 统一管理 GitHub / Gitea / GitLab 的 Issue、PR、Milestone、标签；支持 Issue 子任务 / Epic 树、PR-Issue 关联、评论管理；创建 Issue/PR 时自动关联当前 Session
 
-**自定义 Agent** — 基于内置 Agent 创建自定义 Agent，指定模型和 System Prompt，组合可复用的 Prompt 片段并排序拼接，支持 JSON 导入导出在不同实例间共享；内置"评论助手"系统 Agent 用于 Issue 评论润色
+**[自定义 Agent](docs/features/custom-agents.md)** — 基于内置 Agent 创建自定义 Agent，指定模型和 System Prompt，组合可复用的 Prompt 片段并排序拼接，支持 JSON 导入导出在不同实例间共享；内置"评论助手"系统 Agent 用于 Issue 评论润色
 
-**Session 管理** — 会话可与 Issue / PR 双向关联，侧边栏查看关联历史；支持按 Custom Agent 和模型新建会话，模型可从钉选列表快速选择
+**[Session 管理](docs/features/session-management.md)** — 会话可与 Issue / PR 双向关联，侧边栏查看关联历史；支持按 Custom Agent 和模型新建会话，模型可从钉选列表快速选择
 
-**智能运维** — Claude 多账号自动轮换（cooldown 持久化跨重启恢复）、会话中断自动恢复、截断自动续写（带停滞检测）、空响应自动重试、桌面（macOS）和 iOS 推送通知
+**[智能运维](docs/features/smart-ops.md)** — Claude 多账号自动轮换（cooldown 持久化跨重启恢复）、会话中断自动恢复、截断自动续写（带停滞检测）、空响应自动重试、桌面（macOS）和 iOS 推送通知
 
-**Cloud 账号池** — 可选连接 [claude-accounts-pool](https://github.com/nicepkg/claude-accounts-pool) Master 服务器，多台机器共享账号池，自动 lease 续约和 rate limit 上报，在设置页面一键切换本地 / 云端模式
+**[Cloud 账号池](docs/features/cloud-account-pool.md)** — 可选连接 [claude-accounts-pool](https://github.com/nicepkg/claude-accounts-pool) Master 服务器，多台机器共享账号池，自动 lease 续约和 rate limit 上报，在设置页面一键切换本地 / 云端模式
 
-**数据持久化** — 会话、消息、工具调用、Todo、Issue、PR、Milestone、标签、Custom Agent、Prompt 片段、Workspace、Session 关联等全量存入 PostgreSQL（18 张表），进程重启不丢数据
+**[数据持久化](docs/features/data-persistence.md)** — 会话、消息、工具调用、Todo、Issue、PR、Milestone、标签、Custom Agent、Prompt 片段、Workspace、Session 关联等全量存入 PostgreSQL（18 张表），进程重启不丢数据
 
 ## CLI
 
@@ -94,3 +94,17 @@ make dev      # 启动 Server (:3000) + Web (:5173)
 | [开发指南](docs/development.md) | 环境搭建、Makefile 命令、Schema 变更、调试 |
 | [数据库设计](docs/database.md) | 完整 Schema、表关系、设计说明 |
 | [部署运维](docs/deployment.md) | npm 分发、CLI 详解、CI/CD、环境变量、跨平台构建 |
+
+### 功能详解
+
+| 文档 | 内容 |
+|------|------|
+| [Agent 对话](docs/features/agent-conversation.md) | SSE 流式、工具可视化、Thinking/Question、Todo 追踪、Token 统计 |
+| [Workspace 隔离](docs/features/workspace-isolation.md) | Git Worktree 创建/状态/清理、PR 分支重命名、按仓库开关 |
+| [多仓库管理](docs/features/repo-management.md) | 注册/启停、进程管理、孤儿回收、分支切换、代码拉取 |
+| [Git 平台集成](docs/features/git-integration.md) | MCP 工具、Issue/PR/Milestone 同步、子任务 Epic、评论润色 |
+| [自定义 Agent](docs/features/custom-agents.md) | Prompt 片段、Agent 组合与排序、导入导出、系统 Agent |
+| [Session 管理](docs/features/session-management.md) | 生命周期、Issue/PR 关联、Workspace 绑定、数据同步 |
+| [智能运维](docs/features/smart-ops.md) | 截断续写、空响应重试、账号轮换、通知系统、参数配置 |
+| [Cloud 账号池](docs/features/cloud-account-pool.md) | Lease 协议、LeaseKeeper、Rate Limit 上报、模式切换 |
+| [数据持久化](docs/features/data-persistence.md) | 18 张表 Schema、同步机制、迁移流程、索引策略 |
