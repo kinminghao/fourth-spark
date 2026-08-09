@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
 } from "react"
 import { useNavigate } from "react-router-dom"
-import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, ExternalLink, GitBranch, Menu, PanelRight, Play, Search, Square, X } from "lucide-react"
+import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, ExternalLink, GitBranch, Menu, PanelRight, Play, Plus, Search, Square, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
@@ -663,14 +663,25 @@ export function RunView({
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-term">
       <header className="flex items-center gap-3 border-b border-line bg-base px-4 py-2.5">
-        <button
-          type="button"
-          onClick={onToggleSidebar}
-          aria-label="Open sidebar"
-          className="-ml-1 rounded-lg p-1.5 text-fg-3 hover:bg-elevated md:hidden"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-1 md:hidden">
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            aria-label="Open sidebar"
+            className="-ml-1 rounded-lg p-1.5 text-fg-3 hover:bg-elevated"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => useSessionStore.setState({ activeSessionId: null })}
+            aria-label="新建运行"
+            title="新建运行"
+            className="rounded-lg p-1.5 text-fg-3 hover:bg-elevated"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
+        </div>
         <div className="min-w-0 flex-1">
           {session?.parentID && (
             <button
