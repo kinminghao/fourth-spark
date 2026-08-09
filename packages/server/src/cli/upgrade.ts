@@ -22,18 +22,22 @@ type InstallMethod = "npm" | "manual"
 
 export async function upgradeCommand(args: string[]): Promise<void> {
   const force = args.includes("--force")
+  const canary = args.includes("--canary")
 
   console.log(`current version: ${APP_VERSION}`)
+  if (canary) console.log(`channel:         canary`)
   console.log("")
 
-  const latest = await fetchLatestRelease()
+  const latest = canary ? await fetchLatestPreRelease() : await fetchLatestRelease()
   if (!latest) {
-    console.error("Failed to check for updates. Check your network connection.")
+    console.error(canary
+      ? "No canary release found. Check your network connection."
+      : "Failed to check for updates. Check your network connection.")
     process.exit(1)
   }
 
   const latestVersion = latest.tag_name.replace(/^v/, "")
-  console.log(`latest version:  ${latestVersion}`)
+  console.log(`latest ${canary ? "canary" : "version"}:  ${latestVersion}`)
   console.log("")
 
   if (!force && !isNewer(latestVersion, APP_VERSION)) {
@@ -120,6 +124,20 @@ async function fetchLatestRelease(): Promise<GithubRelease | null> {
     })
     if (!res.ok) return null
     return (await res.json()) as GithubRelease
+  } catch {
+    return null
+  }
+}
+
+async function fetchLatestPreRelease(): Promise<GithubRelease | null> {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=20`, {
+      headers: { "User-Agent": "fourth-spark-upgrade" },
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!res.ok) return null
+    const releases = (await res.json()) as (GithubRelease & { prerelease: boolean })[]
+    return releases.find((r) => r.prerelease) ?? null
   } catch {
     return null
   }
