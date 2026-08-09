@@ -59,7 +59,7 @@ Commands:
   start     Start server in background (with PostgreSQL) [--port PORT]
   stop      Stop background server and all services
   status    Show server and service status
-  upgrade   Check for updates and upgrade to latest version
+  upgrade   Check for updates and upgrade to latest version [--canary] [--force]
 
 Options:
   -v, --version    Show version
