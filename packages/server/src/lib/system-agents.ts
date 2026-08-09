@@ -37,7 +37,14 @@ export async function seedSystemAgents(): Promise<void> {
       .from(customAgents)
       .where(eq(customAgents.id, agent.id))
 
-    if (existing) continue
+    if (existing) {
+      await db.update(customAgents).set({
+        baseAgent: agent.baseAgent,
+        systemPrompt: agent.systemPrompt,
+        updatedAt: Date.now(),
+      }).where(eq(customAgents.id, agent.id))
+      continue
+    }
 
     const now = Date.now()
     await db.insert(customAgents).values({
