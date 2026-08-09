@@ -321,7 +321,7 @@ function PrDetail({
             <ChevronLeft className="h-5 w-5" />
           </button>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span className={clsx("shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold", stateColor(pr.state))}>
                 #{pr.number} {pr.state}
               </span>
@@ -334,7 +334,7 @@ function PrDetail({
               {pr.labels?.map((l) => (
                 <span
                   key={l.id}
-                  className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                  className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
                   style={{ backgroundColor: `#${l.color}20`, color: `#${l.color}` }}
                 >
                   {l.name}
@@ -342,10 +342,10 @@ function PrDetail({
               ))}
             </div>
             <h2 className="mt-1 text-base font-semibold text-fg">{pr.title}</h2>
-            <div className="mt-1.5 flex items-center gap-3 text-xs text-fg-4">
-              <span className="flex items-center gap-1 font-mono text-[11px] text-fg-5">
-                <GitPullRequest className="h-3.5 w-3.5" />
-                {pr.headBranch} → {pr.baseBranch}
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-fg-4">
+              <span className="flex min-w-0 items-center gap-1 font-mono text-[11px] text-fg-5">
+                <GitPullRequest className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{pr.headBranch} → {pr.baseBranch}</span>
               </span>
               {pr.authorLogin && (
                 <span className="flex items-center gap-1.5">
@@ -369,7 +369,7 @@ function PrDetail({
               className="flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 font-mono text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              源站
+              <span className="hidden sm:inline">源站</span>
             </a>
           )}
           <button
@@ -378,7 +378,7 @@ function PrDetail({
             className="flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 text-xs text-fg-3 transition-colors hover:border-blue-500/50 hover:text-blue-400"
           >
             <Link2 className="h-3.5 w-3.5" />
-            关联 Issue
+            <span className="hidden sm:inline">关联 Issue</span>
           </button>
           {pr.state === "open" && (
             <>
@@ -389,7 +389,7 @@ function PrDetail({
                 className="flex h-8 items-center gap-1.5 rounded-md border border-emerald-500/30 px-2.5 text-xs font-medium text-emerald-400 transition-colors hover:border-emerald-500/60 hover:bg-emerald-500/10 disabled:opacity-40"
               >
                 <GitMerge className="h-3.5 w-3.5" />
-                合入
+                <span className="hidden sm:inline">合入</span>
               </button>
               {linkedIssues.some((i) => i.state === "open") && (
                 <button
@@ -399,7 +399,7 @@ function PrDetail({
                   className="flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
                 >
                   <GitMerge className="h-3.5 w-3.5" />
-                  合入并关闭 Issues
+                  <span className="hidden sm:inline">合入并关闭 Issues</span>
                 </button>
               )}
             </>
