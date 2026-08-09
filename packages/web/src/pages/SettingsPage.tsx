@@ -1756,14 +1756,14 @@ export function SettingsPage() {
         <h1 className="text-lg font-semibold text-fg">设置</h1>
         <p className="mt-0.5 text-sm text-fg-4">全局配置</p>
 
-        <div className="mt-6 flex gap-1 rounded-lg border border-line bg-surface p-1">
+        <div className="mt-6 flex gap-1 overflow-x-auto rounded-lg border border-line bg-surface p-1 scrollbar-none">
           {tabs.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
               className={clsx(
-                "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                "flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
                 tab === t.id
                   ? "bg-base text-fg shadow-sm"
                   : "text-fg-4 hover:text-fg-3",
