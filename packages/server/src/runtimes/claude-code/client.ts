@@ -90,6 +90,7 @@ export class StdioRuntimeClient implements RuntimeClient {
   private readonly managed = new Map<string, ManagedSession>()
   private readonly spawnedOnce = new Set<string>()
   private readonly clientListeners = new Set<(block: string) => void>()
+  private readonly persistentMessages = new Map<string, { messages: Message[]; messageIndex: Map<string, number>; todos: Todo[]; userCounter: number }>()
 
   constructor(directory: string) {
     this.directory = directory
@@ -142,13 +143,13 @@ export class StdioRuntimeClient implements RuntimeClient {
   }
 
   async getMessages(sessionId: string): Promise<Message[]> {
-    const m = this.managed.get(sessionId)
-    return m ? m.messages.slice() : []
+    const p = this.persistentMessages.get(sessionId)
+    return p ? p.messages.slice() : []
   }
 
   async getTodos(sessionId: string): Promise<Todo[]> {
-    const m = this.managed.get(sessionId)
-    return m ? m.todos.slice() : []
+    const p = this.persistentMessages.get(sessionId)
+    return p ? p.todos.slice() : []
   }
 
   async getSessionStatus(): Promise<Record<string, SessionStatus>> {
@@ -167,6 +168,15 @@ export class StdioRuntimeClient implements RuntimeClient {
   // with --session-id; subsequent turns after an abort resume with --resume.
   // -------------------------------------------------------------------------
 
+  private ensurePersistent(sessionId: string) {
+    let p = this.persistentMessages.get(sessionId)
+    if (!p) {
+      p = { messages: [], messageIndex: new Map(), todos: [], userCounter: 0 }
+      this.persistentMessages.set(sessionId, p)
+    }
+    return p
+  }
+
   async prompt(sessionId: string, content: string, opts?: PromptOpts): Promise<void> {
     const existing = this.managed.get(sessionId)
     if (existing) {
@@ -178,14 +188,17 @@ export class StdioRuntimeClient implements RuntimeClient {
       this.sessionInfo.set(sessionId, { id: sessionId, createdAt: new Date().toISOString() })
     }
 
+    const p = this.ensurePersistent(sessionId)
     const m = await this.spawnSession(sessionId, content, opts)
 
-    m.userCounter += 1
-    const userMsgId = `claude-${sessionId.slice(0, 8)}-user-${m.userCounter}`
+    p.userCounter += 1
+    const userMsgId = `claude-${sessionId.slice(0, 8)}-user-${p.userCounter}`
     const userPart: MessagePart = { type: "text", content }
     const userMsg: Message = { id: userMsgId, role: "user", parts: [userPart] }
-    m.messageIndex.set(userMsgId, m.messages.length)
-    m.messages.push(userMsg)
+    p.messageIndex.set(userMsgId, p.messages.length)
+    p.messages.push(userMsg)
+    m.messages = p.messages
+    m.messageIndex = p.messageIndex
 
     this.emitClientBlock(this.buildSseBlock("session.status", { sessionID: sessionId, type: "busy" }))
   }
@@ -454,13 +467,14 @@ export class StdioRuntimeClient implements RuntimeClient {
       this.emitClientBlock(block)
     }
 
-    this.syncFromState(m)
+    this.syncFromState(sessionId, m)
     this.updateStatusFromLine(sessionId, m, trimmed)
   }
 
-  private syncFromState(m: ManagedSession): void {
+  private syncFromState(sessionId: string, m: ManagedSession): void {
     const id = m.state.ourMessageId
     if (!id) return
+    const p = this.ensurePersistent(sessionId)
     const message: Message = {
       id,
       role: "assistant",
@@ -469,16 +483,14 @@ export class StdioRuntimeClient implements RuntimeClient {
     if (m.state.lastModelId) {
       message.info = { modelID: m.state.lastModelId, providerID: "anthropic" }
     }
-    const idx = m.messageIndex.get(id)
+    const idx = p.messageIndex.get(id)
     if (idx === undefined) {
-      m.messageIndex.set(id, m.messages.length)
-      m.messages.push(message)
+      p.messageIndex.set(id, p.messages.length)
+      p.messages.push(message)
     } else {
-      m.messages[idx] = message
+      p.messages[idx] = message
     }
 
-    // Rebuild todos from any TodoWrite tool_use parts we've seen so far in
-    // this message. The last TodoWrite wins, matching Claude semantics.
     const todos: Todo[] = []
     for (const part of m.state.currentParts) {
       if (part.type !== "tool-invocation" || part.toolName !== "TodoWrite") continue
@@ -495,7 +507,7 @@ export class StdioRuntimeClient implements RuntimeClient {
         })
       }
     }
-    m.todos = todos
+    p.todos = todos
   }
 
   private updateStatusFromLine(sessionId: string, m: ManagedSession, line: string): void {
