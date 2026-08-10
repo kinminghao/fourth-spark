@@ -205,6 +205,12 @@ export class StdioRuntimeClient implements RuntimeClient {
     m.messages = p.messages
     m.messageIndex = p.messageIndex
 
+    this.emitClientBlock(this.buildSseBlock("message.updated", {
+      sessionID: sessionId,
+      id: userMsgId,
+      role: "user",
+      parts: [userPart],
+    }))
     this.emitClientBlock(this.buildSseBlock("session.status", { sessionID: sessionId, type: "busy" }))
   }
 
