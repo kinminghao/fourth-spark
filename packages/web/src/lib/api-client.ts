@@ -21,6 +21,7 @@ export interface Repo {
   running: boolean
   branch: string | null
   worktreeEnabled: boolean
+  runtimeType?: string
   createdAt: number
   updatedAt: number
 }
@@ -245,10 +246,10 @@ export async function listRepos(): Promise<Repo[]> {
   return unwrapList<Repo>(await apiFetch<unknown>("/api/repos"), "repos")
 }
 
-export async function createRepo(name: string, gitUrl: string, localPath: string): Promise<Repo> {
+export async function createRepo(name: string, gitUrl: string, localPath: string, runtimeType?: string): Promise<Repo> {
   return apiFetch<Repo>("/api/repos", {
     method: "POST",
-    body: JSON.stringify({ name, gitUrl, localPath }),
+    body: JSON.stringify({ name, gitUrl, localPath, runtimeType }),
   })
 }
 
@@ -354,6 +355,13 @@ export async function toggleWorktree(repoId: string, enabled: boolean): Promise<
   await apiFetch(`/api/repos/${repoId}/worktree`, {
     method: "PATCH",
     body: JSON.stringify({ enabled }),
+  })
+}
+
+export async function switchRuntime(repoId: string, runtimeType: string): Promise<void> {
+  await apiFetch(`/api/repos/${repoId}/runtime`, {
+    method: "PATCH",
+    body: JSON.stringify({ runtimeType }),
   })
 }
 

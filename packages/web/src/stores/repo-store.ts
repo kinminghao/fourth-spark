@@ -12,7 +12,7 @@ interface RepoState {
 
   loadRepos: () => Promise<void>
   setActiveRepo: (id: string | null) => void
-  addRepo: (name: string, gitUrl: string, localPath: string) => Promise<Repo | null>
+  addRepo: (name: string, gitUrl: string, localPath: string, runtimeType?: string) => Promise<Repo | null>
   removeRepo: (id: string) => Promise<void>
   updateRepoBranch: (repoId: string, branch: string) => void
 }
@@ -53,9 +53,9 @@ export const useRepoStore = create<RepoState>((set, get) => ({
     else localStorage.removeItem(STORAGE_KEY)
   },
 
-  addRepo: async (name, gitUrl, localPath) => {
+  addRepo: async (name, gitUrl, localPath, runtimeType?) => {
     try {
-      const repo = await api.createRepo(name, gitUrl, localPath)
+      const repo = await api.createRepo(name, gitUrl, localPath, runtimeType)
       set((state) => ({
         repos: [...state.repos, repo],
         activeRepoId: repo.id,

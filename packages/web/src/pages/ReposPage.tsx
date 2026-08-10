@@ -389,6 +389,23 @@ export function ReposPage() {
                     <button
                       type="button"
                       onClick={async () => {
+                        const next = repo.runtimeType === "claude-code" ? "opencode" : "claude-code"
+                        await api.switchRuntime(repo.id, next)
+                        loadRepos()
+                      }}
+                      className={clsx(
+                        "flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+                        repo.runtimeType === "claude-code"
+                          ? "border-orange-500/30 text-orange-600 hover:bg-orange-500/10"
+                          : "border-sky-500/30 text-sky-600 hover:bg-sky-500/10",
+                      )}
+                      title={`当前运行时: ${repo.runtimeType === "claude-code" ? "Claude Code" : "OpenCode"}，点击切换`}
+                    >
+                      {repo.runtimeType === "claude-code" ? "Claude" : "OpenCode"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
                         await api.toggleWorktree(repo.id, !repo.worktreeEnabled)
                         loadRepos()
                       }}
