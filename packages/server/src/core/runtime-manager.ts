@@ -136,6 +136,22 @@ export function createDefaultRuntimeManager(): RuntimeManager {
       await provider.initialize(repoId, localPath)
       repoProviders.set(repoId, providerId)
 
+      if (providerId !== "opencode") {
+        try {
+          const { readAuthAnthropic } = await import("../lib/auth-files")
+          const auth = await readAuthAnthropic()
+          if (auth?.access) {
+            await provider.credentialWriter.write({
+              kind: auth.refresh ? "full" : "lease",
+              access: auth.access,
+              ...(auth.refresh ? { refresh: auth.refresh } : {}),
+              expires: auth.expires,
+            } as Parameters<typeof provider.credentialWriter.write>[0])
+            logger.info({ repoId, providerId }, "synced active credential to runtime")
+          }
+        } catch {}
+      }
+
       const client = provider.getClient(repoId)
       if (!client) {
         throw new Error(`Runtime provider "${providerId}" did not produce a client for repo ${repoId}`)
