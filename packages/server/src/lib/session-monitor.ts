@@ -1,6 +1,7 @@
 import { isUsageLimit } from "./account-switcher"
 import type { RuntimeClient } from "../core/runtime-client"
 import type { SessionStatus, Message, Todo } from "../core/runtime-types"
+import { isValidAgent } from "./agent-validator"
 import { getRegistry } from "../core/registry"
 import type { NotifyEvent } from "../core/types"
 import { logger } from "../middleware/logger"
@@ -31,6 +32,7 @@ type ManagedEntry = {
 const handled = new Map<string, number>()
 const repromptInFlight = new Set<string>()
 const userAborted = new Set<string>()
+
 const autoContinueCounts = new Map<string, number>()
 const emptyRetryCounts = new Map<string, number>()
 const idleResponseCounts = new Map<string, number>()
@@ -102,9 +104,11 @@ async function getLastUserPrompt(
       const text = textParts.map((p) => p.content ?? "").join("\n").trim()
       if (text.length > 0) {
         const assistantAfter = messages.slice(i + 1).find((m) => m.role === "assistant")
+        const rawAgent = assistantAfter?.info?.agent
+        const agent = await isValidAgent(client, rawAgent) ? rawAgent : undefined
         return {
           content: text,
-          agent: assistantAfter?.info?.agent,
+          agent,
           model: assistantAfter?.info?.modelID
             ? `${assistantAfter.info.providerID ?? "anthropic"}/${assistantAfter.info.modelID}`
             : undefined,

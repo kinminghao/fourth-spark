@@ -177,7 +177,6 @@ function SessionItem({
         className={clsx(
           "group relative rounded-md border-l-2",
           isActive ? "border-blue-500 bg-elevated" : "border-transparent bg-surface hover:bg-elevated/50",
-          isCompleted && !isActive && "opacity-50",
           snap && "transition-transform duration-200 ease-out",
         )}
         style={{
@@ -191,7 +190,7 @@ function SessionItem({
         <button
           type="button"
           onClick={() => { if (!editing) { onSelect(); closeSwipe() } }}
-          className="block w-full px-2.5 py-2 text-left"
+          className={clsx("block w-full px-2.5 py-2 text-left", isCompleted && !isActive && "opacity-50")}
           style={swipeX === -REVEAL_W ? { pointerEvents: "auto" } : undefined}
         >
           <div className="flex items-center gap-2">

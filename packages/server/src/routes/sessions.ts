@@ -4,6 +4,7 @@ import { runtimeManager } from "../lib/process-manager"
 import { sessionMonitor } from "../lib/session-monitor"
 import { workspaceManager } from "../lib/workspace-manager"
 import { DEFAULT_VARIANT } from "../lib/config"
+import { resolveAgent } from "../lib/agent-validator"
 import { syncSessionsList, syncMessagesList } from "../db/sync"
 import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFromDB, getTodosFromDB } from "../db/query"
 import { db } from "../db/index"
@@ -146,6 +147,7 @@ sessions.post("/", async (c) => {
   if (message) parts.push(message)
 
   const client = runtimeManager.requireClient(repoId)
+  agent = await resolveAgent(client, agent)
 
   let workspaceId: string | null = null
 

@@ -9,6 +9,7 @@ import { createGitIssueClient, getHostInfo, GitApiError, type GitIssue, type Git
 import { runtimeManager } from "../lib/process-manager"
 import { workspaceManager } from "../lib/workspace-manager"
 import { DEFAULT_VARIANT } from "../lib/config"
+import { resolveAgent } from "../lib/agent-validator"
 import { COMMENT_POLISHER_ID } from "../lib/system-agents"
 import { buildIssueContext } from "./sessions"
 import { logger } from "../middleware/logger"
@@ -466,7 +467,8 @@ issueRoutes.post("/:number/polish", async (c) => {
     client = repoClient.withDirectory(workspace.localPath)
   }
 
-  const session = await client.createSession({ agent: agent.baseAgent })
+  const resolvedAgent = await resolveAgent(client, agent.baseAgent)
+  const session = await client.createSession({ agent: resolvedAgent })
   const now = Date.now()
   await db.insert(sessionsTable).values({
     id: session.id,
@@ -474,7 +476,7 @@ issueRoutes.post("/:number/polish", async (c) => {
     workspaceId,
     issueId: iid,
     customAgentId: COMMENT_POLISHER_ID,
-    agent: agent.baseAgent,
+    agent: resolvedAgent ?? null,
     timeCreated: now,
     timeUpdated: now,
   }).onConflictDoUpdate({
@@ -483,7 +485,7 @@ issueRoutes.post("/:number/polish", async (c) => {
   })
 
   try {
-    await client.prompt(session.id, prompt, { agent: agent.baseAgent, model: agent.model ?? undefined, variant: DEFAULT_VARIANT })
+    await client.prompt(session.id, prompt, { agent: resolvedAgent, model: agent.model ?? undefined, variant: DEFAULT_VARIANT })
   } catch (err) {
     logger.error({ err, sessionId: session.id }, "polish prompt failed, cleaning up")
     await client.deleteSession(session.id).catch(() => {})
