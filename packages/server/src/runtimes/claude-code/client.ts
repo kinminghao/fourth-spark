@@ -168,33 +168,24 @@ export class StdioRuntimeClient implements RuntimeClient {
   // -------------------------------------------------------------------------
 
   async prompt(sessionId: string, content: string, opts?: PromptOpts): Promise<void> {
-    let m = this.managed.get(sessionId)
-    if (!m) {
-      m = await this.spawnSession(sessionId, opts)
+    const existing = this.managed.get(sessionId)
+    if (existing) {
+      try { existing.proc.kill() } catch {}
+      this.managed.delete(sessionId)
     }
-    m.status = "busy"
 
-    // Append the user turn to our in-memory transcript so the UI can render
-    // it before Claude's first token arrives.
+    if (!this.sessionInfo.has(sessionId)) {
+      this.sessionInfo.set(sessionId, { id: sessionId, createdAt: new Date().toISOString() })
+    }
+
+    const m = await this.spawnSession(sessionId, content, opts)
+
     m.userCounter += 1
     const userMsgId = `claude-${sessionId.slice(0, 8)}-user-${m.userCounter}`
     const userPart: MessagePart = { type: "text", content }
     const userMsg: Message = { id: userMsgId, role: "user", parts: [userPart] }
     m.messageIndex.set(userMsgId, m.messages.length)
     m.messages.push(userMsg)
-
-    const line = JSON.stringify({ type: "user", content }) + "\n"
-    logger.info({ sessionId, lineLength: line.length, pid: m.proc.pid }, "writing to claude stdin")
-    const stdin = m.proc.stdin
-    try {
-      stdin.write(line)
-      const flushed = stdin.flush()
-      if (flushed instanceof Promise) await flushed
-      logger.info({ sessionId }, "stdin write+flush complete")
-    } catch (err) {
-      logger.error({ err, sessionId }, "failed to write to claude subprocess stdin")
-      throw new RuntimeError(RUNTIME_ID, "Failed to write user message to Claude", 500, String(err))
-    }
 
     this.emitClientBlock(this.buildSseBlock("session.status", { sessionID: sessionId, type: "busy" }))
   }
@@ -321,18 +312,11 @@ export class StdioRuntimeClient implements RuntimeClient {
   // Subprocess spawn + stdout reader
   // -------------------------------------------------------------------------
 
-  private async spawnSession(sessionId: string, opts?: PromptOpts): Promise<ManagedSession> {
-    // Register the session lazily if the caller prompted without createSession.
-    if (!this.sessionInfo.has(sessionId)) {
-      this.sessionInfo.set(sessionId, { id: sessionId, createdAt: new Date().toISOString() })
-    }
-
+  private async spawnSession(sessionId: string, content: string, opts?: PromptOpts): Promise<ManagedSession> {
     const args = [
       "claude", "-p",
-      "--input-format", "stream-json",
       "--output-format", "stream-json",
       "--permission-mode", "bypassPermissions",
-      "--include-partial-messages",
       "--verbose",
     ]
     if (this.spawnedOnce.has(sessionId)) {
@@ -345,7 +329,7 @@ export class StdioRuntimeClient implements RuntimeClient {
       args.push("--model", extractClaudeModelId(model))
     }
 
-    logger.info({ sessionId, cwd: this.directory, model }, "spawning claude subprocess")
+    logger.info({ sessionId, cwd: this.directory, model, resume: this.spawnedOnce.has(sessionId) }, "spawning claude subprocess")
 
     const proc = Bun.spawn(args, {
       cwd: this.directory,
@@ -354,6 +338,16 @@ export class StdioRuntimeClient implements RuntimeClient {
       stderr: "pipe",
       env: { ...process.env },
     }) as Subprocess<"pipe", "pipe", "pipe">
+
+    logger.info({ sessionId, pid: proc.pid, contentLength: content.length }, "writing prompt to claude stdin")
+    try {
+      proc.stdin.write(content)
+      proc.stdin.flush()
+      proc.stdin.end()
+    } catch (err) {
+      logger.error({ err, sessionId }, "failed to write to claude subprocess stdin")
+      throw new RuntimeError(RUNTIME_ID, "Failed to write prompt to Claude", 500, String(err))
+    }
 
     const state = createSessionState()
     const managed: ManagedSession = {
@@ -452,7 +446,7 @@ export class StdioRuntimeClient implements RuntimeClient {
   private handleLine(sessionId: string, m: ManagedSession, line: string): void {
     const trimmed = line.trim()
     if (!trimmed) return
-    logger.debug({ sessionId, linePreview: trimmed.slice(0, 200) }, "claude stdout line")
+    logger.debug({ sessionId, linePreview: trimmed.slice(0, 300) }, "claude stdout line")
 
     const blocks = claudeEventToSseBlocks(trimmed, sessionId, m.state)
     for (const block of blocks) {
