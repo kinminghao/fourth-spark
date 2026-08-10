@@ -223,6 +223,11 @@ export class StdioRuntimeClient implements RuntimeClient {
 
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
+        for (const m of client.managed.values()) {
+          for (const block of m.eventBuffer) {
+            try { controller.enqueue(encoder.encode(block)) } catch { /* backpressure */ }
+          }
+        }
         listener = (block: string) => {
           if (closed) return
           try {
@@ -370,16 +375,34 @@ export class StdioRuntimeClient implements RuntimeClient {
     this.readStderr(sessionId, managed).catch((err) => {
       logger.warn({ err, sessionId }, "claude stderr reader crashed")
     })
-    proc.exited.then((code) => {
+    proc.exited.then(async (code) => {
       const still = this.managed.get(sessionId)
-      if (still === managed) {
-        this.managed.delete(sessionId)
+      if (still !== managed) return
+
+      let stderrText = ""
+      try {
+        const chunks: string[] = []
+        const reader = managed.proc.stderr.getReader()
+        const decoder = new TextDecoder()
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          chunks.push(decoder.decode(value, { stream: true }))
+        }
+        stderrText = chunks.join("").trim()
+      } catch {}
+
+      this.managed.delete(sessionId)
+
+      if (code !== 0 && code !== null) {
+        const reason = stderrText || `claude exited with code ${code}`
+        this.emitClientBlock(this.buildSseBlock("session.error", { sessionID: sessionId, message: reason }))
+        logger.warn({ sessionId, code, stderr: stderrText.slice(0, 500) }, "claude subprocess exited with error")
+      } else {
         this.emitClientBlock(this.buildSseBlock("session.status", { sessionID: sessionId, type: "idle" }))
         logger.info({ sessionId, code }, "claude subprocess exited")
       }
-    }).catch(() => {
-      // exit signal already handled
-    })
+    }).catch(() => {})
 
     return managed
   }
