@@ -1,10 +1,3 @@
-// ---------------------------------------------------------------------------
-// Claude Code CredentialWriter — reads and writes ~/.claude/.credentials.json,
-// the OAuth token store used by the Claude Code CLI. Writes are atomic (temp
-// file + rename) with 0600 permissions so a partial write never leaves an
-// unreadable-or-broken credentials file for the CLI.
-// ---------------------------------------------------------------------------
-
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
@@ -13,19 +6,27 @@ import type { CredentialWriter } from "../../core/runtime-types"
 
 const CREDENTIALS_PATH = join(homedir(), ".claude", ".credentials.json")
 
-interface ClaudeCredentials {
-  oauth_access_token?: string
-  oauth_refresh_token?: string
-  oauth_expires_at?: number
+interface ClaudeOAuth {
+  accessToken?: string
+  refreshToken?: string
+  expiresAt?: number
+  scopes?: string[]
+  subscriptionType?: string
+  rateLimitTier?: string
   [key: string]: unknown
 }
 
-async function readCredentials(): Promise<ClaudeCredentials> {
+interface ClaudeCredentialsFile {
+  claudeAiOauth?: ClaudeOAuth
+  [key: string]: unknown
+}
+
+async function readCredentials(): Promise<ClaudeCredentialsFile> {
   try {
     const raw = await readFile(CREDENTIALS_PATH, "utf-8")
     const parsed = JSON.parse(raw) as unknown
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as ClaudeCredentials
+      return parsed as ClaudeCredentialsFile
     }
     return {}
   } catch {
@@ -33,7 +34,7 @@ async function readCredentials(): Promise<ClaudeCredentials> {
   }
 }
 
-async function writeCredentials(creds: ClaudeCredentials): Promise<void> {
+async function writeCredentials(creds: ClaudeCredentialsFile): Promise<void> {
   await mkdir(dirname(CREDENTIALS_PATH), { recursive: true })
   const tmp = `${CREDENTIALS_PATH}.tmp-${process.pid}`
   await writeFile(tmp, JSON.stringify(creds, null, 2), { mode: 0o600 })
@@ -43,24 +44,27 @@ async function writeCredentials(creds: ClaudeCredentials): Promise<void> {
 export const claudeCodeCredentialWriter: CredentialWriter = {
   async read() {
     const creds = await readCredentials()
-    if (!creds.oauth_access_token && !creds.oauth_refresh_token) return undefined
+    const oauth = creds.claudeAiOauth
+    if (!oauth?.accessToken) return undefined
     return {
-      access: creds.oauth_access_token,
-      refresh: creds.oauth_refresh_token,
-      expires: creds.oauth_expires_at,
+      access: oauth.accessToken,
+      refresh: oauth.refreshToken,
+      expires: oauth.expiresAt,
     }
   },
 
   async write(token) {
     const creds = await readCredentials()
+    const oauth: ClaudeOAuth = creds.claudeAiOauth ?? {}
     if (token.kind === "full") {
-      creds.oauth_refresh_token = token.refresh
-      if (token.access !== undefined) creds.oauth_access_token = token.access
-      if (token.expires !== undefined) creds.oauth_expires_at = token.expires
+      oauth.accessToken = token.access
+      oauth.refreshToken = token.refresh
+      if (token.expires !== undefined) oauth.expiresAt = token.expires
     } else {
-      creds.oauth_access_token = token.access
-      creds.oauth_expires_at = token.expires
+      oauth.accessToken = token.access
+      oauth.expiresAt = token.expires
     }
+    creds.claudeAiOauth = oauth
     await writeCredentials(creds)
   },
 }
