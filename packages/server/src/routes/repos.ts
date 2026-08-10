@@ -46,9 +46,9 @@ repoRoutes.post("/resolve", async (c) => {
   return c.json({ name, gitUrl, localPath })
 })
 
-// POST /api/repos — register a new repo and start its opencode process.
+// POST /api/repos — register a new repo and start its runtime.
 repoRoutes.post("/", async (c) => {
-  const body = await c.req.json<{ name?: string; gitUrl?: string; localPath?: string }>().catch(() => null)
+  const body = await c.req.json<{ name?: string; gitUrl?: string; localPath?: string; runtimeType?: string }>().catch(() => null)
   if (!body || !body.name || !body.gitUrl || !body.localPath) {
     return c.json({ error: "Body must include name, gitUrl, and localPath", status: 400 }, 400)
   }
@@ -57,6 +57,7 @@ repoRoutes.post("/", async (c) => {
     return c.json({ error: `Local path does not exist: ${body.localPath}`, status: 400 }, 400)
   }
 
+  const runtimeType = body.runtimeType ?? "opencode"
   const id = crypto.randomUUID()
   const now = Date.now()
 
@@ -66,6 +67,7 @@ repoRoutes.post("/", async (c) => {
       name: body.name,
       gitUrl: body.gitUrl,
       localPath: body.localPath,
+      runtimeType,
       status: "inactive",
       createdAt: now,
       updatedAt: now,
@@ -78,11 +80,10 @@ repoRoutes.post("/", async (c) => {
     throw err
   }
 
-  // Start the opencode process for this repo.
   try {
-    await runtimeManager.start(id, body.localPath)
+    await runtimeManager.start(id, body.localPath, runtimeType)
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Failed to start opencode"
+    const msg = err instanceof Error ? err.message : "Failed to start runtime"
     return c.json({ id, name: body.name, status: "error", error: msg }, 201)
   }
 
@@ -123,7 +124,7 @@ repoRoutes.post("/:id/start", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
   try {
-    await runtimeManager.start(repo.id, repo.localPath)
+    await runtimeManager.start(repo.id, repo.localPath, repo.runtimeType ?? undefined)
     return c.json({ ok: true, status: "active" })
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to start"
@@ -216,6 +217,28 @@ repoRoutes.post("/:id/pull", async (c) => {
     const msg = err instanceof Error ? err.message : "Failed to pull"
     return c.json({ error: msg, status: 500 }, 500)
   }
+})
+
+repoRoutes.patch("/:id/runtime", async (c) => {
+  const id = c.req.param("id")
+  const body = await c.req.json<{ runtimeType: string }>().catch(() => null)
+  if (!body?.runtimeType || typeof body.runtimeType !== "string") {
+    return c.json({ error: "'runtimeType' string is required" }, 400)
+  }
+  const [repo] = await db.select().from(repos).where(eq(repos.id, id))
+  if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
+
+  if (repo.runtimeType === body.runtimeType) {
+    return c.json({ ok: true, runtimeType: body.runtimeType })
+  }
+
+  const wasRunning = runtimeManager.isRunning(id)
+  if (wasRunning) await runtimeManager.stop(id)
+  await db.update(repos).set({ runtimeType: body.runtimeType, updatedAt: Date.now() }).where(eq(repos.id, id))
+  if (wasRunning) {
+    await runtimeManager.start(id, repo.localPath, body.runtimeType)
+  }
+  return c.json({ ok: true, runtimeType: body.runtimeType })
 })
 
 repoRoutes.patch("/:id/worktree", async (c) => {
