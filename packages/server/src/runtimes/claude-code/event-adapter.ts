@@ -34,10 +34,10 @@ export interface ClaudeSessionState {
   lastModelId: string | null
 }
 
-export function createSessionState(): ClaudeSessionState {
+export function createSessionState(continueFrom?: { messageCounter: number; partCounter: number }): ClaudeSessionState {
   return {
-    messageCounter: 0,
-    partCounter: 0,
+    messageCounter: continueFrom?.messageCounter ?? 0,
+    partCounter: continueFrom?.partCounter ?? 0,
     currentMessageId: null,
     currentParts: [],
     ourMessageId: null,

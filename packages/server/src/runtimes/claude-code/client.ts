@@ -90,7 +90,7 @@ export class StdioRuntimeClient implements RuntimeClient {
   private readonly managed = new Map<string, ManagedSession>()
   private readonly spawnedOnce = new Set<string>()
   private readonly clientListeners = new Set<(block: string) => void>()
-  private readonly persistentMessages = new Map<string, { messages: Message[]; messageIndex: Map<string, number>; todos: Todo[]; userCounter: number }>()
+  private readonly persistentMessages = new Map<string, { messages: Message[]; messageIndex: Map<string, number>; todos: Todo[]; userCounter: number; lastMessageCounter: number; lastPartCounter: number }>()
 
   constructor(directory: string) {
     this.directory = directory
@@ -171,7 +171,7 @@ export class StdioRuntimeClient implements RuntimeClient {
   private ensurePersistent(sessionId: string) {
     let p = this.persistentMessages.get(sessionId)
     if (!p) {
-      p = { messages: [], messageIndex: new Map(), todos: [], userCounter: 0 }
+      p = { messages: [], messageIndex: new Map(), todos: [], userCounter: 0, lastMessageCounter: 0, lastPartCounter: 0 }
       this.persistentMessages.set(sessionId, p)
     }
     return p
@@ -190,6 +190,11 @@ export class StdioRuntimeClient implements RuntimeClient {
 
     const p = this.ensurePersistent(sessionId)
     const m = await this.spawnSession(sessionId, content, opts)
+
+    const info = this.sessionInfo.get(sessionId)
+    if (info && !info.title && content.length > 0) {
+      info.title = content.length > 50 ? content.slice(0, 50) + "…" : content
+    }
 
     p.userCounter += 1
     const userMsgId = `claude-${sessionId.slice(0, 8)}-user-${p.userCounter}`
@@ -362,7 +367,8 @@ export class StdioRuntimeClient implements RuntimeClient {
       throw new RuntimeError(RUNTIME_ID, "Failed to write prompt to Claude", 500, String(err))
     }
 
-    const state = createSessionState()
+    const p = this.ensurePersistent(sessionId)
+    const state = createSessionState({ messageCounter: p.lastMessageCounter, partCounter: p.lastPartCounter })
     const managed: ManagedSession = {
       proc,
       status: "busy",
@@ -475,6 +481,8 @@ export class StdioRuntimeClient implements RuntimeClient {
     const id = m.state.ourMessageId
     if (!id) return
     const p = this.ensurePersistent(sessionId)
+    p.lastMessageCounter = m.state.messageCounter
+    p.lastPartCounter = m.state.partCounter
     const message: Message = {
       id,
       role: "assistant",
