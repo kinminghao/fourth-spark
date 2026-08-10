@@ -58,6 +58,7 @@ interface ManagedSession {
   messageIndex: Map<string, number>
   todos: Todo[]
   userCounter: number
+  stderrChunks: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -183,11 +184,13 @@ export class StdioRuntimeClient implements RuntimeClient {
     m.messages.push(userMsg)
 
     const line = JSON.stringify({ type: "user", content }) + "\n"
+    logger.info({ sessionId, lineLength: line.length, pid: m.proc.pid }, "writing to claude stdin")
     const stdin = m.proc.stdin
     try {
       stdin.write(line)
       const flushed = stdin.flush()
       if (flushed instanceof Promise) await flushed
+      logger.info({ sessionId }, "stdin write+flush complete")
     } catch (err) {
       logger.error({ err, sessionId }, "failed to write to claude subprocess stdin")
       throw new RuntimeError(RUNTIME_ID, "Failed to write user message to Claude", 500, String(err))
@@ -363,6 +366,7 @@ export class StdioRuntimeClient implements RuntimeClient {
       messageIndex: new Map(),
       todos: [],
       userCounter: 0,
+      stderrChunks: [],
     }
     this.managed.set(sessionId, managed)
     this.spawnedOnce.add(sessionId)
@@ -375,32 +379,19 @@ export class StdioRuntimeClient implements RuntimeClient {
     this.readStderr(sessionId, managed).catch((err) => {
       logger.warn({ err, sessionId }, "claude stderr reader crashed")
     })
-    proc.exited.then(async (code) => {
+    proc.exited.then((code) => {
       const still = this.managed.get(sessionId)
       if (still !== managed) return
-
-      let stderrText = ""
-      try {
-        const chunks: string[] = []
-        const reader = managed.proc.stderr.getReader()
-        const decoder = new TextDecoder()
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          chunks.push(decoder.decode(value, { stream: true }))
-        }
-        stderrText = chunks.join("").trim()
-      } catch {}
-
       this.managed.delete(sessionId)
 
+      const stderrText = managed.stderrChunks.join("").trim()
       if (code !== 0 && code !== null) {
         const reason = stderrText || `claude exited with code ${code}`
         this.emitClientBlock(this.buildSseBlock("session.error", { sessionID: sessionId, message: reason }))
         logger.warn({ sessionId, code, stderr: stderrText.slice(0, 500) }, "claude subprocess exited with error")
       } else {
         this.emitClientBlock(this.buildSseBlock("session.status", { sessionID: sessionId, type: "idle" }))
-        logger.info({ sessionId, code }, "claude subprocess exited")
+        logger.info({ sessionId, code }, "claude subprocess exited normally")
       }
     }).catch(() => {})
 
@@ -442,15 +433,14 @@ export class StdioRuntimeClient implements RuntimeClient {
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        const text = decoder.decode(value, { stream: true }).trim()
-        if (text) logger.debug({ sessionId, stderr: text }, "claude stderr")
+        const text = decoder.decode(value, { stream: true })
+        if (text) {
+          m.stderrChunks.push(text)
+          logger.debug({ sessionId, stderr: text.trim() }, "claude stderr")
+        }
       }
     } finally {
-      try {
-        reader.releaseLock()
-      } catch {
-        // ignore
-      }
+      try { reader.releaseLock() } catch {}
     }
   }
 
@@ -462,6 +452,7 @@ export class StdioRuntimeClient implements RuntimeClient {
   private handleLine(sessionId: string, m: ManagedSession, line: string): void {
     const trimmed = line.trim()
     if (!trimmed) return
+    logger.debug({ sessionId, linePreview: trimmed.slice(0, 200) }, "claude stdout line")
 
     const blocks = claudeEventToSseBlocks(trimmed, sessionId, m.state)
     for (const block of blocks) {
