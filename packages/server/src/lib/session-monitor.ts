@@ -1,5 +1,6 @@
 import { isUsageLimit } from "./account-switcher"
-import type { OpenCodeClient, SessionStatus, Message, Todo } from "./opencode"
+import type { RuntimeClient } from "../core/runtime-client"
+import type { SessionStatus, Message, Todo } from "../core/runtime-types"
 import { isValidAgent } from "./agent-validator"
 import { getRegistry } from "../core/registry"
 import type { NotifyEvent } from "../core/types"
@@ -25,7 +26,7 @@ const NOTIFY_COOLDOWN_MS = 30_000
 
 type ManagedEntry = {
   repoId: string
-  client: OpenCodeClient
+  client: RuntimeClient
 }
 
 const handled = new Map<string, number>()
@@ -91,7 +92,7 @@ function dedup(key: string): boolean {
 }
 
 async function getLastUserPrompt(
-  client: OpenCodeClient,
+  client: RuntimeClient,
   sessionId: string,
 ): Promise<{ content: string; agent?: string; model?: string; variant?: string } | undefined> {
   try {
@@ -120,7 +121,7 @@ async function getLastUserPrompt(
   return undefined
 }
 
-async function detectEmptyResponse(client: OpenCodeClient, sessionId: string): Promise<boolean> {
+async function detectEmptyResponse(client: RuntimeClient, sessionId: string): Promise<boolean> {
   const count = emptyRetryCounts.get(sessionId) ?? 0
   if (count >= MAX_EMPTY_RETRIES) {
     logger.info({ sessionId, count }, "empty-response retry limit reached, skipping")
@@ -146,7 +147,7 @@ async function detectEmptyResponse(client: OpenCodeClient, sessionId: string): P
   }
 }
 
-async function autoRetryEmptyResponse(client: OpenCodeClient, sessionId: string): Promise<void> {
+async function autoRetryEmptyResponse(client: RuntimeClient, sessionId: string): Promise<void> {
   const count = (emptyRetryCounts.get(sessionId) ?? 0) + 1
   emptyRetryCounts.set(sessionId, count)
   const sid = sessionId.slice(-8)
@@ -163,7 +164,7 @@ async function autoRetryEmptyResponse(client: OpenCodeClient, sessionId: string)
   }
 }
 
-async function hasIncompleteTodos(client: OpenCodeClient, sessionId: string): Promise<boolean> {
+async function hasIncompleteTodos(client: RuntimeClient, sessionId: string): Promise<boolean> {
   try {
     const todos = await client.getTodos(sessionId)
     return todos.some((t) => t.status === "in_progress" || t.status === "pending")
@@ -254,7 +255,7 @@ function lastResponseWasTruncated(messages: Message[]): boolean {
   return !parts.some((p) => p.type === "step-finish")
 }
 
-async function detectTruncation(client: OpenCodeClient, sessionId: string): Promise<boolean> {
+async function detectTruncation(client: RuntimeClient, sessionId: string): Promise<boolean> {
   const count = autoContinueCounts.get(sessionId) ?? 0
   if (count >= MAX_AUTO_CONTINUES) {
     logger.info({ sessionId, count }, "auto-continue limit reached, skipping")
@@ -294,7 +295,7 @@ async function detectTruncation(client: OpenCodeClient, sessionId: string): Prom
   return true
 }
 
-async function autoContinueSession(client: OpenCodeClient, sessionId: string): Promise<void> {
+async function autoContinueSession(client: RuntimeClient, sessionId: string): Promise<void> {
   const count = (autoContinueCounts.get(sessionId) ?? 0) + 1
   autoContinueCounts.set(sessionId, count)
   const sid = sessionId.slice(-8)
@@ -337,7 +338,7 @@ function hasSubstantialProgress(messages: Message[]): boolean {
   })
 }
 
-async function repromptSession(client: OpenCodeClient, sessionId: string): Promise<void> {
+async function repromptSession(client: RuntimeClient, sessionId: string): Promise<void> {
   if (repromptInFlight.has(sessionId)) return
   repromptInFlight.add(sessionId)
   try {
@@ -520,7 +521,7 @@ export const sessionMonitor = {
     logger.info({ sessionId }, "session marked as user-aborted, monitor will skip retry")
   },
 
-  register(repoId: string, client: OpenCodeClient): void {
+  register(repoId: string, client: RuntimeClient): void {
     if (entries.some((e) => e.repoId === repoId)) return
     entries.push({ repoId, client })
     logger.info({ repoId }, "session monitor: registered")

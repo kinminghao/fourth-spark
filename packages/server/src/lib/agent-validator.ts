@@ -1,11 +1,11 @@
-import type { OpenCodeClient } from "./opencode"
+import type { RuntimeClient } from "../core/runtime-client"
 
 const cache = new Map<string, { names: Set<string>; expiresAt: number }>()
 const CACHE_TTL_MS = 60_000
 
-export async function isValidAgent(client: OpenCodeClient, name: string | undefined): Promise<boolean> {
+export async function isValidAgent(client: RuntimeClient, name: string | undefined): Promise<boolean> {
   if (!name) return false
-  const key = client.baseUrl
+  const key = client.directory
   const cached = cache.get(key)
   if (cached && cached.expiresAt > Date.now()) return cached.names.has(name)
   try {
@@ -18,7 +18,7 @@ export async function isValidAgent(client: OpenCodeClient, name: string | undefi
   }
 }
 
-export async function resolveAgent(client: OpenCodeClient, name: string | undefined): Promise<string | undefined> {
+export async function resolveAgent(client: RuntimeClient, name: string | undefined): Promise<string | undefined> {
   if (!name) return undefined
   return await isValidAgent(client, name) ? name : undefined
 }

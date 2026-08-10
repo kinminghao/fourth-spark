@@ -16,7 +16,20 @@ async function safeWrite(path: string, content: string): Promise<void> {
   await writeFile(path, content, "utf-8")
 }
 
-const GLOBAL_PATH = join(homedir(), ".config", "opencode", "AGENTS.md")
+const INSTRUCTION_FILES: Record<string, { fileName: string; globalDir: string }> = {
+  opencode: { fileName: "AGENTS.md", globalDir: join(homedir(), ".config", "opencode") },
+  "claude-code": { fileName: "CLAUDE.md", globalDir: join(homedir(), ".claude") },
+}
+
+function instructionConfig(runtimeType?: string | null) {
+  return INSTRUCTION_FILES[runtimeType ?? "opencode"] ?? INSTRUCTION_FILES.opencode
+}
+
+export function instructionFileName(runtimeType?: string | null): string {
+  return instructionConfig(runtimeType).fileName
+}
+
+const DEFAULT_GLOBAL_PATH = join(homedir(), ".config", "opencode", "AGENTS.md")
 
 // ---------------------------------------------------------------------------
 // Global AGENTS.md — mount at /api/agents-md
@@ -24,27 +37,31 @@ const GLOBAL_PATH = join(homedir(), ".config", "opencode", "AGENTS.md")
 export const globalAgentsMd = new Hono()
 
 globalAgentsMd.get("/", async (c) => {
-  return c.json({ content: await safeRead(GLOBAL_PATH) })
+  const rt = c.req.query("runtimeType")
+  const globalPath = rt ? join(instructionConfig(rt).globalDir, instructionConfig(rt).fileName) : DEFAULT_GLOBAL_PATH
+  return c.json({ content: await safeRead(globalPath) })
 })
 
 globalAgentsMd.put("/", async (c) => {
-  const body = await c.req.json<{ content?: string }>().catch(() => null)
+  const body = await c.req.json<{ content?: string; runtimeType?: string }>().catch(() => null)
   if (!body || typeof body.content !== "string") {
     return c.json({ error: "body must include a string 'content'" }, 400)
   }
-  await safeWrite(GLOBAL_PATH, body.content)
+  const cfg = instructionConfig(body.runtimeType)
+  await safeWrite(join(cfg.globalDir, cfg.fileName), body.content)
   return c.json({ ok: true })
 })
 
 // ---------------------------------------------------------------------------
-// Repo-scoped AGENTS.md — mount at /api/repos
+// Repo-scoped instruction file — mount at /api/repos
 // ---------------------------------------------------------------------------
 export const repoAgentsMd = new Hono()
 
 repoAgentsMd.get("/:id/agents-md", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
-  return c.json({ content: await safeRead(join(repo.localPath, "AGENTS.md")) })
+  const fileName = instructionFileName(repo.runtimeType)
+  return c.json({ content: await safeRead(join(repo.localPath, fileName)) })
 })
 
 repoAgentsMd.put("/:id/agents-md", async (c) => {
@@ -54,6 +71,7 @@ repoAgentsMd.put("/:id/agents-md", async (c) => {
   if (!body || typeof body.content !== "string") {
     return c.json({ error: "body must include a string 'content'" }, 400)
   }
-  await writeFile(join(repo.localPath, "AGENTS.md"), body.content, "utf-8")
+  const fileName = instructionFileName(repo.runtimeType)
+  await writeFile(join(repo.localPath, fileName), body.content, "utf-8")
   return c.json({ ok: true })
 })

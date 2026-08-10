@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import { getWorkerConfig, getDefaultWorkerId } from "../lib/config"
 import { CLOUD_ROUTES, NETWORK_TIMEOUT_MS } from "../lib/lease-constants"
-import { processManager } from "../lib/process-manager"
+import { runtimeManager } from "../lib/process-manager"
 import { logger } from "../middleware/logger"
 
 export const cloudRoutes = new Hono()
@@ -37,7 +37,7 @@ cloudRoutes.get("/status", async (c) => {
   if (!cfg) return c.json({ mode: "local", defaultWorkerId: getDefaultWorkerId() })
 
   const connected = await probeMaster(cfg.masterUrl)
-  const heldId = processManager.getHeldAccountId()
+  const heldId = runtimeManager.getHeldAccountId()
   const heldAccount = heldId ? await resolveHeldAccount(cfg.masterUrl, heldId) : undefined
 
   return c.json({
@@ -51,12 +51,12 @@ cloudRoutes.get("/status", async (c) => {
 })
 
 cloudRoutes.post("/reload", async (c) => {
-  await processManager.reloadCloudPool()
+  await runtimeManager.reloadCloudPool()
   const cfg = getWorkerConfig()
   if (!cfg) return c.json({ mode: "local", defaultWorkerId: getDefaultWorkerId() })
 
   const connected = await probeMaster(cfg.masterUrl)
-  const heldId = processManager.getHeldAccountId()
+  const heldId = runtimeManager.getHeldAccountId()
   const heldAccount = heldId ? await resolveHeldAccount(cfg.masterUrl, heldId) : undefined
 
   return c.json({

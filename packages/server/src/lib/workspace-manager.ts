@@ -36,16 +36,16 @@ function runGit(args: string[], cwd: string): { ok: boolean; stdout: string; std
   }
 }
 
-function symlinkAgentsMdIfMissing(repoLocalPath: string, worktreePath: string): void {
-  const sourceAgents = join(repoLocalPath, "AGENTS.md")
-  const targetAgents = join(worktreePath, "AGENTS.md")
-  if (!existsSync(sourceAgents)) return
-  if (existsSync(targetAgents)) return
+function symlinkInstructionFileIfMissing(repoLocalPath: string, worktreePath: string, fileName: string): void {
+  const source = join(repoLocalPath, fileName)
+  const target = join(worktreePath, fileName)
+  if (!existsSync(source)) return
+  if (existsSync(target)) return
   try {
-    symlinkSync(sourceAgents, targetAgents)
-    logger.info({ sourceAgents, targetAgents }, "symlinked AGENTS.md into worktree")
+    symlinkSync(source, target)
+    logger.info({ source, target }, `symlinked ${fileName} into worktree`)
   } catch (err) {
-    logger.warn({ err, sourceAgents, targetAgents }, "failed to symlink AGENTS.md")
+    logger.warn({ err, source, target }, `failed to symlink ${fileName}`)
   }
 }
 
@@ -63,7 +63,7 @@ async function detectBaseBranch(repoLocalPath: string): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export const workspaceManager = {
-  async create(repoId: string, repoLocalPath: string, baseBranch?: string): Promise<Workspace> {
+  async create(repoId: string, repoLocalPath: string, baseBranch?: string, runtimeType?: string | null): Promise<Workspace> {
     mkdirSync(WORKTREE_DIR, { recursive: true })
 
     const id = crypto.randomUUID()
@@ -79,7 +79,8 @@ export const workspaceManager = {
       throw new Error(`Failed to create worktree: ${msg}`)
     }
 
-    symlinkAgentsMdIfMissing(repoLocalPath, localPath)
+    const { instructionFileName } = await import("../routes/agents-md")
+    symlinkInstructionFileIfMissing(repoLocalPath, localPath, instructionFileName(runtimeType))
 
     const now = Date.now()
     const [row] = await db.insert(workspaces).values({

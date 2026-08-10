@@ -4,6 +4,19 @@ import { loadAccounts, saveAccounts, readAuthAnthropic, writeAuthAnthropic, with
 import { refreshToken, isStale as isTokenStale, RefreshRevokedError } from "./token-refresh"
 import { logger } from "../middleware/logger"
 
+// Write credential to all non-OpenCode runtimes (OpenCode is handled by writeAuthAnthropic).
+async function broadcastCredentialToOtherRuntimes(token: { kind: "full" | "lease"; refresh?: string; access?: string; expires?: number }): Promise<void> {
+  try {
+    const { getRegistry } = await import("../core/registry")
+    for (const provider of getRegistry().providers.values()) {
+      if (provider.id === "opencode") continue
+      await provider.credentialWriter.write(token as Parameters<typeof provider.credentialWriter.write>[0]).catch((err) => {
+        logger.warn({ err, runtimeId: provider.id }, "failed to broadcast credential to runtime")
+      })
+    }
+  } catch {}
+}
+
 const COOLDOWN_FILE = join("/tmp", "fourth-spark", "cooldown.json")
 
 const cooldown = new Map<string, number>()
@@ -175,6 +188,7 @@ export async function switchToAccount(targetId: string): Promise<StoredAccount> 
     file.activeId = targetId
     await saveAccounts(file)
     await writeAuthAnthropic({ refresh: account.refresh, access: account.access, expires: account.expires })
+    await broadcastCredentialToOtherRuntimes({ kind: "full", refresh: account.refresh, access: account.access, expires: account.expires })
     logger.info({ id: targetId, label: account.label }, "switched active account")
     return account
   })

@@ -7,6 +7,7 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
   const [localPath, setLocalPath] = useState("")
   const [name, setName] = useState("")
   const [gitUrl, setGitUrl] = useState("")
+  const [runtimeType, setRuntimeType] = useState("opencode")
   const [resolving, setResolving] = useState(false)
   const [error, setError] = useState("")
   const addRepo = useRepoStore((s) => s.addRepo)
@@ -49,7 +50,7 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
   const handleSubmit = async () => {
     if (!canSubmit) return
     setError("")
-    const repo = await addRepo(name.trim(), gitUrl.trim(), localPath.trim())
+    const repo = await addRepo(name.trim(), gitUrl.trim(), localPath.trim(), runtimeType)
     if (repo) onClose()
   }
 
@@ -103,6 +104,32 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
               placeholder="https://github.com/org/repo.git"
               className="w-full rounded-lg border border-line bg-base px-3 py-2 font-mono text-xs text-fg placeholder:text-fg-5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-fg-3">运行时</label>
+            <div className="flex gap-2">
+              {[
+                { value: "opencode", label: "OpenCode" },
+                { value: "claude-code", label: "Claude Code" },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setRuntimeType(opt.value)}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                    runtimeType === opt.value
+                      ? "border-blue-500 bg-blue-500/10 text-blue-600"
+                      : "border-line bg-base text-fg-4 hover:bg-elevated hover:text-fg-2"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] text-fg-5">
+              {runtimeType === "claude-code" ? "需要本地安装 Claude Code CLI" : "需要本地安装 OpenCode CLI"}
+            </span>
           </div>
 
           {error && (

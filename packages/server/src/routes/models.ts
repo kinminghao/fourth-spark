@@ -1,6 +1,6 @@
 import { Hono } from "hono"
-import { processManager } from "../lib/process-manager"
-import type { Provider, ProviderModel } from "../lib/opencode"
+import { runtimeManager } from "../lib/process-manager"
+import type { Provider, ProviderModel } from "../core/runtime-types"
 
 export const modelRoutes = new Hono()
 
@@ -27,7 +27,7 @@ function isTextModel(m: ProviderModel): boolean {
 
 modelRoutes.get("/", async (c) => {
   const repoId = c.req.param("repoId")
-  const client = processManager.requireClient(repoId)
+  const client = runtimeManager.requireClient(repoId)
 
   let providers: Provider[]
   let connectedIds: Set<string>

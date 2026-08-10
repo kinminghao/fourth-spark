@@ -5,6 +5,8 @@ import type {
   AccountPool,
   AgentRuntime,
 } from "./types"
+import type { RuntimeProvider } from "./runtime-provider"
+import type { CredentialWriter } from "./runtime-types"
 import { desktopNotificationChannel } from "../lib/notify"
 import { apnsNotificationChannel } from "../lib/apns"
 import { gitToolProvider } from "../mcp/git-tools"
@@ -14,6 +16,7 @@ import {
   gitlabPlatformFactory,
 } from "../lib/git-provider"
 import { localAccountPool } from "../lib/local-account-pool"
+import { openCodeCredentialWriter } from "../runtimes/opencode/credential"
 
 export interface PluginRegistry {
   runtime?: AgentRuntime
@@ -21,6 +24,8 @@ export interface PluginRegistry {
   notifications: NotificationChannel[]
   mcpTools: McpToolProvider[]
   gitPlatforms: Map<string, GitPlatformFactory>
+  providers: Map<string, RuntimeProvider>
+  credentialWriter: CredentialWriter
 }
 
 let instance: PluginRegistry | undefined
@@ -35,6 +40,8 @@ export function createDefaultRegistry(): PluginRegistry {
       ["gitea", giteaPlatformFactory],
       ["gitlab", gitlabPlatformFactory],
     ]),
+    providers: new Map(),
+    credentialWriter: openCodeCredentialWriter,
   }
 }
 

@@ -6,9 +6,8 @@ import { db } from "../db/index"
 import { issues, issueComments, repos, tags, issueTags, milestones, sessions as sessionsTable, customAgents, workspaces } from "../db/schema"
 import { parseGitUrl } from "../lib/git-url"
 import { createGitIssueClient, getHostInfo, GitApiError, type GitIssue, type GitComment } from "../lib/git-provider"
-import { processManager } from "../lib/process-manager"
+import { runtimeManager } from "../lib/process-manager"
 import { workspaceManager } from "../lib/workspace-manager"
-import { createOpenCodeClient } from "../lib/opencode"
 import { DEFAULT_VARIANT } from "../lib/config"
 import { resolveAgent } from "../lib/agent-validator"
 import { COMMENT_POLISHER_ID } from "../lib/system-agents"
@@ -437,7 +436,7 @@ issueRoutes.post("/:number/polish", async (c) => {
   const body = await c.req.json<{ draft: string }>().catch(() => null)
   if (!body?.draft?.trim()) return c.json({ error: "draft is required" }, 400)
 
-  const repoClient = processManager.requireClient(repoId)
+  const repoClient = runtimeManager.requireClient(repoId)
   const [repo] = await db.select().from(repos).where(eq(repos.id, repoId))
   if (!repo) return c.json({ error: "Repo not found" }, 404)
 
@@ -463,9 +462,9 @@ issueRoutes.post("/:number/polish", async (c) => {
   let workspaceId: string | null = null
 
   if (repo.worktreeEnabled) {
-    const workspace = await workspaceManager.create(repoId, repo.localPath)
+    const workspace = await workspaceManager.create(repoId, repo.localPath, undefined, repo.runtimeType)
     workspaceId = workspace.id
-    client = createOpenCodeClient(repoClient.baseUrl, workspace.localPath)
+    client = repoClient.withDirectory(workspace.localPath)
   }
 
   const resolvedAgent = await resolveAgent(client, agent.baseAgent)
