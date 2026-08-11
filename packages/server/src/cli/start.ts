@@ -87,6 +87,15 @@ export async function startCommand(args: string[]): Promise<void> {
     }
   }
 
+  console.log("→ Running database migrations...")
+  try {
+    const { runMigrations } = await import("../db/migrate")
+    const ran = await runMigrations()
+    console.log(ran ? "  Migrations applied" : "  Database up to date")
+  } catch {
+    console.log("  Migration skipped (will retry on server start)")
+  }
+
   const requestedPort = parsePort(args)
   let port: number
 
