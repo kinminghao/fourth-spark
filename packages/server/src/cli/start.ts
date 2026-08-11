@@ -93,7 +93,7 @@ export async function startCommand(args: string[]): Promise<void> {
     const ran = await runMigrations()
     console.log(ran ? "  Migrations applied" : "  Database up to date")
   } catch (err) {
-    console.error("  Migration failed:", (err as Error).message ?? err)
+    console.error("  Migration failed:", err)
   }
 
   const requestedPort = parsePort(args)
