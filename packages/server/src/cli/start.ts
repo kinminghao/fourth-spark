@@ -1,6 +1,6 @@
 import { spawn, execSync } from "node:child_process"
 import { readFileSync, writeFileSync, existsSync, openSync } from "node:fs"
-import { createServer } from "node:net"
+import { createServer, createConnection } from "node:net"
 import { PID_FILE, LOG_FILE, ensureDataDir, isProcessRunning, findDockerCompose, getDockerComposeCmd } from "./paths"
 
 const DEFAULT_PORT = 3000
@@ -26,6 +26,15 @@ async function findFreePort(start: number): Promise<number> {
     if (await isPortFree(p)) return p
   }
   throw new Error(`No free port found in range ${start}-${start + 99}`)
+}
+
+function isPortReachable(port: number, host = "127.0.0.1"): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = createConnection({ port, host })
+    sock.once("connect", () => { sock.destroy(); resolve(true) })
+    sock.once("error", () => { sock.destroy(); resolve(false) })
+    sock.setTimeout(1000, () => { sock.destroy(); resolve(false) })
+  })
 }
 
 function isPortOccupiedByOther(port: number, containerName: string): boolean {
@@ -71,13 +80,11 @@ export async function startCommand(args: string[]): Promise<void> {
       execSync(`${composeCmd.join(" ")} -f "${composePath}" up -d postgres`, { stdio: "pipe" })
       let ready = false
       for (let i = 0; i < 30; i++) {
-        try {
-          execSync("docker exec fourth-spark-db pg_isready -U fourth_spark -q", { stdio: "pipe" })
+        if (await isPortReachable(PG_PORT)) {
           ready = true
           break
-        } catch {
-          await new Promise((r) => setTimeout(r, 500))
         }
+        await new Promise((r) => setTimeout(r, 500))
       }
       console.log(ready ? "  PostgreSQL ready" : "  Warning: PostgreSQL may not be ready")
     } catch {
