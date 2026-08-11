@@ -67,7 +67,10 @@ export async function runMigrations(): Promise<boolean> {
     process.env.MIGRATIONS_DIR ?? join(binaryDir, "drizzle"),
   )
   const journalPath = join(migrationsFolder, "meta", "_journal.json")
-  if (!existsSync(journalPath)) return false
+  if (!existsSync(journalPath)) {
+    console.warn(`[migrate] migration journal not found at ${journalPath} — skipping migrations`)
+    return false
+  }
 
   const journal: { entries: JournalEntry[] } = JSON.parse(
     readFileSync(journalPath, "utf-8"),
