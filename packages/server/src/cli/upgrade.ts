@@ -87,7 +87,7 @@ export async function upgradeCommand(args: string[]): Promise<void> {
     if (isWindows) {
       execSync(`powershell -Command "Expand-Archive -Path '${tmpFile}' -DestinationPath '${binaryDir}' -Force"`)
     } else {
-      execSync(`tar xzf "${tmpFile}" -C "${binaryDir}" fourth-spark`, { stdio: "pipe" })
+      execSync(`tar xzf "${tmpFile}" -C "${binaryDir}"`, { stdio: "pipe" })
       chmodSync(binaryPath, 0o755)
     }
 
