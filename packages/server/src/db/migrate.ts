@@ -1,6 +1,7 @@
 import postgres from "postgres"
 import { resolve, join, dirname } from "node:path"
-import { existsSync, realpathSync, readFileSync } from "node:fs"
+import { existsSync, realpathSync, readFileSync, appendFileSync, mkdirSync } from "node:fs"
+import { homedir } from "node:os"
 
 const DATABASE_URL =
   process.env.DATABASE_URL ??
@@ -77,7 +78,17 @@ export async function runMigrations(): Promise<boolean> {
   )
   if (journal.entries.length === 0) return false
 
-  const client = postgres(DATABASE_URL, { max: 1 })
+  const logDir = join(homedir(), ".fourth-spark", "logs")
+  mkdirSync(logDir, { recursive: true })
+  const logFile = join(logDir, "migration.log")
+
+  const client = postgres(DATABASE_URL, {
+    max: 1,
+    onnotice: (notice) => {
+      const line = `[${new Date().toISOString()}] ${notice.severity}: ${notice.message}\n`
+      appendFileSync(logFile, line)
+    },
+  })
   try {
     await client`
       CREATE TABLE IF NOT EXISTS "__drizzle_migrations" (
