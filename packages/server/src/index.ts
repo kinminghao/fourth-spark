@@ -126,37 +126,6 @@ if (existsSync(join(STATIC_DIR, "index.html"))) {
 const registry = initRegistry()
 logger.info({ port: PORT }, "fourth-spark server starting")
 
-// Auto-detect dev vs prod and sync schema accordingly.
-// Dev mode (drizzle.config.ts present): push schema.ts directly — always in sync.
-// Prod mode (compiled binary): apply SQL migration files from drizzle/ folder.
-const drizzleConfigPath = resolve("./drizzle.config.ts")
-if (existsSync(drizzleConfigPath)) {
-  try {
-    execSync("bunx drizzle-kit push --force", {
-      cwd: resolve("./"),
-      stdio: "pipe",
-      timeout: 30_000,
-    })
-    logger.info("database schema synced (dev mode)")
-  } catch (err) {
-    logger.warn({ err }, "schema push failed — continuing with existing schema")
-  }
-} else {
-  runMigrations()
-    .then((ran) => {
-      if (ran) logger.info("database migrations applied")
-    })
-    .catch((err) => {
-      logger.error({ err }, "migration failed — continuing with existing schema")
-    })
-}
-
-seedSystemAgents().then(() => {
-  logger.info("system agents seeded")
-}).catch((err) => {
-  logger.warn({ err }, "failed to seed system agents — continuing")
-})
-
 import { eq } from "drizzle-orm"
 import { db } from "./db/index"
 import { settings } from "./db/schema"
@@ -166,13 +135,47 @@ async function getSetting(key: string): Promise<string | undefined> {
   return rows[0]?.value
 }
 
-initWorkerConfig(getSetting).then(() => {
-  return runtimeManager.startAll()
-}).then(() => {
-  logger.info("all repos initialized")
-}).catch((err) => {
-  logger.error({ err }, "failed to initialize repos")
-})
+// Ordered startup: migrations MUST complete before any DB queries.
+async function startup() {
+  // 1. Sync database schema — dev mode pushes directly, prod applies SQL migrations.
+  const drizzleConfigPath = resolve("./drizzle.config.ts")
+  if (existsSync(drizzleConfigPath)) {
+    try {
+      execSync("bunx drizzle-kit push --force", {
+        cwd: resolve("./"),
+        stdio: "pipe",
+        timeout: 30_000,
+      })
+      logger.info("database schema synced (dev mode)")
+    } catch (err) {
+      logger.warn({ err }, "schema push failed — continuing with existing schema")
+    }
+  } else {
+    try {
+      const ran = await runMigrations()
+      if (ran) logger.info("database migrations applied")
+    } catch (err) {
+      logger.error({ err }, "migration failed — continuing with existing schema")
+    }
+  }
+
+  try {
+    await seedSystemAgents()
+    logger.info("system agents seeded")
+  } catch (err) {
+    logger.warn({ err }, "failed to seed system agents — continuing")
+  }
+
+  try {
+    await initWorkerConfig(getSetting)
+    await runtimeManager.startAll()
+    logger.info("all repos initialized")
+  } catch (err) {
+    logger.error({ err }, "failed to initialize repos")
+  }
+}
+
+startup()
 
 // ---------------------------------------------------------------------------
 // Graceful shutdown — covers SIGINT (Ctrl-C), SIGTERM (kill), SIGHUP (bun --watch)
