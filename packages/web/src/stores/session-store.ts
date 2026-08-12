@@ -69,7 +69,7 @@ interface SessionState {
   setSessionFilter: (filter: SessionFilter) => void
   toggleSessionComplete: (id: string) => Promise<void>
   loadSessions: () => Promise<void>
-  createSession: (message: string, agent?: string, model?: string, variant?: string, issueId?: string, customAgentId?: string) => Promise<Session | null>
+  createSession: (message: string, agent?: string, model?: string, variant?: string, issueId?: string, customAgentId?: string, files?: PromptFile[]) => Promise<Session | null>
   setActiveSession: (id: string) => Promise<void>
   refreshSessionData: (id: string) => Promise<void>
   refreshSessionLinks: (id: string) => Promise<void>
@@ -159,12 +159,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  createSession: async (message, agent, model, variant, issueId, customAgentId) => {
+  createSession: async (message, agent, model, variant, issueId, customAgentId, files) => {
     const repoId = getRepoId()
     if (!repoId) return null
     set({ sendError: null })
     try {
-      const session = await api.createSession(repoId, message, agent, model, variant, issueId, customAgentId)
+      const session = await api.createSession(repoId, message, agent, model, variant, issueId, customAgentId, files)
       set((state) => ({
         sessions: [
           session,

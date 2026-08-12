@@ -11,6 +11,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, ExternalLink, Gi
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
+import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
 import { MarkdownTable } from "./MarkdownTable"
 import {
   EMPTY_MESSAGES,
@@ -150,6 +151,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const [issueDropdownOpen, setIssueDropdownOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const issueComboRef = useRef<HTMLDivElement>(null)
+  const { attachments, error: attachError, addFiles, onPaste, remove, clear } = useAttachments()
   const createSession = useSessionStore((state) => state.createSession)
   const sendError = useSessionStore((state) => state.sendError)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
@@ -202,7 +204,8 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     const text = draft.trim()
     if (!activeRepoId || (!text && !hasContext)) return
     setDraft("")
-    void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined)
+    clear()
+    void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined, attachments.length > 0 ? attachments : undefined)
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -232,6 +235,8 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
           </div>
         </div>
 
+        <AttachmentStrip attachments={attachments} error={attachError} onRemove={remove} />
+
         <div className="rounded-xl border border-line bg-base/80 shadow-sm transition-colors focus-within:border-fg-5">
           <div className="flex items-start gap-2 px-4 py-3">
             <span className="select-none pt-px font-mono text-sm leading-6 text-emerald-400">
@@ -245,8 +250,14 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
               disabled={!activeRepoId}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={onPaste}
               placeholder={activeRepoId ? "让 Agent 做什么？" : "请先选择一个仓库"}
               className="flex-1 resize-none bg-transparent font-mono text-sm leading-6 text-fg placeholder:text-fg-6 focus:outline-none disabled:cursor-not-allowed"
+            />
+            <AttachButton
+              onFiles={(files) => void addFiles(files)}
+              disabled={!activeRepoId}
+              allowed
             />
             <button
               type="button"

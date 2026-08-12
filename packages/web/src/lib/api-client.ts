@@ -392,10 +392,11 @@ export async function createSession(
   variant?: string,
   issueId?: string,
   customAgentId?: string,
+  files?: PromptFile[],
 ): Promise<Session> {
   return apiFetch<Session>(`${repoBase(repoId)}/sessions`, {
     method: "POST",
-    body: JSON.stringify({ message, agent, model, variant, issueId, customAgentId }),
+    body: JSON.stringify({ message, agent, model, variant, issueId, customAgentId, files }),
   })
 }
 
