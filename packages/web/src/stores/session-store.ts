@@ -7,7 +7,7 @@
 
 import { create } from "zustand"
 import * as api from "../lib/api-client"
-import type { Message, MessagePart, Session, Todo, SessionLinks, SessionLinkSummary } from "../lib/api-client"
+import type { Message, MessagePart, PromptFile, Session, Todo, SessionLinks, SessionLinkSummary } from "../lib/api-client"
 
 export type SessionFilter = "all" | "active" | "completed"
 import { isQuestionTool, isQuestionPending, getPartText } from "../lib/message-parts"
@@ -76,7 +76,7 @@ interface SessionState {
   addLink: (sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
   removeLink: (sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
   deleteSession: (id: string) => Promise<void>
-  sendMessage: (content: string, model?: string) => Promise<boolean>
+  sendMessage: (content: string, model?: string, files?: PromptFile[]) => Promise<boolean>
   replyQuestion: (answers: string[][]) => Promise<void>
   rejectQuestion: () => Promise<void>
   abortSession: () => Promise<void>
@@ -306,7 +306,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
   },
 
-  sendMessage: async (content, model?) => {
+  sendMessage: async (content, model?, files?) => {
     const repoId = getRepoId()
     const sessionId = get().activeSessionId
     if (!repoId || !sessionId) return false
@@ -321,7 +321,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const validAgent = session?.agent && agentStore.loaded &&
         agentStore.agents.some((a) => a.name === session.agent || a.id === session.agent)
         ? session.agent : undefined
-      await api.sendMessage(repoId, sessionId, content, validAgent, model)
+      await api.sendMessage(repoId, sessionId, content, validAgent, model, files)
       if (wasBusy) {
         _pendingQueueMarks[sessionId] = (_pendingQueueMarks[sessionId] || 0) + 1
       }

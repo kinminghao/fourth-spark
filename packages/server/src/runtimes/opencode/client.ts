@@ -114,7 +114,10 @@ export class HttpRuntimeClient implements RuntimeClient {
         : { providerID: "anthropic", modelID: opts.model }
     }
     return this.fetchers.send("POST", `/session/${sessionId}/prompt_async`, { directory: this.directory }, {
-      parts: [{ type: "text", text: content }],
+      parts: [
+        { type: "text", text: content },
+        ...(opts?.files ?? []).map((f) => ({ type: "file", mime: f.mime, url: f.url, filename: f.filename })),
+      ],
       agent: opts?.agent,
       model,
       variant: opts?.variant,

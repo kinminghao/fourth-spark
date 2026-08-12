@@ -20,6 +20,10 @@ export type MessagePart = {
   toolName?: string
   input?: unknown
   output?: unknown
+  // url must be a data: URL — OpenCode's validateMedia rejects anything else
+  mime?: string
+  url?: string
+  filename?: string
 }
 
 export type Message = {
@@ -48,6 +52,7 @@ export type ProviderModel = {
   status?: string
   capabilities?: {
     toolcall?: boolean
+    input?: { text?: boolean; image?: boolean; pdf?: boolean }
     output?: { text?: boolean; image?: boolean }
   }
   cost?: { input?: number; output?: number }
@@ -80,7 +85,9 @@ export type PendingQuestion = {
   tool?: { messageID: string; callID: string }
 }
 
-export type PromptOpts = { agent?: string; model?: string; variant?: string }
+export type PromptFile = { mime: string; url: string; filename?: string }
+
+export type PromptOpts = { agent?: string; model?: string; variant?: string; files?: PromptFile[] }
 
 export class RuntimeError extends Error {
   readonly status: number

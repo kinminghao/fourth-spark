@@ -12,6 +12,7 @@ type ModelInfo = {
   configured: boolean
   cost?: { input?: number; output?: number }
   contextLimit?: number
+  supportsImage: boolean
 }
 
 function isTextModel(m: ProviderModel): boolean {
@@ -55,6 +56,8 @@ modelRoutes.get("/", async (c) => {
         configured: connectedIds.has(provider.id),
         cost: m.cost,
         contextLimit: m.limit?.context,
+        // runtimes without capability data (claude-code) default to allowed
+        supportsImage: m.capabilities?.input?.image !== false,
       })
     }
   }

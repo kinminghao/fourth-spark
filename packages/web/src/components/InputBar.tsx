@@ -3,18 +3,32 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ClipboardEvent,
   type KeyboardEvent,
 } from "react"
-import { ArrowUp } from "lucide-react"
+import { ArrowUp, ImagePlus, X } from "lucide-react"
 import clsx from "clsx"
 import { useSessionStore, EMPTY_MESSAGES } from "../stores/session-store"
 import { useRepoStore } from "../stores/repo-store"
 import { useDraftStore } from "../stores/draft-store"
 import { classifyPart, isQuestionPending } from "../lib/message-parts"
-import type { ModelInfo } from "../lib/api-client"
+import type { ModelInfo, PromptFile } from "../lib/api-client"
 import { getSettings, listModels } from "../lib/api-client"
 
 const MAX_HEIGHT_PX = 200
+
+// 5MB, well under OpenCode's 20MB decode cap — base64 in Postgres grows ~1.4x
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
+const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
 
 function useHasPendingQuestion(): boolean {
   return useSessionStore((state) => {
@@ -36,7 +50,10 @@ export function InputBar() {
   const [value, setValue] = useState("")
   const [selectedModel, setSelectedModel] = useState("")
   const [pinnedModels, setPinnedModels] = useState<ModelInfo[]>([])
+  const [attachments, setAttachments] = useState<PromptFile[]>([])
+  const [attachError, setAttachError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
@@ -83,16 +100,61 @@ export function InputBar() {
 
   useEffect(() => {
     setValue(activeSessionId ? useDraftStore.getState().drafts[activeSessionId] ?? "" : "")
+    setAttachments([])
+    setAttachError(null)
   }, [activeSessionId])
+
+  // Unknown model (default / unpinned) stays permissive; only a hard false blocks
+  const imagesAllowed = pinnedModels.find((m) => m.id === selectedModel)?.supportsImage !== false
+
+  useEffect(() => {
+    setAttachError(null)
+    if (!imagesAllowed) {
+      setAttachments([])
+    }
+  }, [imagesAllowed])
+
+  const addFiles = async (incoming: File[]) => {
+    const accepted: PromptFile[] = []
+    const errors: string[] = []
+    for (const file of incoming) {
+      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+        errors.push(`${file.name || "文件"}：格式不支持`)
+        continue
+      }
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        errors.push(`${file.name}：超过 5MB`)
+        continue
+      }
+      accepted.push({ mime: file.type, url: await readAsDataUrl(file), filename: file.name })
+    }
+    if (accepted.length > 0) {
+      setAttachments((prev) => [...prev, ...accepted])
+    }
+    setAttachError(errors.length > 0 ? errors.join("；") : null)
+  }
+
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files)
+    if (files.length === 0) return
+    event.preventDefault()
+    if (!imagesAllowed) {
+      setAttachError("当前模型不支持图片")
+      return
+    }
+    void addFiles(files)
+  }
 
   const submit = async () => {
     const text = value.trim()
     if (!text || disabled) {
       return
     }
-    const ok = await sendMessage(text, selectedModel || undefined)
+    const ok = await sendMessage(text, selectedModel || undefined, attachments.length > 0 ? attachments : undefined)
     if (ok) {
       setValue("")
+      setAttachments([])
+      setAttachError(null)
       if (activeSessionId) clearDraft(activeSessionId)
     }
   }
@@ -123,6 +185,30 @@ export function InputBar() {
 
   return (
     <div className="border-t border-line bg-term px-4 py-4">
+      {attachments.length > 0 && (
+        <div className="mx-auto mb-2 flex max-w-4xl flex-wrap gap-2">
+          {attachments.map((file, index) => (
+            <div key={`${file.filename ?? "img"}-${index}`} className="group relative">
+              <img
+                src={file.url}
+                alt={file.filename ?? "attachment"}
+                className="h-16 w-16 rounded border border-line object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
+                aria-label="Remove attachment"
+                className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-line bg-term text-fg-4 opacity-0 transition-opacity duration-150 hover:text-fg-2 group-hover:opacity-100"
+              >
+                <X className="h-2.5 w-2.5" strokeWidth={2.5} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {attachError && (
+        <div className="mx-auto mb-2 max-w-4xl font-mono text-[11px] text-red-400">{attachError}</div>
+      )}
       <div
         className={clsx(
           "mx-auto flex max-w-4xl items-start gap-2 rounded-lg border px-3 py-2 transition-colors duration-150",
@@ -145,9 +231,31 @@ export function InputBar() {
             if (activeSessionId) setDraft(activeSessionId, v)
           }}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={placeholder}
           className="flex-1 resize-none bg-transparent font-mono text-sm leading-6 text-fg placeholder:text-fg-6 focus:outline-none disabled:cursor-not-allowed"
         />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ACCEPTED_IMAGE_TYPES.join(",")}
+          multiple
+          hidden
+          onChange={(event) => {
+            void addFiles(Array.from(event.target.files ?? []))
+            event.target.value = ""
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled || !imagesAllowed}
+          aria-label="Attach image"
+          title={imagesAllowed ? "附加图片" : "当前模型不支持图片"}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-5 transition-colors duration-150 hover:text-fg-3 disabled:cursor-not-allowed disabled:text-fg-6/40"
+        >
+          <ImagePlus className="h-4 w-4" />
+        </button>
         <button
           type="button"
           onClick={submit}
