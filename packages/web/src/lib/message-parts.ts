@@ -6,7 +6,7 @@
 
 import type { MessagePart, Todo } from "./api-client"
 
-export type PartKind = "text" | "thinking" | "tool" | "other"
+export type PartKind = "text" | "thinking" | "tool" | "file" | "other"
 
 const TOOL_TYPES = new Set([
   "tool",
@@ -22,11 +22,16 @@ const THINKING_TYPES = new Set(["thinking", "reasoning", "reason"])
 
 const TEXT_TYPES = new Set(["text", "output_text", "message"])
 
-/** Classify a part into the four rendering buckets. */
+const FILE_TYPES = new Set(["file", "image"])
+
+/** Classify a part into the five rendering buckets. */
 export function classifyPart(part: MessagePart): PartKind {
   const type = part.type?.toLowerCase() ?? ""
   if (TOOL_TYPES.has(type) || part.toolName != null || part.tool != null) {
     return "tool"
+  }
+  if (FILE_TYPES.has(type)) {
+    return "file"
   }
   if (THINKING_TYPES.has(type)) {
     return "thinking"

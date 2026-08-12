@@ -21,6 +21,7 @@ import {
   type MessagePart,
   type PendingQuestion,
   type ProviderListResponse,
+  type PromptFile,
   type PromptOpts,
   type Session,
   type SessionStatus,
@@ -64,6 +65,22 @@ interface ManagedSession {
 // ---------------------------------------------------------------------------
 // Helpers — model ID extraction, todo parsing from TodoWrite tool_use input.
 // ---------------------------------------------------------------------------
+
+// Text block MUST stay first: the CLI silently drops image blocks that lead the
+// content array — it echoes them back on --replay-user-messages, model never sees them
+function streamJsonUserMessage(content: string, files: PromptFile[]): string {
+  const message = {
+    role: "user",
+    content: [
+      { type: "text", text: content },
+      ...files.map((f) => ({
+        type: "image",
+        source: { type: "base64", media_type: f.mime, data: f.url.slice(f.url.indexOf(",") + 1) },
+      })),
+    ],
+  }
+  return JSON.stringify({ type: "user", message }) + "\n"
+}
 
 function extractClaudeModelId(model: string): string {
   const slash = model.indexOf("/")
@@ -198,8 +215,11 @@ export class StdioRuntimeClient implements RuntimeClient {
 
     p.userCounter += 1
     const userMsgId = `claude-${sessionId.slice(0, 8)}-user-${p.userCounter}`
-    const userPart: MessagePart = { type: "text", content }
-    const userMsg: Message = { id: userMsgId, role: "user", parts: [userPart] }
+    const userParts: MessagePart[] = [
+      { type: "text", content },
+      ...(opts?.files ?? []).map((f) => ({ type: "file", mime: f.mime, url: f.url, filename: f.filename })),
+    ]
+    const userMsg: Message = { id: userMsgId, role: "user", parts: userParts }
     p.messageIndex.set(userMsgId, p.messages.length)
     p.messages.push(userMsg)
     m.messages = p.messages
@@ -209,7 +229,7 @@ export class StdioRuntimeClient implements RuntimeClient {
       sessionID: sessionId,
       id: userMsgId,
       role: "user",
-      parts: [userPart],
+      parts: userParts,
     }))
     this.emitClientBlock(this.buildSseBlock("session.status", { sessionID: sessionId, type: "busy" }))
   }
@@ -337,12 +357,16 @@ export class StdioRuntimeClient implements RuntimeClient {
   // -------------------------------------------------------------------------
 
   private async spawnSession(sessionId: string, content: string, opts?: PromptOpts): Promise<ManagedSession> {
+    const files = opts?.files ?? []
     const args = [
       "claude", "-p",
       "--output-format", "stream-json",
       "--permission-mode", "bypassPermissions",
       "--verbose",
     ]
+    if (files.length > 0) {
+      args.push("--input-format", "stream-json")
+    }
     if (this.spawnedOnce.has(sessionId)) {
       args.push("--resume", sessionId)
     } else {
@@ -363,9 +387,9 @@ export class StdioRuntimeClient implements RuntimeClient {
       env: { ...process.env },
     }) as Subprocess<"pipe", "pipe", "pipe">
 
-    logger.info({ sessionId, pid: proc.pid, contentLength: content.length }, "writing prompt to claude stdin")
+    logger.info({ sessionId, pid: proc.pid, contentLength: content.length, files: files.length }, "writing prompt to claude stdin")
     try {
-      proc.stdin.write(content)
+      proc.stdin.write(files.length > 0 ? streamJsonUserMessage(content, files) : content)
       proc.stdin.flush()
       proc.stdin.end()
     } catch (err) {

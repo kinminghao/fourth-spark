@@ -10,7 +10,7 @@ import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFrom
 import { db } from "../db/index"
 import { sessions as sessionsTable, issues, issueComments, customAgents, customAgentFragments, promptFragments, sessionLinks, pullRequests, repos } from "../db/schema"
 import { logger } from "../middleware/logger"
-import type { SessionStatus } from "../core/runtime-types"
+import type { SessionStatus, PromptFile } from "../core/runtime-types"
 
 export const sessions = new Hono()
 
@@ -96,14 +96,15 @@ sessions.post("/", async (c) => {
     return c.json({ error: "Repo not found", status: 404 }, 404)
   }
 
-  const body = await c.req.json<{ message?: string; agent?: string; model?: string; variant?: string; title?: string; issueId?: string; customAgentId?: string }>().catch(() => null)
+  const body = await c.req.json<{ message?: string; agent?: string; model?: string; variant?: string; title?: string; issueId?: string; customAgentId?: string; files?: PromptFile[] }>().catch(() => null)
   if (!body) {
     return c.json({ error: "Request body is required", status: 400 }, 400)
   }
   const message = typeof body.message === "string" ? body.message.trim() : ""
   const hasContext = Boolean(body.issueId) || Boolean(body.customAgentId)
-  if (!message && !hasContext) {
-    return c.json({ error: "Either a non-empty 'message', an 'issueId', or a 'customAgentId' is required", status: 400 }, 400)
+  const hasFiles = Boolean(body.files && body.files.length > 0)
+  if (!message && !hasContext && !hasFiles) {
+    return c.json({ error: "Either a non-empty 'message', an 'issueId', a 'customAgentId', or a file is required", status: 400 }, 400)
   }
 
   let agent = body.agent
@@ -176,7 +177,7 @@ sessions.post("/", async (c) => {
     set: { workspaceId, issueId: body.issueId ?? null, customAgentId, timeUpdated: now },
   })
   try {
-    await client.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT })
+    await client.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT, files: body.files })
   } catch (err) {
     logger.error({ err, sessionId: session.id, agent, model }, "prompt failed after session creation, cleaning up")
     await client.deleteSession(session.id).catch(() => {})
@@ -291,11 +292,14 @@ sessions.delete("/:id", async (c) => {
 
 sessions.post("/:id/prompt", async (c) => {
   const client = runtimeManager.requireClient(c.req.param("repoId"))
-  const body = await c.req.json<{ content?: string; agent?: string; model?: string; variant?: string }>().catch(() => null)
-  if (!body || typeof body.content !== "string" || body.content.length === 0) {
-    return c.json({ error: "Body must include a non-empty 'content' string", status: 400 }, 400)
+  const body = await c.req.json<{ content?: string; agent?: string; model?: string; variant?: string; files?: PromptFile[] }>().catch(() => null)
+  if (!body || typeof body.content !== "string") {
+    return c.json({ error: "Body must include a 'content' string", status: 400 }, 400)
   }
-  await client.prompt(c.req.param("id"), body.content, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT })
+  if (body.content.length === 0 && !(body.files && body.files.length > 0)) {
+    return c.json({ error: "Body must include a non-empty 'content' string or at least one file", status: 400 }, 400)
+  }
+  await client.prompt(c.req.param("id"), body.content, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT, files: body.files })
   return c.json({ ok: true })
 })
 

@@ -13,6 +13,7 @@ import { useDraftStore } from "../stores/draft-store"
 import { classifyPart, isQuestionPending } from "../lib/message-parts"
 import type { ModelInfo } from "../lib/api-client"
 import { getSettings, listModels } from "../lib/api-client"
+import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
 
 const MAX_HEIGHT_PX = 200
 
@@ -81,18 +82,24 @@ export function InputBar() {
     element.style.height = `${Math.min(element.scrollHeight, MAX_HEIGHT_PX)}px`
   }, [value])
 
+  // Unknown model (default / unpinned) stays permissive; only a hard false blocks
+  const imagesAllowed = pinnedModels.find((m) => m.id === selectedModel)?.supportsImage !== false
+  const { attachments, error: attachError, addFiles, onPaste, remove, clear } = useAttachments(imagesAllowed)
+
   useEffect(() => {
     setValue(activeSessionId ? useDraftStore.getState().drafts[activeSessionId] ?? "" : "")
-  }, [activeSessionId])
+    clear()
+  }, [activeSessionId, clear])
 
   const submit = async () => {
     const text = value.trim()
-    if (!text || disabled) {
+    if (disabled || (!text && attachments.length === 0)) {
       return
     }
-    const ok = await sendMessage(text, selectedModel || undefined)
+    const ok = await sendMessage(text, selectedModel || undefined, attachments.length > 0 ? attachments : undefined)
     if (ok) {
       setValue("")
+      clear()
       if (activeSessionId) clearDraft(activeSessionId)
     }
   }
@@ -123,6 +130,12 @@ export function InputBar() {
 
   return (
     <div className="border-t border-line bg-term px-4 py-4">
+      <AttachmentStrip
+        attachments={attachments}
+        error={attachError}
+        onRemove={remove}
+        className="mx-auto max-w-4xl"
+      />
       <div
         className={clsx(
           "mx-auto flex max-w-4xl items-start gap-2 rounded-lg border px-3 py-2 transition-colors duration-150",
@@ -145,13 +158,19 @@ export function InputBar() {
             if (activeSessionId) setDraft(activeSessionId, v)
           }}
           onKeyDown={handleKeyDown}
+          onPaste={onPaste}
           placeholder={placeholder}
           className="flex-1 resize-none bg-transparent font-mono text-sm leading-6 text-fg placeholder:text-fg-6 focus:outline-none disabled:cursor-not-allowed"
+        />
+        <AttachButton
+          onFiles={(files) => void addFiles(files)}
+          disabled={disabled}
+          allowed={imagesAllowed}
         />
         <button
           type="button"
           onClick={submit}
-          disabled={disabled || value.trim().length === 0}
+          disabled={disabled || (value.trim().length === 0 && attachments.length === 0)}
           aria-label="Send message"
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white transition-colors duration-150 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6/30 disabled:text-fg-5"
         >

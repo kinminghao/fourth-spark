@@ -89,6 +89,16 @@ export interface MessagePart {
   input?: unknown
   output?: unknown
   state?: ToolState
+  // File parts — url is a data: URL
+  mime?: string
+  url?: string
+  filename?: string
+}
+
+export interface PromptFile {
+  mime: string
+  url: string
+  filename?: string
 }
 
 export interface Message {
@@ -170,6 +180,7 @@ export interface ModelInfo {
   configured: boolean
   cost?: { input?: number; output?: number }
   contextLimit?: number
+  supportsImage?: boolean
 }
 
 export class ApiError extends Error {
@@ -381,10 +392,11 @@ export async function createSession(
   variant?: string,
   issueId?: string,
   customAgentId?: string,
+  files?: PromptFile[],
 ): Promise<Session> {
   return apiFetch<Session>(`${repoBase(repoId)}/sessions`, {
     method: "POST",
-    body: JSON.stringify({ message, agent, model, variant, issueId, customAgentId }),
+    body: JSON.stringify({ message, agent, model, variant, issueId, customAgentId, files }),
   })
 }
 
@@ -398,10 +410,10 @@ export async function deleteSession(repoId: string, id: string): Promise<void> {
   })
 }
 
-export async function sendMessage(repoId: string, sessionId: string, content: string, agent?: string, model?: string): Promise<void> {
+export async function sendMessage(repoId: string, sessionId: string, content: string, agent?: string, model?: string, files?: PromptFile[]): Promise<void> {
   await apiFetch<void>(
     `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/prompt`,
-    { method: "POST", body: JSON.stringify({ content, agent, model }) },
+    { method: "POST", body: JSON.stringify({ content, agent, model, files }) },
   )
 }
 

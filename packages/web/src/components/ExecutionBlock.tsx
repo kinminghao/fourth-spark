@@ -2,9 +2,11 @@ import { useEffect, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import remarkGfm from "remark-gfm"
-import { AlertTriangle, Brain, ChevronDown, ChevronRight } from "lucide-react"
+import clsx from "clsx"
+import { AlertTriangle, Brain, ChevronDown, ChevronRight, Paperclip } from "lucide-react"
 import type { Message, MessagePart } from "../lib/api-client"
 import { classifyPart, getPartText, isQuestionTool } from "../lib/message-parts"
+import { PreviewableImage } from "./Attachments"
 import { MarkdownTable } from "./MarkdownTable"
 import { QuestionPanel } from "./QuestionPanel"
 import { ToolCallPanel } from "./ToolCallPanel"
@@ -54,6 +56,27 @@ function ThinkingIndicator() {
   )
 }
 
+function AttachmentView({ part, className }: { part: MessagePart; className?: string }) {
+  if (!part.url) {
+    return null
+  }
+  if (!part.mime?.startsWith("image/")) {
+    return (
+      <div className="flex items-center gap-1.5 font-mono text-xs text-fg-5">
+        <Paperclip className="h-3 w-3 shrink-0" />
+        <span>{part.filename ?? part.mime ?? "attachment"}</span>
+      </div>
+    )
+  }
+  return (
+    <PreviewableImage
+      url={part.url}
+      label={part.filename ?? "attachment"}
+      className={clsx("object-contain", className ?? "max-h-80")}
+    />
+  )
+}
+
 function PartView({ part, isStreaming }: { part: MessagePart; isStreaming?: boolean }) {
   const kind = classifyPart(part)
   switch (kind) {
@@ -78,6 +101,8 @@ function PartView({ part, isStreaming }: { part: MessagePart; isStreaming?: bool
     case "tool":
       if (isQuestionTool(part)) return <QuestionPanel part={part} />
       return <ToolCallPanel part={part} />
+    case "file":
+      return <AttachmentView part={part} />
     default:
       return null
   }
@@ -90,6 +115,7 @@ export function ExecutionBlock({ message, isStreaming, queued }: { message: Mess
 
   if (isUser) {
     const prompt = parts.map(getPartText).join("").trim()
+    const attachments = parts.filter((part) => classifyPart(part) === "file")
     const createdAt = message.time?.created
     const timeStr = createdAt
       ? new Date(createdAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -117,6 +143,13 @@ export function ExecutionBlock({ message, isStreaming, queued }: { message: Mess
             {prompt || "…"}
           </span>
         </div>
+        {attachments.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2 pl-5">
+            {attachments.map((part, index) => (
+              <AttachmentView key={part.id ?? index} part={part} className="max-h-40" />
+            ))}
+          </div>
+        )}
       </div>
     )
   }
