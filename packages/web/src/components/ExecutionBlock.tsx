@@ -56,6 +56,20 @@ function ThinkingIndicator() {
 }
 
 function AttachmentView({ part, className }: { part: MessagePart; className?: string }) {
+  const [preview, setPreview] = useState(false)
+
+  useEffect(() => {
+    if (!preview) return
+    // Capture phase + preventDefault so RunView's Escape-to-abort skips this keypress
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      event.preventDefault()
+      setPreview(false)
+    }
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
+  }, [preview])
+
   if (!part.url) {
     return null
   }
@@ -67,12 +81,34 @@ function AttachmentView({ part, className }: { part: MessagePart; className?: st
       </div>
     )
   }
+
+  const label = part.filename ?? "attachment"
   return (
-    <img
-      src={part.url}
-      alt={part.filename ?? "attachment"}
-      className={clsx("rounded-md border border-line object-contain", className ?? "max-h-80")}
-    />
+    <>
+      <button
+        type="button"
+        onClick={() => setPreview(true)}
+        aria-label={`预览 ${label}`}
+        className="block cursor-zoom-in rounded-md transition-opacity duration-150 hover:opacity-80"
+      >
+        <img
+          src={part.url}
+          alt={label}
+          className={clsx("rounded-md border border-line object-contain", className ?? "max-h-80")}
+        />
+      </button>
+      {preview && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={label}
+          onClick={() => setPreview(false)}
+          className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-black/80 p-8 backdrop-blur-sm"
+        >
+          <img src={part.url} alt={label} className="max-h-full max-w-full object-contain" />
+        </div>
+      )}
+    </>
   )
 }
 
