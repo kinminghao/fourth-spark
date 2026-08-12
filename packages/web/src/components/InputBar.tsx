@@ -84,7 +84,7 @@ export function InputBar() {
 
   // Unknown model (default / unpinned) stays permissive; only a hard false blocks
   const imagesAllowed = pinnedModels.find((m) => m.id === selectedModel)?.supportsImage !== false
-  const { attachments, error: attachError, addFiles, onPaste, remove, clear } = useAttachments(imagesAllowed)
+  const { attachments, promptFiles, error: attachError, addFiles, onPaste, remove, clear } = useAttachments(imagesAllowed)
 
   useEffect(() => {
     setValue(activeSessionId ? useDraftStore.getState().drafts[activeSessionId] ?? "" : "")
@@ -96,7 +96,7 @@ export function InputBar() {
     if (disabled || (!text && attachments.length === 0)) {
       return
     }
-    const ok = await sendMessage(text, selectedModel || undefined, attachments.length > 0 ? attachments : undefined)
+    const ok = await sendMessage(text, selectedModel || undefined, promptFiles.length > 0 ? promptFiles : undefined)
     if (ok) {
       setValue("")
       clear()

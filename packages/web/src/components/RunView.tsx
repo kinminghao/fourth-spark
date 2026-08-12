@@ -19,7 +19,8 @@ import {
   EMPTY_TODOS,
   useSessionStore,
 } from "../stores/session-store"
-import type { Message as ApiMessage, Session } from "../lib/api-client"
+import type { Message as ApiMessage, ModelInfo, Session } from "../lib/api-client"
+import { listModels } from "../lib/api-client"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useIssueStore } from "../stores/issue-store"
@@ -151,7 +152,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const [issueDropdownOpen, setIssueDropdownOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const issueComboRef = useRef<HTMLDivElement>(null)
-  const { attachments, error: attachError, addFiles, onPaste, remove, clear } = useAttachments()
+  const [models, setModels] = useState<ModelInfo[]>([])
   const createSession = useSessionStore((state) => state.createSession)
   const sendError = useSessionStore((state) => state.sendError)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
@@ -159,6 +160,16 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const issues = useIssueStore((state) => state.issues)
   const selectedIssueId = useIssueStore((state) => state.selectedIssueId)
   const pendingDraft = useIssueStore((state) => state.pendingDraft)
+
+  useEffect(() => {
+    if (!activeRepoId) { setModels([]); return }
+    let cancelled = false
+    void listModels(activeRepoId).then((m) => { if (!cancelled) setModels(m) }).catch(() => { if (!cancelled) setModels([]) })
+    return () => { cancelled = true }
+  }, [activeRepoId])
+
+  const imagesAllowed = models.length === 0 || models.some((m) => m.supportsImage !== false)
+  const { attachments, promptFiles, error: attachError, addFiles, onPaste, remove, clear } = useAttachments(imagesAllowed)
 
   useEffect(() => {
     if (selectedIssueId) {
@@ -205,7 +216,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     if (!activeRepoId || (!text && !hasContext && attachments.length === 0)) return
     setDraft("")
     clear()
-    void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined, attachments.length > 0 ? attachments : undefined)
+    void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined, promptFiles.length > 0 ? promptFiles : undefined)
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {

@@ -3,9 +3,15 @@ import clsx from "clsx"
 import { ImagePlus, X } from "lucide-react"
 import type { PromptFile } from "../lib/api-client"
 
-// 5MB, well under OpenCode's 20MB decode cap — base64 in Postgres grows ~1.4x
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
+const MAX_ATTACHMENTS = 10
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
+
+let attachmentSeq = 0
+
+export interface AttachmentFile extends PromptFile {
+  _id: string
+}
 
 function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -59,7 +65,7 @@ export function PreviewableImage({ url, label, className }: { url: string; label
 }
 
 export function useAttachments(imagesAllowed = true) {
-  const [attachments, setAttachments] = useState<PromptFile[]>([])
+  const [attachments, setAttachments] = useState<AttachmentFile[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -70,9 +76,17 @@ export function useAttachments(imagesAllowed = true) {
   }, [imagesAllowed])
 
   const addFiles = async (incoming: File[]) => {
-    const accepted: PromptFile[] = []
+    const accepted: AttachmentFile[] = []
     const errors: string[] = []
+
+    const currentCount = attachments.length
+    let remaining = MAX_ATTACHMENTS - currentCount
+
     for (const file of incoming) {
+      if (remaining <= 0) {
+        errors.push(`最多 ${MAX_ATTACHMENTS} 张图片`)
+        break
+      }
       if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
         errors.push(`${file.name || "文件"}：格式不支持`)
         continue
@@ -81,7 +95,8 @@ export function useAttachments(imagesAllowed = true) {
         errors.push(`${file.name}：超过 5MB`)
         continue
       }
-      accepted.push({ mime: file.type, url: await readAsDataUrl(file), filename: file.name })
+      accepted.push({ _id: `att-${++attachmentSeq}`, mime: file.type, url: await readAsDataUrl(file), filename: file.name })
+      remaining--
     }
     if (accepted.length > 0) {
       setAttachments((prev) => [...prev, ...accepted])
@@ -100,14 +115,16 @@ export function useAttachments(imagesAllowed = true) {
     void addFiles(files)
   }
 
-  const remove = (index: number) => setAttachments((prev) => prev.filter((_, i) => i !== index))
+  const remove = (id: string) => setAttachments((prev) => prev.filter((a) => a._id !== id))
 
   const clear = useCallback(() => {
     setAttachments([])
     setError(null)
   }, [])
 
-  return { attachments, error, setError, addFiles, onPaste, remove, clear }
+  const promptFiles: PromptFile[] = attachments.map(({ mime, url, filename }) => ({ mime, url, filename }))
+
+  return { attachments, promptFiles, error, setError, addFiles, onPaste, remove, clear }
 }
 
 export function AttachButton({
@@ -153,9 +170,9 @@ export function AttachmentStrip({
   onRemove,
   className,
 }: {
-  attachments: PromptFile[]
+  attachments: AttachmentFile[]
   error: string | null
-  onRemove: (index: number) => void
+  onRemove: (id: string) => void
   className?: string
 }) {
   if (attachments.length === 0 && !error) {
@@ -165,8 +182,8 @@ export function AttachmentStrip({
     <div className={className}>
       {attachments.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-2">
-          {attachments.map((file, index) => (
-            <div key={`${file.filename ?? "img"}-${index}`} className="group relative">
+          {attachments.map((file) => (
+            <div key={file._id} className="group relative">
               <PreviewableImage
                 url={file.url}
                 label={file.filename ?? "attachment"}
@@ -174,7 +191,7 @@ export function AttachmentStrip({
               />
               <button
                 type="button"
-                onClick={() => onRemove(index)}
+                onClick={() => onRemove(file._id)}
                 aria-label="Remove attachment"
                 className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-line bg-term text-fg-4 opacity-0 transition-opacity duration-150 hover:text-fg-2 group-hover:opacity-100"
               >
