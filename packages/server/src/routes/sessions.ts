@@ -12,6 +12,40 @@ import { sessions as sessionsTable, issues, issueComments, customAgents, customA
 import { logger } from "../middleware/logger"
 import type { SessionStatus, PromptFile } from "../core/runtime-types"
 
+// ---------------------------------------------------------------------------
+// PromptFile server-side validation
+// ---------------------------------------------------------------------------
+
+const ALLOWED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
+const MAX_FILE_COUNT = 10
+// 5 MB raw ≈ 6.87 MB base64 (×1.37 overhead). We check the data-URL string length.
+const MAX_DATA_URL_LENGTH = 7 * 1024 * 1024
+
+function validateFiles(raw: unknown): PromptFile[] {
+  if (!Array.isArray(raw) || raw.length === 0) return []
+  if (raw.length > MAX_FILE_COUNT) {
+    throw new Error(`Too many files: ${raw.length} (max ${MAX_FILE_COUNT})`)
+  }
+  const out: PromptFile[] = []
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) {
+      throw new Error("Each file must be an object with mime and url")
+    }
+    const { mime, url, filename } = item as Record<string, unknown>
+    if (typeof mime !== "string" || !ALLOWED_MIME_TYPES.has(mime)) {
+      throw new Error(`Unsupported mime type: ${String(mime)}. Allowed: ${[...ALLOWED_MIME_TYPES].join(", ")}`)
+    }
+    if (typeof url !== "string" || !url.startsWith("data:")) {
+      throw new Error("File url must be a data: URL")
+    }
+    if (url.length > MAX_DATA_URL_LENGTH) {
+      throw new Error(`File too large (max ~5 MB). ${typeof filename === "string" ? filename : ""}`)
+    }
+    out.push({ mime, url, filename: typeof filename === "string" ? filename : undefined })
+  }
+  return out
+}
+
 export const sessions = new Hono()
 
 function stripMedia(text: string): string {
@@ -102,7 +136,15 @@ sessions.post("/", async (c) => {
   }
   const message = typeof body.message === "string" ? body.message.trim() : ""
   const hasContext = Boolean(body.issueId) || Boolean(body.customAgentId)
-  const hasFiles = Boolean(body.files && body.files.length > 0)
+
+  let files: PromptFile[] = []
+  try {
+    files = validateFiles(body.files)
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Invalid files", status: 400 }, 400)
+  }
+
+  const hasFiles = files.length > 0
   if (!message && !hasContext && !hasFiles) {
     return c.json({ error: "Either a non-empty 'message', an 'issueId', a 'customAgentId', or a file is required", status: 400 }, 400)
   }
@@ -177,7 +219,7 @@ sessions.post("/", async (c) => {
     set: { workspaceId, issueId: body.issueId ?? null, customAgentId, timeUpdated: now },
   })
   try {
-    await client.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT, files: body.files })
+    await client.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT, files })
   } catch (err) {
     logger.error({ err, sessionId: session.id, agent, model }, "prompt failed after session creation, cleaning up")
     await client.deleteSession(session.id).catch(() => {})
@@ -296,10 +338,18 @@ sessions.post("/:id/prompt", async (c) => {
   if (!body || typeof body.content !== "string") {
     return c.json({ error: "Body must include a 'content' string", status: 400 }, 400)
   }
-  if (body.content.length === 0 && !(body.files && body.files.length > 0)) {
+
+  let files: PromptFile[] = []
+  try {
+    files = validateFiles(body.files)
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Invalid files", status: 400 }, 400)
+  }
+
+  if (body.content.length === 0 && files.length === 0) {
     return c.json({ error: "Body must include a non-empty 'content' string or at least one file", status: 400 }, 400)
   }
-  await client.prompt(c.req.param("id"), body.content, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT, files: body.files })
+  await client.prompt(c.req.param("id"), body.content, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT, files })
   return c.json({ ok: true })
 })
 
