@@ -202,7 +202,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
 
   const submit = () => {
     const text = draft.trim()
-    if (!activeRepoId || (!text && !hasContext)) return
+    if (!activeRepoId || (!text && !hasContext && attachments.length === 0)) return
     setDraft("")
     clear()
     void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined, attachments.length > 0 ? attachments : undefined)
@@ -262,7 +262,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
             <button
               type="button"
               onClick={submit}
-              disabled={!activeRepoId || (!draft.trim() && !hasContext)}
+              disabled={!activeRepoId || (!draft.trim() && !hasContext && attachments.length === 0)}
               aria-label="Start run"
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white transition-colors duration-150 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6/30 disabled:text-fg-5"
             >

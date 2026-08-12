@@ -93,7 +93,7 @@ export function InputBar() {
 
   const submit = async () => {
     const text = value.trim()
-    if (!text || disabled) {
+    if (disabled || (!text && attachments.length === 0)) {
       return
     }
     const ok = await sendMessage(text, selectedModel || undefined, attachments.length > 0 ? attachments : undefined)
@@ -170,7 +170,7 @@ export function InputBar() {
         <button
           type="button"
           onClick={submit}
-          disabled={disabled || value.trim().length === 0}
+          disabled={disabled || (value.trim().length === 0 && attachments.length === 0)}
           aria-label="Send message"
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white transition-colors duration-150 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6/30 disabled:text-fg-5"
         >
