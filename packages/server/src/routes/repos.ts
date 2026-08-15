@@ -212,7 +212,24 @@ repoRoutes.post("/:id/pull", async (c) => {
       return c.json({ error: message, status: 500 }, 500)
     }
 
-    return c.json({ ok: true, output: stdout, branch: getBranch(repo.localPath) })
+    const alreadyUpToDate = /already up.to.date/i.test(stdout)
+    const autostashed = /autostash/i.test(stderr)
+    const filesChangedMatch = stdout.match(/(\d+)\s+files?\s+changed/)
+    const filesChanged = filesChangedMatch ? Number(filesChangedMatch[1]) : 0
+
+    let summary: string
+    if (alreadyUpToDate) {
+      summary = "已是最新，无需更新"
+    } else if (filesChanged > 0) {
+      summary = `已更新 ${filesChanged} 个文件`
+    } else {
+      summary = "拉取完成"
+    }
+    if (autostashed) {
+      summary += "（已自动暂存并恢复本地修改）"
+    }
+
+    return c.json({ ok: true, output: stdout, branch: getBranch(repo.localPath), summary, alreadyUpToDate, autostashed, filesChanged })
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to pull"
     return c.json({ error: msg, status: 500 }, 500)
