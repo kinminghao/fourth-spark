@@ -188,7 +188,14 @@ export function ExecutionBlock({ message, isStreaming, queued }: { message: Mess
             <PartView key={part.id ?? part.callID ?? index} part={part} isStreaming={isStreaming} />
           ))
         ) : (
-          !msgError && <span className="text-fg-5">…</span>
+          !msgError && (
+            isStreaming
+              ? <span className="text-fg-5">…</span>
+              : <div className="flex items-center gap-1.5 text-xs text-amber-400/80">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  <span>空响应 — Agent 未产出任何内容</span>
+                </div>
+          )
         )}
       </div>
     </div>
