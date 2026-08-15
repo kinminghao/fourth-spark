@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { Capacitor } from "@capacitor/core"
+import { SpeechRecognition } from "@capacitor-community/speech-recognition"
 
-// Web Speech API type declarations (not in all TS lib bundles)
+// ── Web Speech API type declarations (not in all TS DOM lib bundles) ──────
+
 interface SpeechRecognitionAlternative {
   readonly transcript: string
   readonly confidence: number
@@ -52,10 +55,20 @@ declare global {
   }
 }
 
-const RecognitionAPI: SpeechRecognitionCtor | undefined =
-  typeof window !== "undefined"
+// ── Engine detection ─────────────────────────────────────────────────────
+
+const isNative = Capacitor.isNativePlatform()
+
+const WebRecognitionAPI: SpeechRecognitionCtor | undefined =
+  !isNative && typeof window !== "undefined"
     ? window.SpeechRecognition ?? window.webkitSpeechRecognition
     : undefined
+
+// Native always supported (Capacitor plugin handles availability);
+// Web only when browser exposes the API (HTTPS / localhost)
+const supported = isNative || WebRecognitionAPI !== undefined
+
+// ── Hook ─────────────────────────────────────────────────────────────────
 
 export function useSpeechToText(lang = "zh-CN") {
   const [isListening, setIsListening] = useState(false)
@@ -63,25 +76,94 @@ export function useSpeechToText(lang = "zh-CN") {
   const [interimTranscript, setInterimTranscript] = useState("")
   const [error, setError] = useState<string | null>(null)
 
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
+  const webRecognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const manualStopRef = useRef(false)
+  const nativeListenersRef = useRef<Array<{ remove: () => Promise<void> }>>([])
 
-  const isSupported = RecognitionAPI !== undefined
+  const isSupported = supported
 
-  const stop = useCallback(() => {
+  // ── stop ────────────────────────────────────────────────────────────
+
+  const stop = useCallback(async () => {
     manualStopRef.current = true
-    recognitionRef.current?.stop()
+    if (isNative) {
+      await SpeechRecognition.stop().catch(() => {})
+      for (const l of nativeListenersRef.current) await l.remove().catch(() => {})
+      nativeListenersRef.current = []
+      setIsListening(false)
+      setInterimTranscript("")
+    } else {
+      webRecognitionRef.current?.stop()
+    }
   }, [])
 
-  const start = useCallback(() => {
-    if (!RecognitionAPI) return
+  // ── start (native) ─────────────────────────────────────────────────
+
+  const startNative = useCallback(async () => {
+    setTranscript("")
+    setInterimTranscript("")
+    setError(null)
+
+    const { available } = await SpeechRecognition.available()
+    if (!available) {
+      setError("当前设备不支持语音识别")
+      return
+    }
+
+    const perm = await SpeechRecognition.requestPermissions()
+    if (perm.speechRecognition !== "granted") {
+      setError("请允许语音识别权限")
+      return
+    }
+
+    const listeners: Array<{ remove: () => Promise<void> }> = []
+
+    listeners.push(
+      await SpeechRecognition.addListener("partialResults", (data: { matches: string[] }) => {
+        setInterimTranscript(data.matches[0] ?? "")
+      }),
+    )
+
+    listeners.push(
+      await SpeechRecognition.addListener("listeningState", (data: { status: string }) => {
+        const on = data.status === "started"
+        setIsListening(on)
+        if (!on) setInterimTranscript("")
+      }),
+    )
+
+    nativeListenersRef.current = listeners
+
+    try {
+      const result = await SpeechRecognition.start({
+        language: lang,
+        partialResults: true,
+        maxResults: 1,
+      })
+      if (result.matches?.length) {
+        setTranscript((prev) => prev + result.matches!.join(""))
+      }
+    } catch (err) {
+      setError(`语音识别错误：${err instanceof Error ? err.message : String(err)}`)
+      for (const l of listeners) await l.remove().catch(() => {})
+      nativeListenersRef.current = []
+    }
+  }, [lang])
+
+  // ── start (web) ────────────────────────────────────────────────────
+
+  const startWeb = useCallback(() => {
+    if (!WebRecognitionAPI) {
+      setError("当前浏览器不支持语音识别，请使用 Chrome/Edge/Safari 并通过 HTTPS 访问")
+      return
+    }
 
     setTranscript("")
     setInterimTranscript("")
     setError(null)
     manualStopRef.current = false
 
-    const recognition = new RecognitionAPI()
+    const recognition = new WebRecognitionAPI()
     recognition.lang = lang
     recognition.continuous = true
     recognition.interimResults = true
@@ -125,20 +207,14 @@ export function useSpeechToText(lang = "zh-CN") {
 
     recognition.onend = () => {
       setInterimTranscript("")
-      // Chrome auto-stops after silence; restart unless manually stopped
       if (!manualStopRef.current) {
-        try {
-          recognition.start()
-          return
-        } catch {
-          // Failed to restart
-        }
+        try { recognition.start(); return } catch { /* fall through */ }
       }
       setIsListening(false)
-      recognitionRef.current = null
+      webRecognitionRef.current = null
     }
 
-    recognitionRef.current = recognition
+    webRecognitionRef.current = recognition
     try {
       recognition.start()
     } catch {
@@ -146,10 +222,23 @@ export function useSpeechToText(lang = "zh-CN") {
     }
   }, [lang])
 
+  // ── unified start ──────────────────────────────────────────────────
+
+  const start = useCallback(() => {
+    if (isNative) {
+      void startNative()
+    } else {
+      startWeb()
+    }
+  }, [startNative, startWeb])
+
+  // ── cleanup ────────────────────────────────────────────────────────
+
   useEffect(
     () => () => {
       manualStopRef.current = true
-      recognitionRef.current?.stop()
+      webRecognitionRef.current?.stop()
+      for (const l of nativeListenersRef.current) void l.remove().catch(() => {})
     },
     [],
   )

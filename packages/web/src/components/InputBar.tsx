@@ -191,14 +191,12 @@ export function InputBar() {
           disabled={disabled}
           allowed={imagesAllowed}
         />
-        {stt.isSupported && (
-          <VoiceButton
-            isListening={stt.isListening}
-            disabled={disabled}
-            onClick={handleVoiceToggle}
-            error={stt.error}
-          />
-        )}
+        <VoiceButton
+          isListening={stt.isListening}
+          disabled={disabled}
+          onClick={handleVoiceToggle}
+          error={stt.error}
+        />
         <button
           type="button"
           onClick={submit}
