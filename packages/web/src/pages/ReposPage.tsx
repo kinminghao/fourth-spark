@@ -249,13 +249,13 @@ export function ReposPage() {
       const result = await api.pullRepo(repoId)
       await loadRepos()
       const variant = result.alreadyUpToDate ? "info" : "success"
-      addToast(result.summary, variant)
+      addToast(result.summary, variant, undefined, { persistent: true })
     } catch (err) {
       let message = "拉取失败"
       if (err instanceof api.ApiError) {
         try { message = JSON.parse(err.message).error ?? err.message } catch { message = err.message }
       }
-      addToast(message, "error")
+      addToast(message, "error", undefined, { persistent: true })
     }
     setPullingId(null)
   }
