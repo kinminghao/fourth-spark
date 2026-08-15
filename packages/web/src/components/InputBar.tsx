@@ -14,6 +14,8 @@ import { classifyPart, isQuestionPending } from "../lib/message-parts"
 import type { ModelInfo } from "../lib/api-client"
 import { getSettings, listModels } from "../lib/api-client"
 import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
+import { VoiceButton } from "./VoiceButton"
+import { useSpeechToText } from "../hooks/use-speech-to-text"
 
 const MAX_HEIGHT_PX = 200
 
@@ -38,6 +40,8 @@ export function InputBar() {
   const [selectedModel, setSelectedModel] = useState("")
   const [pinnedModels, setPinnedModels] = useState<ModelInfo[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const stt = useSpeechToText()
+  const preVoiceValueRef = useRef("")
 
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
@@ -89,7 +93,8 @@ export function InputBar() {
   useEffect(() => {
     setValue(activeSessionId ? useDraftStore.getState().drafts[activeSessionId] ?? "" : "")
     clear()
-  }, [activeSessionId, clear])
+    stt.stop()
+  }, [activeSessionId, clear, stt.stop])
 
   const submit = async () => {
     const text = value.trim()
@@ -111,6 +116,25 @@ export function InputBar() {
       submit()
     }
   }
+
+  const handleVoiceToggle = () => {
+    if (stt.isListening) {
+      stt.stop()
+      const committed = preVoiceValueRef.current + stt.transcript
+      setValue(committed)
+      if (activeSessionId) setDraft(activeSessionId, committed)
+    } else {
+      preVoiceValueRef.current = value
+      stt.start()
+    }
+  }
+
+  // Sync voice transcript → textarea while recording
+  useEffect(() => {
+    if (stt.isListening) {
+      setValue(preVoiceValueRef.current + stt.transcript + stt.interimTranscript)
+    }
+  }, [stt.isListening, stt.transcript, stt.interimTranscript])
 
   const placeholder = !activeSessionId
     ? "select or start a run"
@@ -167,6 +191,14 @@ export function InputBar() {
           disabled={disabled}
           allowed={imagesAllowed}
         />
+        {stt.isSupported && (
+          <VoiceButton
+            isListening={stt.isListening}
+            disabled={disabled}
+            onClick={handleVoiceToggle}
+            error={stt.error}
+          />
+        )}
         <button
           type="button"
           onClick={submit}
@@ -178,6 +210,12 @@ export function InputBar() {
         </button>
       </div>
       <div className="mx-auto mt-1.5 flex max-w-4xl items-center gap-3 pl-5">
+        {stt.isListening && (
+          <span className="font-mono text-[10px] text-red-400 animate-pulse">● 录音中…</span>
+        )}
+        {stt.error && (
+          <span className="font-mono text-[10px] text-red-400">{stt.error}</span>
+        )}
         <span className="font-mono text-[10px] text-fg-6">⏎ to run · shift+⏎ for newline</span>
         {pinnedModels.length > 0 && (
           <select
