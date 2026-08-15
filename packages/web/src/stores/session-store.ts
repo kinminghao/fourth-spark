@@ -202,10 +202,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       api.getSession(repoId, id),
       api.getSessionLinks(repoId, id),
     ])
+    const revertMessageID = sessionInfo.status === "fulfilled"
+      ? sessionInfo.value.revert?.messageID
+      : undefined
+
     set((state) => {
       const next: Partial<SessionState> = {}
       if (messages.status === "fulfilled") {
-        next.messages = { ...state.messages, [id]: messages.value }
+        let msgs = messages.value
+        if (revertMessageID) {
+          const cutIdx = msgs.findIndex((m) => m.id === revertMessageID)
+          if (cutIdx >= 0) msgs = msgs.slice(0, cutIdx + 1)
+        }
+        next.messages = { ...state.messages, [id]: msgs }
       }
       if (todos.status === "fulfilled") {
         next.todos = { ...state.todos, [id]: todos.value }
