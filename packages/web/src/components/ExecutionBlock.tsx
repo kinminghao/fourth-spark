@@ -7,6 +7,7 @@ import { AlertTriangle, Brain, ChevronDown, ChevronRight, Paperclip } from "luci
 import type { Message, MessagePart } from "../lib/api-client"
 import { classifyPart, getPartText, isQuestionTool } from "../lib/message-parts"
 import { PreviewableImage } from "./Attachments"
+import { MarkdownLink } from "./MarkdownLink"
 import { MarkdownTable } from "./MarkdownTable"
 import { QuestionPanel } from "./QuestionPanel"
 import { ToolCallPanel } from "./ToolCallPanel"
@@ -87,7 +88,7 @@ function PartView({ part, isStreaming }: { part: MessagePart; isStreaming?: bool
       }
       return (
         <div className="markdown-body leading-relaxed">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={{ table: MarkdownTable }}>{text}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={{ a: MarkdownLink, table: MarkdownTable }}>{text}</ReactMarkdown>
         </div>
       )
     }
