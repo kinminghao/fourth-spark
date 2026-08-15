@@ -122,11 +122,6 @@ async function getLastUserPrompt(
 }
 
 async function detectEmptyResponse(client: RuntimeClient, sessionId: string): Promise<boolean> {
-  const count = emptyRetryCounts.get(sessionId) ?? 0
-  if (count >= MAX_EMPTY_RETRIES) {
-    logger.info({ sessionId, count }, "empty-response retry limit reached, skipping")
-    return false
-  }
   try {
     const messages = await client.getMessages(sessionId)
     if (messages.length === 0) return false
@@ -162,6 +157,28 @@ async function autoRetryEmptyResponse(client: RuntimeClient, sessionId: string):
   } catch (err) {
     logger.warn({ err, sessionId }, "empty-response retry failed")
   }
+}
+
+/** Returns true if auto-retry was triggered (caller should `continue`). */
+async function handleEmptyResponse(client: RuntimeClient, sessionId: string): Promise<boolean> {
+  const isEmpty = await detectEmptyResponse(client, sessionId)
+  if (!isEmpty) return false
+
+  const retryCount = emptyRetryCounts.get(sessionId) ?? 0
+  if (retryCount < MAX_EMPTY_RETRIES) {
+    await autoRetryEmptyResponse(client, sessionId)
+    return true
+  }
+
+  const sid = sessionId.slice(-8)
+  logger.warn({ sessionId, retryCount }, "empty-response retry limit exhausted, notifying user")
+  emitNotification({
+    type: "session_error",
+    title: "空响应",
+    body: `[${sid}] Agent 返回空响应，已达重试上限`,
+    sessionId,
+  })
+  return false
 }
 
 async function hasIncompleteTodos(client: RuntimeClient, sessionId: string): Promise<boolean> {
@@ -417,9 +434,7 @@ async function pollOnce(): Promise<void> {
               continue
             }
 
-            const isEmpty = await detectEmptyResponse(client, sessionId)
-            if (isEmpty) {
-              await autoRetryEmptyResponse(client, sessionId)
+            if (await handleEmptyResponse(client, sessionId)) {
               continue
             }
 
@@ -447,9 +462,7 @@ async function pollOnce(): Promise<void> {
               continue
             }
 
-            const isEmpty = await detectEmptyResponse(client, sessionId)
-            if (isEmpty) {
-              await autoRetryEmptyResponse(client, sessionId)
+            if (await handleEmptyResponse(client, sessionId)) {
               continue
             }
           }
