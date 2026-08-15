@@ -33,4 +33,5 @@ export interface RuntimeClient {
   rejectQuestion(requestID: string): Promise<void>
   listAgents(): Promise<Agent[]>
   getProviders(): Promise<ProviderListResponse>
+  revert(sessionId: string, messageID: string, partID?: string): Promise<Session>
 }

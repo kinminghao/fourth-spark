@@ -438,6 +438,13 @@ export async function rejectQuestion(repoId: string, sessionId: string): Promise
   )
 }
 
+export async function revertSession(repoId: string, sessionId: string, messageID: string): Promise<Session> {
+  return apiFetch<Session>(
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/revert`,
+    { method: "POST", body: JSON.stringify({ messageID }) },
+  )
+}
+
 function normalizeMessage(raw: unknown): Message {
   const r = raw as Record<string, unknown>
   const info = r.info as Record<string, unknown> | undefined
