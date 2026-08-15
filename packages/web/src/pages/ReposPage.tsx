@@ -19,6 +19,7 @@ import {
 import clsx from "clsx"
 import * as api from "../lib/api-client"
 import { useRepoStore } from "../stores/repo-store"
+import { useToastStore } from "../stores/toast-store"
 import { AddRepoModal } from "../components/AddRepoModal"
 import { AgentsMdModal } from "../components/AgentsMdModal"
 
@@ -226,7 +227,7 @@ export function ReposPage() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [pullingId, setPullingId] = useState<string | null>(null)
-  const [pullErrors, setPullErrors] = useState<Record<string, string>>({})
+  const addToast = useToastStore((s) => s.addToast)
   const [agentsMdRepo, setAgentsMdRepo] = useState<{ id: string; name: string } | null>(null)
 
   const handleToggle = async (repoId: string, running: boolean) => {
@@ -244,16 +245,18 @@ export function ReposPage() {
 
   const handlePull = async (repoId: string) => {
     setPullingId(repoId)
-    setPullErrors((prev) => { const next = { ...prev }; delete next[repoId]; return next })
+
     try {
-      await api.pullRepo(repoId)
+      const result = await api.pullRepo(repoId)
       await loadRepos()
+      const variant = result.alreadyUpToDate ? "info" : "success"
+      addToast(result.summary, variant, undefined, { persistent: true })
     } catch (err) {
       let message = "拉取失败"
       if (err instanceof api.ApiError) {
         try { message = JSON.parse(err.message).error ?? err.message } catch { message = err.message }
       }
-      setPullErrors((prev) => ({ ...prev, [repoId]: message }))
+      addToast(message, "error", undefined, { persistent: true })
     }
     setPullingId(null)
   }
@@ -475,19 +478,6 @@ export function ReposPage() {
                       </button>
                     )}
                   </div>
-
-                  {pullErrors[repo.id] && (
-                    <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-1.5 text-xs text-red-600">
-                      <span className="min-w-0 break-words">{pullErrors[repo.id]}</span>
-                      <button
-                        type="button"
-                        onClick={() => setPullErrors((prev) => { const next = { ...prev }; delete next[repo.id]; return next })}
-                        className="shrink-0 rounded p-0.5 transition-colors hover:bg-red-500/10"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  )}
 
                   {repo.worktreeEnabled && <WorkspacesSection repoId={repo.id} />}
                 </div>

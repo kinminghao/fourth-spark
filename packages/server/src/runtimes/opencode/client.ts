@@ -156,6 +156,12 @@ export class HttpRuntimeClient implements RuntimeClient {
     return this.fetchers.getJson<ProviderListResponse>("/provider", { directory: this.directory })
   }
 
+  revert(sessionId: string, messageID: string, partID?: string): Promise<Session> {
+    const body: Record<string, string> = { messageID }
+    if (partID) body.partID = partID
+    return this.fetchers.postJson<Session>(`/session/${sessionId}/revert`, { directory: this.directory }, body)
+  }
+
   async eventStream(signal?: AbortSignal): Promise<Response> {
     const res = await fetch(this.fetchers.buildUrl("/event", { directory: this.directory }), {
       method: "GET",

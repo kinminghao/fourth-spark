@@ -310,6 +310,10 @@ export interface PullResult {
   ok: boolean
   output: string
   branch: string | null
+  summary: string
+  alreadyUpToDate: boolean
+  autostashed: boolean
+  filesChanged: number
 }
 
 export async function pullRepo(id: string): Promise<PullResult> {
@@ -435,6 +439,13 @@ export async function rejectQuestion(repoId: string, sessionId: string): Promise
   await apiFetch<void>(
     `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/questions/reject`,
     { method: "POST" },
+  )
+}
+
+export async function revertSession(repoId: string, sessionId: string, messageID: string): Promise<Session> {
+  return apiFetch<Session>(
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/revert`,
+    { method: "POST", body: JSON.stringify({ messageID }) },
   )
 }
 
