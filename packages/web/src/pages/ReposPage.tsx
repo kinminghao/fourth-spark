@@ -245,6 +245,7 @@ export function ReposPage() {
 
   const handlePull = async (repoId: string) => {
     setPullingId(repoId)
+
     try {
       const result = await api.pullRepo(repoId)
       await loadRepos()
