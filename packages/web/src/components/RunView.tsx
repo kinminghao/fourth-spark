@@ -647,6 +647,7 @@ export function RunView({
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   useEffect(() => {
     const element = scrollRef.current
     if (element && stickToBottomRef.current) {
@@ -656,6 +657,7 @@ export function RunView({
 
   useEffect(() => {
     stickToBottomRef.current = true
+    setShowScrollToBottom(false)
   }, [activeSessionId])
 
   useEffect(() => {
@@ -772,64 +774,88 @@ export function RunView({
         )}
       </header>
 
-      <div
-        ref={scrollRef}
-        onScroll={() => {
-          const element = scrollRef.current
-          if (!element) return
-          stickToBottomRef.current =
-            element.scrollHeight - element.clientHeight - element.scrollTop <=
-            STICK_TO_BOTTOM_THRESHOLD_PX
-        }}
-        className="flex-1 overflow-y-auto"
-      >
-        <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-4">
-          {messages.length === 0 ? (
-            <p className="py-10 text-center font-mono text-xs text-fg-6">
-              <span className="text-emerald-500/60">❯</span> waiting for input
-              <span className="fs-blink"> ▋</span>
-            </p>
-          ) : (
-            messages.map((message, index) => (
-              <Fragment key={message.id}>
-                {index > 0 && message.role === "user" && (
-                  <div className="group/revert relative border-t border-line">
-                    {canRevert && !stoppable && (
-                      <button
-                        type="button"
-                        disabled={revertingId !== null}
-                        onClick={async () => {
-                          const count = messages.length - index
-                          if (!window.confirm(`回退到此处？将撤销后续 ${count} 条消息及其产生的改动。`)) return
-                          setRevertingId(message.id)
-                          await revertToMessage(activeSessionId!, message.id)
-                          setRevertingId(null)
-                        }}
-                        className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-line bg-base px-2.5 py-1 font-mono text-[11px] text-fg-4 opacity-60 shadow-sm transition-all duration-150 hover:border-amber-500/50 hover:text-amber-400 md:opacity-0 md:group-hover/revert:opacity-100 disabled:opacity-50"
-                      >
-                        {revertingId === message.id ? (
-                          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                        ) : (
-                          <RotateCcw className="h-3 w-3" />
-                        )}
-                        回退到此处
-                      </button>
-                    )}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={scrollRef}
+          onScroll={() => {
+            const element = scrollRef.current
+            if (!element) return
+            const atBottom =
+              element.scrollHeight - element.clientHeight - element.scrollTop <=
+              STICK_TO_BOTTOM_THRESHOLD_PX
+            stickToBottomRef.current = atBottom
+            setShowScrollToBottom(!atBottom)
+          }}
+          className="h-full overflow-y-auto"
+        >
+          <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-4">
+            {messages.length === 0 ? (
+              <p className="py-10 text-center font-mono text-xs text-fg-6">
+                <span className="text-emerald-500/60">❯</span> waiting for input
+                <span className="fs-blink"> ▋</span>
+              </p>
+            ) : (
+              messages.map((message, index) => (
+                <Fragment key={message.id}>
+                  {index > 0 && message.role === "user" && (
+                    <div className="group/revert relative border-t border-line">
+                      {canRevert && !stoppable && (
+                        <button
+                          type="button"
+                          disabled={revertingId !== null}
+                          onClick={async () => {
+                            const count = messages.length - index
+                            if (!window.confirm(`回退到此处？将撤销后续 ${count} 条消息及其产生的改动。`)) return
+                            setRevertingId(message.id)
+                            await revertToMessage(activeSessionId!, message.id)
+                            setRevertingId(null)
+                          }}
+                          className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-line bg-base px-2.5 py-1 font-mono text-[11px] text-fg-4 opacity-60 shadow-sm transition-all duration-150 hover:border-amber-500/50 hover:text-amber-400 md:opacity-0 md:group-hover/revert:opacity-100 disabled:opacity-50"
+                        >
+                          {revertingId === message.id ? (
+                            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                          ) : (
+                            <RotateCcw className="h-3 w-3" />
+                          )}
+                          回退到此处
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <div data-message-id={message.id}>
+                    <ExecutionBlock message={message} isStreaming={busy && index === messages.length - 1} queued={queuedIds.includes(message.id)} />
                   </div>
-                )}
-                <div data-message-id={message.id}>
-                  <ExecutionBlock message={message} isStreaming={busy && index === messages.length - 1} queued={queuedIds.includes(message.id)} />
-                </div>
-              </Fragment>
-            ))
-          )}
-          {todos.length > 0 && (
-            <TodoProgressCompact
-              todos={[...todos]}
-              onClick={onToggleRightPanel}
-            />
-          )}
+                </Fragment>
+              ))
+            )}
+            {todos.length > 0 && (
+              <TodoProgressCompact
+                todos={[...todos]}
+                onClick={onToggleRightPanel}
+              />
+            )}
+          </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            const el = scrollRef.current
+            if (!el) return
+            el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
+            stickToBottomRef.current = true
+          }}
+          aria-label="滚动到底部"
+          className={clsx(
+            "absolute bottom-4 right-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface/90 text-fg-4 shadow-lg backdrop-blur transition-all duration-200",
+            "hover:bg-elevated hover:text-fg-2",
+            showScrollToBottom
+              ? "translate-y-0 opacity-100"
+              : "pointer-events-none translate-y-2 opacity-0",
+          )}
+        >
+          <ChevronDown className="h-4 w-4" />
+        </button>
       </div>
 
       {status === "error" && errorReason && (
