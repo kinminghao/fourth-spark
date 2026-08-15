@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
 } from "react"
 import { useNavigate } from "react-router-dom"
-import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, ExternalLink, GitBranch, Menu, PanelRight, Play, Plus, Search, Square, X } from "lucide-react"
+import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, ExternalLink, GitBranch, Menu, PanelRight, Play, Plus, RotateCcw, Search, Square, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
@@ -631,6 +631,10 @@ export function RunView({
   })
   const sendError = useSessionStore((state) => state.sendError)
   const abortSession = useSessionStore((state) => state.abortSession)
+  const revertToMessage = useSessionStore((state) => state.revertToMessage)
+  const activeRepo = useRepoStore((state) => state.repos.find((r) => r.id === state.activeRepoId))
+  const canRevert = activeRepo?.runtimeType !== "claude-code"
+  const [revertingId, setRevertingId] = useState<string | null>(null)
   const linkedIssue = useIssueStore((state) =>
     session?.issueId ? state.issues.find((i) => i.id === session.issueId) : undefined,
   )
@@ -789,7 +793,29 @@ export function RunView({
             messages.map((message, index) => (
               <Fragment key={message.id}>
                 {index > 0 && message.role === "user" && (
-                  <div className="border-t border-line" />
+                  <div className="group/revert relative border-t border-line">
+                    {canRevert && !stoppable && (
+                      <button
+                        type="button"
+                        disabled={revertingId !== null}
+                        onClick={async () => {
+                          const count = messages.length - index
+                          if (!window.confirm(`回退到此处？将撤销后续 ${count} 条消息及其产生的改动。`)) return
+                          setRevertingId(message.id)
+                          await revertToMessage(activeSessionId!, message.id)
+                          setRevertingId(null)
+                        }}
+                        className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-line bg-base px-2.5 py-1 font-mono text-[11px] text-fg-4 opacity-0 shadow-sm transition-all duration-150 hover:border-amber-500/50 hover:text-amber-400 group-hover/revert:opacity-100 disabled:opacity-50"
+                      >
+                        {revertingId === message.id ? (
+                          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        ) : (
+                          <RotateCcw className="h-3 w-3" />
+                        )}
+                        回退到此处
+                      </button>
+                    )}
+                  </div>
                 )}
                 <div data-message-id={message.id}>
                   <ExecutionBlock message={message} isStreaming={busy && index === messages.length - 1} queued={queuedIds.includes(message.id)} />
