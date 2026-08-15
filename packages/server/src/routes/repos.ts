@@ -5,17 +5,13 @@ import { db } from "../db/index"
 import { repos } from "../db/schema"
 import { runtimeManager } from "../lib/process-manager"
 import { existsSync } from "node:fs"
+import { runGit, runGitWithRetry, withRepoLock, cleanupStaleLock, pruneRemoteRefs, classifyGitError } from "../lib/git-runner"
 
 export const repoRoutes = new Hono()
 
 function getBranch(localPath: string): string | null {
-  try {
-    const result = Bun.spawnSync(["git", "rev-parse", "--abbrev-ref", "HEAD"], { cwd: localPath })
-    const branch = result.stdout.toString().trim()
-    return branch || null
-  } catch {
-    return null
-  }
+  const result = runGit(["rev-parse", "--abbrev-ref", "HEAD"], localPath, { timeout: 5_000 })
+  return result.ok ? (result.stdout || null) : null
 }
 
 // POST /api/repos/resolve — read .git directory to extract repo name and remote URL.
@@ -38,10 +34,8 @@ repoRoutes.post("/resolve", async (c) => {
   const name = basename(localPath)
 
   let gitUrl = ""
-  try {
-    const result = Bun.spawnSync(["git", "config", "--get", "remote.origin.url"], { cwd: localPath })
-    gitUrl = result.stdout.toString().trim()
-  } catch {}
+  const result = runGit(["config", "--get", "remote.origin.url"], localPath, { timeout: 5_000 })
+  if (result.ok) gitUrl = result.stdout
 
   return c.json({ name, gitUrl, localPath })
 })
@@ -145,26 +139,22 @@ repoRoutes.get("/:id/branches", async (c) => {
 
   const current = getBranch(repo.localPath)
 
-  try {
-    const result = Bun.spawnSync(["git", "branch", "--format=%(refname:short)"], { cwd: repo.localPath })
-    const output = result.stdout.toString().trim()
-    const local = output ? output.split("\n").map((b) => b.trim()).filter(Boolean) : []
+  const result = runGit(["branch", "--format=%(refname:short)"], repo.localPath)
+  const local = result.ok && result.stdout
+    ? result.stdout.split("\n").map((b) => b.trim()).filter(Boolean)
+    : current ? [current] : []
 
-    const remoteResult = Bun.spawnSync(["git", "branch", "-r", "--format=%(refname:short)"], { cwd: repo.localPath })
-    const remoteOutput = remoteResult.stdout.toString().trim()
-    const remote = remoteOutput
-      ? remoteOutput
-          .split("\n")
-          .map((b) => b.trim())
-          .filter((b) => b && !b.includes("->"))
-          .map((b) => b.replace(/^origin\//, ""))
-          .filter((b) => !local.includes(b))
-      : []
+  const remoteResult = runGit(["branch", "-r", "--format=%(refname:short)"], repo.localPath)
+  const remote = remoteResult.ok && remoteResult.stdout
+    ? remoteResult.stdout
+        .split("\n")
+        .map((b) => b.trim())
+        .filter((b) => b && !b.includes("->"))
+        .map((b) => b.replace(/^origin\//, ""))
+        .filter((b) => !local.includes(b))
+    : []
 
-    return c.json({ current, local, remote })
-  } catch {
-    return c.json({ current, local: current ? [current] : [], remote: [] })
-  }
+  return c.json({ current, local, remote })
 })
 
 // POST /api/repos/:id/checkout — switch branch.
@@ -176,19 +166,37 @@ repoRoutes.post("/:id/checkout", async (c) => {
   if (!body?.branch) {
     return c.json({ error: "branch is required", status: 400 }, 400)
   }
+  const targetBranch = body.branch
 
-  try {
-    const result = Bun.spawnSync(["git", "checkout", body.branch], { cwd: repo.localPath })
-    if (result.exitCode !== 0) {
-      const stderr = result.stderr.toString().trim()
-      return c.json({ error: stderr || "Failed to checkout branch", status: 400 }, 400)
+  return await withRepoLock(repo.localPath, () => {
+    // Stash uncommitted changes before checkout (matching pull's --autostash behavior)
+    const stashResult = runGit(["stash", "--include-untracked"], repo.localPath)
+    const didStash = stashResult.ok && !stashResult.stdout.includes("No local changes")
+
+    const result = runGit(["checkout", targetBranch], repo.localPath)
+
+    if (!result.ok) {
+      // Restore stash if checkout failed
+      if (didStash) runGit(["stash", "pop"], repo.localPath)
+      const errorInfo = classifyGitError(result.stdout, result.stderr)
+      return c.json({ error: errorInfo.message, code: errorInfo.code, status: 400 }, 400)
     }
-    const branch = getBranch(repo.localPath)
-    return c.json({ ok: true, branch })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Failed to checkout"
-    return c.json({ error: msg, status: 500 }, 500)
-  }
+
+    // Pop stash after successful checkout
+    if (didStash) {
+      const popResult = runGit(["stash", "pop"], repo.localPath)
+      if (!popResult.ok) {
+        // Stash pop conflict — leave stash, warn user
+        return c.json({
+          ok: true,
+          branch: getBranch(repo.localPath),
+          warning: "分支切换成功，但暂存的修改恢复时有冲突，请手动执行 git stash pop 解决",
+        })
+      }
+    }
+
+    return c.json({ ok: true, branch: getBranch(repo.localPath) })
+  })
 })
 
 // POST /api/repos/:id/pull — pull latest code from remote.
@@ -196,27 +204,20 @@ repoRoutes.post("/:id/pull", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
 
-  try {
-    const result = Bun.spawnSync(["git", "pull", "--ff-only", "--autostash"], { cwd: repo.localPath })
-    const stdout = result.stdout.toString().trim()
-    const stderr = result.stderr.toString().trim()
+  return await withRepoLock(repo.localPath, async () => {
+    // Pre-pull cleanup: remove stale lock files and prune remote refs
+    cleanupStaleLock(repo.localPath)
+    pruneRemoteRefs(repo.localPath)
 
-    if (result.exitCode !== 0) {
-      const combined = `${stdout}\n${stderr}`.toLowerCase()
-      let message = stderr || stdout || "git pull failed"
+    const result = await runGitWithRetry(["pull", "--ff-only", "--autostash"], repo.localPath)
 
-      if (combined.includes("not possible to fast-forward") || combined.includes("fatal: not possible")) {
-        message = "远端分支已分叉，无法快进合并，请手动处理"
-      }
-
-      return c.json({ error: message, status: 500 }, 500)
+    if (!result.ok) {
+      const errorInfo = classifyGitError(result.stdout, result.stderr)
+      return c.json({ error: errorInfo.message, code: errorInfo.code, status: 500 }, 500)
     }
 
-    return c.json({ ok: true, output: stdout, branch: getBranch(repo.localPath) })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Failed to pull"
-    return c.json({ error: msg, status: 500 }, 500)
-  }
+    return c.json({ ok: true, output: result.stdout, branch: getBranch(repo.localPath) })
+  })
 })
 
 repoRoutes.patch("/:id/runtime", async (c) => {

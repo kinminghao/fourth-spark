@@ -226,7 +226,7 @@ export function ReposPage() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [pullingId, setPullingId] = useState<string | null>(null)
-  const [pullError, setPullError] = useState<string | null>(null)
+  const [pullErrors, setPullErrors] = useState<Record<string, string>>({})
   const [agentsMdRepo, setAgentsMdRepo] = useState<{ id: string; name: string } | null>(null)
 
   const handleToggle = async (repoId: string, running: boolean) => {
@@ -244,7 +244,7 @@ export function ReposPage() {
 
   const handlePull = async (repoId: string) => {
     setPullingId(repoId)
-    setPullError(null)
+    setPullErrors((prev) => { const next = { ...prev }; delete next[repoId]; return next })
     try {
       await api.pullRepo(repoId)
       await loadRepos()
@@ -253,7 +253,7 @@ export function ReposPage() {
       if (err instanceof api.ApiError) {
         try { message = JSON.parse(err.message).error ?? err.message } catch { message = err.message }
       }
-      setPullError(message)
+      setPullErrors((prev) => ({ ...prev, [repoId]: message }))
     }
     setPullingId(null)
   }
@@ -275,15 +275,6 @@ export function ReposPage() {
             <span className="hidden md:inline">添加仓库</span>
           </button>
         </div>
-
-        {pullError && (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-2.5 text-sm text-red-600">
-            <span>{pullError}</span>
-            <button type="button" onClick={() => setPullError(null)} className="shrink-0 rounded p-0.5 transition-colors hover:bg-red-500/10">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
 
         {repos.length === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-line-hard py-16 text-center">
@@ -484,6 +475,19 @@ export function ReposPage() {
                       </button>
                     )}
                   </div>
+
+                  {pullErrors[repo.id] && (
+                    <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-1.5 text-xs text-red-600">
+                      <span className="min-w-0 break-words">{pullErrors[repo.id]}</span>
+                      <button
+                        type="button"
+                        onClick={() => setPullErrors((prev) => { const next = { ...prev }; delete next[repo.id]; return next })}
+                        className="shrink-0 rounded p-0.5 transition-colors hover:bg-red-500/10"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
 
                   {repo.worktreeEnabled && <WorkspacesSection repoId={repo.id} />}
                 </div>
