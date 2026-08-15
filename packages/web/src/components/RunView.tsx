@@ -12,6 +12,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
 import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
+import { MarkdownLink } from "./MarkdownLink"
 import { MarkdownTable } from "./MarkdownTable"
 import {
   EMPTY_MESSAGES,
@@ -395,7 +396,7 @@ function IssueBody({ body }: { body?: string }) {
   if (!body) return <p className="py-10 text-center font-mono text-xs text-fg-5">没有描述内容</p>
   return (
     <div className="markdown-body leading-relaxed">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ table: MarkdownTable }}>{body}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: MarkdownLink, table: MarkdownTable }}>{body}</ReactMarkdown>
     </div>
   )
 }
@@ -581,7 +582,7 @@ function IssuePreview({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
         <div className="mx-auto max-w-4xl px-6 py-6">
           {issue.body ? (
             <div className="markdown-body leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ table: MarkdownTable }}>{issue.body}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: MarkdownLink, table: MarkdownTable }}>{issue.body}</ReactMarkdown>
             </div>
           ) : (
             <p className="py-10 text-center font-mono text-xs text-fg-5">该 Issue 没有描述内容</p>
