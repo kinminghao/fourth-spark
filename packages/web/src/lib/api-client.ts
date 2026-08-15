@@ -310,6 +310,10 @@ export interface PullResult {
   ok: boolean
   output: string
   branch: string | null
+  summary: string
+  alreadyUpToDate: boolean
+  autostashed: boolean
+  filesChanged: number
 }
 
 export async function pullRepo(id: string): Promise<PullResult> {
