@@ -884,19 +884,19 @@ export function RunView({
               messages.map((message, index) => (
                 <Fragment key={message.id}>
                   {index > 0 && message.role === "user" && (
-                    <div className="group/revert relative border-t border-line">
+                    <div className="group/revert relative border-t border-line py-2">
                       {canRevert && !stoppable && (
                         <button
                           type="button"
                           disabled={revertingId !== null}
                           onClick={async () => {
                             const count = messages.length - index
-                            if (!window.confirm(`回退到此处？将撤销后续 ${count} 条消息及其产生的改动。`)) return
+                            if (!window.confirm(`回退到此处？将移除后续 ${count} 条对话记录（不影响已产生的代码改动）。`)) return
                             setRevertingId(message.id)
                             await revertToMessage(activeSessionId!, message.id)
                             setRevertingId(null)
                           }}
-                          className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-line bg-base px-2.5 py-1 font-mono text-[11px] text-fg-4 opacity-60 shadow-sm transition-all duration-150 hover:border-amber-500/50 hover:text-amber-400 md:opacity-0 md:group-hover/revert:opacity-100 disabled:opacity-50"
+                          className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-line bg-base px-2.5 py-1 font-mono text-[11px] text-fg-4 opacity-60 shadow-sm transition-all duration-150 hover:border-amber-500/50 hover:text-amber-400 md:opacity-30 md:group-hover/revert:opacity-100 disabled:opacity-50"
                         >
                           {revertingId === message.id ? (
                             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
