@@ -635,6 +635,7 @@ export function RunView({
   const activeRepo = useRepoStore((state) => state.repos.find((r) => r.id === state.activeRepoId))
   const canRevert = activeRepo?.runtimeType !== "claude-code"
   const [revertingId, setRevertingId] = useState<string | null>(null)
+  const [headerExpanded, setHeaderExpanded] = useState(false)
   const linkedIssue = useIssueStore((state) =>
     session?.issueId ? state.issues.find((i) => i.id === session.issueId) : undefined,
   )
@@ -690,26 +691,111 @@ export function RunView({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-term">
-      <header className="flex items-center gap-3 border-b border-line bg-base px-4 py-2.5">
-        <div className="flex items-center gap-1 md:hidden">
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            aria-label="Open sidebar"
-            className="-ml-1 rounded-lg p-1.5 text-fg-3 hover:bg-elevated"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => useSessionStore.setState({ activeSessionId: null })}
-            aria-label="新建运行"
-            title="新建运行"
-            className="rounded-lg p-1.5 text-fg-3 hover:bg-elevated"
-          >
-            <Plus className="h-5 w-5" />
-          </button>
+      {/* ── Mobile header (< md) ── */}
+      <header className="border-b border-line bg-base md:hidden">
+        <div
+          className="flex items-center gap-2 px-3 py-2"
+          onClick={() => setHeaderExpanded((v) => !v)}
+        >
+          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              aria-label="Open sidebar"
+              className="-ml-1 rounded-lg p-1.5 text-fg-3 hover:bg-elevated"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => useSessionStore.setState({ activeSessionId: null })}
+              aria-label="新建运行"
+              title="新建运行"
+              className="rounded-lg p-1.5 text-fg-3 hover:bg-elevated"
+            >
+              <Plus className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="min-w-0 flex-1">
+            {session?.parentID && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); void useSessionStore.getState().setActiveSession(session.parentID!) }}
+                className="mb-0.5 flex items-center gap-1 text-[11px] text-fg-4 transition-colors hover:text-blue-400"
+              >
+                <ArrowLeft className="h-3 w-3" />
+                返回父会话
+              </button>
+            )}
+            <h2 className="text-sm font-medium leading-snug text-fg">
+              {session?.title?.trim() || "untitled run"}
+            </h2>
+          </div>
+          {stoppable && (
+            <span className={clsx("h-2 w-2 shrink-0 rounded-full", retrying ? "bg-amber-400 animate-pulse" : "bg-amber-400 animate-pulse")} />
+          )}
+          {!stoppable && status === "error" && (
+            <span className="h-2 w-2 shrink-0 rounded-full bg-red-400" />
+          )}
+          <ChevronDown className={clsx("h-4 w-4 shrink-0 text-fg-5 transition-transform duration-200", headerExpanded && "rotate-180")} />
         </div>
+        <div
+          className={clsx(
+            "grid transition-[grid-template-rows] duration-200 ease-in-out",
+            headerExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+          )}
+        >
+          <div className="overflow-hidden">
+            <div className="flex flex-col gap-2.5 border-t border-line/60 px-4 py-3">
+              {session?.agent && (
+                <div className="flex items-center gap-2 font-mono text-xs text-fg-4">
+                  <span className="w-14 shrink-0 text-fg-5">Agent</span>
+                  <span className="truncate">{session.agent}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="w-14 shrink-0 font-mono text-xs text-fg-5">Status</span>
+                <StatusBadge status={status} reason={errorReason} />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-14 shrink-0 font-mono text-xs text-fg-5">Context</span>
+                <ContextInfo session={session} messages={messages} />
+              </div>
+              {linkedIssue && (
+                <div className="flex items-center gap-2">
+                  <span className="w-14 shrink-0 font-mono text-xs text-fg-5">Issue</span>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/${encodeURIComponent(repoName!)}/issues?issueId=${linkedIssue.id}`)}
+                    className="flex items-center gap-1.5 truncate font-mono text-xs text-fg-3 transition-colors hover:text-blue-400"
+                  >
+                    <span className={clsx(
+                      "shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold",
+                      linkedIssue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
+                    )}>
+                      #{linkedIssue.number}
+                    </span>
+                    <span className="truncate">{linkedIssue.title}</span>
+                  </button>
+                </div>
+              )}
+              {stoppable && (
+                <button
+                  type="button"
+                  onClick={() => void abortSession()}
+                  className="mt-0.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 font-mono text-xs text-fg-2 transition-colors hover:border-red-500/50 hover:text-red-400"
+                >
+                  <Square className="h-3 w-3 fill-current" />
+                  {retrying ? "stop retry" : "stop"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Desktop header (md+) ── */}
+      <header className="hidden items-center gap-3 border-b border-line bg-base px-4 py-2.5 md:flex">
         <div className="min-w-0 flex-1">
           {session?.parentID && (
             <button
@@ -753,7 +839,7 @@ export function RunView({
             onClick={onToggleRightPanel}
             aria-label={rightPanelOpen ? "关闭侧边栏" : "打开侧边栏"}
             className={clsx(
-              "hidden items-center justify-center rounded-md border border-line p-1.5 transition-colors md:flex",
+              "flex items-center justify-center rounded-md border border-line p-1.5 transition-colors",
               rightPanelOpen
                 ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20"
                 : "text-fg-4 hover:bg-elevated hover:text-fg-2",
