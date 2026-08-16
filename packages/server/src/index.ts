@@ -21,7 +21,8 @@ import { milestoneRoutes } from "./routes/milestones"
 import { pullRoutes } from "./routes/pulls"
 import { pushRoutes } from "./routes/push"
 import { workspaceRoutes } from "./routes/workspaces"
-import { PORT, initWorkerConfig } from "./lib/config"
+import { PORT, HTTPS_PORT, initWorkerConfig } from "./lib/config"
+import { getLocalIPs, isLocalClient, ensureTlsCert, getTlsPaths } from "./lib/tls-manager"
 import { runtimeManager } from "./lib/process-manager"
 import { initRegistry } from "./core/registry"
 import { cloudRoutes } from "./routes/cloud"
@@ -127,6 +128,9 @@ if (existsSync(join(STATIC_DIR, "index.html"))) {
 // Startup — sync database schema, then spawn opencode for all repos
 // ---------------------------------------------------------------------------
 const registry = initRegistry()
+const localIPs = getLocalIPs()
+let httpsReady = false
+
 logger.info({ port: PORT }, "fourth-spark server starting")
 
 import { eq } from "drizzle-orm"
@@ -176,6 +180,26 @@ async function startup() {
   }
 
   try {
+    httpsReady = await ensureTlsCert(localIPs)
+  } catch (err) {
+    logger.warn({ err }, "TLS certificate setup failed — HTTPS disabled")
+  }
+
+  if (httpsReady) {
+    const tls = getTlsPaths()
+    Bun.serve({
+      port: HTTPS_PORT,
+      idleTimeout: 0,
+      tls: {
+        cert: Bun.file(tls.cert),
+        key: Bun.file(tls.key),
+      },
+      fetch: app.fetch,
+    })
+    logger.info({ port: HTTPS_PORT, ips: [...localIPs] }, "HTTPS server started for LAN access")
+  }
+
+  try {
     await initWorkerConfig(getSetting)
     await runtimeManager.startAll()
     logger.info("all repos initialized")
@@ -207,5 +231,20 @@ process.on("SIGHUP", () => {
 export default {
   port: PORT,
   idleTimeout: 0,
-  fetch: app.fetch,
+  fetch(req: Request, server: { requestIP(req: Request): { address: string } | null }) {
+    const url = new URL(req.url)
+    const hostname = url.hostname
+
+    if (hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "::1" && localIPs.has(hostname)) {
+      const clientAddr = server.requestIP(req)?.address
+      if (isLocalClient(clientAddr, localIPs)) {
+        return Response.redirect(`http://localhost:${PORT}${url.pathname}${url.search}`, 302)
+      }
+      if (httpsReady) {
+        return Response.redirect(`https://${hostname}:${HTTPS_PORT}${url.pathname}${url.search}`, 302)
+      }
+    }
+
+    return app.fetch(req)
+  },
 }
