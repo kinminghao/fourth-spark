@@ -79,6 +79,8 @@ export function useSpeechToText(lang = "zh-CN") {
   const webRecognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const manualStopRef = useRef(false)
   const nativeListenersRef = useRef<Array<{ remove: () => Promise<void> }>>([])
+  const gotResultRef = useRef(false)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isSupported = supported
 
@@ -86,6 +88,7 @@ export function useSpeechToText(lang = "zh-CN") {
 
   const stop = useCallback(async () => {
     manualStopRef.current = true
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
     if (isNative) {
       await SpeechRecognition.stop().catch(() => {})
       for (const l of nativeListenersRef.current) await l.remove().catch(() => {})
@@ -169,9 +172,19 @@ export function useSpeechToText(lang = "zh-CN") {
     recognition.interimResults = true
     recognition.maxAlternatives = 1
 
-    recognition.onstart = () => setIsListening(true)
+    recognition.onstart = () => {
+      setIsListening(true)
+      gotResultRef.current = false
+      timeoutRef.current = setTimeout(() => {
+        if (!gotResultRef.current && !manualStopRef.current) {
+          setError("未检测到语音，请检查麦克风或网络连接（Chrome 需访问 Google 服务器）")
+        }
+      }, 5000)
+    }
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
+      gotResultRef.current = true
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
       let finalChunk = ""
       let interim = ""
       for (let i = event.resultIndex; i < event.results.length; i++) {

@@ -120,7 +120,7 @@ export function InputBar() {
   const handleVoiceToggle = () => {
     if (stt.isListening) {
       stt.stop()
-      const committed = preVoiceValueRef.current + stt.transcript
+      const committed = preVoiceValueRef.current + stt.transcript + stt.interimTranscript
       setValue(committed)
       if (activeSessionId) setDraft(activeSessionId, committed)
     } else {
@@ -146,11 +146,13 @@ export function InputBar() {
 
   const promptColor = !activeSessionId
     ? "text-fg-6"
-    : busy
-      ? "text-amber-400 fs-blink"
-      : hasPendingQuestion
-        ? "text-blue-400"
-        : "text-emerald-400"
+    : stt.isListening
+      ? "text-red-400 fs-blink"
+      : busy
+        ? "text-amber-400 fs-blink"
+        : hasPendingQuestion
+          ? "text-blue-400"
+          : "text-emerald-400"
 
   return (
     <div className="border-t border-line bg-term px-4 py-4">
@@ -165,7 +167,9 @@ export function InputBar() {
           "mx-auto flex max-w-4xl items-start gap-2 rounded-lg border px-3 py-2 transition-colors duration-150",
           disabled
             ? "border-line"
-            : "border-fg-5 focus-within:border-fg-4",
+            : stt.isListening
+              ? "border-red-500/60"
+              : "border-fg-5 focus-within:border-fg-4",
         )}
       >
         <span className={clsx("select-none pt-px font-mono text-sm leading-6", promptColor)}>
