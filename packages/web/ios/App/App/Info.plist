@@ -47,5 +47,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Fourth Spark needs speech recognition to transcribe your voice input</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Fourth Spark needs microphone access to record audio for voice input</string>
 </dict>
 </plist>

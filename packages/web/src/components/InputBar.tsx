@@ -120,9 +120,6 @@ export function InputBar() {
   const handleVoiceToggle = () => {
     if (stt.isListening) {
       stt.stop()
-      const committed = preVoiceValueRef.current + stt.transcript
-      setValue(committed)
-      if (activeSessionId) setDraft(activeSessionId, committed)
     } else {
       preVoiceValueRef.current = value
       stt.start()
@@ -136,6 +133,17 @@ export function InputBar() {
     }
   }, [stt.isListening, stt.transcript, stt.interimTranscript])
 
+  // Commit transcript when recording ends (handles async server engine)
+  const wasListeningRef = useRef(false)
+  useEffect(() => {
+    if (wasListeningRef.current && !stt.isListening && stt.transcript) {
+      const committed = preVoiceValueRef.current + stt.transcript
+      setValue(committed)
+      if (activeSessionId) setDraft(activeSessionId, committed)
+    }
+    wasListeningRef.current = stt.isListening
+  }, [stt.isListening, stt.transcript, activeSessionId, setDraft])
+
   const placeholder = !activeSessionId
     ? "select or start a run"
     : hasPendingQuestion
@@ -146,11 +154,13 @@ export function InputBar() {
 
   const promptColor = !activeSessionId
     ? "text-fg-6"
-    : busy
-      ? "text-amber-400 fs-blink"
-      : hasPendingQuestion
-        ? "text-blue-400"
-        : "text-emerald-400"
+    : stt.isListening
+      ? "text-red-400 fs-blink"
+      : busy
+        ? "text-amber-400 fs-blink"
+        : hasPendingQuestion
+          ? "text-blue-400"
+          : "text-emerald-400"
 
   return (
     <div className="border-t border-line bg-term px-4 py-4">
@@ -165,7 +175,9 @@ export function InputBar() {
           "mx-auto flex max-w-4xl items-start gap-2 rounded-lg border px-3 py-2 transition-colors duration-150",
           disabled
             ? "border-line"
-            : "border-fg-5 focus-within:border-fg-4",
+            : stt.isListening
+              ? "border-red-500/60"
+              : "border-fg-5 focus-within:border-fg-4",
         )}
       >
         <span className={clsx("select-none pt-px font-mono text-sm leading-6", promptColor)}>
@@ -191,14 +203,12 @@ export function InputBar() {
           disabled={disabled}
           allowed={imagesAllowed}
         />
-        {stt.isSupported && (
-          <VoiceButton
-            isListening={stt.isListening}
-            disabled={disabled}
-            onClick={handleVoiceToggle}
-            error={stt.error}
-          />
-        )}
+        <VoiceButton
+          isListening={stt.isListening}
+          disabled={disabled}
+          onClick={handleVoiceToggle}
+          error={stt.error}
+        />
         <button
           type="button"
           onClick={submit}
@@ -211,7 +221,15 @@ export function InputBar() {
       </div>
       <div className="mx-auto mt-1.5 flex max-w-4xl items-center gap-3 pl-5">
         {stt.isListening && (
-          <span className="font-mono text-[10px] text-red-400 animate-pulse">● 录音中…</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-[10px] text-red-400">● 录音中</span>
+            <div className="h-1 w-16 overflow-hidden rounded-full bg-fg-6/30">
+              <div
+                className="h-full rounded-full bg-red-400 transition-[width] duration-75"
+                style={{ width: `${Math.round(stt.volumeLevel * 100)}%` }}
+              />
+            </div>
+          </div>
         )}
         {stt.error && (
           <span className="font-mono text-[10px] text-red-400">{stt.error}</span>

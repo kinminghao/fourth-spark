@@ -26,6 +26,8 @@ import { runtimeManager } from "./lib/process-manager"
 import { initRegistry } from "./core/registry"
 import { cloudRoutes } from "./routes/cloud"
 import { seedSystemAgents } from "./lib/system-agents"
+import { ensureSenseVoice } from "./lib/sensevoice-manager"
+import { transcribeRoute } from "./routes/transcribe"
 import { runMigrations } from "./db/migrate"
 import { resolve, join, dirname } from "node:path"
 import { existsSync, realpathSync } from "node:fs"
@@ -48,6 +50,7 @@ app.route("/api/health", health)
 app.route("/api/usage", usageRoutes)
 app.route("/api/cloud", cloudRoutes)
 app.route("/api/push", pushRoutes)
+app.route("/api/transcribe", transcribeRoute)
 app.route("/api/agents-md", globalAgentsMd)
 app.route("/api/custom-agents", globalCustomAgents)
 app.route("/api/prompt-fragments", globalFragments)
@@ -164,6 +167,12 @@ async function startup() {
     logger.info("system agents seeded")
   } catch (err) {
     logger.warn({ err }, "failed to seed system agents — continuing")
+  }
+
+  try {
+    await ensureSenseVoice()
+  } catch (err) {
+    logger.warn({ err }, "SenseVoice model download failed — speech-to-text will be unavailable")
   }
 
   try {
