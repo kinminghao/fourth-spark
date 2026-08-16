@@ -221,7 +221,15 @@ export function InputBar() {
       </div>
       <div className="mx-auto mt-1.5 flex max-w-4xl items-center gap-3 pl-5">
         {stt.isListening && (
-          <span className="font-mono text-[10px] text-red-400 animate-pulse">● 录音中…</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-[10px] text-red-400">● 录音中</span>
+            <div className="h-1 w-16 overflow-hidden rounded-full bg-fg-6/30">
+              <div
+                className="h-full rounded-full bg-red-400 transition-[width] duration-75"
+                style={{ width: `${Math.round(stt.volumeLevel * 100)}%` }}
+              />
+            </div>
+          </div>
         )}
         {stt.error && (
           <span className="font-mono text-[10px] text-red-400">{stt.error}</span>

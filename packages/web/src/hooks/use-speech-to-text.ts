@@ -106,6 +106,7 @@ export function useSpeechToText(lang = "zh-CN") {
   const [transcript, setTranscript] = useState("")
   const [interimTranscript, setInterimTranscript] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [volumeLevel, setVolumeLevel] = useState(0)
 
   const webRecognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const manualStopRef = useRef(false)
@@ -381,6 +382,60 @@ export function useSpeechToText(lang = "zh-CN") {
     }
   }, [startNative, startWeb, startServer])
 
+  // ── volume monitoring ────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!isListening) {
+      setVolumeLevel(0)
+      return
+    }
+
+    let cancelled = false
+    let monitorStream: MediaStream | null = null
+    let monitorCtx: AudioContext | null = null
+    let raf = 0
+
+    void (async () => {
+      try {
+        monitorStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        if (cancelled) { monitorStream.getTracks().forEach((t) => t.stop()); return }
+
+        monitorCtx = new AudioContext()
+        const source = monitorCtx.createMediaStreamSource(monitorStream)
+        const analyser = monitorCtx.createAnalyser()
+        analyser.fftSize = 256
+        source.connect(analyser)
+
+        const buf = new Uint8Array(analyser.frequencyBinCount)
+        let lastUpdate = 0
+
+        const tick = () => {
+          if (cancelled) return
+          analyser.getByteFrequencyData(buf)
+          const now = performance.now()
+          if (now - lastUpdate > 80) {
+            let sum = 0
+            for (let i = 0; i < buf.length; i++) sum += buf[i]
+            setVolumeLevel(sum / (buf.length * 255))
+            lastUpdate = now
+          }
+          raf = requestAnimationFrame(tick)
+        }
+        raf = requestAnimationFrame(tick)
+      } catch {
+        // getUserMedia unavailable (e.g. native WebView) — skip volume monitoring
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf)
+      monitorStream?.getTracks().forEach((t) => t.stop())
+      void monitorCtx?.close().catch(() => {})
+      setVolumeLevel(0)
+    }
+  }, [isListening])
+
   // ── cleanup ────────────────────────────────────────────────────────
 
   useEffect(
@@ -406,6 +461,7 @@ export function useSpeechToText(lang = "zh-CN") {
     transcript,
     interimTranscript,
     error,
+    volumeLevel,
     start,
     stop,
     resetTranscript,
