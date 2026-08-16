@@ -12,6 +12,9 @@ const DEFAULT_PORT = 3000
 // Port this backend listens on.
 export const PORT = Number(process.env.PORT ?? DEFAULT_PORT)
 
+// HTTPS port for LAN access (self-signed cert).
+export const HTTPS_PORT = Number(process.env.HTTPS_PORT ?? 3443)
+
 // Allowed browser origin for CORS (the Vite dev server).
 export const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN ?? DEFAULT_FRONTEND_ORIGIN
 
