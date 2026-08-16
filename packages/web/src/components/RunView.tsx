@@ -810,7 +810,7 @@ export function RunView({
                             await revertToMessage(activeSessionId!, message.id)
                             setRevertingId(null)
                           }}
-                          className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-line bg-base px-2.5 py-1 font-mono text-[11px] text-fg-4 opacity-60 shadow-sm transition-all duration-150 hover:border-amber-500/50 hover:text-amber-400 md:opacity-0 md:group-hover/revert:opacity-100 disabled:opacity-50"
+                          className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-line bg-base px-2.5 py-1 font-mono text-[11px] text-fg-4 opacity-60 shadow-sm transition-all duration-150 hover:border-amber-500/50 hover:text-amber-400 md:opacity-30 md:group-hover/revert:opacity-100 disabled:opacity-50"
                         >
                           {revertingId === message.id ? (
                             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
