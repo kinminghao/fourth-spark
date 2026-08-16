@@ -113,6 +113,7 @@ export function useSpeechToText(lang = "zh-CN") {
   const nativeListenersRef = useRef<Array<{ remove: () => Promise<void> }>>([])
   const gotResultRef = useRef(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const webSpeechFailedRef = useRef(false)
 
   // Server-engine recording refs
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -263,7 +264,10 @@ export function useSpeechToText(lang = "zh-CN") {
       gotResultRef.current = false
       timeoutRef.current = setTimeout(() => {
         if (!gotResultRef.current && !manualStopRef.current) {
-          setError("未检测到语音，请检查麦克风或网络连接（Chrome 需访问 Google 服务器）")
+          webSpeechFailedRef.current = true
+          manualStopRef.current = true
+          recognition.stop()
+          setError("语音识别服务不可用（Chrome/Edge 需连接 Google 服务器），下次将使用服务端识别")
         }
       }, 5000)
     }
@@ -374,7 +378,7 @@ export function useSpeechToText(lang = "zh-CN") {
   const start = useCallback(() => {
     if (isNative) {
       void startNative()
-    } else if (WebRecognitionAPI) {
+    } else if (WebRecognitionAPI && !webSpeechFailedRef.current) {
       const ok = startWeb()
       if (!ok) void startServer()
     } else {
