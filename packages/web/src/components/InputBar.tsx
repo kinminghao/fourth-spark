@@ -120,9 +120,6 @@ export function InputBar() {
   const handleVoiceToggle = () => {
     if (stt.isListening) {
       stt.stop()
-      const committed = preVoiceValueRef.current + stt.transcript + stt.interimTranscript
-      setValue(committed)
-      if (activeSessionId) setDraft(activeSessionId, committed)
     } else {
       preVoiceValueRef.current = value
       stt.start()
@@ -135,6 +132,17 @@ export function InputBar() {
       setValue(preVoiceValueRef.current + stt.transcript + stt.interimTranscript)
     }
   }, [stt.isListening, stt.transcript, stt.interimTranscript])
+
+  // Commit transcript when recording ends (handles async server engine)
+  const wasListeningRef = useRef(false)
+  useEffect(() => {
+    if (wasListeningRef.current && !stt.isListening && stt.transcript) {
+      const committed = preVoiceValueRef.current + stt.transcript
+      setValue(committed)
+      if (activeSessionId) setDraft(activeSessionId, committed)
+    }
+    wasListeningRef.current = stt.isListening
+  }, [stt.isListening, stt.transcript, activeSessionId, setDraft])
 
   const placeholder = !activeSessionId
     ? "select or start a run"

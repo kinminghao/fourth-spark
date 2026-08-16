@@ -55,6 +55,39 @@ declare global {
   }
 }
 
+// ── WAV encoder (PCM16, mono) ────────────────────────────────────────────
+
+function encodeWAV(samples: Float32Array, sampleRate: number): Blob {
+  const len = samples.length
+  const buffer = new ArrayBuffer(44 + len * 2)
+  const v = new DataView(buffer)
+
+  const writeStr = (offset: number, s: string) => {
+    for (let i = 0; i < s.length; i++) v.setUint8(offset + i, s.charCodeAt(i))
+  }
+
+  writeStr(0, "RIFF")
+  v.setUint32(4, 36 + len * 2, true)
+  writeStr(8, "WAVE")
+  writeStr(12, "fmt ")
+  v.setUint32(16, 16, true)
+  v.setUint16(20, 1, true)
+  v.setUint16(22, 1, true)
+  v.setUint32(24, sampleRate, true)
+  v.setUint32(28, sampleRate * 2, true)
+  v.setUint16(32, 2, true)
+  v.setUint16(34, 16, true)
+  writeStr(36, "data")
+  v.setUint32(40, len * 2, true)
+
+  for (let i = 0; i < len; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]))
+    v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true)
+  }
+
+  return new Blob([buffer], { type: "audio/wav" })
+}
+
 // ── Engine detection ─────────────────────────────────────────────────────
 
 const isNative = Capacitor.isNativePlatform()
@@ -64,11 +97,9 @@ const WebRecognitionAPI: SpeechRecognitionCtor | undefined =
     ? window.SpeechRecognition ?? window.webkitSpeechRecognition
     : undefined
 
-// Native always supported (Capacitor plugin handles availability);
-// Web only when browser exposes the API (HTTPS / localhost)
-const supported = isNative || WebRecognitionAPI !== undefined
-
 // ── Hook ─────────────────────────────────────────────────────────────────
+
+const SAMPLE_RATE = 16000
 
 export function useSpeechToText(lang = "zh-CN") {
   const [isListening, setIsListening] = useState(false)
@@ -82,9 +113,62 @@ export function useSpeechToText(lang = "zh-CN") {
   const gotResultRef = useRef(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const isSupported = supported
+  // Server-engine recording refs
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const processorRef = useRef<ScriptProcessorNode | null>(null)
+  const chunksRef = useRef<Float32Array[]>([])
+
+  const isSupported = true
 
   // ── stop ────────────────────────────────────────────────────────────
+
+  const stopServerRecording = useCallback(async () => {
+    processorRef.current?.disconnect()
+    mediaStreamRef.current?.getTracks().forEach((t) => t.stop())
+    await audioCtxRef.current?.close().catch(() => {})
+
+    const chunks = chunksRef.current
+    chunksRef.current = []
+    processorRef.current = null
+    mediaStreamRef.current = null
+    audioCtxRef.current = null
+
+    if (chunks.length === 0) {
+      setIsListening(false)
+      return
+    }
+
+    setInterimTranscript("识别中…")
+
+    const totalLen = chunks.reduce((sum, c) => sum + c.length, 0)
+    const merged = new Float32Array(totalLen)
+    let offset = 0
+    for (const c of chunks) {
+      merged.set(c, offset)
+      offset += c.length
+    }
+
+    const wav = encodeWAV(merged, SAMPLE_RATE)
+    const form = new FormData()
+    form.append("audio", wav, "recording.wav")
+
+    try {
+      const res = await fetch("/api/transcribe", { method: "POST", body: form })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        setError((body as { error?: string }).error ?? `HTTP ${res.status}`)
+      } else {
+        const { text } = (await res.json()) as { text: string }
+        if (text) setTranscript(text)
+      }
+    } catch (err) {
+      setError(`语音识别失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setInterimTranscript("")
+      setIsListening(false)
+    }
+  }, [])
 
   const stop = useCallback(async () => {
     manualStopRef.current = true
@@ -95,10 +179,14 @@ export function useSpeechToText(lang = "zh-CN") {
       nativeListenersRef.current = []
       setIsListening(false)
       setInterimTranscript("")
+    } else if (webRecognitionRef.current) {
+      webRecognitionRef.current.stop()
+    } else if (audioCtxRef.current) {
+      await stopServerRecording()
     } else {
-      webRecognitionRef.current?.stop()
+      setIsListening(false)
     }
-  }, [])
+  }, [stopServerRecording])
 
   // ── start (native) ─────────────────────────────────────────────────
 
@@ -153,13 +241,10 @@ export function useSpeechToText(lang = "zh-CN") {
     }
   }, [lang])
 
-  // ── start (web) ────────────────────────────────────────────────────
+  // ── start (web speech API) ─────────────────────────────────────────
 
   const startWeb = useCallback(() => {
-    if (!WebRecognitionAPI) {
-      setError("当前浏览器不支持语音识别，请使用 Chrome/Edge/Safari 并通过 HTTPS 访问")
-      return
-    }
+    if (!WebRecognitionAPI) return false
 
     setTranscript("")
     setInterimTranscript("")
@@ -230,20 +315,71 @@ export function useSpeechToText(lang = "zh-CN") {
     webRecognitionRef.current = recognition
     try {
       recognition.start()
+      return true
     } catch {
-      setError("无法启动语音识别")
+      return false
     }
   }, [lang])
+
+  // ── start (server — raw PCM → WAV → POST /api/transcribe) ─────────
+
+  const startServer = useCallback(async () => {
+    setTranscript("")
+    setInterimTranscript("")
+    setError(null)
+
+    // Check server availability first
+    try {
+      const res = await fetch("/api/transcribe/status")
+      const { available } = (await res.json()) as { available: boolean }
+      if (!available) {
+        setError("语音识别服务未就绪，请稍后重试")
+        return
+      }
+    } catch {
+      setError("无法连接语音识别服务")
+      return
+    }
+
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: SAMPLE_RATE, channelCount: 1 } })
+    } catch {
+      setError("请允许麦克风权限")
+      return
+    }
+
+    const audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE })
+    const source = audioCtx.createMediaStreamSource(stream)
+    const processor = audioCtx.createScriptProcessor(4096, 1, 1)
+
+    chunksRef.current = []
+
+    processor.onaudioprocess = (e) => {
+      chunksRef.current.push(new Float32Array(e.inputBuffer.getChannelData(0)))
+    }
+
+    source.connect(processor)
+    processor.connect(audioCtx.destination)
+
+    audioCtxRef.current = audioCtx
+    mediaStreamRef.current = stream
+    processorRef.current = processor
+    setIsListening(true)
+  }, [])
 
   // ── unified start ──────────────────────────────────────────────────
 
   const start = useCallback(() => {
     if (isNative) {
       void startNative()
+    } else if (WebRecognitionAPI) {
+      const ok = startWeb()
+      if (!ok) void startServer()
     } else {
-      startWeb()
+      void startServer()
     }
-  }, [startNative, startWeb])
+  }, [startNative, startWeb, startServer])
 
   // ── cleanup ────────────────────────────────────────────────────────
 
@@ -251,6 +387,9 @@ export function useSpeechToText(lang = "zh-CN") {
     () => () => {
       manualStopRef.current = true
       webRecognitionRef.current?.stop()
+      processorRef.current?.disconnect()
+      mediaStreamRef.current?.getTracks().forEach((t) => t.stop())
+      void audioCtxRef.current?.close().catch(() => {})
       for (const l of nativeListenersRef.current) void l.remove().catch(() => {})
     },
     [],
