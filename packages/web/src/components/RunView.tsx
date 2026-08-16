@@ -798,14 +798,14 @@ export function RunView({
               messages.map((message, index) => (
                 <Fragment key={message.id}>
                   {index > 0 && message.role === "user" && (
-                    <div className="group/revert relative border-t border-line">
+                    <div className="group/revert relative border-t border-line py-2">
                       {canRevert && !stoppable && (
                         <button
                           type="button"
                           disabled={revertingId !== null}
                           onClick={async () => {
                             const count = messages.length - index
-                            if (!window.confirm(`回退到此处？将撤销后续 ${count} 条消息及其产生的改动。`)) return
+                            if (!window.confirm(`回退到此处？将移除后续 ${count} 条对话记录（不影响已产生的代码改动）。`)) return
                             setRevertingId(message.id)
                             await revertToMessage(activeSessionId!, message.id)
                             setRevertingId(null)

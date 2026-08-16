@@ -45,6 +45,7 @@ export interface Session {
   tokens?: SessionTokens
   model?: { providerID?: string; modelID?: string; variant?: string }
   completedAt?: number
+  revert?: { messageID: string }
 }
 
 export interface Issue {
