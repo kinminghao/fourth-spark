@@ -79,13 +79,14 @@ export async function startCommand(args: string[]): Promise<void> {
     try {
       execSync(`${composeCmd.join(" ")} -f "${composePath}" up -d postgres`, { stdio: "pipe" })
       let ready = false
-      for (let i = 0; i < 30; i++) {
+      for (let i = 0; i < 60; i++) {
         try {
-          execSync(`${composeCmd.join(" ")} -f "${composePath}" exec -T postgres pg_isready -U fourth_spark`, { stdio: "pipe", timeout: 3000 })
+          execSync("docker exec fourth-spark-db pg_isready -U fourth_spark -q", { stdio: "pipe" })
           ready = true
           break
-        } catch {}
-        await new Promise((r) => setTimeout(r, 1000))
+        } catch {
+          await new Promise((r) => setTimeout(r, 500))
+        }
       }
       console.log(ready ? "  PostgreSQL ready" : "  Warning: PostgreSQL may not be ready")
     } catch {

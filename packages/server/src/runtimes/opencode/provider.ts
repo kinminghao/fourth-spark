@@ -193,25 +193,6 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
       }
     }
 
-    const adoptedPids = new Set([...adopted.values()].map((r) => r.pid))
-    try {
-      const result = Bun.spawnSync(["pgrep", "-f", "opencode serve --port"])
-      const output = result.stdout.toString().trim()
-      if (output) {
-        const myPid = process.pid
-        const strayPids = output.split("\n").map(Number).filter((p) => p && p !== myPid && !adoptedPids.has(p))
-        let killed = 0
-        for (const pid of strayPids) {
-          if (killPid(pid)) killed++
-        }
-        if (killed > 0) {
-          logger.info({ killed }, "killed stray opencode serve processes not in PID file")
-        }
-      }
-    } catch {
-      // pgrep unavailable — non-fatal
-    }
-
     if (adopted.size > 0) {
       logger.info({ count: adopted.size }, "adopted live opencode processes from previous run")
     }

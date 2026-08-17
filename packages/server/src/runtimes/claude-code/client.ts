@@ -328,6 +328,10 @@ export class StdioRuntimeClient implements RuntimeClient {
     return [{ id: "claude-code", name: "Claude Code" }]
   }
 
+  async revert(_sessionId: string, _messageID: string, _partID?: string): Promise<Session> {
+    throw new RuntimeError(RUNTIME_ID, "Claude Code does not support session revert", 501, "")
+  }
+
   async getProviders(): Promise<ProviderListResponse> {
     return {
       all: [

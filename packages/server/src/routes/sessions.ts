@@ -353,6 +353,16 @@ sessions.post("/:id/prompt", async (c) => {
   return c.json({ ok: true })
 })
 
+sessions.post("/:id/revert", async (c) => {
+  const client = runtimeManager.requireClient(c.req.param("repoId"))
+  const body = await c.req.json<{ messageID?: string; partID?: string }>().catch(() => null)
+  if (!body || typeof body.messageID !== "string" || !body.messageID) {
+    return c.json({ error: "Body must include a 'messageID' string", status: 400 }, 400)
+  }
+  const session = await client.revert(c.req.param("id"), body.messageID, body.partID)
+  return c.json(session)
+})
+
 sessions.post("/:id/abort", async (c) => {
   const sessionId = c.req.param("id")
   const client = runtimeManager.requireClient(c.req.param("repoId"))

@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { db } from "../db/index"
 import { repos, workspaces } from "../db/schema"
 import { logger } from "../middleware/logger"
+import { runGit } from "./git-runner"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -25,15 +26,6 @@ export type Workspace = typeof workspaces.$inferSelect
 
 function shortId(): string {
   return crypto.randomUUID().replace(/-/g, "").slice(0, SHORT_ID_LENGTH)
-}
-
-function runGit(args: string[], cwd: string): { ok: boolean; stdout: string; stderr: string } {
-  const result = Bun.spawnSync(["git", ...args], { cwd })
-  return {
-    ok: result.exitCode === 0,
-    stdout: result.stdout.toString(),
-    stderr: result.stderr.toString(),
-  }
 }
 
 function symlinkInstructionFileIfMissing(repoLocalPath: string, worktreePath: string, fileName: string): void {
