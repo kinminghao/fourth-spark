@@ -12,6 +12,8 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
 import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
+import { VoiceButton } from "./VoiceButton"
+import { useSpeechToText } from "../hooks/use-speech-to-text"
 import { MarkdownTable } from "./MarkdownTable"
 import {
   EMPTY_MESSAGES,
@@ -152,7 +154,10 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const [issueDropdownOpen, setIssueDropdownOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const issueComboRef = useRef<HTMLDivElement>(null)
+  const preVoiceValueRef = useRef("")
+  const wasListeningRef = useRef(false)
   const [models, setModels] = useState<ModelInfo[]>([])
+  const stt = useSpeechToText()
   const createSession = useSessionStore((state) => state.createSession)
   const sendError = useSessionStore((state) => state.sendError)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
@@ -227,6 +232,28 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     }
   }
 
+  const handleVoiceToggle = () => {
+    if (stt.isListening) {
+      stt.stop()
+    } else {
+      preVoiceValueRef.current = draft
+      stt.start()
+    }
+  }
+
+  useEffect(() => {
+    if (stt.isListening) {
+      setDraft(preVoiceValueRef.current + stt.transcript + stt.interimTranscript)
+    }
+  }, [stt.isListening, stt.transcript, stt.interimTranscript])
+
+  useEffect(() => {
+    if (wasListeningRef.current && !stt.isListening && stt.transcript) {
+      setDraft(preVoiceValueRef.current + stt.transcript)
+    }
+    wasListeningRef.current = stt.isListening
+  }, [stt.isListening, stt.transcript])
+
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center bg-term">
       <button
@@ -248,9 +275,15 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
 
         <AttachmentStrip attachments={attachments} error={attachError} onRemove={remove} />
 
-        <div className="rounded-xl border border-line bg-base/80 shadow-sm transition-colors focus-within:border-fg-5">
+        <div className={clsx(
+          "rounded-xl border bg-base/80 shadow-sm transition-colors",
+          stt.isListening ? "border-red-500/60" : "border-line focus-within:border-fg-5",
+        )}>
           <div className="flex items-start gap-2 px-4 py-3">
-            <span className="select-none pt-px font-mono text-sm leading-6 text-emerald-400">
+            <span className={clsx(
+              "select-none pt-px font-mono text-sm leading-6",
+              stt.isListening ? "text-red-400 fs-blink" : "text-emerald-400",
+            )}>
               ❯
             </span>
             <textarea
@@ -270,6 +303,12 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
               disabled={!activeRepoId}
               allowed
             />
+            <VoiceButton
+              isListening={stt.isListening}
+              disabled={!activeRepoId}
+              onClick={handleVoiceToggle}
+              error={stt.error}
+            />
             <button
               type="button"
               onClick={submit}
@@ -280,6 +319,25 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
               <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
             </button>
           </div>
+
+          {(stt.isListening || stt.error) && (
+            <div className="flex items-center gap-3 border-t border-line/60 px-4 py-1.5">
+              {stt.isListening && (
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-[10px] text-red-400">● 录音中</span>
+                  <div className="h-1 w-16 overflow-hidden rounded-full bg-fg-6/30">
+                    <div
+                      className="h-full rounded-full bg-red-400 transition-[width] duration-75"
+                      style={{ width: `${Math.round(stt.volumeLevel * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              {stt.error && (
+                <span className="font-mono text-[10px] text-red-400">{stt.error}</span>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-col gap-2 border-t border-line/60 px-4 py-2 sm:flex-row sm:items-center sm:gap-3">
             <label className="flex items-center gap-1.5 font-mono text-[11px] text-fg-4">
