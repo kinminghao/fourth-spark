@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Capacitor } from "@capacitor/core"
 import { SpeechRecognition } from "@capacitor-community/speech-recognition"
 
+export type SpeechPhase = "idle" | "recording" | "recognizing" | "done"
+
 // ── Web Speech API type declarations (not in all TS DOM lib bundles) ──────
 
 interface SpeechRecognitionAlternative {
@@ -107,6 +109,7 @@ export function useSpeechToText(lang = "zh-CN") {
   const [interimTranscript, setInterimTranscript] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [volumeLevel, setVolumeLevel] = useState(0)
+  const [phase, setPhase] = useState<SpeechPhase>("idle")
 
   const webRecognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const manualStopRef = useRef(false)
@@ -120,6 +123,7 @@ export function useSpeechToText(lang = "zh-CN") {
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const processorRef = useRef<ScriptProcessorNode | null>(null)
   const chunksRef = useRef<Float32Array[]>([])
+  const cancelledRef = useRef(false)
 
   const isSupported = true
 
@@ -136,12 +140,14 @@ export function useSpeechToText(lang = "zh-CN") {
     mediaStreamRef.current = null
     audioCtxRef.current = null
 
-    if (chunks.length === 0) {
+    if (chunks.length === 0 || cancelledRef.current) {
       setIsListening(false)
+      setPhase("idle")
       return
     }
 
     setInterimTranscript("识别中…")
+    setPhase("recognizing")
 
     const totalLen = chunks.reduce((sum, c) => sum + c.length, 0)
     const merged = new Float32Array(totalLen)
@@ -157,15 +163,23 @@ export function useSpeechToText(lang = "zh-CN") {
 
     try {
       const res = await fetch("/api/transcribe", { method: "POST", body: form })
+      if (cancelledRef.current) return
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
         setError((body as { error?: string }).error ?? `HTTP ${res.status}`)
+        setPhase("idle")
       } else {
         const { text } = (await res.json()) as { text: string }
-        if (text) setTranscript(text)
+        if (text) {
+          setTranscript(text)
+          setPhase("done")
+        } else {
+          setPhase("idle")
+        }
       }
     } catch (err) {
       setError(`语音识别失败：${err instanceof Error ? err.message : String(err)}`)
+      setPhase("idle")
     } finally {
       setInterimTranscript("")
       setIsListening(false)
@@ -187,15 +201,18 @@ export function useSpeechToText(lang = "zh-CN") {
       await stopServerRecording()
     } else {
       setIsListening(false)
+      setPhase("idle")
     }
   }, [stopServerRecording])
 
   // ── start (native) ─────────────────────────────────────────────────
 
   const startNative = useCallback(async () => {
+    cancelledRef.current = false
     setTranscript("")
     setInterimTranscript("")
     setError(null)
+    setPhase("idle")
 
     const { available } = await SpeechRecognition.available()
     if (!available) {
@@ -221,6 +238,7 @@ export function useSpeechToText(lang = "zh-CN") {
       await SpeechRecognition.addListener("listeningState", (data: { status: string }) => {
         const on = data.status === "started"
         setIsListening(on)
+        if (on) setPhase("recording")
         if (!on) setInterimTranscript("")
       }),
     )
@@ -248,9 +266,11 @@ export function useSpeechToText(lang = "zh-CN") {
   const startWeb = useCallback(() => {
     if (!WebRecognitionAPI) return false
 
+    cancelledRef.current = false
     setTranscript("")
     setInterimTranscript("")
     setError(null)
+    setPhase("idle")
     manualStopRef.current = false
 
     const recognition = new WebRecognitionAPI()
@@ -261,6 +281,7 @@ export function useSpeechToText(lang = "zh-CN") {
 
     recognition.onstart = () => {
       setIsListening(true)
+      setPhase("recording")
       gotResultRef.current = false
       timeoutRef.current = setTimeout(() => {
         if (!gotResultRef.current && !manualStopRef.current) {
@@ -329,9 +350,11 @@ export function useSpeechToText(lang = "zh-CN") {
   // ── start (server — raw PCM → WAV → POST /api/transcribe) ─────────
 
   const startServer = useCallback(async () => {
+    cancelledRef.current = false
     setTranscript("")
     setInterimTranscript("")
     setError(null)
+    setPhase("idle")
 
     // Check server availability first
     try {
@@ -371,6 +394,7 @@ export function useSpeechToText(lang = "zh-CN") {
     mediaStreamRef.current = stream
     processorRef.current = processor
     setIsListening(true)
+    setPhase("recording")
   }, [])
 
   // ── unified start ──────────────────────────────────────────────────
@@ -440,6 +464,15 @@ export function useSpeechToText(lang = "zh-CN") {
     }
   }, [isListening])
 
+  // ── phase transition for streaming engines ────────────────────────
+  // Web Speech API / Capacitor Native: recording ends → done (if transcript) or idle
+  // Server engine sets "recognizing" before isListening goes false, so this is a no-op for it
+  useEffect(() => {
+    if (!isListening && phase === "recording") {
+      setPhase(transcript ? "done" : "idle")
+    }
+  }, [isListening, phase, transcript])
+
   // ── cleanup ────────────────────────────────────────────────────────
 
   useEffect(
@@ -455,13 +488,16 @@ export function useSpeechToText(lang = "zh-CN") {
   )
 
   const resetTranscript = useCallback(() => {
+    cancelledRef.current = true
     setTranscript("")
     setInterimTranscript("")
+    setPhase("idle")
   }, [])
 
   return {
     isSupported,
     isListening,
+    phase,
     transcript,
     interimTranscript,
     error,

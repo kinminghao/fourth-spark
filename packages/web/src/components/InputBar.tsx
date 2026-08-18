@@ -15,7 +15,10 @@ import type { ModelInfo } from "../lib/api-client"
 import { getSettings, listModels } from "../lib/api-client"
 import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
 import { VoiceButton } from "./VoiceButton"
+import { VoiceConfirmPanel } from "./VoiceConfirmPanel"
+import { VoiceRecordingOverlay } from "./VoiceRecordingOverlay"
 import { useSpeechToText } from "../hooks/use-speech-to-text"
+import { useIsMobile } from "../hooks/use-is-mobile"
 
 const MAX_HEIGHT_PX = 200
 
@@ -41,7 +44,7 @@ export function InputBar() {
   const [pinnedModels, setPinnedModels] = useState<ModelInfo[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const stt = useSpeechToText()
-  const preVoiceValueRef = useRef("")
+  const isMobile = useIsMobile()
 
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
@@ -118,31 +121,38 @@ export function InputBar() {
   }
 
   const handleVoiceToggle = () => {
-    if (stt.isListening) {
-      stt.stop()
+    if (stt.phase !== "idle") {
+      void stt.stop()
     } else {
-      preVoiceValueRef.current = value
       stt.start()
     }
   }
 
-  // Sync voice transcript → textarea while recording
-  useEffect(() => {
-    if (stt.isListening) {
-      setValue(preVoiceValueRef.current + stt.transcript + stt.interimTranscript)
+  const handleVoiceConfirm = (text: string) => {
+    const trimmed = text.trim()
+    if (trimmed.length > 0) {
+      const needsSpace = value.length > 0 && !/\s$/.test(value)
+      const merged = value + (needsSpace ? " " : "") + trimmed
+      setValue(merged)
+      if (activeSessionId) setDraft(activeSessionId, merged)
     }
-  }, [stt.isListening, stt.transcript, stt.interimTranscript])
+    stt.resetTranscript()
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(el.value.length, el.value.length)
+    })
+  }
 
-  // Commit transcript when recording ends (handles async server engine)
-  const wasListeningRef = useRef(false)
-  useEffect(() => {
-    if (wasListeningRef.current && !stt.isListening && stt.transcript) {
-      const committed = preVoiceValueRef.current + stt.transcript
-      setValue(committed)
-      if (activeSessionId) setDraft(activeSessionId, committed)
-    }
-    wasListeningRef.current = stt.isListening
-  }, [stt.isListening, stt.transcript, activeSessionId, setDraft])
+  const handleVoiceCancel = () => {
+    void stt.stop()
+    stt.resetTranscript()
+  }
+
+  const handleVoiceStop = () => {
+    void stt.stop()
+  }
 
   const placeholder = !activeSessionId
     ? "select or start a run"
@@ -154,16 +164,33 @@ export function InputBar() {
 
   const promptColor = !activeSessionId
     ? "text-fg-6"
-    : stt.isListening
-      ? "text-red-400 fs-blink"
-      : busy
-        ? "text-amber-400 fs-blink"
-        : hasPendingQuestion
-          ? "text-blue-400"
-          : "text-emerald-400"
+    : busy
+      ? "text-amber-400 fs-blink"
+      : hasPendingQuestion
+        ? "text-blue-400"
+        : "text-emerald-400"
 
   return (
     <div className="border-t border-line bg-term px-4 py-4">
+      {isMobile && stt.phase === "recording" && (
+        <VoiceRecordingOverlay
+          volumeLevel={stt.volumeLevel}
+          onStop={handleVoiceStop}
+          onCancel={handleVoiceCancel}
+        />
+      )}
+      {stt.phase !== "idle" && (
+        <VoiceConfirmPanel
+          phase={stt.phase}
+          transcript={stt.transcript}
+          interimTranscript={stt.interimTranscript}
+          volumeLevel={stt.volumeLevel}
+          error={stt.error}
+          onConfirm={handleVoiceConfirm}
+          onCancel={handleVoiceCancel}
+          onStop={handleVoiceStop}
+        />
+      )}
       <AttachmentStrip
         attachments={attachments}
         error={attachError}
@@ -175,9 +202,7 @@ export function InputBar() {
           "mx-auto flex max-w-4xl items-start gap-2 rounded-lg border px-3 py-2 transition-colors duration-150",
           disabled
             ? "border-line"
-            : stt.isListening
-              ? "border-red-500/60"
-              : "border-fg-5 focus-within:border-fg-4",
+            : "border-fg-5 focus-within:border-fg-4",
         )}
       >
         <span className={clsx("select-none pt-px font-mono text-sm leading-6", promptColor)}>
@@ -220,18 +245,7 @@ export function InputBar() {
         </button>
       </div>
       <div className="mx-auto mt-1.5 flex max-w-4xl items-center gap-3 pl-5">
-        {stt.isListening && (
-          <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[10px] text-red-400">● 录音中</span>
-            <div className="h-1 w-16 overflow-hidden rounded-full bg-fg-6/30">
-              <div
-                className="h-full rounded-full bg-red-400 transition-[width] duration-75"
-                style={{ width: `${Math.round(stt.volumeLevel * 100)}%` }}
-              />
-            </div>
-          </div>
-        )}
-        {stt.error && (
+        {stt.error && stt.phase === "idle" && (
           <span className="font-mono text-[10px] text-red-400">{stt.error}</span>
         )}
         <span className="font-mono text-[10px] text-fg-6">⏎ to run · shift+⏎ for newline</span>
