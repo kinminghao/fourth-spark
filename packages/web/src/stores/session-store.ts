@@ -207,9 +207,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const repoId = getRepoId()
     if (!repoId) return
 
+    const isInitialLoad = !get().messages[id] || get().messages[id].length === 0
+    const msgsOpts = isInitialLoad ? { limit: MESSAGES_PAGE_SIZE } : undefined
+
     const [snapResult, msgsResult] = await Promise.allSettled([
       api.getSessionSnapshot(repoId, id),
-      api.getMessages(repoId, id, { limit: MESSAGES_PAGE_SIZE }),
+      api.getMessages(repoId, id, msgsOpts),
     ])
 
     const snap = snapResult.status === "fulfilled" ? snapResult.value : null

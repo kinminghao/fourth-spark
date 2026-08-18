@@ -1,4 +1,4 @@
-import { eq, desc, asc, lt, and, or, inArray, count, sql } from "drizzle-orm"
+import { eq, desc, asc, lt, and, or, inArray, count } from "drizzle-orm"
 import { db } from "./index"
 import { sessions, messages, parts, todos, repos, sessionLinks, issues, pullRequests } from "./schema"
 
