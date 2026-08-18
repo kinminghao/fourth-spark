@@ -88,6 +88,15 @@ export async function startCommand(args: string[]): Promise<void> {
           await new Promise((r) => setTimeout(r, 500))
         }
       }
+      if (ready) {
+        // Docker port forwarding may lag behind container readiness (especially on macOS)
+        let hostReachable = false
+        for (let i = 0; i < 20; i++) {
+          if (await isPortReachable(PG_PORT)) { hostReachable = true; break }
+          await new Promise((r) => setTimeout(r, 500))
+        }
+        if (!hostReachable) ready = false
+      }
       console.log(ready ? "  PostgreSQL ready" : "  Warning: PostgreSQL may not be ready")
     } catch {
       console.error("ERROR: Could not start PostgreSQL via Docker.")
