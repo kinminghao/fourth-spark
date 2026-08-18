@@ -5,8 +5,8 @@ import { sessionMonitor } from "../lib/session-monitor"
 import { workspaceManager } from "../lib/workspace-manager"
 import { DEFAULT_VARIANT } from "../lib/config"
 import { resolveAgent } from "../lib/agent-validator"
-import { syncSessionsList, syncMessagesList } from "../db/sync"
-import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFromDB, getTodosFromDB } from "../db/query"
+import { syncSessionsList, syncMessagesList, syncMessagesListSync } from "../db/sync"
+import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFromDB, getMessagesPaginated, getMessageCount, getTodosFromDB, getSessionLinksFromDB } from "../db/query"
 import { db } from "../db/index"
 import { sessions as sessionsTable, issues, issueComments, customAgents, customAgentFragments, promptFragments, sessionLinks, pullRequests, repos } from "../db/schema"
 import { logger } from "../middleware/logger"
@@ -292,6 +292,25 @@ sessions.get("/all-links", async (c) => {
   return c.json(result)
 })
 
+sessions.get("/snapshot/:id", async (c) => {
+  const repoId = c.req.param("repoId")
+  const sessionId = c.req.param("id")
+
+  const client = runtimeManager.getClient(repoId)
+  const statusPromise = client
+    ? client.getSessionStatus().then((all) => all[sessionId] ?? { type: "idle" }).catch(() => ({ type: "idle" as const }))
+    : Promise.resolve({ type: "idle" as const })
+
+  const [session, todos, status, links] = await Promise.all([
+    getSessionFromDB(sessionId),
+    getTodosFromDB(sessionId),
+    statusPromise,
+    getSessionLinksFromDB(sessionId),
+  ])
+
+  return c.json({ session, todos, status, links })
+})
+
 sessions.get("/status", async (c) => {
   const repoId = c.req.param("repoId")
   const client = runtimeManager.getClient(repoId)
@@ -402,6 +421,32 @@ sessions.post("/:id/questions/reject", async (c) => {
 sessions.get("/:id/messages", async (c) => {
   const repoId = c.req.param("repoId")
   const id = c.req.param("id")
+  const limit = Math.min(Math.max(Number(c.req.query("limit")) || 0, 0), 100)
+  const before = c.req.query("before") || undefined
+
+  if (limit > 0) {
+    const dbCount = await getMessageCount(id)
+    if (dbCount === 0) {
+      const client = runtimeManager.getClient(repoId)
+      if (client) {
+        try {
+          const msgs = await client.getMessages(id)
+          await syncMessagesListSync(id, msgs)
+        } catch (err) {
+          logger.warn({ err, repoId }, "opencode unavailable for initial sync in paginated path")
+        }
+      }
+    } else {
+      const client = runtimeManager.getClient(repoId)
+      if (client) {
+        client.getMessages(id)
+          .then((msgs) => syncMessagesList(id, msgs))
+          .catch(() => {})
+      }
+    }
+    return c.json(await getMessagesPaginated(id, limit, before))
+  }
+
   const client = runtimeManager.getClient(repoId)
   if (client) {
     try {

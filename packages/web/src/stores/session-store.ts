@@ -51,10 +51,19 @@ function getRepoId(): string | null {
   return useRepoStore.getState().activeRepoId
 }
 
+const MESSAGES_PAGE_SIZE = 20
+
+export interface MessagesMeta {
+  total: number
+  hasMore: boolean
+  loading: boolean
+}
+
 interface SessionState {
   sessions: Session[]
   activeSessionId: string | null
   messages: Record<string, Message[]>
+  messagesMeta: Record<string, MessagesMeta>
   todos: Record<string, Todo[]>
   sessionStatuses: Record<string, string>
   errorReasons: Record<string, string>
@@ -72,6 +81,7 @@ interface SessionState {
   createSession: (message: string, agent?: string, model?: string, variant?: string, issueId?: string, customAgentId?: string, files?: PromptFile[]) => Promise<Session | null>
   setActiveSession: (id: string) => Promise<void>
   refreshSessionData: (id: string) => Promise<void>
+  loadMoreMessages: (sessionId: string) => Promise<void>
   refreshSessionLinks: (id: string) => Promise<void>
   addLink: (sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
   removeLink: (sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
@@ -105,6 +115,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   sessions: [],
   activeSessionId: null,
   messages: {},
+  messagesMeta: {},
   todos: {},
   sessionStatuses: {},
   errorReasons: {},
@@ -195,49 +206,83 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   refreshSessionData: async (id) => {
     const repoId = getRepoId()
     if (!repoId) return
-    const [messages, todos, status, sessionInfo, links] = await Promise.allSettled([
-      api.getMessages(repoId, id),
-      api.getTodos(repoId, id),
-      api.getSessionStatus(repoId, id),
-      api.getSession(repoId, id),
-      api.getSessionLinks(repoId, id),
-    ])
-    const revertMessageID = sessionInfo.status === "fulfilled"
-      ? sessionInfo.value.revert?.messageID
-      : undefined
 
-    set((state) => {
-      const next: Partial<SessionState> = {}
-      if (messages.status === "fulfilled") {
-        let msgs = messages.value
-        if (revertMessageID) {
-          const cutIdx = msgs.findIndex((m) => m.id === revertMessageID)
-          if (cutIdx >= 0) msgs = msgs.slice(0, cutIdx + 1)
+    api.getSessionSnapshot(repoId, id).then((snap) => {
+      set((state) => {
+        const next: Partial<SessionState> = {}
+        if (snap.status) {
+          next.sessionStatuses = { ...state.sessionStatuses, [id]: snap.status.type }
         }
-        next.messages = { ...state.messages, [id]: msgs }
-      }
-      if (todos.status === "fulfilled") {
-        next.todos = { ...state.todos, [id]: todos.value }
-      }
-      if (status.status === "fulfilled") {
-        next.sessionStatuses = {
-          ...state.sessionStatuses,
-          [id]: status.value.type,
+        if (snap.todos) {
+          next.todos = { ...state.todos, [id]: snap.todos }
         }
+        if (snap.links) {
+          next.sessionLinks = { ...state.sessionLinks, [id]: snap.links }
+        }
+        if (snap.session) {
+          next.sessions = state.sessions.map((s) =>
+            s.id === id ? { ...s, ...snap.session } : s,
+          )
+        }
+        return next
+      })
+    }).catch(() => {})
+
+    try {
+      const result = await api.getMessages(repoId, id, { limit: MESSAGES_PAGE_SIZE })
+      set((state) => ({
+        messages: { ...state.messages, [id]: result.messages },
+        messagesMeta: {
+          ...state.messagesMeta,
+          [id]: { total: result.total, hasMore: result.hasMore, loading: false },
+        },
+      }))
+      if (hasAnyPendingQuestion(result.messages)) {
+        fireQuestionToast(id, get().sessions)
       }
-      if (sessionInfo.status === "fulfilled") {
-        const fresh = sessionInfo.value
-        next.sessions = state.sessions.map((s) =>
-          s.id === id ? { ...s, ...fresh } : s,
-        )
-      }
-      if (links.status === "fulfilled") {
-        next.sessionLinks = { ...state.sessionLinks, [id]: links.value }
-      }
-      return next
-    })
-    if (messages.status === "fulfilled" && hasAnyPendingQuestion(messages.value)) {
-      fireQuestionToast(id, get().sessions)
+    } catch {
+      // best-effort
+    }
+  },
+
+  loadMoreMessages: async (sessionId) => {
+    const repoId = getRepoId()
+    if (!repoId) return
+    const meta = get().messagesMeta[sessionId]
+    if (!meta?.hasMore || meta.loading) return
+
+    const existing = get().messages[sessionId] ?? []
+    const oldestId = existing[0]?.id
+
+    set((state) => ({
+      messagesMeta: {
+        ...state.messagesMeta,
+        [sessionId]: { ...meta, loading: true },
+      },
+    }))
+
+    try {
+      const result = await api.getMessages(repoId, sessionId, {
+        limit: MESSAGES_PAGE_SIZE,
+        before: oldestId,
+      })
+      set((state) => {
+        const current = state.messages[sessionId] ?? []
+        return {
+          messages: { ...state.messages, [sessionId]: [...result.messages, ...current] },
+          messagesMeta: {
+            ...state.messagesMeta,
+            [sessionId]: { total: result.total, hasMore: result.hasMore, loading: false },
+          },
+        }
+      })
+    } catch {
+      set((state) => ({
+        messagesMeta: {
+          ...state.messagesMeta,
+          [sessionId]: { ...meta, loading: false },
+        },
+      }))
     }
   },
 
@@ -295,6 +340,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     delete _pendingQueueMarks[id]
     set((state) => {
       const { [id]: _removedMessages, ...messages } = state.messages
+      const { [id]: _removedMeta, ...messagesMeta } = state.messagesMeta
       const { [id]: _removedTodos, ...todos } = state.todos
       const { [id]: _removedStatus, ...sessionStatuses } = state.sessionStatuses
       const { [id]: _removedReason, ...errorReasons } = state.errorReasons
@@ -304,6 +350,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       return {
         sessions: state.sessions.filter((s) => s.id !== id),
         messages,
+        messagesMeta,
         todos,
         sessionStatuses,
         errorReasons,
@@ -391,6 +438,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       sessions: [],
       activeSessionId: null,
       messages: {},
+      messagesMeta: {},
       todos: {},
       sessionStatuses: {},
       errorReasons: {},
@@ -409,6 +457,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       let next: Message[]
       let queuedMessageIds = state.queuedMessageIds
 
+      let messagesMeta = state.messagesMeta
       if (idx >= 0) {
         const merged: Message = { ...list[idx], ...message }
         if (
@@ -421,6 +470,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         next[idx] = merged
       } else {
         next = [...list, message]
+
+        const meta = messagesMeta[sessionId]
+        if (meta) {
+          messagesMeta = { ...messagesMeta, [sessionId]: { ...meta, total: meta.total + 1 } }
+        }
 
         const pending = _pendingQueueMarks[sessionId] || 0
         if (message.role === "user" && pending > 0) {
@@ -437,6 +491,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
       return {
         messages: { ...state.messages, [sessionId]: next },
+        messagesMeta,
         queuedMessageIds,
       }
     })

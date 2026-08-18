@@ -687,6 +687,11 @@ export function RunView({
     const id = state.activeSessionId
     return id ? state.errorReasons[id] : undefined
   })
+  const messagesMeta = useSessionStore((state) => {
+    const id = state.activeSessionId
+    return id ? state.messagesMeta[id] : undefined
+  })
+  const loadMoreMessages = useSessionStore((state) => state.loadMoreMessages)
   const sendError = useSessionStore((state) => state.sendError)
   const abortSession = useSessionStore((state) => state.abortSession)
   const revertToMessage = useSessionStore((state) => state.revertToMessage)
@@ -929,10 +934,40 @@ export function RunView({
               STICK_TO_BOTTOM_THRESHOLD_PX
             stickToBottomRef.current = atBottom
             setShowScrollToBottom(!atBottom)
+
+            if (
+              element.scrollTop < 200 &&
+              activeSessionId &&
+              messagesMeta?.hasMore &&
+              !messagesMeta.loading
+            ) {
+              const prevHeight = element.scrollHeight
+              loadMoreMessages(activeSessionId).then(() => {
+                requestAnimationFrame(() => {
+                  if (scrollRef.current) {
+                    scrollRef.current.scrollTop = scrollRef.current.scrollHeight - prevHeight
+                  }
+                })
+              })
+            }
           }}
           className="h-full overflow-y-auto"
         >
           <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-4">
+            {messagesMeta?.loading && (
+              <div className="flex justify-center py-2">
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-fg-5 border-t-transparent" />
+              </div>
+            )}
+            {messagesMeta && !messagesMeta.loading && messagesMeta.hasMore && (
+              <button
+                type="button"
+                onClick={() => activeSessionId && loadMoreMessages(activeSessionId)}
+                className="mx-auto rounded-md border border-line px-3 py-1 font-mono text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-2"
+              >
+                加载更早的消息
+              </button>
+            )}
             {messages.length === 0 ? (
               <p className="py-10 text-center font-mono text-xs text-fg-6">
                 <span className="text-emerald-500/60">❯</span> waiting for input
