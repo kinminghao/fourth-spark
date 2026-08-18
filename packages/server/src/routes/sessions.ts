@@ -297,16 +297,29 @@ sessions.get("/snapshot/:id", async (c) => {
   const sessionId = c.req.param("id")
 
   const client = runtimeManager.getClient(repoId)
+
+  const liveSessionPromise = client
+    ? client.getSession(sessionId).catch(() => null)
+    : Promise.resolve(null)
   const statusPromise = client
     ? client.getSessionStatus().then((all) => all[sessionId] ?? { type: "idle" }).catch(() => ({ type: "idle" as const }))
     : Promise.resolve({ type: "idle" as const })
+  const liveTodosPromise = client
+    ? client.getTodos(sessionId).catch(() => null)
+    : Promise.resolve(null)
 
-  const [session, todos, status, links] = await Promise.all([
+  const [dbSession, liveSession, liveTodos, status, links] = await Promise.all([
     getSessionFromDB(sessionId),
-    getTodosFromDB(sessionId),
+    liveSessionPromise,
+    liveTodosPromise,
     statusPromise,
     getSessionLinksFromDB(sessionId),
   ])
+
+  const session = liveSession
+    ? { ...liveSession, ...(dbSession ? { cost: dbSession.cost, tokens: dbSession.tokens, model: dbSession.model } : {}) }
+    : dbSession
+  const todos = liveTodos ?? await getTodosFromDB(sessionId)
 
   return c.json({ session, todos, status, links })
 })

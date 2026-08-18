@@ -1,4 +1,4 @@
-import { eq, desc, asc, lt, and, inArray, count } from "drizzle-orm"
+import { eq, desc, asc, lt, and, or, inArray, count, sql } from "drizzle-orm"
 import { db } from "./index"
 import { sessions, messages, parts, todos, repos, sessionLinks, issues, pullRequests } from "./schema"
 
@@ -76,19 +76,27 @@ export async function getMessagesPaginated(
   before?: string,
 ) {
   let cursorTime: number | undefined
+  let cursorId: string | undefined
   if (before) {
-    const [cursor] = await db.select({ timeCreated: messages.timeCreated })
+    const [cursor] = await db.select({ timeCreated: messages.timeCreated, id: messages.id })
       .from(messages).where(eq(messages.id, before))
     cursorTime = cursor?.timeCreated
+    cursorId = cursor?.id
   }
 
-  const condition = cursorTime != null
-    ? and(eq(messages.sessionId, sessionId), lt(messages.timeCreated, cursorTime))
+  const cursorCondition = cursorTime != null && cursorId != null
+    ? or(
+        lt(messages.timeCreated, cursorTime),
+        and(eq(messages.timeCreated, cursorTime), lt(messages.id, cursorId)),
+      )
+    : undefined
+  const condition = cursorCondition
+    ? and(eq(messages.sessionId, sessionId), cursorCondition)
     : eq(messages.sessionId, sessionId)
 
   const msgRows = await db.select().from(messages)
     .where(condition)
-    .orderBy(desc(messages.timeCreated))
+    .orderBy(desc(messages.timeCreated), desc(messages.id))
     .limit(limit + 1)
 
   const hasMore = msgRows.length > limit

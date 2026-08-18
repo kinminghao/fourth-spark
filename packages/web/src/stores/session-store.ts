@@ -207,9 +207,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const repoId = getRepoId()
     if (!repoId) return
 
-    api.getSessionSnapshot(repoId, id).then((snap) => {
-      set((state) => {
-        const next: Partial<SessionState> = {}
+    const [snapResult, msgsResult] = await Promise.allSettled([
+      api.getSessionSnapshot(repoId, id),
+      api.getMessages(repoId, id, { limit: MESSAGES_PAGE_SIZE }),
+    ])
+
+    const snap = snapResult.status === "fulfilled" ? snapResult.value : null
+    const revertMessageID = snap?.session?.revert?.messageID
+
+    set((state) => {
+      const next: Partial<SessionState> = {}
+      if (snap) {
         if (snap.status) {
           next.sessionStatuses = { ...state.sessionStatuses, [id]: snap.status.type }
         }
@@ -224,24 +232,23 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             s.id === id ? { ...s, ...snap.session } : s,
           )
         }
-        return next
-      })
-    }).catch(() => {})
-
-    try {
-      const result = await api.getMessages(repoId, id, { limit: MESSAGES_PAGE_SIZE })
-      set((state) => ({
-        messages: { ...state.messages, [id]: result.messages },
-        messagesMeta: {
-          ...state.messagesMeta,
-          [id]: { total: result.total, hasMore: result.hasMore, loading: false },
-        },
-      }))
-      if (hasAnyPendingQuestion(result.messages)) {
-        fireQuestionToast(id, get().sessions)
       }
-    } catch {
-      // best-effort
+      if (msgsResult.status === "fulfilled") {
+        let msgs = msgsResult.value.messages
+        if (revertMessageID) {
+          const cutIdx = msgs.findIndex((m) => m.id === revertMessageID)
+          if (cutIdx >= 0) msgs = msgs.slice(0, cutIdx + 1)
+        }
+        next.messages = { ...state.messages, [id]: msgs }
+        next.messagesMeta = {
+          ...state.messagesMeta,
+          [id]: { total: msgsResult.value.total, hasMore: msgsResult.value.hasMore, loading: false },
+        }
+      }
+      return next
+    })
+    if (msgsResult.status === "fulfilled" && hasAnyPendingQuestion(msgsResult.value.messages)) {
+      fireQuestionToast(id, get().sessions)
     }
   },
 
