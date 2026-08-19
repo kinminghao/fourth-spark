@@ -13,6 +13,7 @@ import { repoRoutes } from "./routes/repos"
 import { usageRoutes } from "./routes/usage"
 import { globalAgentsMd, repoAgentsMd } from "./routes/agents-md"
 import { globalCustomAgents, repoCustomAgents } from "./routes/custom-agents"
+import { agentMemoryRoutes, agentSessionRoutes } from "./routes/agent-memories"
 import { globalFragments, repoFragments } from "./routes/prompt-fragments"
 import { modelRoutes } from "./routes/models"
 import { mcpRoute } from "./routes/mcp"
@@ -54,6 +55,8 @@ app.route("/api/push", pushRoutes)
 app.route("/api/transcribe", transcribeRoute)
 app.route("/api/agents-md", globalAgentsMd)
 app.route("/api/custom-agents", globalCustomAgents)
+app.route("/api/custom-agents/:agentId/memories", agentMemoryRoutes)
+app.route("/api/custom-agents/:agentId/sessions", agentSessionRoutes)
 app.route("/api/prompt-fragments", globalFragments)
 app.route("/api/repos", repoAgentsMd)
 

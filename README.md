@@ -20,7 +20,7 @@ Server (Bun + Hono :3000)
     ├── AccountPool ─────── 本地多账号轮换 或 Cloud 账号池 (lease)
     ├── MCP Server ──────── Git 平台操作代理 (GitHub · Gitea · GitLab)
     ├── Notifications ───── macOS 桌面通知 + iOS APNs 推送
-    └── PostgreSQL ──────── 18 张表全量持久化
+    └── PostgreSQL ──────── 19 张表全量持久化
 ```
 
 每个仓库对应一个独立的 [OpenCode](https://opencode.ai/) 进程，端口自动分配，互不干扰。
@@ -55,7 +55,7 @@ fourth-spark start              # 拉起 PostgreSQL + 后台启动
 
 **[Cloud 账号池](docs/features/cloud-account-pool.md)** — 可选连接 [claude-accounts-pool](https://github.com/nicepkg/claude-accounts-pool) Master 服务器，多台机器共享账号池，自动 lease 续约和 rate limit 上报，在设置页面一键切换本地 / 云端模式
 
-**[数据持久化](docs/features/data-persistence.md)** — 会话、消息、工具调用、Todo、Issue、PR、Milestone、标签、Custom Agent、Prompt 片段、Workspace、Session 关联等全量存入 PostgreSQL（18 张表），进程重启不丢数据
+**[数据持久化](docs/features/data-persistence.md)** — 会话、消息、工具调用、Todo、Issue、PR、Milestone、标签、Custom Agent、Prompt 片段、Workspace、Session 关联、Agent 记忆等全量存入 PostgreSQL（19 张表），进程重启不丢数据
 
 ## CLI
 
@@ -107,4 +107,4 @@ make dev      # 启动 Server (:3000) + Web (:5173)
 | [Session 管理](docs/features/session-management.md) | 生命周期、Issue/PR 关联、Workspace 绑定、数据同步 |
 | [智能运维](docs/features/smart-ops.md) | 截断续写、空响应重试、账号轮换、通知系统、参数配置 |
 | [Cloud 账号池](docs/features/cloud-account-pool.md) | Lease 协议、LeaseKeeper、Rate Limit 上报、模式切换 |
-| [数据持久化](docs/features/data-persistence.md) | 18 张表 Schema、同步机制、迁移流程、索引策略 |
+| [数据持久化](docs/features/data-persistence.md) | 19 张表 Schema、同步机制、迁移流程、索引策略 |

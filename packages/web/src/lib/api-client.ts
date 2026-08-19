@@ -596,6 +596,55 @@ export async function importCustomAgent(data: CustomAgentExport): Promise<Custom
   return apiFetch<CustomAgent>("/api/custom-agents/import", { method: "POST", body: JSON.stringify(data) })
 }
 
+export interface AgentMemory {
+  id: string
+  customAgentId: string
+  sessionId: string | null
+  mergedFrom: string[] | null
+  content: string
+  category: string
+  importance: number
+  supersededBy: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+export async function listAgentMemories(agentId: string, opts?: { category?: string; includeSuperseded?: boolean }): Promise<AgentMemory[]> {
+  const params = new URLSearchParams()
+  if (opts?.category) params.set("category", opts.category)
+  if (opts?.includeSuperseded) params.set("includeSuperseded", "true")
+  const qs = params.toString()
+  return apiFetch<AgentMemory[]>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories${qs ? `?${qs}` : ""}`)
+}
+
+export async function updateAgentMemory(agentId: string, memId: string, data: { content?: string; category?: string; importance?: number }): Promise<AgentMemory> {
+  return apiFetch<AgentMemory>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(memId)}`, { method: "PUT", body: JSON.stringify(data) })
+}
+
+export async function deleteAgentMemory(agentId: string, memId: string): Promise<void> {
+  await apiFetch<void>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(memId)}`, { method: "DELETE" })
+}
+
+export async function extractAgentMemories(agentId: string, sessionIds: string[]): Promise<{ queued: number }> {
+  return apiFetch<{ queued: number }>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/extract`, { method: "POST", body: JSON.stringify({ sessionIds }) })
+}
+
+export interface AgentSession {
+  id: string
+  title: string
+  agent: string | null
+  cost: number
+  tokensInput: number
+  tokensOutput: number
+  timeCreated: number
+  timeUpdated: number
+  completedAt: number | null
+}
+
+export async function listAgentSessions(agentId: string): Promise<AgentSession[]> {
+  return apiFetch<AgentSession[]>(`/api/custom-agents/${encodeURIComponent(agentId)}/sessions`)
+}
+
 export async function listRepoCustomAgents(repoId: string): Promise<CustomAgent[]> {
   return unwrapList<CustomAgent>(await apiFetch<unknown>(`${repoBase(repoId)}/custom-agents`))
 }

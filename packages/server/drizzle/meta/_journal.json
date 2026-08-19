@@ -43,6 +43,13 @@
       "when": 1786330620604,
       "tag": "0005_deep_mysterio",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787097786560,
+      "tag": "0006_conscious_thundra",
+      "breakpoints": true
     }
   ]
 }

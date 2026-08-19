@@ -8,7 +8,7 @@
 - **ORM**：Drizzle ORM，schema 定义在 `packages/server/src/db/schema.ts`
 - **迁移**：开发环境用 `drizzle-kit push` 直接推送 schema；生产环境用 `drizzle-kit generate` + SQL 迁移文件
 
-## Schema（18 张表）
+## Schema（19 张表）
 
 ### 核心业务表
 
@@ -40,6 +40,7 @@
 | `custom_agents` | 自定义 Agent | name, base_agent, model, system_prompt, system_prompt_position, is_system, repo_id |
 | `custom_agent_fragments` | Agent ↔ 片段关联 | custom_agent_id, fragment_id, position |
 | `prompt_fragments` | 可复用提示词片段 | name, content, repo_id, sort_order |
+| `agent_memories` | Agent 记忆 | custom_agent_id, session_id, content, category, importance, superseded_by, merged_from (JSONB) |
 
 ### 系统表
 
