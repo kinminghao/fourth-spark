@@ -1,7 +1,8 @@
 import { Hono } from "hono"
-import { eq, and, isNull, desc } from "drizzle-orm"
+import { eq, and, isNull, desc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
+import { sessionMonitor } from "../lib/session-monitor"
 
 async function requireNonSystemAgent(agentId: string): Promise<{ error?: string; status?: number }> {
   const [agent] = await db.select({ id: customAgents.id, isSystem: customAgents.isSystem })
@@ -103,6 +104,35 @@ agentMemoryRoutes.delete("/:memId", async (c) => {
 
   await db.update(agentMemories).set({ supersededBy: "user-deleted", updatedAt: Date.now() }).where(eq(agentMemories.id, memId))
   return c.json({ ok: true })
+})
+
+agentMemoryRoutes.post("/extract", async (c) => {
+  const agentId = c.req.param("agentId")
+  if (!agentId) return c.json({ error: "Missing agentId", status: 400 }, 400)
+
+  const check = await requireNonSystemAgent(agentId)
+  if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
+
+  const body = await c.req.json<{ sessionIds: string[] }>()
+  if (!body.sessionIds?.length) return c.json({ error: "sessionIds is required", status: 400 }, 400)
+
+  const validSessions = await db.select({ id: sessionsTable.id })
+    .from(sessionsTable)
+    .where(and(
+      inArray(sessionsTable.id, body.sessionIds),
+      eq(sessionsTable.customAgentId, agentId),
+    ))
+
+  if (validSessions.length === 0) return c.json({ error: "No matching sessions found", status: 404 }, 404)
+
+  const repoId = sessionMonitor.getRunningRepoId()
+  if (!repoId) return c.json({ error: "No running repo available for extraction", status: 503 }, 503)
+
+  for (const session of validSessions) {
+    sessionMonitor.extractMemory(repoId, session.id)
+  }
+
+  return c.json({ queued: validSessions.length })
 })
 
 export const agentSessionRoutes = new Hono()

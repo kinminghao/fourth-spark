@@ -698,6 +698,17 @@ export const sessionMonitor = {
     logger.info({ sessionId }, "session marked as user-aborted, monitor will skip retry")
   },
 
+  extractMemory(repoId: string, sourceSessionId: string): void {
+    const entry = entries.find(e => e.repoId === repoId)
+    if (!entry) return
+    triggerMemoryExtraction(repoId, entry.client, sourceSessionId).catch(err =>
+      logger.warn({ err, sourceSessionId }, "manual memory extraction trigger failed"))
+  },
+
+  getRunningRepoId(): string | undefined {
+    return entries[0]?.repoId
+  },
+
   register(repoId: string, client: RuntimeClient): void {
     if (entries.some((e) => e.repoId === repoId)) return
     entries.push({ repoId, client })
