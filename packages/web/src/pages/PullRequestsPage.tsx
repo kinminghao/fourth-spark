@@ -2,12 +2,18 @@ import { useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   AlertTriangle,
+  ChevronDown,
   ChevronLeft,
+  ChevronRight,
   CircleDot,
   ExternalLink,
+  FileText,
+  GitCommit,
   GitMerge,
   GitPullRequest,
   Link2,
+  Minus,
+  Plus,
   RefreshCw,
   Search,
   X,
@@ -248,6 +254,7 @@ function PrDetail({
   const [comments, setComments] = useState<IssueComment[]>([])
   const [loadingComments, setLoadingComments] = useState(false)
   const [linkedIssues, setLinkedIssues] = useState<Issue[]>([])
+  const [filesExpanded, setFilesExpanded] = useState(false)
   const navigate = useNavigate()
   const unlinkIssue = usePrStore((s) => s.unlinkIssue)
 
@@ -454,6 +461,69 @@ function PrDetail({
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {(pr.commitCount != null || pr.additions != null) && (
+            <div className="mb-6 rounded-lg border border-line bg-elevated/30 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-fg-3">
+                {pr.commitCount != null && (
+                  <span className="flex items-center gap-1">
+                    <GitCommit className="h-3.5 w-3.5 text-fg-5" />
+                    <span className="font-medium">{pr.commitCount}</span> 次提交
+                  </span>
+                )}
+                {pr.changedFilesCount != null && (
+                  <span className="flex items-center gap-1">
+                    <FileText className="h-3.5 w-3.5 text-fg-5" />
+                    <span className="font-medium">{pr.changedFilesCount}</span> 个文件
+                  </span>
+                )}
+                {pr.additions != null && (
+                  <span className="flex items-center gap-1 text-emerald-400">
+                    <Plus className="h-3 w-3" />
+                    <span className="font-mono font-medium">{pr.additions}</span>
+                  </span>
+                )}
+                {pr.deletions != null && (
+                  <span className="flex items-center gap-1 text-red-400">
+                    <Minus className="h-3 w-3" />
+                    <span className="font-mono font-medium">{pr.deletions}</span>
+                  </span>
+                )}
+              </div>
+
+              {pr.diffStats && pr.diffStats.length > 0 && (
+                <div className="mt-3 border-t border-line pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setFilesExpanded((v) => !v)}
+                    className="flex w-full items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fg-4 transition-colors hover:text-fg-2"
+                  >
+                    {filesExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                    变更文件 ({pr.diffStats.length})
+                  </button>
+                  {filesExpanded && (
+                    <div className="mt-2 space-y-0.5">
+                      {pr.diffStats.map((f) => (
+                        <div key={f.filename} className="flex items-center gap-2 rounded px-2 py-1 text-xs hover:bg-elevated/50">
+                          <span className={clsx(
+                            "w-14 shrink-0 rounded px-1 py-0.5 text-center font-mono text-[10px] font-medium",
+                            f.status === "added" ? "bg-emerald-500/15 text-emerald-400"
+                              : f.status === "removed" ? "bg-red-500/15 text-red-400"
+                              : "bg-blue-500/15 text-blue-400",
+                          )}>
+                            {f.status === "added" ? "新增" : f.status === "removed" ? "删除" : f.status === "renamed" ? "重命名" : "修改"}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate font-mono text-fg-3" title={f.filename}>{f.filename}</span>
+                          <span className="shrink-0 font-mono text-[11px] text-emerald-400">+{f.additions}</span>
+                          <span className="shrink-0 font-mono text-[11px] text-red-400">-{f.deletions}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

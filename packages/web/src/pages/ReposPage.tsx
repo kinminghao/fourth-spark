@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   ArrowDownToLine,
   Check,
@@ -7,6 +7,7 @@ import {
   Circle,
   CircleDot,
   Copy,
+  Ellipsis,
   FileText,
   GitBranch,
   HardDrive,
@@ -229,6 +230,19 @@ export function ReposPage() {
   const [pullingId, setPullingId] = useState<string | null>(null)
   const addToast = useToastStore((s) => s.addToast)
   const [agentsMdRepo, setAgentsMdRepo] = useState<{ id: string; name: string } | null>(null)
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpenId) return
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpenId(null)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [menuOpenId])
 
   const handleToggle = async (repoId: string, running: boolean) => {
     setTogglingId(repoId)
@@ -382,46 +396,6 @@ export function ReposPage() {
                   <div className="mt-3 flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={async () => {
-                        const next = repo.runtimeType === "claude-code" ? "opencode" : "claude-code"
-                        await api.switchRuntime(repo.id, next)
-                        loadRepos()
-                      }}
-                      className={clsx(
-                        "flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
-                        repo.runtimeType === "claude-code"
-                          ? "border-orange-500/30 text-orange-600 hover:bg-orange-500/10"
-                          : "border-sky-500/30 text-sky-600 hover:bg-sky-500/10",
-                      )}
-                      title={`当前运行时: ${repo.runtimeType === "claude-code" ? "Claude Code" : "OpenCode"}，点击切换`}
-                    >
-                      {repo.runtimeType === "claude-code" ? "Claude" : "OpenCode"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await api.toggleWorktree(repo.id, !repo.worktreeEnabled)
-                        loadRepos()
-                      }}
-                      className={clsx(
-                        "flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
-                        repo.worktreeEnabled
-                          ? "border-violet-500/30 text-violet-600 hover:bg-violet-500/10"
-                          : "border-line text-fg-4 hover:bg-elevated hover:text-fg-2",
-                      )}
-                      title={repo.worktreeEnabled ? "Worktree 已开启" : "Worktree 已关闭"}
-                    >
-                      <GitBranch className="h-3 w-3" />Worktree
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAgentsMdRepo({ id: repo.id, name: repo.name })}
-                      className="flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-line px-2.5 text-xs font-medium text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
-                    >
-                      <FileText className="h-3 w-3" />配置
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => void handlePull(repo.id)}
                       disabled={pullingId === repo.id}
                       className="flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-blue-500/30 px-2.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/10 disabled:opacity-50"
@@ -451,33 +425,94 @@ export function ReposPage() {
                         <><Play className="h-3 w-3 fill-current" />启动</>
                       )}
                     </button>
-                    {confirmingId === repo.id ? (
-                      <>
+                    <div className="relative" ref={menuOpenId === repo.id ? menuRef : undefined}>
+                      <button
+                        type="button"
+                        onClick={() => setMenuOpenId(menuOpenId === repo.id ? null : repo.id)}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+                      >
+                        <Ellipsis className="h-4 w-4" />
+                      </button>
+                      {menuOpenId === repo.id && (
+                        <div className="absolute right-0 top-full z-20 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-line bg-elevated shadow-lg">
+                          <button
+                            type="button"
+                            className={clsx(
+                              "flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-base/60",
+                              repo.runtimeType === "claude-code" ? "text-orange-500" : "text-sky-500",
+                            )}
+                            onClick={async () => {
+                              setMenuOpenId(null)
+                              const next = repo.runtimeType === "claude-code" ? "opencode" : "claude-code"
+                              await api.switchRuntime(repo.id, next)
+                              loadRepos()
+                            }}
+                          >
+                            {repo.runtimeType === "claude-code" ? "Claude → OpenCode" : "OpenCode → Claude"}
+                          </button>
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-base/60"
+                            onClick={async () => {
+                              setMenuOpenId(null)
+                              await api.toggleWorktree(repo.id, !repo.worktreeEnabled)
+                              loadRepos()
+                            }}
+                          >
+                            <GitBranch className="h-3 w-3" />
+                            <span>Worktree</span>
+                            <span className={clsx("ml-auto text-[10px]", repo.worktreeEnabled ? "text-violet-500" : "text-fg-5")}>
+                              {repo.worktreeEnabled ? "已开启" : "已关闭"}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-base/60"
+                            onClick={() => {
+                              setMenuOpenId(null)
+                              setAgentsMdRepo({ id: repo.id, name: repo.name })
+                            }}
+                          >
+                            <FileText className="h-3 w-3" />
+                            配置
+                          </button>
+                          <div className="my-0.5 border-t border-line" />
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-500 transition-colors hover:bg-red-500/10"
+                            onClick={() => {
+                              setMenuOpenId(null)
+                              setConfirmingId(repo.id)
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            删除仓库
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {confirmingId === repo.id && (
+                    <div className="mt-2 flex items-center justify-between rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2">
+                      <span className="text-xs text-red-500">确认删除此仓库？</span>
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => { void removeRepo(repo.id); setConfirmingId(null) }}
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-500/30 text-red-500 transition-colors hover:bg-red-500/10"
+                          className="flex h-6 items-center gap-1 rounded border border-red-500/30 px-2 text-xs text-red-500 transition-colors hover:bg-red-500/10"
                         >
-                          <Check className="h-3.5 w-3.5" />
+                          <Check className="h-3 w-3" />确认
                         </button>
                         <button
                           type="button"
                           onClick={() => setConfirmingId(null)}
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:bg-elevated"
+                          className="flex h-6 items-center gap-1 rounded border border-line px-2 text-xs text-fg-4 transition-colors hover:bg-elevated"
                         >
-                          <X className="h-3.5 w-3.5" />
+                          取消
                         </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setConfirmingId(repo.id)}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line text-fg-5 transition-colors hover:bg-red-500/10 hover:text-red-500"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
+                      </div>
+                    </div>
+                  )}
 
                   {repo.worktreeEnabled && <WorkspacesSection repoId={repo.id} />}
                 </div>
