@@ -13,7 +13,10 @@ import remarkGfm from "remark-gfm"
 import clsx from "clsx"
 import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
 import { VoiceButton } from "./VoiceButton"
+import { VoiceConfirmPanel } from "./VoiceConfirmPanel"
+import { VoiceRecordingOverlay } from "./VoiceRecordingOverlay"
 import { useSpeechToText } from "../hooks/use-speech-to-text"
+import { useIsMobile } from "../hooks/use-is-mobile"
 import { MarkdownTable } from "./MarkdownTable"
 import {
   EMPTY_MESSAGES,
@@ -154,10 +157,9 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const [issueDropdownOpen, setIssueDropdownOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const issueComboRef = useRef<HTMLDivElement>(null)
-  const preVoiceValueRef = useRef("")
-  const wasListeningRef = useRef(false)
   const [models, setModels] = useState<ModelInfo[]>([])
   const stt = useSpeechToText()
+  const isMobile = useIsMobile()
   const createSession = useSessionStore((state) => state.createSession)
   const sendError = useSessionStore((state) => state.sendError)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
@@ -233,29 +235,46 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   }
 
   const handleVoiceToggle = () => {
-    if (stt.isListening) {
-      stt.stop()
+    if (stt.phase !== "idle") {
+      void stt.stop()
     } else {
-      preVoiceValueRef.current = draft
       stt.start()
     }
   }
 
-  useEffect(() => {
-    if (stt.isListening) {
-      setDraft(preVoiceValueRef.current + stt.transcript + stt.interimTranscript)
+  const handleVoiceConfirm = (text: string) => {
+    const trimmed = text.trim()
+    if (trimmed.length > 0) {
+      const needsSpace = draft.length > 0 && !/\s$/.test(draft)
+      setDraft(draft + (needsSpace ? " " : "") + trimmed)
     }
-  }, [stt.isListening, stt.transcript, stt.interimTranscript])
+    stt.resetTranscript()
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(el.value.length, el.value.length)
+    })
+  }
 
-  useEffect(() => {
-    if (wasListeningRef.current && !stt.isListening && stt.transcript) {
-      setDraft(preVoiceValueRef.current + stt.transcript)
-    }
-    wasListeningRef.current = stt.isListening
-  }, [stt.isListening, stt.transcript])
+  const handleVoiceCancel = () => {
+    void stt.stop()
+    stt.resetTranscript()
+  }
+
+  const handleVoiceStop = () => {
+    void stt.stop()
+  }
 
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center bg-term">
+      {isMobile && stt.phase === "recording" && (
+        <VoiceRecordingOverlay
+          volumeLevel={stt.volumeLevel}
+          onStop={handleVoiceStop}
+          onCancel={handleVoiceCancel}
+        />
+      )}
       <button
         type="button"
         onClick={onToggleSidebar}
@@ -275,14 +294,27 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
 
         <AttachmentStrip attachments={attachments} error={attachError} onRemove={remove} />
 
+        {stt.phase !== "idle" && (
+          <VoiceConfirmPanel
+            phase={stt.phase}
+            transcript={stt.transcript}
+            interimTranscript={stt.interimTranscript}
+            volumeLevel={stt.volumeLevel}
+            error={stt.error}
+            onConfirm={handleVoiceConfirm}
+            onCancel={handleVoiceCancel}
+            onStop={handleVoiceStop}
+          />
+        )}
+
         <div className={clsx(
           "rounded-xl border bg-base/80 shadow-sm transition-colors",
-          stt.isListening ? "border-red-500/60" : "border-line focus-within:border-fg-5",
+          "border-line focus-within:border-fg-5",
         )}>
           <div className="flex items-start gap-2 px-4 py-3">
             <span className={clsx(
               "select-none pt-px font-mono text-sm leading-6",
-              stt.isListening ? "text-red-400 fs-blink" : "text-emerald-400",
+              "text-emerald-400",
             )}>
               ❯
             </span>
@@ -320,22 +352,9 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
             </button>
           </div>
 
-          {(stt.isListening || stt.error) && (
-            <div className="flex items-center gap-3 border-t border-line/60 px-4 py-1.5">
-              {stt.isListening && (
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono text-[10px] text-red-400">● 录音中</span>
-                  <div className="h-1 w-16 overflow-hidden rounded-full bg-fg-6/30">
-                    <div
-                      className="h-full rounded-full bg-red-400 transition-[width] duration-75"
-                      style={{ width: `${Math.round(stt.volumeLevel * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-              {stt.error && (
-                <span className="font-mono text-[10px] text-red-400">{stt.error}</span>
-              )}
+          {stt.error && stt.phase === "idle" && (
+            <div className="border-t border-line/60 px-4 py-1.5">
+              <span className="font-mono text-[10px] text-red-400">{stt.error}</span>
             </div>
           )}
 
