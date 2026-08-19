@@ -43,10 +43,11 @@ export async function buildExtractionPrompt(sessionId: string, customAgentId: st
       if (part.type === "thinking") continue
 
       if (part.type === "text") {
-        const text = ((part as Record<string, unknown>).content as string) ?? ""
+        const p = part as Record<string, unknown>
+        const text = (p.content as string) ?? (p.text as string) ?? ""
         if (text.trim()) lines.push(`[${role}] ${text}`)
       } else if (part.type === "tool-call" || part.type === "tool-result") {
-        const toolName = (part as Record<string, unknown>).toolName as string ?? "tool"
+        const toolName = (part as Record<string, unknown>).toolName as string ?? (part as Record<string, unknown>).tool as string ?? "tool"
         const input = JSON.stringify((part as Record<string, unknown>).input ?? "").slice(0, TOOL_SUMMARY_LIMIT)
         const output = JSON.stringify((part as Record<string, unknown>).output ?? "").slice(0, TOOL_SUMMARY_LIMIT)
         if (part.type === "tool-call") {
