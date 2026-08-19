@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, Ban, Bot, Check, Clipboard, Clock, Cloud, Cpu, Download, Edit3, Eye, EyeOff, FileText, Gauge, GitBranch, Loader2, Plus, RefreshCw, Save, Search, Trash2, Upload, User, Users, Wifi, X, Zap } from "lucide-react"
+import { AlertTriangle, Ban, Bot, Brain, Check, Clipboard, Clock, Cloud, Cpu, Download, Edit3, Eye, EyeOff, FileText, Gauge, GitBranch, Loader2, Plus, RefreshCw, Save, Search, Trash2, Upload, User, Users, Wifi, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
-import type { AccountUsage, CustomAgent, CustomAgentExport, GitHost, ModelInfo, PromptFragment, UsageResult, UsageWindow } from "../lib/api-client"
+import type { AccountUsage, AgentMemory, CustomAgent, CustomAgentExport, GitHost, ModelInfo, PromptFragment, UsageResult, UsageWindow } from "../lib/api-client"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useRepoStore } from "../stores/repo-store"
 import { isNativePlatform, getServerUrl, setServerUrl } from "../lib/config"
@@ -757,9 +757,234 @@ function ModelManagementSection() {
 
 const BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atlas - Plan Executor"]
 
+const CATEGORY_STYLES: Record<string, { bg: string; text: string }> = {
+  decision: { bg: "bg-blue-500/10", text: "text-blue-400" },
+  lesson: { bg: "bg-amber-500/10", text: "text-amber-400" },
+  preference: { bg: "bg-green-500/10", text: "text-green-400" },
+  pattern: { bg: "bg-purple-500/10", text: "text-purple-400" },
+  general: { bg: "bg-elevated", text: "text-fg-4" },
+}
+
+function formatRelativeTime(ts: number): string {
+  const diff = Date.now() - ts
+  const mins = Math.floor(diff / 60_000)
+  if (mins < 1) return "刚刚"
+  if (mins < 60) return `${mins} 分钟前`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours} 小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days} 天前`
+  return `${Math.floor(days / 30)} 个月前`
+}
+
+function MemoryItem({ memory, onUpdate, onDelete }: {
+  memory: AgentMemory
+  onUpdate: (memId: string, data: { content?: string; category?: string; importance?: number }) => Promise<void>
+  onDelete: (memId: string) => Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [content, setContent] = useState(memory.content)
+  const [category, setCategory] = useState(memory.category)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const style = CATEGORY_STYLES[memory.category] ?? CATEGORY_STYLES.general
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await onUpdate(memory.id, { content, category })
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setDeleting(false)
+    await onDelete(memory.id)
+  }
+
+  if (editing) {
+    return (
+      <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 space-y-2">
+        <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3}
+          className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+        <div className="flex items-center gap-3">
+          <select value={category} onChange={(e) => setCategory(e.target.value)}
+            className="rounded-md border border-line bg-surface px-2 py-1 text-xs text-fg focus:border-blue-500 focus:outline-none">
+            <option value="decision">decision</option>
+            <option value="lesson">lesson</option>
+            <option value="preference">preference</option>
+            <option value="pattern">pattern</option>
+            <option value="general">general</option>
+          </select>
+          <div className="flex-1" />
+          <button type="button" onClick={() => { setEditing(false); setContent(memory.content); setCategory(memory.category) }}
+            className="rounded-md px-3 py-1 text-xs text-fg-4 hover:bg-elevated">取消</button>
+          <button type="button" onClick={() => void handleSave()} disabled={saving || !content.trim()}
+            className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-40">
+            {saving ? "保存中…" : "保存"}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="group/mem rounded-lg border border-line bg-base px-3 py-2.5">
+      <div className="flex items-start gap-2">
+        <span className={clsx("mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium", style.bg, style.text)}>
+          {memory.category}
+        </span>
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-fg">{memory.content}</p>
+      </div>
+      <div className="mt-1.5 flex items-center gap-2 text-[11px] text-fg-5">
+        <span className="flex items-center gap-0.5">
+          <Zap className="h-3 w-3" /> {memory.importance.toFixed(2)}
+        </span>
+        <span>·</span>
+        <span>{formatRelativeTime(memory.updatedAt)}</span>
+        {memory.supersededBy && (
+          <>
+            <span>·</span>
+            <span className="text-amber-400">{memory.supersededBy === "user-deleted" ? "已删除" : "已合并"}</span>
+          </>
+        )}
+        <div className="flex-1" />
+        {!memory.supersededBy && (
+          <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/mem:opacity-100">
+            {deleting ? (
+              <>
+                <button type="button" onClick={() => void handleDelete()} className="rounded p-1 text-red-400 hover:bg-red-500/10">
+                  <Check className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" onClick={() => setDeleting(false)} className="rounded p-1 text-fg-4 hover:bg-elevated">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={() => setEditing(true)} className="rounded p-1 text-fg-5 hover:text-fg-3">
+                  <Edit3 className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" onClick={() => setDeleting(true)} className="rounded p-1 text-fg-5 hover:text-red-400">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MemoryPanel({ agentId }: { agentId: string }) {
+  const [memories, setMemories] = useState<AgentMemory[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<string | null>(null)
+  const [showSuperseded, setShowSuperseded] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await api.listAgentMemories(agentId, {
+        category: filter ?? undefined,
+        includeSuperseded: showSuperseded,
+      })
+      setMemories(data)
+    } catch {
+      setMemories([])
+    }
+    setLoading(false)
+  }, [agentId, filter, showSuperseded])
+
+  useEffect(() => { void load() }, [load])
+
+  const active = memories.filter(m => !m.supersededBy)
+  const superseded = memories.filter(m => m.supersededBy)
+
+  const handleUpdate = async (memId: string, data: { content?: string; category?: string; importance?: number }) => {
+    await api.updateAgentMemory(agentId, memId, data)
+    await load()
+  }
+
+  const handleDelete = async (memId: string) => {
+    await api.deleteAgentMemory(agentId, memId)
+    await load()
+  }
+
+  const categories = ["decision", "lesson", "preference", "pattern"] as const
+
+  return (
+    <div className="rounded-lg border border-line bg-surface p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Brain className="h-4 w-4 text-purple-400" />
+          <span className="text-xs font-semibold text-fg">记忆</span>
+          {!loading && <span className="rounded-full bg-elevated px-1.5 py-0.5 text-[10px] tabular-nums text-fg-4">{active.length}</span>}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button type="button" onClick={() => setFilter(null)}
+          className={clsx("rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+            filter === null ? "bg-fg/10 text-fg" : "text-fg-4 hover:text-fg-3")}>
+          全部
+        </button>
+        {categories.map(cat => {
+          const s = CATEGORY_STYLES[cat]
+          return (
+            <button key={cat} type="button" onClick={() => setFilter(filter === cat ? null : cat)}
+              className={clsx("rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                filter === cat ? clsx(s.bg, s.text) : "text-fg-4 hover:text-fg-3")}>
+              {cat}
+            </button>
+          )
+        })}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="h-4 w-4 fs-spin text-fg-5" />
+        </div>
+      ) : active.length === 0 && superseded.length === 0 ? (
+        <div className="py-6 text-center text-xs text-fg-5">
+          暂无记忆。使用此 Agent 完成 Session 后将自动提取。
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {active.map(m => (
+            <MemoryItem key={m.id} memory={m} onUpdate={handleUpdate} onDelete={handleDelete} />
+          ))}
+
+          {superseded.length > 0 && (
+            <div className="pt-1">
+              <button type="button" onClick={() => setShowSuperseded(!showSuperseded)}
+                className="flex items-center gap-1 text-[11px] text-fg-5 hover:text-fg-3">
+                <span>{showSuperseded ? "▾" : "▸"}</span>
+                已合并/已删除 ({superseded.length})
+              </button>
+              {showSuperseded && (
+                <div className="mt-1.5 space-y-1.5 opacity-60">
+                  {superseded.map(m => (
+                    <MemoryItem key={m.id} memory={m} onUpdate={handleUpdate} onDelete={handleDelete} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CustomAgentRow({ agent, onEdit, onDelete }: { agent: CustomAgent; onEdit: () => void; onDelete: () => void }) {
   const [confirming, setConfirming] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [memoryOpen, setMemoryOpen] = useState(false)
 
   const handleExportDownload = async () => {
     const data = await api.exportCustomAgent(agent.id)
@@ -780,51 +1005,59 @@ function CustomAgentRow({ agent, onEdit, onDelete }: { agent: CustomAgent; onEdi
   }
 
   return (
-    <div className="group flex items-center gap-3 rounded-lg border border-line bg-base px-4 py-3">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-fg">{agent.name}</span>
-          <span className="rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-4">{agent.baseAgent}</span>
-          {agent.model && (
-            <span className="rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">{agent.model}</span>
-          )}
-          {agent.repoId && (
-            <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">repo</span>
+    <div className="space-y-2">
+      <div className="group flex items-center gap-3 rounded-lg border border-line bg-base px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-fg">{agent.name}</span>
+            <span className="rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-4">{agent.baseAgent}</span>
+            {agent.model && (
+              <span className="rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">{agent.model}</span>
+            )}
+            {agent.repoId && (
+              <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">repo</span>
+            )}
+          </div>
+          {agent.systemPrompt && (
+            <p className="mt-0.5 truncate font-mono text-xs text-fg-5">{agent.systemPrompt}</p>
           )}
         </div>
-        {agent.systemPrompt && (
-          <p className="mt-0.5 truncate font-mono text-xs text-fg-5">{agent.systemPrompt}</p>
-        )}
+        <div className="flex items-center gap-1">
+          {confirming ? (
+            <>
+              <button type="button" onClick={onDelete} className="rounded p-1.5 text-red-400 hover:bg-red-500/10">
+                <Check className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => setConfirming(false)} className="rounded p-1.5 text-fg-4 hover:bg-elevated">
+                <X className="h-4 w-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={() => void handleExportDownload()} title="导出 JSON 文件"
+                className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100">
+                <Download className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => void handleExportCopy()} title="复制 JSON 到剪贴板"
+                className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100">
+                {copied ? <Check className="h-4 w-4 text-green-500" /> : <Clipboard className="h-4 w-4" />}
+              </button>
+              <button type="button" onClick={() => setMemoryOpen(!memoryOpen)} title="记忆"
+                className={clsx("rounded p-1.5 transition-opacity hover:text-purple-400",
+                  memoryOpen ? "text-purple-400" : "text-fg-5 opacity-0 group-hover:opacity-100")}>
+                <Brain className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={onEdit} className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100">
+                <Edit3 className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => setConfirming(true)} className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-1">
-        {confirming ? (
-          <>
-            <button type="button" onClick={onDelete} className="rounded p-1.5 text-red-400 hover:bg-red-500/10">
-              <Check className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={() => setConfirming(false)} className="rounded p-1.5 text-fg-4 hover:bg-elevated">
-              <X className="h-4 w-4" />
-            </button>
-          </>
-        ) : (
-          <>
-            <button type="button" onClick={() => void handleExportDownload()} title="导出 JSON 文件"
-              className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100">
-              <Download className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={() => void handleExportCopy()} title="复制 JSON 到剪贴板"
-              className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100">
-              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Clipboard className="h-4 w-4" />}
-            </button>
-            <button type="button" onClick={onEdit} className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100">
-              <Edit3 className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={() => setConfirming(true)} className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100">
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </>
-        )}
-      </div>
+      {memoryOpen && <MemoryPanel agentId={agent.id} />}
     </div>
   )
 }
