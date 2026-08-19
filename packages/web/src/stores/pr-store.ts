@@ -91,7 +91,7 @@ export const usePrStore = create<PrState>((set, get) => ({
     if (!repoId) return
     set({ syncing: true })
     try {
-      await api.syncPulls(repoId)
+      await api.syncPulls(repoId, "open")
       const pulls = await api.listPulls(repoId, "all")
       set({ pulls, syncing: false })
     } catch (err) {
