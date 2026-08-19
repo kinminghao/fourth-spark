@@ -26,34 +26,26 @@ export function VoiceButton({
     e.preventDefault()
     touchActiveRef.current = true
     onStart()
-  }
-
-  const handleTouchEnd = () => {
-    if (!touchActiveRef.current) return
-    touchActiveRef.current = false
-    onStop()
-  }
-
-  const handleTouchCancel = () => {
-    if (!touchActiveRef.current) return
-    touchActiveRef.current = false
-    onStop()
+    // Global listener guarantees stop fires even if the button shifts,
+    // is covered by the recording overlay, or the finger moves off it.
+    const stop = () => {
+      document.removeEventListener("touchend", stop)
+      document.removeEventListener("touchcancel", stop)
+      touchActiveRef.current = false
+      onStop()
+    }
+    document.addEventListener("touchend", stop, { once: true })
+    document.addEventListener("touchcancel", stop, { once: true })
   }
 
   const handleMouseDown = () => {
-    if (disabled) return
-    if (touchActiveRef.current) return
+    if (disabled || touchActiveRef.current) return
     onStart()
-  }
-
-  const handleMouseUp = () => {
-    if (touchActiveRef.current) return
-    onStop()
-  }
-
-  const handleMouseLeave = () => {
-    if (touchActiveRef.current) return
-    if (isListening) onStop()
+    const stop = () => {
+      document.removeEventListener("mouseup", stop)
+      onStop()
+    }
+    document.addEventListener("mouseup", stop, { once: true })
   }
 
   return (
@@ -61,14 +53,11 @@ export function VoiceButton({
       type="button"
       disabled={disabled}
       onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchCancel}
       onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
       onContextMenu={(e) => e.preventDefault()}
       aria-label="按住说话"
       title={error ?? "按住说话"}
+      style={{ WebkitTouchCallout: "none" }}
       className={clsx(
         "flex h-7 w-7 shrink-0 select-none touch-none items-center justify-center rounded-md transition-colors duration-150 disabled:cursor-not-allowed disabled:text-fg-6/40",
         isListening
