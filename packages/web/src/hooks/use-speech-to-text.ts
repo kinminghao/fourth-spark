@@ -418,6 +418,12 @@ export function useSpeechToText(lang = "zh-CN") {
       return
     }
 
+    // Web Speech API handles audio capture internally — opening a second
+    // getUserMedia stream on iOS Safari steals the mic from the recognition
+    // engine, causing it to receive silence.  Skip volume monitoring for
+    // streaming engines; interimResults already provides visual feedback.
+    if (webRecognitionRef.current) return
+
     let cancelled = false
     let monitorStream: MediaStream | null = null
     let monitorCtx: AudioContext | null = null
