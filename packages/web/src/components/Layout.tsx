@@ -20,6 +20,80 @@ function navPath(segment: string, global: boolean, repoName: string | null): str
   return repoName ? `/${encodeURIComponent(repoName)}/${segment}` : `/${segment}`
 }
 
+function shortRepoName(name: string): string {
+  const idx = name.lastIndexOf("/")
+  return idx >= 0 ? name.slice(idx + 1) : name
+}
+
+function RepoSwitcher({
+  repos,
+  activeRepoId,
+  onRepoChange,
+}: {
+  repos: Array<{ id: string; name: string }>
+  activeRepoId: string | null
+  onRepoChange: (repoId: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const activeRepo = repos.find((r) => r.id === activeRepoId)
+
+  const close = useCallback(() => setOpen(false), [])
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) close()
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [open, close])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex max-w-[140px] items-center gap-1 rounded-md border border-line bg-base px-2 py-1 text-xs text-fg-2 transition-colors hover:border-blue-500 sm:max-w-[200px]"
+      >
+        <Box className="h-3 w-3 shrink-0 text-fg-4" />
+        <span className="truncate">
+          <span className="sm:hidden">{activeRepo ? shortRepoName(activeRepo.name) : ""}</span>
+          <span className="hidden sm:inline">{activeRepo?.name ?? ""}</span>
+        </span>
+        <ChevronDown className={clsx("h-3 w-3 shrink-0 text-fg-4 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
+          <div className="max-h-64 overflow-y-auto py-1">
+            {repos.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => { onRepoChange(r.id); close() }}
+                className={clsx(
+                  "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors",
+                  r.id === activeRepoId
+                    ? "font-medium text-blue-600"
+                    : "text-fg-2 hover:bg-elevated",
+                )}
+              >
+                {r.id === activeRepoId ? (
+                  <Check className="h-3 w-3 shrink-0" />
+                ) : (
+                  <span className="h-3 w-3 shrink-0" />
+                )}
+                <span className="truncate">{r.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BranchSwitcher({ repoId, currentBranch }: { repoId: string; currentBranch: string | null }) {
   const updateRepoBranch = useRepoStore((s) => s.updateRepoBranch)
   const [open, setOpen] = useState(false)
@@ -196,12 +270,12 @@ function Header() {
       <div className="flex h-12 items-center justify-between px-4">
         <div className="flex items-center gap-2.5">
           <Zap className="h-5 w-5 text-blue-500" />
-          <span className="text-sm font-bold tracking-tight text-fg">Fourth Spark</span>
-          <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-fg-4">
+          <span className="hidden text-sm font-bold tracking-tight text-fg sm:inline">Fourth Spark</span>
+          <span className="hidden rounded bg-elevated px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-fg-4 sm:inline">
             v{__APP_VERSION__}
           </span>
           {latestVersion && (
-            <span className="text-[10px] text-amber-500">
+            <span className="hidden text-[10px] text-amber-500 sm:inline">
               → v{latestVersion} 可用，运行 <code className="rounded bg-amber-500/10 px-1 font-mono">fourth-spark upgrade</code> 更新
             </span>
           )}
@@ -210,15 +284,7 @@ function Header() {
         <div className="flex items-center gap-3">
           {repos.length > 0 && (
             <div className="flex items-center gap-2">
-              <select
-                value={activeRepoId ?? ""}
-                onChange={(e) => handleRepoChange(e.target.value)}
-                className="rounded-md border border-line bg-base px-2.5 py-1 text-xs text-fg-2 focus:border-blue-500 focus:outline-none"
-              >
-                {repos.map((r) => (
-                  <option key={r.id} value={r.id}>{r.name}</option>
-                ))}
-              </select>
+              <RepoSwitcher repos={repos} activeRepoId={activeRepoId} onRepoChange={handleRepoChange} />
               {activeRepo && activeRepoId && (
                 <BranchSwitcher repoId={activeRepoId} currentBranch={activeRepo.branch} />
               )}
@@ -245,6 +311,13 @@ function Header() {
           </button>
         </div>
       </div>
+      {latestVersion && (
+        <div className="border-t border-line px-4 py-1.5 sm:hidden">
+          <span className="text-[10px] text-amber-500">
+            → v{latestVersion} 可用，运行 <code className="rounded bg-amber-500/10 px-1 font-mono">fourth-spark upgrade</code> 更新
+          </span>
+        </div>
+      )}
     </header>
   )
 }
