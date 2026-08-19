@@ -421,6 +421,19 @@ export function ToolCallPanel({ part }: { part: MessagePart }) {
   const output = customOutput ? "" : formatToolPayload(rawOutput)
   const meta = STATUS_META[status]
 
+  const isEdit = lower === "edit" || lower === "patch"
+  let addedLines = 0
+  let removedLines = 0
+  if (isEdit) {
+    const rec = toRecord(rawInput)
+    if (rec) {
+      const oldStr = typeof rec.oldString === "string" ? rec.oldString : ""
+      const newStr = typeof rec.newString === "string" ? rec.newString : ""
+      if (oldStr) removedLines = oldStr.split("\n").length
+      if (newStr) addedLines = newStr.split("\n").length
+    }
+  }
+
   const outputTooLong = output.length > OUTPUT_TRUNCATE_LIMIT
   const shownOutput =
     outputExpanded || !outputTooLong
@@ -439,6 +452,12 @@ export function ToolCallPanel({ part }: { part: MessagePart }) {
         </span>
         <span className="shrink-0 font-medium text-fg">{label}</span>
         {arg && <span className="truncate text-fg-3">{arg}</span>}
+        {isEdit && (addedLines > 0 || removedLines > 0) && (
+          <span className="flex shrink-0 items-center gap-1.5 text-[11px] leading-none">
+            {addedLines > 0 && <span className="text-emerald-400">+{addedLines}</span>}
+            {removedLines > 0 && <span className="text-red-400">-{removedLines}</span>}
+          </span>
+        )}
         <span
           className={clsx(
             "ml-auto flex shrink-0 items-center gap-1.5 leading-none",
