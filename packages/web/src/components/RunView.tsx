@@ -13,8 +13,7 @@ import remarkGfm from "remark-gfm"
 import clsx from "clsx"
 import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
 import { VoiceButton } from "./VoiceButton"
-import { VoiceConfirmPanel } from "./VoiceConfirmPanel"
-import { VoiceRecordingOverlay } from "./VoiceRecordingOverlay"
+import { VoicePanel } from "./VoicePanel"
 import { useSpeechToText } from "../hooks/use-speech-to-text"
 import { useIsMobile } from "../hooks/use-is-mobile"
 import { MarkdownTable } from "./MarkdownTable"
@@ -234,27 +233,9 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     }
   }
 
-  const handleVoiceToggle = () => {
-    if (stt.phase !== "idle") {
-      void stt.stop()
-    } else {
-      stt.start()
-    }
-  }
-
   const handleVoiceConfirm = (text: string) => {
-    const trimmed = text.trim()
-    if (trimmed.length > 0) {
-      const needsSpace = draft.length > 0 && !/\s$/.test(draft)
-      setDraft(draft + (needsSpace ? " " : "") + trimmed)
-    }
     stt.resetTranscript()
-    requestAnimationFrame(() => {
-      const el = textareaRef.current
-      if (!el) return
-      el.focus()
-      el.setSelectionRange(el.value.length, el.value.length)
-    })
+    void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined)
   }
 
   const handleVoiceCancel = () => {
@@ -262,16 +243,17 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     stt.resetTranscript()
   }
 
-  const handleVoiceStop = () => {
-    void stt.stop()
-  }
-
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center bg-term">
-      {isMobile && stt.phase === "recording" && (
-        <VoiceRecordingOverlay
+      {stt.phase !== "idle" && (
+        <VoicePanel
+          phase={stt.phase}
+          transcript={stt.transcript}
+          interimTranscript={stt.interimTranscript}
           volumeLevel={stt.volumeLevel}
-          onStop={handleVoiceStop}
+          error={stt.error}
+          isMobile={isMobile}
+          onConfirm={handleVoiceConfirm}
           onCancel={handleVoiceCancel}
         />
       )}
@@ -293,19 +275,6 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
         </div>
 
         <AttachmentStrip attachments={attachments} error={attachError} onRemove={remove} />
-
-        {stt.phase !== "idle" && (
-          <VoiceConfirmPanel
-            phase={stt.phase}
-            transcript={stt.transcript}
-            interimTranscript={stt.interimTranscript}
-            volumeLevel={stt.volumeLevel}
-            error={stt.error}
-            onConfirm={handleVoiceConfirm}
-            onCancel={handleVoiceCancel}
-            onStop={handleVoiceStop}
-          />
-        )}
 
         <div className={clsx(
           "rounded-xl border bg-base/80 shadow-sm transition-colors",
@@ -338,7 +307,8 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
             <VoiceButton
               isListening={stt.isListening}
               disabled={!activeRepoId}
-              onClick={handleVoiceToggle}
+              onStart={stt.start}
+              onStop={() => void stt.stop()}
               error={stt.error}
             />
             <button
