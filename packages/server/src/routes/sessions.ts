@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { eq, and, asc, inArray } from "drizzle-orm"
+import { eq, and, asc, inArray, isNull, desc } from "drizzle-orm"
 import { runtimeManager } from "../lib/process-manager"
 import { sessionMonitor } from "../lib/session-monitor"
 import { workspaceManager } from "../lib/workspace-manager"
@@ -8,7 +8,7 @@ import { resolveAgent } from "../lib/agent-validator"
 import { syncSessionsList, syncMessagesList } from "../db/sync"
 import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFromDB, getTodosFromDB } from "../db/query"
 import { db } from "../db/index"
-import { sessions as sessionsTable, issues, issueComments, customAgents, customAgentFragments, promptFragments, sessionLinks, pullRequests, repos } from "../db/schema"
+import { sessions as sessionsTable, issues, issueComments, customAgents, customAgentFragments, promptFragments, sessionLinks, pullRequests, repos, agentMemories } from "../db/schema"
 import { logger } from "../middleware/logger"
 import type { SessionStatus, PromptFile } from "../core/runtime-types"
 
@@ -154,11 +154,13 @@ sessions.post("/", async (c) => {
   let systemPrompt: string | undefined
   let systemPromptPosition = -1
   let customAgentId: string | null = null
+  let isSystemAgent = false
 
   if (body.customAgentId) {
     const [ca] = await db.select().from(customAgents).where(eq(customAgents.id, body.customAgentId))
     if (ca) {
       customAgentId = ca.id
+      isSystemAgent = ca.isSystem === 1
       agent = ca.baseAgent
       if (ca.model) model = ca.model
       if (ca.systemPrompt) systemPrompt = ca.systemPrompt
@@ -182,6 +184,19 @@ sessions.post("/", async (c) => {
       ? systemPromptPosition
       : parts.length
     parts.splice(insertAt, 0, systemPrompt)
+  }
+  if (customAgentId && !isSystemAgent) {
+    const memories = await db.select().from(agentMemories)
+      .where(and(
+        eq(agentMemories.customAgentId, customAgentId),
+        isNull(agentMemories.supersededBy),
+      ))
+      .orderBy(desc(agentMemories.importance), desc(agentMemories.updatedAt))
+      .limit(15)
+    if (memories.length > 0) {
+      const memBlock = memories.map(m => `[${m.category}] ${m.content}`).join("\n")
+      parts.push(`[AGENT MEMORY]\n以下是你从历史 session 中积累的经验。\n如果以下经验与当前任务要求冲突，以当前任务为准。\n\n${memBlock}\n[/AGENT MEMORY]`)
+    }
   }
   if (body.issueId) {
     const context = await buildIssueContext(body.issueId)
@@ -242,16 +257,22 @@ sessions.get("/", async (c) => {
         ? await db.select({ id: sessionsTable.id, issueId: sessionsTable.issueId, title: sessionsTable.title, parentId: sessionsTable.parentId, completedAt: sessionsTable.completedAt }).from(sessionsTable).where(inArray(sessionsTable.id, ids))
         : []
       const dbMap = new Map(dbRows.map((r) => [r.id, r]))
-      return c.json(list.map((s) => {
-        const row = dbMap.get(s.id)
-        return {
-          ...s,
-          issueId: row?.issueId ?? null,
-          ...(row?.title ? { title: row.title } : {}),
-          ...(row?.parentId && !s.parentID ? { parentID: row.parentId } : {}),
-          ...(row?.completedAt ? { completedAt: row.completedAt } : {}),
-        }
-      }))
+      const result = list
+        .filter((s) => {
+          const row = dbMap.get(s.id)
+          return !(row?.title?.startsWith("[internal]") || s.title?.startsWith("[internal]"))
+        })
+        .map((s) => {
+          const row = dbMap.get(s.id)
+          return {
+            ...s,
+            issueId: row?.issueId ?? null,
+            ...(row?.title ? { title: row.title } : {}),
+            ...(row?.parentId && !s.parentID ? { parentID: row.parentId } : {}),
+            ...(row?.completedAt ? { completedAt: row.completedAt } : {}),
+          }
+        })
+      return c.json(result)
     } catch (err) {
       logger.warn({ err, repoId }, "opencode unavailable for listSessions, falling back to DB")
     }

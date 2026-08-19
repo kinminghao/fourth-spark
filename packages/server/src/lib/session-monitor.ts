@@ -6,6 +6,12 @@ import { getRegistry } from "../core/registry"
 import type { NotifyEvent } from "../core/types"
 import { logger } from "../middleware/logger"
 import { DEFAULT_VARIANT } from "./config"
+import { MEMORY_EXTRACTOR_ID } from "./system-agents"
+import { buildExtractionPrompt, parseExtractionResult, executeActions, getSessionCustomAgentId } from "./memory-extractor"
+import { resolveAgent } from "./agent-validator"
+import { db } from "../db/index"
+import { sessions as sessionsTable } from "../db/schema"
+import { syncMessagesList } from "../db/sync"
 
 function emitNotification(event: NotifyEvent): void {
   const { notifications } = getRegistry()
@@ -44,6 +50,15 @@ let timer: ReturnType<typeof setInterval> | undefined
 const entries: ManagedEntry[] = []
 
 const STATUS_LABELS: Record<string, string> = { idle: "完成", busy: "运行中", retry: "重试中" }
+
+// ---------------------------------------------------------------------------
+// Memory extraction state
+// ---------------------------------------------------------------------------
+const EXTRACTION_TIMEOUT_MS = 120_000
+type ExtractionEntry = { repoId: string; customAgentId: string; sourceSessionId: string; startedAt: number }
+const extractionSessions = new Map<string, ExtractionEntry>()
+const pendingExtractions = new Map<string, Array<{ sourceSessionId: string; customAgentId: string }>>()
+const extractingRepos = new Set<string>()
 
 function emitTransition(sessionId: string, from: string, to: string): void {
   const notifyKey = `notify:${sessionId}`
@@ -394,6 +409,149 @@ async function repromptSession(client: RuntimeClient, sessionId: string): Promis
   }
 }
 
+async function triggerMemoryExtraction(repoId: string, client: RuntimeClient, sourceSessionId: string): Promise<void> {
+  const customAgentId = await getSessionCustomAgentId(sourceSessionId)
+  if (!customAgentId) return
+
+  if (extractingRepos.has(repoId)) {
+    const queue = pendingExtractions.get(repoId) ?? []
+    queue.push({ sourceSessionId, customAgentId })
+    pendingExtractions.set(repoId, queue)
+    logger.info({ repoId, sourceSessionId, queueSize: queue.length }, "memory extraction queued")
+    return
+  }
+
+  extractingRepos.add(repoId)
+  await startExtraction(repoId, client, sourceSessionId, customAgentId)
+}
+
+async function startExtraction(repoId: string, client: RuntimeClient, sourceSessionId: string, customAgentId: string): Promise<void> {
+  try {
+    // Sync messages to DB first
+    try {
+      const msgs = await client.getMessages(sourceSessionId)
+      syncMessagesList(sourceSessionId, msgs)
+    } catch {
+      // best-effort sync
+    }
+
+    const prompt = await buildExtractionPrompt(sourceSessionId, customAgentId)
+    if (!prompt) {
+      logger.info({ sourceSessionId }, "no content to extract memories from")
+      processNextExtraction(repoId)
+      return
+    }
+
+    const agent = await resolveAgent(client, "Sisyphus - ultraworker")
+    const session = await client.createSession({ agent, title: `[internal] memory extraction` })
+
+    await db.insert(sessionsTable).values({
+      id: session.id,
+      title: `[internal] memory extraction`,
+      customAgentId: MEMORY_EXTRACTOR_ID,
+      agent: agent ?? null,
+      timeCreated: Date.now(),
+      timeUpdated: Date.now(),
+    }).onConflictDoUpdate({
+      target: sessionsTable.id,
+      set: { customAgentId: MEMORY_EXTRACTOR_ID, timeUpdated: Date.now() },
+    })
+
+    await client.prompt(session.id, prompt, { agent, variant: DEFAULT_VARIANT })
+
+    extractionSessions.set(session.id, {
+      repoId,
+      customAgentId,
+      sourceSessionId,
+      startedAt: Date.now(),
+    })
+    logger.info({ sessionId: session.id, sourceSessionId, customAgentId }, "memory extraction started")
+  } catch (err) {
+    logger.warn({ err, sourceSessionId }, "failed to start memory extraction")
+    processNextExtraction(repoId)
+  }
+}
+
+async function pollExtractionSessions(): Promise<void> {
+  for (const [sessionId, entry] of extractionSessions) {
+    const repoEntry = entries.find(e => e.repoId === entry.repoId)
+    if (!repoEntry) {
+      extractionSessions.delete(sessionId)
+      extractingRepos.delete(entry.repoId)
+      continue
+    }
+
+    const { client } = repoEntry
+
+    if (Date.now() - entry.startedAt > EXTRACTION_TIMEOUT_MS) {
+      logger.warn({ sessionId, sourceSessionId: entry.sourceSessionId }, "memory extraction timed out")
+      client.deleteSession(sessionId).catch(() => {})
+      extractionSessions.delete(sessionId)
+      processNextExtraction(entry.repoId)
+      continue
+    }
+
+    // Check if extraction session is idle
+    let status: SessionStatus
+    try {
+      const statuses = await client.getSessionStatus()
+      const s = statuses[sessionId]
+      if (!s || s.type === "busy" || s.type === "retry") continue
+      status = s
+    } catch {
+      continue
+    }
+
+    if (status.type === "idle") {
+      try {
+        const messages = await client.getMessages(sessionId)
+        const lastAssistant = [...messages].reverse().find(m => m.role === "assistant")
+        if (lastAssistant?.parts) {
+          const textParts = lastAssistant.parts
+            .filter(p => p.type === "text")
+            .map(p => (p as Record<string, unknown>).content as string ?? "")
+          const fullText = textParts.join("\n").trim()
+          if (fullText) {
+            const actions = parseExtractionResult(fullText)
+            if (actions.length > 0) {
+              await executeActions(entry.customAgentId, entry.sourceSessionId, actions)
+              logger.info({ sessionId, actionCount: actions.length, sourceSessionId: entry.sourceSessionId }, "memory extraction completed")
+            } else {
+              logger.info({ sessionId, sourceSessionId: entry.sourceSessionId }, "memory extraction returned no actions")
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn({ err, sessionId }, "failed to process extraction result")
+      }
+
+      client.deleteSession(sessionId).catch(() => {})
+      extractionSessions.delete(sessionId)
+      processNextExtraction(entry.repoId)
+    }
+  }
+}
+
+function processNextExtraction(repoId: string): void {
+  const queue = pendingExtractions.get(repoId)
+  if (!queue || queue.length === 0) {
+    extractingRepos.delete(repoId)
+    return
+  }
+  const next = queue.shift()!
+  if (queue.length === 0) pendingExtractions.delete(repoId)
+
+  const repoEntry = entries.find(e => e.repoId === repoId)
+  if (repoEntry) {
+    startExtraction(repoId, repoEntry.client, next.sourceSessionId, next.customAgentId).catch(err => {
+      logger.warn({ err, sourceSessionId: next.sourceSessionId }, "failed to start queued extraction")
+      processNextExtraction(repoId)
+    })
+  } else {
+    extractingRepos.delete(repoId)
+  }
+}
+
 let pollCount = 0
 let polling = false
 
@@ -438,6 +596,8 @@ async function pollOnce(): Promise<void> {
               continue
             }
 
+            triggerMemoryExtraction(repoId, client, sessionId).catch(err =>
+              logger.warn({ err, sessionId }, "memory extraction trigger failed"))
           }
         }
       }
@@ -465,6 +625,9 @@ async function pollOnce(): Promise<void> {
             if (await handleEmptyResponse(client, sessionId)) {
               continue
             }
+
+            triggerMemoryExtraction(repoId, client, sessionId).catch(err =>
+              logger.warn({ err, sessionId }, "memory extraction trigger failed"))
           }
 
           if (prev && prev !== status.type) emitTransition(sessionId, prev, status.type)
@@ -523,6 +686,7 @@ async function pollOnce(): Promise<void> {
         }
       }
     }
+    await pollExtractionSessions()
   } finally {
     polling = false
   }
@@ -565,6 +729,9 @@ export const sessionMonitor = {
     lastUserMessageIds.clear()
     todoFingerprints.clear()
     userAborted.clear()
+    extractionSessions.clear()
+    pendingExtractions.clear()
+    extractingRepos.clear()
     logger.info("session monitor stopped")
   },
 }
