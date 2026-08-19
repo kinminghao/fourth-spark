@@ -48,11 +48,19 @@ export async function upgradeCommand(args: string[]): Promise<void> {
   const method = detectInstallMethod()
 
   if (method === "npm") {
-    console.log("Installed via npm. Run:")
+    console.log("Updating via npm...")
     console.log("")
-    console.log("  npm update -g fourth-spark")
+    try {
+      execSync("npm update -g fourth-spark", { stdio: "inherit" })
+    } catch (err) {
+      console.error("npm update failed. You may need to run with sudo:")
+      console.error("")
+      console.error("  sudo npm update -g fourth-spark")
+      process.exit(1)
+    }
     console.log("")
-    if (!force) return
+    console.log(`Upgraded to latest. Restart the server to apply.`)
+    return
   }
 
   const key = `${process.platform}-${process.arch}`
