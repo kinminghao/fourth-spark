@@ -147,7 +147,7 @@ const MAX_NEW_HEIGHT_PX = 144
 const STICK_TO_BOTTOM_THRESHOLD_PX = 64
 const VOICE_TEXTAREA_MAX_HEIGHT_PX = 240
 const VOICE_TICK_INTERVAL_MS = 1000
-const LONG_PRESS_MS = 400
+const LONG_PRESS_MS = 250
 const LONG_PRESS_MOVE_THRESHOLD = 10
 
 // Per-bar amplitude multipliers so the 7 bars scale volumeLevel at slightly
@@ -295,10 +295,12 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     if (!canStartVoice()) return
     e.preventDefault()
     e.stopPropagation()
+    textareaRef.current?.blur()
     const touch = e.touches[0]
     longPressStartPosRef.current = { x: touch.clientX, y: touch.clientY }
     longPressTimerRef.current = setTimeout(() => {
       longPressTouchRef.current = true
+      if (textareaRef.current) textareaRef.current.disabled = true
       stt.start()
       const stop = () => {
         document.removeEventListener("touchend", stop)
@@ -340,6 +342,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     let fired = false
     longPressTimerRef.current = setTimeout(() => {
       fired = true
+      if (textareaRef.current) textareaRef.current.disabled = true
       textareaRef.current?.blur()
       stt.start()
     }, LONG_PRESS_MS)
@@ -371,6 +374,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     void stt.stop()
     stt.resetTranscript()
     setVoiceEditText("")
+    if (textareaRef.current) textareaRef.current.disabled = false
   }
 
   const handleVoiceConfirm = () => {
@@ -378,6 +382,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     if (!text) { handleVoiceCancel(); return }
     stt.resetTranscript()
     setVoiceEditText("")
+    if (textareaRef.current) textareaRef.current.disabled = false
     void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined)
   }
 

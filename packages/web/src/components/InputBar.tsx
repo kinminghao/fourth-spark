@@ -20,7 +20,7 @@ import { useSpeechToText } from "../hooks/use-speech-to-text"
 const MAX_HEIGHT_PX = 200
 const VOICE_TEXTAREA_MAX_HEIGHT_PX = 240
 const TICK_INTERVAL_MS = 1000
-const LONG_PRESS_MS = 400
+const LONG_PRESS_MS = 250
 const LONG_PRESS_MOVE_THRESHOLD = 10
 
 // Per-bar amplitude multipliers so the 7 bars scale volumeLevel at slightly
@@ -225,10 +225,12 @@ export function InputBar() {
     if (!canStartVoice()) return
     e.preventDefault()
     e.stopPropagation()
+    textareaRef.current?.blur()
     const touch = e.touches[0]
     longPressStartPosRef.current = { x: touch.clientX, y: touch.clientY }
     longPressTimerRef.current = setTimeout(() => {
       longPressTouchRef.current = true
+      if (textareaRef.current) textareaRef.current.disabled = true
       stt.start()
       const stop = () => {
         document.removeEventListener("touchend", stop)
@@ -270,6 +272,7 @@ export function InputBar() {
     let fired = false
     longPressTimerRef.current = setTimeout(() => {
       fired = true
+      if (textareaRef.current) textareaRef.current.disabled = true
       textareaRef.current?.blur()
       stt.start()
     }, LONG_PRESS_MS)
@@ -301,6 +304,7 @@ export function InputBar() {
     void stt.stop()
     stt.resetTranscript()
     setVoiceEditText("")
+    if (textareaRef.current) textareaRef.current.disabled = false
   }
 
   const handleVoiceConfirm = async () => {
@@ -310,6 +314,7 @@ export function InputBar() {
     if (ok) {
       stt.resetTranscript()
       setVoiceEditText("")
+      if (textareaRef.current) textareaRef.current.disabled = false
     }
   }
 
