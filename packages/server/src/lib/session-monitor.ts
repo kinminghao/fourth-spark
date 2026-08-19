@@ -6,7 +6,7 @@ import { getRegistry } from "../core/registry"
 import type { NotifyEvent } from "../core/types"
 import { logger } from "../middleware/logger"
 import { DEFAULT_VARIANT } from "./config"
-import { MEMORY_EXTRACTOR_ID } from "./system-agents"
+import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "./system-agents"
 import { buildExtractionPrompt, parseExtractionResult, executeActions, getSessionCustomAgentId } from "./memory-extractor"
 import { resolveAgent } from "./agent-validator"
 import { db } from "../db/index"
@@ -457,7 +457,8 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
       set: { customAgentId: MEMORY_EXTRACTOR_ID, timeUpdated: Date.now() },
     })
 
-    await client.prompt(session.id, prompt, { agent, variant: DEFAULT_VARIANT })
+    const fullPrompt = `${MEMORY_EXTRACTOR_PROMPT}\n\n---\n\n${prompt}`
+    await client.prompt(session.id, fullPrompt, { agent, variant: DEFAULT_VARIANT })
 
     extractionSessions.set(session.id, {
       repoId,
