@@ -183,28 +183,34 @@ export function syncSessionsList(items: unknown[]): void {
   }, { op: "syncSessionsList" })
 }
 
-export function syncMessagesList(sessionId: string, items: unknown[]): void {
-  fireWithRetry(async () => {
-    await ensureSession(sessionId)
-    for (const item of items) {
-      const r = asRecord(item)
-      if (!r) continue
-      const info = asRecord(r.info)
-      const msgProps = info && typeof info.id === "string" ? info : r
-      if (typeof msgProps.id === "string") {
-        await upsertMessage(sessionId, msgProps)
-      }
-      const partsList = Array.isArray(r.parts) ? r.parts : []
-      for (const p of partsList) {
-        const part = asRecord(p)
-        if (part && typeof part.id === "string" && typeof part.type === "string") {
-          const msgId = str(part.messageID || msgProps.id)
-          await ensureMessage(sessionId, msgId)
-          await upsertPart(sessionId, msgId, part)
-        }
+async function syncMessagesCore(sessionId: string, items: unknown[]): Promise<void> {
+  await ensureSession(sessionId)
+  for (const item of items) {
+    const r = asRecord(item)
+    if (!r) continue
+    const info = asRecord(r.info)
+    const msgProps = info && typeof info.id === "string" ? info : r
+    if (typeof msgProps.id === "string") {
+      await upsertMessage(sessionId, msgProps)
+    }
+    const partsList = Array.isArray(r.parts) ? r.parts : []
+    for (const p of partsList) {
+      const part = asRecord(p)
+      if (part && typeof part.id === "string" && typeof part.type === "string") {
+        const msgId = str(part.messageID || msgProps.id)
+        await ensureMessage(sessionId, msgId)
+        await upsertPart(sessionId, msgId, part)
       }
     }
-  }, { op: "syncMessagesList", sessionId })
+  }
+}
+
+export function syncMessagesList(sessionId: string, items: unknown[]): void {
+  fireWithRetry(() => syncMessagesCore(sessionId, items), { op: "syncMessagesList", sessionId })
+}
+
+export async function syncMessagesListSync(sessionId: string, items: unknown[]): Promise<void> {
+  await syncMessagesCore(sessionId, items)
 }
 
 export function syncSseEvent(sessionId: string, eventName: string, raw: string): void {

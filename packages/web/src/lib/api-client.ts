@@ -460,12 +460,34 @@ function normalizeMessage(raw: unknown): Message {
   return r as unknown as Message
 }
 
-export async function getMessages(repoId: string, sessionId: string): Promise<Message[]> {
-  const raw = unwrapList<unknown>(
-    await apiFetch<unknown>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/messages`),
-    "messages",
-  )
-  return raw.map(normalizeMessage)
+export interface PaginatedMessages {
+  messages: Message[]
+  total: number
+  hasMore: boolean
+}
+
+export async function getMessages(
+  repoId: string,
+  sessionId: string,
+  opts?: { limit?: number; before?: string },
+): Promise<PaginatedMessages> {
+  const params = new URLSearchParams()
+  if (opts?.limit) params.set("limit", String(opts.limit))
+  if (opts?.before) params.set("before", opts.before)
+  const qs = params.toString()
+  const url = `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ""}`
+  const raw = await apiFetch<unknown>(url)
+  if (Array.isArray(raw)) {
+    const msgs = raw.map(normalizeMessage)
+    return { messages: msgs, total: msgs.length, hasMore: false }
+  }
+  const data = raw as { messages: unknown[]; total: number; hasMore: boolean }
+  const msgList = Array.isArray(data.messages) ? data.messages : []
+  return {
+    messages: msgList.map(normalizeMessage),
+    total: data.total ?? msgList.length,
+    hasMore: data.hasMore ?? false,
+  }
 }
 
 export async function getTodos(repoId: string, sessionId: string): Promise<Todo[]> {
@@ -489,6 +511,19 @@ export interface SessionLinks {
 export async function getSessionLinks(repoId: string, sessionId: string): Promise<SessionLinks> {
   return apiFetch<SessionLinks>(
     `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/links`,
+  )
+}
+
+export interface SessionSnapshot {
+  session: Session | null
+  todos: Todo[]
+  status: SessionStatus
+  links: SessionLinks
+}
+
+export async function getSessionSnapshot(repoId: string, sessionId: string): Promise<SessionSnapshot> {
+  return apiFetch<SessionSnapshot>(
+    `${repoBase(repoId)}/sessions/snapshot/${encodeURIComponent(sessionId)}`,
   )
 }
 
