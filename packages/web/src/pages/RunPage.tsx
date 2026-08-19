@@ -319,7 +319,6 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
     .filter((s) => {
       if (s.parentID) return false
       if (sessionFilter === "active") return !s.completedAt
-      if (sessionFilter === "completed") return !!s.completedAt
       return true
     })
     .sort((a, b) => sessionTime(b) - sessionTime(a))
@@ -374,7 +373,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
         </div>
         {activeRepoId && (
           <div className="flex gap-1 border-b border-line px-3 py-1.5">
-            {([["all", "全部"], ["active", "进行中"], ["completed", "已完成"]] as const).map(([key, label]) => (
+            {([["active", "进行中"], ["all", "全部"]] as const).map(([key, label]) => (
               <button
                 key={key}
                 type="button"

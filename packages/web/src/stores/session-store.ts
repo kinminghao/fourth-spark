@@ -9,7 +9,7 @@ import { create } from "zustand"
 import * as api from "../lib/api-client"
 import type { Message, MessagePart, PromptFile, Session, Todo, SessionLinks, SessionLinkSummary } from "../lib/api-client"
 
-export type SessionFilter = "all" | "active" | "completed"
+export type SessionFilter = "active" | "all"
 import { isQuestionTool, isQuestionPending, getPartText } from "../lib/message-parts"
 import { useRepoStore } from "./repo-store"
 import { useAgentStore } from "./agent-store"
@@ -111,7 +111,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   queuedMessageIds: {},
   sessionLinks: {},
   allSessionLinks: {},
-  sessionFilter: "all",
+  sessionFilter: "active",
   loadingSessions: false,
   loadError: null,
   sendError: null,
