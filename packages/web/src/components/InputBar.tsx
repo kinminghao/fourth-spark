@@ -14,12 +14,14 @@ import { classifyPart, isQuestionPending } from "../lib/message-parts"
 import type { ModelInfo } from "../lib/api-client"
 import { getSettings, listModels } from "../lib/api-client"
 import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
-import { VoiceButton } from "./VoiceButton"
+
 import { useSpeechToText } from "../hooks/use-speech-to-text"
 
 const MAX_HEIGHT_PX = 200
 const VOICE_TEXTAREA_MAX_HEIGHT_PX = 240
 const TICK_INTERVAL_MS = 1000
+const LONG_PRESS_MS = 400
+const LONG_PRESS_MOVE_THRESHOLD = 10
 
 // Per-bar amplitude multipliers so the 7 bars scale volumeLevel at slightly
 // different intensities — otherwise every bar would move in perfect lockstep
@@ -84,6 +86,9 @@ export function InputBar() {
   const voiceTextareaRef = useRef<HTMLTextAreaElement>(null)
   const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const voiceStartTimeRef = useRef(0)
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressTouchRef = useRef(false)
+  const longPressStartPosRef = useRef({ x: 0, y: 0 })
   const stt = useSpeechToText()
 
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
@@ -206,6 +211,86 @@ export function InputBar() {
     }
   }
 
+  const canStartVoice = () => {
+    if (disabled) return false
+    if (stt.phase !== "idle") return false
+    const textarea = textareaRef.current
+    if (textarea && document.activeElement === textarea && value.trim().length > 0) return false
+    return true
+  }
+
+  const handleContainerTouchStart = (e: React.TouchEvent) => {
+    if (!canStartVoice()) return
+    const touch = e.touches[0]
+    longPressStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTouchRef.current = true
+      textareaRef.current?.blur()
+      stt.start()
+      const stop = () => {
+        document.removeEventListener("touchend", stop)
+        document.removeEventListener("touchcancel", stop)
+        longPressTouchRef.current = false
+        void stt.stop()
+      }
+      document.addEventListener("touchend", stop, { once: true })
+      document.addEventListener("touchcancel", stop, { once: true })
+    }, LONG_PRESS_MS)
+  }
+
+  const handleContainerTouchMove = (e: React.TouchEvent) => {
+    if (!longPressTimerRef.current) return
+    const touch = e.touches[0]
+    const dx = touch.clientX - longPressStartPosRef.current.x
+    const dy = touch.clientY - longPressStartPosRef.current.y
+    if (Math.abs(dx) > LONG_PRESS_MOVE_THRESHOLD || Math.abs(dy) > LONG_PRESS_MOVE_THRESHOLD) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  const handleContainerTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  const handleContainerMouseDown = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (target.closest("button") || target.closest("[role='button']")) return
+    if (!canStartVoice()) return
+
+    let fired = false
+    longPressTimerRef.current = setTimeout(() => {
+      fired = true
+      textareaRef.current?.blur()
+      stt.start()
+    }, LONG_PRESS_MS)
+
+    const handleUp = () => {
+      document.removeEventListener("mouseup", handleUp)
+      if (!fired) {
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current)
+          longPressTimerRef.current = null
+        }
+      } else {
+        void stt.stop()
+      }
+    }
+    document.addEventListener("mouseup", handleUp, { once: true })
+  }
+
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current)
+        longPressTimerRef.current = null
+      }
+    }
+  }, [])
+
   const handleVoiceCancel = () => {
     void stt.stop()
     stt.resetTranscript()
@@ -261,7 +346,7 @@ export function InputBar() {
       ? "输入回复，或点击上方选项…"
       : busy
         ? "输入消息将排队等待处理…"
-        : "enter a command…"
+        : "输入消息，或长按语音转文字…"
 
   const promptColor = !activeSessionId
     ? "text-fg-6"
@@ -336,6 +421,13 @@ export function InputBar() {
             ? "border-line"
             : "border-fg-5 focus-within:border-fg-4",
         )}
+        onTouchStart={handleContainerTouchStart}
+        onTouchMove={handleContainerTouchMove}
+        onTouchEnd={handleContainerTouchEnd}
+        onTouchCancel={handleContainerTouchEnd}
+        onMouseDown={handleContainerMouseDown}
+        onContextMenu={(e) => { if (longPressTouchRef.current) e.preventDefault() }}
+        style={{ WebkitTouchCallout: "none" }}
       >
         <span className={clsx("select-none pt-px font-mono text-sm leading-6", promptColor)}>
           ❯
@@ -360,13 +452,7 @@ export function InputBar() {
           disabled={disabled}
           allowed={imagesAllowed}
         />
-        <VoiceButton
-          isListening={stt.isListening}
-          disabled={disabled}
-          onStart={stt.start}
-          onStop={() => void stt.stop()}
-          error={stt.error}
-        />
+
         <button
           type="button"
           onClick={submit}
