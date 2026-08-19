@@ -28,6 +28,7 @@ import { runtimeManager } from "./lib/process-manager"
 import { initRegistry } from "./core/registry"
 import { cloudRoutes } from "./routes/cloud"
 import { seedSystemAgents } from "./lib/system-agents"
+import { startSyncScheduler, stopSyncScheduler } from "./lib/sync-scheduler"
 import { ensureSenseVoice } from "./lib/sensevoice-manager"
 import { transcribeRoute } from "./routes/transcribe"
 import { runMigrations } from "./db/migrate"
@@ -209,6 +210,8 @@ async function startup() {
   } catch (err) {
     logger.error({ err }, "failed to initialize repos")
   }
+
+  startSyncScheduler()
 }
 
 startup()
@@ -218,6 +221,7 @@ startup()
 // ---------------------------------------------------------------------------
 async function gracefulShutdown(signal: string) {
   logger.info({ signal }, "shutting down — stopping all opencode processes")
+  stopSyncScheduler()
   await runtimeManager.stopAll()
   process.exit(0)
 }

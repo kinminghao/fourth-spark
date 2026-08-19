@@ -123,7 +123,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     if (!repoId) return
     set({ syncing: true })
     try {
-      await api.syncIssues(repoId)
+      await api.syncIssues(repoId, "open")
       const [issues, tags, milestones] = await Promise.all([
         api.listIssues(repoId, "all"),
         api.listTags(repoId),
