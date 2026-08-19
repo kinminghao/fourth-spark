@@ -207,18 +207,43 @@ issueRoutes.post("/sync", async (c) => {
 
   const allIssues = await db.select({ number: issues.number }).from(issues).where(eq(issues.repoId, repoId))
   let totalComments = 0
-  for (const row of allIssues) {
-    try {
-      const comments = await client.listComments(row.number)
-      for (const gc of comments) {
-        const values = commentToDb(repoId, row.number, gc)
-        const { id: _, createdAt: __, ...updateSet } = values
-        await db.insert(issueComments).values(values).onConflictDoUpdate({ target: issueComments.id, set: updateSet })
+
+  const CONCURRENCY = 5
+  let active = 0
+  const queue = [...allIssues]
+  const results: Array<{ issueNum: number; comments: GitComment[] }> = []
+
+  await new Promise<void>((resolve) => {
+    if (queue.length === 0) return resolve()
+    let finished = 0
+    const total = queue.length
+
+    function next() {
+      while (active < CONCURRENCY && queue.length > 0) {
+        const row = queue.shift()!
+        active++
+        client.listComments(row.number)
+          .then((comments) => { results.push({ issueNum: row.number, comments }) })
+          .catch((err) => { logger.warn({ err, repoId, issueNumber: row.number }, "failed to sync comments for issue") })
+          .finally(() => {
+            active--
+            finished++
+            if (finished === total) resolve()
+            else next()
+          })
       }
-      totalComments += comments.length
-    } catch (err) {
-      logger.warn({ err, repoId, issueNumber: row.number }, "failed to sync comments for issue")
     }
+    next()
+  })
+
+  for (const { issueNum, comments } of results) {
+    if (comments.length === 0) continue
+    const rows = comments.map((gc) => commentToDb(repoId, issueNum, gc))
+    for (const values of rows) {
+      const { id: _, createdAt: __, ...updateSet } = values
+      await db.insert(issueComments).values(values).onConflictDoUpdate({ target: issueComments.id, set: updateSet })
+    }
+    totalComments += comments.length
   }
 
   let totalTags = 0

@@ -119,25 +119,54 @@ pullRoutes.post("/sync", async (c) => {
     // For "all" state, we need to fetch open and closed separately (most git APIs don't support "all" for PRs)
     const states: Array<"open" | "closed"> = state === "all" ? ["open", "closed"] : [state as "open" | "closed"]
 
+    const CONCURRENCY = 5
+
     for (const s of states) {
       page = 1
       while (true) {
         const batch = await client.listPullRequests({ state: s, page, limit })
         if (batch.length === 0) break
-        for (const gpr of batch) {
-          let detail = gpr
-          let diffStats: Array<{ filename: string; status: string; additions: number; deletions: number }> | null = null
-          try {
-            detail = await client.getPullRequest(gpr.number)
-            const files = await client.listPullRequestFiles(gpr.number)
-            diffStats = files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
-          } catch (detailErr) {
-            logger.warn({ err: detailErr, repoId, prNumber: gpr.number }, "failed to fetch PR detail/files, using list data")
+
+        const enriched: Array<{ detail: GitPullRequest; diffStats: Array<{ filename: string; status: string; additions: number; deletions: number }> | null }>  = []
+        let active = 0
+        const queue = [...batch]
+
+        await new Promise<void>((resolve) => {
+          if (queue.length === 0) return resolve()
+          let finished = 0
+          const count = queue.length
+
+          function next() {
+            while (active < CONCURRENCY && queue.length > 0) {
+              const gpr = queue.shift()!
+              active++
+              Promise.all([
+                client.getPullRequest(gpr.number).catch(() => gpr),
+                client.listPullRequestFiles(gpr.number).catch(() => null),
+              ])
+                .then(([detail, files]) => {
+                  const diffStats = files
+                    ? files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
+                    : null
+                  enriched.push({ detail: detail as GitPullRequest, diffStats })
+                })
+                .finally(() => {
+                  active--
+                  finished++
+                  if (finished === count) resolve()
+                  else next()
+                })
+            }
           }
+          next()
+        })
+
+        for (const { detail, diffStats } of enriched) {
           const values = { ...prToDb(repoId, detail), diffStats }
           const { id: _, createdAt: __, ...updateSet } = values
           await db.insert(pullRequests).values(values).onConflictDoUpdate({ target: pullRequests.id, set: updateSet })
         }
+
         total += batch.length
         if (batch.length < limit) break
         page++
