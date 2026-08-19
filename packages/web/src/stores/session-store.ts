@@ -242,10 +242,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           const cutIdx = msgs.findIndex((m) => m.id === revertMessageID)
           if (cutIdx >= 0) msgs = msgs.slice(0, cutIdx + 1)
         }
-        next.messages = { ...state.messages, [id]: msgs }
+        const current = state.messages[id] ?? []
+        if (msgs.length >= current.length) {
+          next.messages = { ...state.messages, [id]: msgs }
+        }
         next.messagesMeta = {
           ...state.messagesMeta,
-          [id]: { total: msgsResult.value.total, hasMore: msgsResult.value.hasMore, loading: false },
+          [id]: { total: Math.max(msgsResult.value.total, current.length), hasMore: msgsResult.value.hasMore, loading: false },
         }
       }
       return next
