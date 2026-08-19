@@ -5,8 +5,8 @@ import { sessionMonitor } from "../lib/session-monitor"
 import { workspaceManager } from "../lib/workspace-manager"
 import { DEFAULT_VARIANT } from "../lib/config"
 import { resolveAgent } from "../lib/agent-validator"
-import { syncSessionsList, syncMessagesList, syncMessagesListSync } from "../db/sync"
-import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFromDB, getMessagesPaginated, getMessageCount, getTodosFromDB, getSessionLinksFromDB } from "../db/query"
+import { syncSessionsList, syncMessagesList } from "../db/sync"
+import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFromDB, getMessagesPaginated, getTodosFromDB, getSessionLinksFromDB } from "../db/query"
 import { db } from "../db/index"
 import { sessions as sessionsTable, issues, issueComments, customAgents, customAgentFragments, promptFragments, sessionLinks, pullRequests, repos } from "../db/schema"
 import { logger } from "../middleware/logger"
@@ -437,38 +437,30 @@ sessions.get("/:id/messages", async (c) => {
   const limit = Math.min(Math.max(Number(c.req.query("limit")) || 0, 0), 100)
   const before = c.req.query("before") || undefined
 
-  if (limit > 0) {
-    const dbCount = await getMessageCount(id)
-    if (dbCount === 0) {
-      const client = runtimeManager.getClient(repoId)
-      if (client) {
-        try {
-          const msgs = await client.getMessages(id)
-          await syncMessagesListSync(id, msgs)
-        } catch (err) {
-          logger.warn({ err, repoId }, "opencode unavailable for initial sync in paginated path")
-        }
-      }
-    } else {
-      const client = runtimeManager.getClient(repoId)
-      if (client) {
-        client.getMessages(id)
-          .then((msgs) => syncMessagesList(id, msgs))
-          .catch(() => {})
-      }
-    }
-    return c.json(await getMessagesPaginated(id, limit, before))
-  }
-
   const client = runtimeManager.getClient(repoId)
   if (client) {
     try {
-      const msgs = await client.getMessages(id)
-      syncMessagesList(id, msgs)
-      return c.json(msgs)
+      const allMsgs = await client.getMessages(id)
+      syncMessagesList(id, allMsgs)
+
+      if (limit > 0) {
+        let slice = allMsgs
+        if (before) {
+          const idx = allMsgs.findIndex((m: { id: string }) => m.id === before)
+          if (idx > 0) slice = allMsgs.slice(0, idx)
+        }
+        const hasMore = slice.length > limit
+        const page = slice.slice(-limit)
+        return c.json({ messages: page, total: allMsgs.length, hasMore })
+      }
+      return c.json(allMsgs)
     } catch (err) {
       logger.warn({ err, repoId }, "opencode unavailable for getMessages, falling back to DB")
     }
+  }
+
+  if (limit > 0) {
+    return c.json(await getMessagesPaginated(id, limit, before))
   }
   return c.json(await getMessagesFromDB(id))
 })
