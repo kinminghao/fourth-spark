@@ -164,6 +164,23 @@ export const parts = pgTable("parts", {
   index("parts_session_idx").on(t.sessionId),
 ])
 
+export const agentMemories = pgTable("agent_memories", {
+  id: text("id").primaryKey(),
+  customAgentId: text("custom_agent_id").notNull().references(() => customAgents.id, { onDelete: "cascade" }),
+  sessionId: text("session_id").references(() => sessions.id, { onDelete: "set null" }),
+  mergedFrom: jsonb("merged_from").$type<string[]>(),
+  content: text("content").notNull(),
+  category: text("category").notNull().default("general"),
+  importance: real("importance").notNull().default(0.5),
+  supersededBy: text("superseded_by"),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+}, (t) => [
+  index("agent_memories_agent_idx").on(t.customAgentId),
+  index("agent_memories_category_idx").on(t.customAgentId, t.category),
+  index("agent_memories_active_idx").on(t.customAgentId, t.importance),
+])
+
 export const settings = pgTable("settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
