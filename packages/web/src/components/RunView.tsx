@@ -290,12 +290,15 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   }
 
   const handleContainerTouchStart = (e: React.TouchEvent) => {
+    const target = e.target as HTMLElement
+    if (target.closest("button") || target.closest("[role='button']")) return
     if (!canStartVoice()) return
+    e.preventDefault()
+    e.stopPropagation()
     const touch = e.touches[0]
     longPressStartPosRef.current = { x: touch.clientX, y: touch.clientY }
     longPressTimerRef.current = setTimeout(() => {
       longPressTouchRef.current = true
-      textareaRef.current?.blur()
       stt.start()
       const stop = () => {
         document.removeEventListener("touchend", stop)
@@ -309,6 +312,8 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   }
 
   const handleContainerTouchMove = (e: React.TouchEvent) => {
+    if (!longPressTimerRef.current && !longPressTouchRef.current) return
+    e.stopPropagation()
     if (!longPressTimerRef.current) return
     const touch = e.touches[0]
     const dx = touch.clientX - longPressStartPosRef.current.x
@@ -323,6 +328,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current)
       longPressTimerRef.current = null
+      textareaRef.current?.focus()
     }
   }
 
