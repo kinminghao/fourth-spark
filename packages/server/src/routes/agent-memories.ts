@@ -125,11 +125,8 @@ agentMemoryRoutes.post("/extract", async (c) => {
 
   if (validSessions.length === 0) return c.json({ error: "No matching sessions found", status: 404 }, 404)
 
-  const repoId = sessionMonitor.getRunningRepoId()
-  if (!repoId) return c.json({ error: "No running repo available for extraction", status: 503 }, 503)
-
   for (const session of validSessions) {
-    sessionMonitor.extractMemory(repoId, session.id)
+    sessionMonitor.extractMemory(session.id)
   }
 
   return c.json({ queued: validSessions.length })

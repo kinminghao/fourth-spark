@@ -698,15 +698,18 @@ export const sessionMonitor = {
     logger.info({ sessionId }, "session marked as user-aborted, monitor will skip retry")
   },
 
-  extractMemory(repoId: string, sourceSessionId: string): void {
-    const entry = entries.find(e => e.repoId === repoId)
-    if (!entry) return
-    triggerMemoryExtraction(repoId, entry.client, sourceSessionId).catch(err =>
-      logger.warn({ err, sourceSessionId }, "manual memory extraction trigger failed"))
-  },
-
-  getRunningRepoId(): string | undefined {
-    return entries[0]?.repoId
+  extractMemory(sourceSessionId: string): void {
+    const tryAll = async () => {
+      for (const { repoId, client } of entries) {
+        try {
+          await client.getSession(sourceSessionId)
+          await triggerMemoryExtraction(repoId, client, sourceSessionId)
+          return
+        } catch { continue }
+      }
+      logger.warn({ sourceSessionId }, "no running process found for session")
+    }
+    tryAll().catch(err => logger.warn({ err, sourceSessionId }, "manual memory extraction failed"))
   },
 
   register(repoId: string, client: RuntimeClient): void {
