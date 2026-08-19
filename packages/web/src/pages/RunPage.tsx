@@ -95,14 +95,28 @@ function SessionItem({
 
   /* ---- iOS-style swipe-to-reveal (mobile) ---- */
   const REVEAL_W = 192
-  const [swipeX, setSwipeX] = useState(0)
-  const [snap, setSnap] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const actionsRef = useRef<HTMLDivElement>(null)
+  const currentX = useRef(0)
   const touch = useRef({ x0: 0, y0: 0, base: 0, dir: null as "h" | "v" | null, on: false })
+
+  /** Apply swipe offset directly to DOM — no React re-render during drag */
+  const applyX = (x: number) => {
+    currentX.current = x
+    const el = contentRef.current
+    const ac = actionsRef.current
+    if (el) {
+      el.style.transform = x !== 0 ? `translateX(${x}px)` : ""
+      el.style.pointerEvents = x === -REVEAL_W ? "none" : ""
+    }
+    if (ac) ac.style.width = `${Math.abs(x)}px`
+  }
 
   const onTS = (e: React.TouchEvent) => {
     const t = e.touches[0]
-    touch.current = { x0: t.clientX, y0: t.clientY, base: swipeX, dir: null, on: true }
-    setSnap(false)
+    touch.current = { x0: t.clientX, y0: t.clientY, base: currentX.current, dir: null, on: true }
+    if (contentRef.current) contentRef.current.style.transition = "none"
+    if (actionsRef.current) actionsRef.current.style.transition = "none"
   }
   const onTM = (e: React.TouchEvent) => {
     const c = touch.current
@@ -114,22 +128,30 @@ function SessionItem({
       return
     }
     if (c.dir === "v") return
-    setSwipeX(Math.max(-REVEAL_W, Math.min(0, c.base + dx)))
+    applyX(Math.max(-REVEAL_W, Math.min(0, c.base + dx)))
+  }
+  const snapTo = (target: number) => {
+    const el = contentRef.current
+    const ac = actionsRef.current
+    if (el) el.style.transition = "transform 200ms ease-out"
+    if (ac) ac.style.transition = "width 200ms ease-out"
+    applyX(target)
   }
   const onTE = () => {
     touch.current.on = false
-    setSnap(true)
-    setSwipeX((p) => (p < -REVEAL_W / 2 ? -REVEAL_W : 0))
+    snapTo(currentX.current < -REVEAL_W / 2 ? -REVEAL_W : 0)
   }
-  const closeSwipe = () => { setSnap(true); setSwipeX(0) }
+  const closeSwipe = () => snapTo(0)
 
   return (
     <li className="relative overflow-hidden rounded-md">
-      {/* Swipe action buttons (mobile, behind content) */}
+      {/* Swipe action buttons — iOS-style reveal from right edge */}
       <div
-        className="absolute right-0 top-0 bottom-0 flex md:hidden"
-        style={swipeX < 0 ? { zIndex: 10 } : undefined}
+        ref={actionsRef}
+        className="absolute right-0 top-0 bottom-0 z-10 overflow-hidden md:hidden"
+        style={{ width: 0 }}
       >
+        <div className="absolute right-0 top-0 bottom-0 flex" style={{ width: REVEAL_W }}>
         {isConfirming ? (
           <>
             <button type="button" onClick={() => { onDelete(); closeSwipe() }} className="flex w-12 items-center justify-center bg-red-500 text-white active:bg-red-600">
@@ -170,19 +192,16 @@ function SessionItem({
             </button>
           </>
         )}
+        </div>
       </div>
 
       {/* Slideable content */}
       <div
+        ref={contentRef}
         className={clsx(
-          "group relative rounded-md border-l-2",
+          "group relative rounded-md border-l-2 will-change-transform",
           isActive ? "border-blue-500 bg-elevated" : "border-transparent bg-surface hover:bg-elevated/50",
-          snap && "transition-transform duration-200 ease-out",
         )}
-        style={{
-          ...(swipeX !== 0 ? { transform: `translateX(${swipeX}px)` } : {}),
-          ...(swipeX === -REVEAL_W ? { pointerEvents: "none" as const } : {}),
-        }}
         onTouchStart={onTS}
         onTouchMove={onTM}
         onTouchEnd={onTE}
@@ -191,7 +210,7 @@ function SessionItem({
           type="button"
           onClick={() => { if (!editing) { onSelect(); closeSwipe() } }}
           className={clsx("block w-full px-2.5 py-2 text-left", isCompleted && !isActive && "opacity-50")}
-          style={swipeX === -REVEAL_W ? { pointerEvents: "auto" } : undefined}
+          style={{ pointerEvents: "auto" }}
         >
           <div className="flex items-center gap-2">
             <span className={clsx("h-1.5 w-1.5 shrink-0 rounded-full", statusDotClass(status))} />

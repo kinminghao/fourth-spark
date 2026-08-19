@@ -225,6 +225,7 @@ export function InputBar() {
     if (!canStartVoice()) return
     e.preventDefault()
     e.stopPropagation()
+    textareaRef.current?.blur()
     const touch = e.touches[0]
     longPressStartPosRef.current = { x: touch.clientX, y: touch.clientY }
     longPressTimerRef.current = setTimeout(() => {
