@@ -14,7 +14,7 @@ import { classifyPart, isQuestionPending } from "../lib/message-parts"
 import type { ModelInfo } from "../lib/api-client"
 import { getSettings, listModels } from "../lib/api-client"
 import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
-import { VoiceButton } from "./VoiceButton"
+
 import { useSpeechToText } from "../hooks/use-speech-to-text"
 
 const MAX_HEIGHT_PX = 200
@@ -346,7 +346,7 @@ export function InputBar() {
       ? "输入回复，或点击上方选项…"
       : busy
         ? "输入消息将排队等待处理…"
-        : "enter a command…"
+        : "输入消息，或长按语音转文字…"
 
   const promptColor = !activeSessionId
     ? "text-fg-6"
@@ -452,7 +452,7 @@ export function InputBar() {
           disabled={disabled}
           allowed={imagesAllowed}
         />
-        <VoiceButton isListening={stt.isListening} />
+
         <button
           type="button"
           onClick={submit}

@@ -12,7 +12,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
 import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
-import { VoiceButton } from "./VoiceButton"
+
 import { useSpeechToText } from "../hooks/use-speech-to-text"
 import { MarkdownTable } from "./MarkdownTable"
 import {
@@ -549,7 +549,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={onPaste}
-              placeholder={activeRepoId ? "让 Agent 做什么？" : "请先选择一个仓库"}
+              placeholder={activeRepoId ? "输入消息，或长按语音转文字…" : "请先选择一个仓库"}
               className="flex-1 resize-none bg-transparent font-mono text-sm leading-6 text-fg placeholder:text-fg-6 focus:outline-none disabled:cursor-not-allowed"
             />
             <AttachButton
@@ -557,7 +557,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
               disabled={!activeRepoId}
               allowed
             />
-            <VoiceButton isListening={stt.isListening} />
+    
             <button
               type="button"
               onClick={submit}
