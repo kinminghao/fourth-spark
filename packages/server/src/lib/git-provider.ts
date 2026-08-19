@@ -87,6 +87,28 @@ export interface GitPullRequest {
   updated_at: string
   merged_at?: string | null
   mergeable: boolean | null
+  // Diff stats — available from individual PR detail endpoint, not from list
+  additions?: number
+  deletions?: number
+  changed_files?: number
+  commits?: number
+}
+
+export interface GitPrFile {
+  filename: string
+  status: string // "added" | "modified" | "removed" | "renamed"
+  additions: number
+  deletions: number
+  changes: number
+  previous_filename?: string
+}
+
+export interface GitPrCommit {
+  sha: string
+  message: string
+  author: { name: string; email: string; date: string }
+  committer: { name: string; email: string; date: string }
+  html_url?: string
 }
 
 export interface CreatePullRequestInput {
@@ -110,6 +132,8 @@ export interface GitIssueClient {
   getPullRequest(number: number): Promise<GitPullRequest>
   listIssuePullRequests(issueNumber: number): Promise<GitPullRequest[]>
   mergePullRequest(prNumber: number): Promise<void>
+  listPullRequestFiles(prNumber: number): Promise<GitPrFile[]>
+  listPullRequestCommits(prNumber: number): Promise<GitPrCommit[]>
 }
 
 export class GitApiError extends Error {
@@ -179,6 +203,10 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
       updated_at: (raw.updated_at as string) ?? "",
       merged_at: (raw.merged_at as string | null) ?? null,
       mergeable: typeof raw.mergeable === "boolean" ? raw.mergeable : null,
+      additions: typeof raw.additions === "number" ? raw.additions : undefined,
+      deletions: typeof raw.deletions === "number" ? raw.deletions : undefined,
+      changed_files: typeof raw.changed_files === "number" ? raw.changed_files : undefined,
+      commits: typeof raw.commits === "number" ? raw.commits : undefined,
     }
   }
 
@@ -281,6 +309,44 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
       } else {
         await request<unknown>("POST", `/pulls/${prNumber}/merge`, { Do: "merge" })
       }
+    },
+
+    async listPullRequestFiles(prNumber) {
+      const params = platform === "github" ? "?per_page=300" : "?limit=300"
+      const raw = await request<Record<string, unknown>[]>("GET", `/pulls/${prNumber}/files${params}`)
+      return raw.map((f) => ({
+        filename: (f.filename as string) ?? "",
+        status: (f.status as string) ?? "modified",
+        additions: typeof f.additions === "number" ? f.additions : 0,
+        deletions: typeof f.deletions === "number" ? f.deletions : 0,
+        changes: typeof f.changes === "number" ? f.changes : 0,
+        previous_filename: (f.previous_filename as string | undefined),
+      }))
+    },
+
+    async listPullRequestCommits(prNumber) {
+      const params = platform === "github" ? "?per_page=250" : "?limit=250"
+      const raw = await request<Record<string, unknown>[]>("GET", `/pulls/${prNumber}/commits${params}`)
+      return raw.map((c) => {
+        const commit = (c.commit as Record<string, unknown> | undefined) ?? {}
+        const author = (commit.author as Record<string, unknown> | undefined) ?? {}
+        const committer = (commit.committer as Record<string, unknown> | undefined) ?? {}
+        return {
+          sha: (c.sha as string) ?? "",
+          message: (commit.message as string) ?? "",
+          author: {
+            name: (author.name as string) ?? "",
+            email: (author.email as string) ?? "",
+            date: (author.date as string) ?? "",
+          },
+          committer: {
+            name: (committer.name as string) ?? "",
+            email: (committer.email as string) ?? "",
+            date: (committer.date as string) ?? "",
+          },
+          html_url: (c.html_url as string | undefined),
+        }
+      })
     },
 
     async listIssuePullRequests(issueNumber) {

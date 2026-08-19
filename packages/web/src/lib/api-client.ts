@@ -768,9 +768,29 @@ export interface PersistentPullRequest {
   mergeable?: string | null
   draft: number
   commentCount: number
+  additions?: number | null
+  deletions?: number | null
+  changedFilesCount?: number | null
+  commitCount?: number | null
+  diffStats?: Array<{ filename: string; status: string; additions: number; deletions: number }> | null
   createdAt: number
   updatedAt: number
   mergedAt?: number | null
+}
+
+export interface PrFile {
+  filename: string
+  status: string
+  additions: number
+  deletions: number
+}
+
+export interface PrCommit {
+  sha: string
+  message: string
+  author: { name: string; email: string; date: string }
+  committer: { name: string; email: string; date: string }
+  html_url?: string
 }
 
 export async function listPulls(repoId: string, state = "open"): Promise<PersistentPullRequest[]> {
@@ -807,6 +827,14 @@ export async function linkPrToIssue(repoId: string, prNumber: number, issueNumbe
 
 export async function unlinkPrFromIssue(repoId: string, prNumber: number, issueNumber: number): Promise<void> {
   await apiFetch<void>(`${repoBase(repoId)}/pulls/${prNumber}/issues/${issueNumber}`, { method: "DELETE" })
+}
+
+export async function listPrFiles(repoId: string, prNumber: number): Promise<PrFile[]> {
+  return apiFetch<PrFile[]>(`${repoBase(repoId)}/pulls/${prNumber}/files`)
+}
+
+export async function listPrCommits(repoId: string, prNumber: number): Promise<PrCommit[]> {
+  return apiFetch<PrCommit[]>(`${repoBase(repoId)}/pulls/${prNumber}/commits`)
 }
 
 export async function listPullComments(repoId: string, prNumber: number): Promise<IssueComment[]> {

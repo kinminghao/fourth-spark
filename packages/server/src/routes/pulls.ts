@@ -45,6 +45,10 @@ function prToDb(repoId: string, gpr: GitPullRequest) {
     mergeable: gpr.mergeable === true ? "true" : gpr.mergeable === false ? "false" : null,
     draft: gpr.draft ? 1 : 0,
     commentCount: gpr.comments ?? 0,
+    additions: gpr.additions ?? null,
+    deletions: gpr.deletions ?? null,
+    changedFilesCount: gpr.changed_files ?? null,
+    commitCount: gpr.commits ?? null,
     createdAt: new Date(gpr.created_at).getTime(),
     updatedAt: new Date(gpr.updated_at).getTime(),
     mergedAt: gpr.merged_at ? new Date(gpr.merged_at).getTime() : null,
@@ -121,7 +125,16 @@ pullRoutes.post("/sync", async (c) => {
         const batch = await client.listPullRequests({ state: s, page, limit })
         if (batch.length === 0) break
         for (const gpr of batch) {
-          const values = prToDb(repoId, gpr)
+          let detail = gpr
+          let diffStats: Array<{ filename: string; status: string; additions: number; deletions: number }> | null = null
+          try {
+            detail = await client.getPullRequest(gpr.number)
+            const files = await client.listPullRequestFiles(gpr.number)
+            diffStats = files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
+          } catch (detailErr) {
+            logger.warn({ err: detailErr, repoId, prNumber: gpr.number }, "failed to fetch PR detail/files, using list data")
+          }
+          const values = { ...prToDb(repoId, detail), diffStats }
           const { id: _, createdAt: __, ...updateSet } = values
           await db.insert(pullRequests).values(values).onConflictDoUpdate({ target: pullRequests.id, set: updateSet })
         }
@@ -167,6 +180,27 @@ pullRoutes.get("/:number", async (c) => {
   const [row] = await db.select().from(pullRequests).where(eq(pullRequests.id, pid))
 
   if (row) {
+    if (row.additions === null || row.diffStats === null) {
+      const ctx = await getRepoGitClient(repoId)
+      if (ctx) {
+        try {
+          const detail = await ctx.client.getPullRequest(number)
+          const files = await ctx.client.listPullRequestFiles(number)
+          const diffStats = files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
+          const statsUpdate = {
+            additions: detail.additions ?? 0,
+            deletions: detail.deletions ?? 0,
+            changedFilesCount: detail.changed_files ?? 0,
+            commitCount: detail.commits ?? 0,
+            diffStats,
+          }
+          await db.update(pullRequests).set(statsUpdate).where(eq(pullRequests.id, pid))
+          Object.assign(row, statsUpdate)
+        } catch (err) {
+          logger.warn({ err, repoId, prNumber: number }, "failed to fetch PR diff stats on demand")
+        }
+      }
+    }
     row.body = rewriteAttachmentUrls(row.body, repoId)
     return c.json(row)
   }
@@ -176,10 +210,44 @@ pullRoutes.get("/:number", async (c) => {
   if (!ctx) return c.json({ error: "Repo not found or git host not configured" }, 400)
 
   const gpr = await ctx.client.getPullRequest(number)
-  const values = prToDb(repoId, gpr)
+  const files = await ctx.client.listPullRequestFiles(number).catch(() => [])
+  const diffStats = files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
+  const values = { ...prToDb(repoId, gpr), diffStats }
   await db.insert(pullRequests).values(values).onConflictDoNothing()
   values.body = rewriteAttachmentUrls(values.body, repoId)
   return c.json(values)
+})
+
+// GET /:number/files — fetch PR changed files from platform
+pullRoutes.get("/:number/files", async (c) => {
+  const repoId = c.req.param("repoId")!
+  const number = Number(c.req.param("number"))
+  if (!Number.isFinite(number)) return c.json({ error: "invalid PR number" }, 400)
+
+  const pid = prId(repoId, number)
+  const [row] = await db.select({ diffStats: pullRequests.diffStats }).from(pullRequests).where(eq(pullRequests.id, pid))
+  if (row?.diffStats) return c.json(row.diffStats)
+
+  const ctx = await getRepoGitClient(repoId)
+  if (!ctx) return c.json([])
+
+  const files = await ctx.client.listPullRequestFiles(number)
+  const diffStats = files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
+  await db.update(pullRequests).set({ diffStats }).where(eq(pullRequests.id, pid))
+  return c.json(diffStats)
+})
+
+// GET /:number/commits — fetch PR commits from platform
+pullRoutes.get("/:number/commits", async (c) => {
+  const repoId = c.req.param("repoId")!
+  const number = Number(c.req.param("number"))
+  if (!Number.isFinite(number)) return c.json({ error: "invalid PR number" }, 400)
+
+  const ctx = await getRepoGitClient(repoId)
+  if (!ctx) return c.json([])
+
+  const commits = await ctx.client.listPullRequestCommits(number)
+  return c.json(commits)
 })
 
 // GET /:number/comments — fetch PR comments from platform
