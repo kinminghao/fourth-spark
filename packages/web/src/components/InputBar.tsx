@@ -15,8 +15,7 @@ import type { ModelInfo } from "../lib/api-client"
 import { getSettings, listModels } from "../lib/api-client"
 import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
 import { VoiceButton } from "./VoiceButton"
-import { VoiceConfirmPanel } from "./VoiceConfirmPanel"
-import { VoiceRecordingOverlay } from "./VoiceRecordingOverlay"
+import { VoicePanel } from "./VoicePanel"
 import { useSpeechToText } from "../hooks/use-speech-to-text"
 import { useIsMobile } from "../hooks/use-is-mobile"
 
@@ -120,38 +119,14 @@ export function InputBar() {
     }
   }
 
-  const handleVoiceToggle = () => {
-    if (stt.phase !== "idle") {
-      void stt.stop()
-    } else {
-      stt.start()
-    }
-  }
-
-  const handleVoiceConfirm = (text: string) => {
-    const trimmed = text.trim()
-    if (trimmed.length > 0) {
-      const needsSpace = value.length > 0 && !/\s$/.test(value)
-      const merged = value + (needsSpace ? " " : "") + trimmed
-      setValue(merged)
-      if (activeSessionId) setDraft(activeSessionId, merged)
-    }
-    stt.resetTranscript()
-    requestAnimationFrame(() => {
-      const el = textareaRef.current
-      if (!el) return
-      el.focus()
-      el.setSelectionRange(el.value.length, el.value.length)
-    })
+  const handleVoiceConfirm = async (text: string) => {
+    const ok = await sendMessage(text, selectedModel || undefined)
+    if (ok) stt.resetTranscript()
   }
 
   const handleVoiceCancel = () => {
     void stt.stop()
     stt.resetTranscript()
-  }
-
-  const handleVoiceStop = () => {
-    void stt.stop()
   }
 
   const placeholder = !activeSessionId
@@ -172,23 +147,16 @@ export function InputBar() {
 
   return (
     <div className="border-t border-line bg-term px-4 py-4">
-      {isMobile && stt.phase === "recording" && (
-        <VoiceRecordingOverlay
-          volumeLevel={stt.volumeLevel}
-          onStop={handleVoiceStop}
-          onCancel={handleVoiceCancel}
-        />
-      )}
       {stt.phase !== "idle" && (
-        <VoiceConfirmPanel
+        <VoicePanel
           phase={stt.phase}
           transcript={stt.transcript}
           interimTranscript={stt.interimTranscript}
           volumeLevel={stt.volumeLevel}
           error={stt.error}
+          isMobile={isMobile}
           onConfirm={handleVoiceConfirm}
           onCancel={handleVoiceCancel}
-          onStop={handleVoiceStop}
         />
       )}
       <AttachmentStrip
@@ -231,7 +199,8 @@ export function InputBar() {
         <VoiceButton
           isListening={stt.isListening}
           disabled={disabled}
-          onClick={handleVoiceToggle}
+          onStart={stt.start}
+          onStop={() => void stt.stop()}
           error={stt.error}
         />
         <button
