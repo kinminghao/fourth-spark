@@ -107,4 +107,4 @@ export async function seedSystemAgents(): Promise<void> {
   }
 }
 
-export { COMMENT_POLISHER_ID, MEMORY_EXTRACTOR_ID }
+export { COMMENT_POLISHER_ID, MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT }
