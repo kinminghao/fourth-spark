@@ -4,6 +4,7 @@ import { customAgents } from "../db/schema"
 import { logger } from "../middleware/logger"
 
 const COMMENT_POLISHER_ID = "system-comment-polisher"
+const ISSUE_POLISHER_ID = "system-issue-polisher"
 
 const COMMENT_POLISHER_PROMPT = `你是一个 Issue 评论润色助手。
 
@@ -20,6 +21,26 @@ const COMMENT_POLISHER_PROMPT = `你是一个 Issue 评论润色助手。
 注意：
 - 不要输出解释、前言、后记
 - 不要使用 create_comment 工具，只修改文件
+- 只修改指定的文件，不要做任何其他操作`
+
+const ISSUE_POLISHER_PROMPT = `你是一个 Issue 创建润色助手。
+
+用户会给你一个临时文件路径，里面包含 Issue 草稿。文件格式为：第一行是标题，空一行后是正文描述。
+
+你的任务：
+1. 先用 Read 工具读取该文件中的草稿内容
+2. 基于用户的草稿意图，润色标题和正文
+3. 标题：精炼、明确，体现核心诉求
+4. 正文：补充结构化内容（背景、需求描述、期望行为等），使用 Markdown 格式
+5. 如果用户只写了标题没有正文，根据标题推断并生成合理的正文
+6. 如果用户只写了几个关键词，将其扩展为完整的 Issue
+7. 保持用户的原始意图，只优化表达和结构
+8. 用 Edit 工具将润色后的内容写回同一个文件，完全替换原内容
+9. 输出格式必须为：第一行是润色后的标题，空一行后是润色后的正文
+
+注意：
+- 不要输出解释、前言、后记
+- 不要使用 create_issue 工具，只修改文件
 - 只修改指定的文件，不要做任何其他操作`
 
 const MEMORY_EXTRACTOR_ID = "system-memory-extractor"
@@ -67,6 +88,12 @@ const SYSTEM_AGENTS = [
     systemPrompt: COMMENT_POLISHER_PROMPT,
   },
   {
+    id: ISSUE_POLISHER_ID,
+    name: "Issue 润色助手",
+    baseAgent: "Sisyphus - ultraworker",
+    systemPrompt: ISSUE_POLISHER_PROMPT,
+  },
+  {
     id: MEMORY_EXTRACTOR_ID,
     name: "记忆提炼助手",
     baseAgent: "Sisyphus - ultraworker",
@@ -107,4 +134,4 @@ export async function seedSystemAgents(): Promise<void> {
   }
 }
 
-export { COMMENT_POLISHER_ID, MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT }
+export { COMMENT_POLISHER_ID, ISSUE_POLISHER_ID, MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT }

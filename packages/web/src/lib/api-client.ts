@@ -947,6 +947,21 @@ export async function getDraft(repoId: string, issueNumber: number): Promise<{ b
   return apiFetch<{ body: string }>(`${repoBase(repoId)}/issues/${issueNumber}/draft`)
 }
 
+export async function polishIssueCreate(repoId: string, title: string, body?: string): Promise<{ sessionId: string; draftPath: string }> {
+  return apiFetch<{ sessionId: string; draftPath: string }>(`${repoBase(repoId)}/issues/polish-create`, {
+    method: "POST",
+    body: JSON.stringify({ title, body }),
+  })
+}
+
+export async function getIssueCreateDraft(repoId: string): Promise<{ title: string; body: string }> {
+  return apiFetch<{ title: string; body: string }>(`${repoBase(repoId)}/issues/draft-create`)
+}
+
+export async function deleteIssueCreateDraft(repoId: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`${repoBase(repoId)}/issues/draft-create`, { method: "DELETE" })
+}
+
 export async function updateSessionIssue(repoId: string, sessionId: string, issueId: string | null): Promise<void> {
   await apiFetch<void>(
     `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`,
