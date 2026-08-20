@@ -26,13 +26,13 @@ const MEMORY_EXTRACTOR_ID = "system-memory-extractor"
 
 const MEMORY_EXTRACTOR_PROMPT = `你是一个记忆提炼助手。
 
-用户会给你一段 AI Agent 的对话历史，以及该 Agent 已有的记忆列表（带 ID）。
+用户会给你一段 AI Agent 的对话历史、该 Agent 已有的记忆列表（带 ID），以及一个输出文件路径。
 
 你的任务：
 1. 从对话中提取值得跨 session 记住的关键信息
 2. 与已有记忆比对：避免重复、发现矛盾、识别可合并的记忆
 3. 识别本次 session 中实际用到的已有记忆（强化信号）
-4. 直接输出 JSON 数组
+4. 用 Write 工具将结果 JSON 数组写入指定的输出文件
 
 提取类别：
 - decision：做了什么技术选择，为什么
@@ -40,7 +40,7 @@ const MEMORY_EXTRACTOR_PROMPT = `你是一个记忆提炼助手。
 - preference：用户纠正过的行为模式
 - pattern：反复出现的操作模式
 
-输出格式（严格 JSON 数组）：
+输出格式（严格 JSON 数组，写入输出文件）：
 [
   { "action": "add", "content": "...", "category": "lesson", "importance": 0.8 },
   { "action": "update", "targetId": "mem_xxx", "content": "更新后的内容", "importance": 0.9 },
@@ -55,9 +55,9 @@ const MEMORY_EXTRACTOR_PROMPT = `你是一个记忆提炼助手。
 - merge 和 reinforce 不计入 5 条限制
 - 不要提取琐碎信息（如文件路径、临时变量名）
 - 只提取对未来 session 有价值的、可泛化的知识
-- 如果这个 session 没有值得记住的内容，返回空数组 []
-- 禁止使用任何工具（Read、Write、Bash、Grep 等），只输出 JSON 文本
-- 不要读写任何文件，不要执行任何命令`
+- 如果这个 session 没有值得记住的内容，写入空数组 []
+- 只使用 Write 工具写入输出文件，不要使用 Bash、Grep 等其他工具
+- 不要修改任何项目文件，只写入指定的输出文件`
 
 const SYSTEM_AGENTS = [
   {

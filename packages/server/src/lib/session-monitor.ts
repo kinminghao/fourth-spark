@@ -7,7 +7,8 @@ import type { NotifyEvent } from "../core/types"
 import { logger } from "../middleware/logger"
 import { DEFAULT_VARIANT } from "./config"
 import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "./system-agents"
-import { buildExtractionPrompt, parseExtractionResult, executeActions, getSessionCustomAgentId } from "./memory-extractor"
+import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions, getSessionCustomAgentId } from "./memory-extractor"
+import { unlink } from "node:fs/promises"
 import { resolveAgent } from "./agent-validator"
 import { db } from "../db/index"
 import { sessions as sessionsTable } from "../db/schema"
@@ -425,6 +426,7 @@ async function triggerMemoryExtraction(repoId: string, client: RuntimeClient, so
 
 async function startExtraction(repoId: string, client: RuntimeClient, sourceSessionId: string, customAgentId: string): Promise<void> {
   let extractionSessionId: string | undefined
+  const outputPath = `/tmp/memory-extract-${crypto.randomUUID()}.json`
   try {
     try {
       const msgs = await client.getMessages(sourceSessionId)
@@ -436,6 +438,8 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
       processNextExtraction(repoId)
       return
     }
+
+    await Bun.write(outputPath, "[]")
 
     const agent = await resolveAgent(client, "Sisyphus - ultraworker")
     const session = await client.createSession({ agent, title: `[internal] memory extraction` })
@@ -453,68 +457,37 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
       set: { customAgentId: MEMORY_EXTRACTOR_ID, timeUpdated: Date.now() },
     })
 
-    const fullPrompt = `${MEMORY_EXTRACTOR_PROMPT}\n\n---\n\n${prompt}`
+    const fullPrompt = buildFullExtractionPrompt(MEMORY_EXTRACTOR_PROMPT, outputPath, prompt)
     await client.prompt(session.id, fullPrompt, { agent, variant: DEFAULT_VARIANT })
-    logger.info({ sessionId: session.id, sourceSessionId, customAgentId }, "memory extraction started, waiting for result")
+    logger.info({ sessionId: session.id, sourceSessionId, outputPath }, "memory extraction started, waiting for result")
 
     const startedAt = Date.now()
-    let resultText = ""
-
     while (Date.now() - startedAt < EXTRACTION_TIMEOUT_MS) {
       await new Promise(r => setTimeout(r, 2_000))
-
-      let sessionDone = false
       try {
         const statuses = await client.getSessionStatus()
         const s = statuses[session.id]
-        logger.info({ sessionId: session.id, status: s?.type ?? "gone" }, "[extract-debug] poll status")
         if (s && (s.type === "busy" || s.type === "retry")) continue
-        sessionDone = true
-      } catch (err) {
-        logger.warn({ err, sessionId: session.id }, "[extract-debug] getSessionStatus failed")
-        continue
-      }
-
-      if (sessionDone) {
-        try {
-          const messages = await client.getMessages(session.id)
-          logger.info({ sessionId: session.id, msgCount: messages.length, roles: messages.map(m => m.role) }, "[extract-debug] getMessages")
-          const lastAssistant = [...messages].reverse().find(m => m.role === "assistant")
-          if (lastAssistant) {
-            const partsSummary = (lastAssistant.parts ?? []).map(p => ({ type: p.type, hasContent: !!(p as Record<string, unknown>).content, hasText: !!(p as Record<string, unknown>).text, contentLen: ((p as Record<string, unknown>).content as string)?.length, textLen: ((p as Record<string, unknown>).text as string)?.length }))
-            logger.info({ sessionId: session.id, partsSummary }, "[extract-debug] assistant parts")
-            resultText = (lastAssistant.parts ?? [])
-              .filter(p => p.type === "text")
-              .map(p => { const r = p as Record<string, unknown>; return (r.content as string) ?? (r.text as string) ?? "" })
-              .join("\n").trim()
-            logger.info({ sessionId: session.id, resultTextLen: resultText.length, resultTextPreview: resultText.slice(0, 200) }, "[extract-debug] extracted text")
-          } else {
-            logger.warn({ sessionId: session.id }, "[extract-debug] no assistant message found")
-          }
-        } catch (err) {
-          logger.warn({ err, sessionId: session.id }, "[extract-debug] getMessages failed")
-        }
-        break
-      }
+      } catch { continue }
+      break
     }
 
-    if (resultText) {
+    const file = Bun.file(outputPath)
+    const resultText = (await file.exists()) ? (await file.text()).trim() : ""
+    logger.info({ sessionId: session.id, sourceSessionId, resultLen: resultText.length }, "memory extraction file read")
+
+    if (resultText && resultText !== "[]") {
       const actions = parseExtractionResult(resultText)
       if (actions.length > 0) {
         await executeActions(customAgentId, sourceSessionId, actions)
         logger.info({ sessionId: session.id, actionCount: actions.length, sourceSessionId }, "memory extraction completed")
-      } else {
-        logger.info({ sessionId: session.id, sourceSessionId }, "memory extraction returned no actions")
       }
-    } else {
-      logger.warn({ sessionId: session.id, sourceSessionId }, "memory extraction produced no text result")
     }
   } catch (err) {
     logger.warn({ err, sourceSessionId }, "memory extraction failed")
   } finally {
-    if (extractionSessionId) {
-      client.deleteSession(extractionSessionId).catch(() => {})
-    }
+    if (extractionSessionId) client.deleteSession(extractionSessionId).catch(() => {})
+    try { await unlink(outputPath) } catch { /* cleanup */ }
     processNextExtraction(repoId)
   }
 }

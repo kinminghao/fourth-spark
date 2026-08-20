@@ -98,6 +98,10 @@ export async function buildExtractionPrompt(sessionId: string, customAgentId: st
   return `## 对话历史\n${conversation}${todoSummary}${existingBlock}`
 }
 
+export function buildFullExtractionPrompt(systemPrompt: string, outputPath: string, conversationPrompt: string): string {
+  return `${systemPrompt}\n\n输出文件路径：${outputPath}\n请用 Write 工具将 JSON 结果写入上述文件，完全替换原内容。\n\n---\n\n${conversationPrompt}`
+}
+
 export function parseExtractionResult(text: string): ExtractionAction[] {
   try {
     const parsed = JSON.parse(text)
