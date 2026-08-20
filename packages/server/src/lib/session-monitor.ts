@@ -55,8 +55,6 @@ const STATUS_LABELS: Record<string, string> = { idle: "完成", busy: "运行中
 // Memory extraction state
 // ---------------------------------------------------------------------------
 const EXTRACTION_TIMEOUT_MS = 120_000
-type ExtractionEntry = { repoId: string; customAgentId: string; sourceSessionId: string; startedAt: number }
-const extractionSessions = new Map<string, ExtractionEntry>()
 const pendingExtractions = new Map<string, Array<{ sourceSessionId: string; customAgentId: string }>>()
 const extractingRepos = new Set<string>()
 
@@ -426,24 +424,22 @@ async function triggerMemoryExtraction(repoId: string, client: RuntimeClient, so
 }
 
 async function startExtraction(repoId: string, client: RuntimeClient, sourceSessionId: string, customAgentId: string): Promise<void> {
+  let extractionSessionId: string | undefined
   try {
-    // Sync messages to DB first
     try {
       const msgs = await client.getMessages(sourceSessionId)
       syncMessagesList(sourceSessionId, msgs)
-    } catch {
-      // best-effort sync
-    }
+    } catch { /* best-effort sync */ }
 
     const prompt = await buildExtractionPrompt(sourceSessionId, customAgentId)
     if (!prompt) {
-      logger.info({ sourceSessionId }, "no content to extract memories from")
       processNextExtraction(repoId)
       return
     }
 
     const agent = await resolveAgent(client, "Sisyphus - ultraworker")
     const session = await client.createSession({ agent, title: `[internal] memory extraction` })
+    extractionSessionId = session.id
 
     await db.insert(sessionsTable).values({
       id: session.id,
@@ -459,75 +455,51 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
 
     const fullPrompt = `${MEMORY_EXTRACTOR_PROMPT}\n\n---\n\n${prompt}`
     await client.prompt(session.id, fullPrompt, { agent, variant: DEFAULT_VARIANT })
+    logger.info({ sessionId: session.id, sourceSessionId, customAgentId }, "memory extraction started, waiting for result")
 
-    extractionSessions.set(session.id, {
-      repoId,
-      customAgentId,
-      sourceSessionId,
-      startedAt: Date.now(),
-    })
-    logger.info({ sessionId: session.id, sourceSessionId, customAgentId }, "memory extraction started")
-  } catch (err) {
-    logger.warn({ err, sourceSessionId }, "failed to start memory extraction")
-    processNextExtraction(repoId)
-  }
-}
+    const startedAt = Date.now()
+    let resultText = ""
 
-async function pollExtractionSessions(): Promise<void> {
-  for (const [sessionId, entry] of extractionSessions) {
-    const repoEntry = entries.find(e => e.repoId === entry.repoId)
-    if (!repoEntry) {
-      extractionSessions.delete(sessionId)
-      extractingRepos.delete(entry.repoId)
-      continue
-    }
+    while (Date.now() - startedAt < EXTRACTION_TIMEOUT_MS) {
+      await new Promise(r => setTimeout(r, 2_000))
 
-    const { client } = repoEntry
-
-    if (Date.now() - entry.startedAt > EXTRACTION_TIMEOUT_MS) {
-      logger.warn({ sessionId, sourceSessionId: entry.sourceSessionId }, "memory extraction timed out")
-      client.deleteSession(sessionId).catch(() => {})
-      extractionSessions.delete(sessionId)
-      processNextExtraction(entry.repoId)
-      continue
-    }
-
-    // Check if extraction session is idle
-    try {
-      const statuses = await client.getSessionStatus()
-      const s = statuses[sessionId]
-      if (s && (s.type === "busy" || s.type === "retry")) continue
-    } catch {
-      continue
-    }
-
-    {
       try {
-        const messages = await client.getMessages(sessionId)
+        const statuses = await client.getSessionStatus()
+        const s = statuses[session.id]
+        if (s && (s.type === "busy" || s.type === "retry")) continue
+      } catch { continue }
+
+      try {
+        const messages = await client.getMessages(session.id)
         const lastAssistant = [...messages].reverse().find(m => m.role === "assistant")
         if (lastAssistant?.parts) {
-          const textParts = lastAssistant.parts
+          resultText = lastAssistant.parts
             .filter(p => p.type === "text")
             .map(p => { const r = p as Record<string, unknown>; return (r.content as string) ?? (r.text as string) ?? "" })
-          const fullText = textParts.join("\n").trim()
-          if (fullText) {
-            const actions = parseExtractionResult(fullText)
-            if (actions.length > 0) {
-              await executeActions(entry.customAgentId, entry.sourceSessionId, actions)
-              logger.info({ sessionId, actionCount: actions.length, sourceSessionId: entry.sourceSessionId }, "memory extraction completed")
-            } else {
-              logger.info({ sessionId, sourceSessionId: entry.sourceSessionId }, "memory extraction returned no actions")
-            }
-          }
+            .join("\n").trim()
         }
-      } catch (err) {
-        logger.warn({ err, sessionId }, "failed to process extraction result")
-      }
-
-      client.deleteSession(sessionId).catch(() => {})
-      extractionSessions.delete(sessionId)
-      processNextExtraction(entry.repoId)
+      } catch { /* session might be gone, but we tried */ }
+      break
     }
+
+    if (resultText) {
+      const actions = parseExtractionResult(resultText)
+      if (actions.length > 0) {
+        await executeActions(customAgentId, sourceSessionId, actions)
+        logger.info({ sessionId: session.id, actionCount: actions.length, sourceSessionId }, "memory extraction completed")
+      } else {
+        logger.info({ sessionId: session.id, sourceSessionId }, "memory extraction returned no actions")
+      }
+    } else {
+      logger.warn({ sessionId: session.id, sourceSessionId }, "memory extraction produced no text result")
+    }
+  } catch (err) {
+    logger.warn({ err, sourceSessionId }, "memory extraction failed")
+  } finally {
+    if (extractionSessionId) {
+      client.deleteSession(extractionSessionId).catch(() => {})
+    }
+    processNextExtraction(repoId)
   }
 }
 
@@ -685,7 +657,6 @@ async function pollOnce(): Promise<void> {
         }
       }
     }
-    await pollExtractionSessions()
   } finally {
     polling = false
   }
@@ -742,7 +713,6 @@ export const sessionMonitor = {
     lastUserMessageIds.clear()
     todoFingerprints.clear()
     userAborted.clear()
-    extractionSessions.clear()
     pendingExtractions.clear()
     extractingRepos.clear()
     logger.info("session monitor stopped")
