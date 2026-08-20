@@ -186,6 +186,29 @@ async function handleEmptyResponse(client: RuntimeClient, sessionId: string): Pr
     return true
   }
 
+  // Retries exhausted — attempt account switch (empty responses are often
+  // caused by rate-limit throttling that doesn't produce a clean error).
+  const pool = getRegistry().accountPool
+  if (pool && Date.now() - lastSwitchAt >= RECENT_SWITCH_GUARD_MS) {
+    const activeId = await pool.getActiveId()
+    await pool.reportLimit({ accountId: activeId ?? "", message: "empty response after retries (suspected rate limit)" })
+    const result = await pool.acquire({ reason: "ratelimit", currentAccountId: activeId ?? "" })
+    if (result.ok) {
+      lastSwitchAt = Date.now()
+      emptyRetryCounts.delete(sessionId)
+      logger.info({ from: activeId, to: result.accountId, sessionId }, "account switched after empty-response retries exhausted")
+      emitNotification({
+        type: "account_switched",
+        title: "账号切换",
+        body: "空响应重试耗尽，已切换账号并重试",
+        sessionId,
+      })
+      await repromptSession(client, sessionId)
+      return true
+    }
+    logger.warn({ reason: result.reason, sessionId }, "account switch failed after empty-response retries")
+  }
+
   const sid = sessionId.slice(-8)
   logger.warn({ sessionId, retryCount }, "empty-response retry limit exhausted, notifying user")
   emitNotification({
@@ -547,11 +570,13 @@ async function pollOnce(): Promise<void> {
             }
           }
 
-          if (prev === "busy") {
-            const shouldContinue = await detectTruncation(client, sessionId)
-            if (shouldContinue) {
-              await autoContinueSession(client, sessionId)
-              continue
+          if (prev === "busy" || prev === "retry") {
+            if (prev === "busy") {
+              const shouldContinue = await detectTruncation(client, sessionId)
+              if (shouldContinue) {
+                await autoContinueSession(client, sessionId)
+                continue
+              }
             }
 
             if (await handleEmptyResponse(client, sessionId)) {
@@ -574,11 +599,13 @@ async function pollOnce(): Promise<void> {
             }
           }
 
-          if (prev === "busy") {
-            const shouldContinue = await detectTruncation(client, sessionId)
-            if (shouldContinue) {
-              await autoContinueSession(client, sessionId)
-              continue
+          if (prev === "busy" || prev === "retry") {
+            if (prev === "busy") {
+              const shouldContinue = await detectTruncation(client, sessionId)
+              if (shouldContinue) {
+                await autoContinueSession(client, sessionId)
+                continue
+              }
             }
 
             if (await handleEmptyResponse(client, sessionId)) {

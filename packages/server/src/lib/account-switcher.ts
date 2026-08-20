@@ -86,18 +86,17 @@ function scheduleRecovery(id: string, until: number): void {
   recoveryTimers.set(id, timer)
 }
 
+const DEFAULT_COOLDOWN_MS = 30 * 60_000
+
 export function markCooldown(id: string, untilMs?: number): void {
-  if (typeof untilMs === "number" && Number.isFinite(untilMs)) {
-    cooldownPending.delete(id)
-    cooldown.set(id, untilMs)
-    scheduleRecovery(id, untilMs)
-    persistCooldown()
-    logger.info({ id, until: new Date(untilMs).toISOString() }, "account cooldown set")
-  } else {
-    cooldown.delete(id)
-    cooldownPending.add(id)
-    logger.info({ id }, "account cooldown set (unknown deadline)")
-  }
+  const deadline = typeof untilMs === "number" && Number.isFinite(untilMs)
+    ? untilMs
+    : Date.now() + DEFAULT_COOLDOWN_MS
+  cooldownPending.delete(id)
+  cooldown.set(id, deadline)
+  scheduleRecovery(id, deadline)
+  persistCooldown()
+  logger.info({ id, until: new Date(deadline).toISOString(), fallback: untilMs === undefined }, "account cooldown set")
 }
 
 export function clearCooldown(id: string): void {
