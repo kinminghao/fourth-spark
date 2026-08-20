@@ -7,7 +7,7 @@ import type { NotifyEvent } from "../core/types"
 import { logger } from "../middleware/logger"
 import { DEFAULT_VARIANT } from "./config"
 import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "./system-agents"
-import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions, getSessionCustomAgentId } from "./memory-extractor"
+import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions, getSessionCustomAgentId, listExtractableSessions } from "./memory-extractor"
 import { unlink } from "node:fs/promises"
 import { resolveAgent } from "./agent-validator"
 import { db } from "../db/index"
@@ -56,6 +56,8 @@ const STATUS_LABELS: Record<string, string> = { idle: "完成", busy: "运行中
 // Memory extraction state
 // ---------------------------------------------------------------------------
 const EXTRACTION_TIMEOUT_MS = 120_000
+const EXTRACTION_SCAN_INTERVAL_MS = 4 * 60 * 60 * 1_000
+let extractionScanTimer: ReturnType<typeof setInterval> | undefined
 const pendingExtractions = new Map<string, Array<{ sourceSessionId: string; customAgentId: string }>>()
 const extractingRepos = new Set<string>()
 
@@ -555,9 +557,6 @@ async function pollOnce(): Promise<void> {
             if (await handleEmptyResponse(client, sessionId)) {
               continue
             }
-
-            triggerMemoryExtraction(repoId, client, sessionId).catch(err =>
-              logger.warn({ err, sessionId }, "memory extraction trigger failed"))
           }
         }
       }
@@ -585,9 +584,6 @@ async function pollOnce(): Promise<void> {
             if (await handleEmptyResponse(client, sessionId)) {
               continue
             }
-
-            triggerMemoryExtraction(repoId, client, sessionId).catch(err =>
-              logger.warn({ err, sessionId }, "memory extraction trigger failed"))
           }
 
           if (prev && prev !== status.type) emitTransition(sessionId, prev, status.type)
@@ -651,6 +647,23 @@ async function pollOnce(): Promise<void> {
   }
 }
 
+async function runExtractionScan(): Promise<void> {
+  const sessions = await listExtractableSessions()
+  if (sessions.length === 0) return
+  logger.info({ count: sessions.length }, "memory extraction scan: found sessions needing extraction")
+
+  for (const { id: sessionId } of sessions) {
+    for (const { repoId, client } of entries) {
+      try {
+        await client.getSession(sessionId)
+        triggerMemoryExtraction(repoId, client, sessionId).catch(err =>
+          logger.warn({ err, sessionId }, "scheduled memory extraction failed"))
+        break
+      } catch { continue }
+    }
+  }
+}
+
 export const sessionMonitor = {
   markAborted(sessionId: string): void {
     userAborted.add(sessionId)
@@ -687,6 +700,16 @@ export const sessionMonitor = {
     timer = setInterval(() => {
       pollOnce().catch((err) => logger.error({ err }, "session monitor poll error"))
     }, POLL_INTERVAL_MS)
+
+    if (!extractionScanTimer) {
+      extractionScanTimer = setInterval(() => {
+        runExtractionScan().catch((err) => logger.error({ err }, "memory extraction scan error"))
+      }, EXTRACTION_SCAN_INTERVAL_MS)
+      setTimeout(() => {
+        runExtractionScan().catch((err) => logger.error({ err }, "initial memory extraction scan error"))
+      }, 60_000)
+    }
+
     logger.info("session monitor started")
   },
 
@@ -694,6 +717,10 @@ export const sessionMonitor = {
     if (timer) {
       clearInterval(timer)
       timer = undefined
+    }
+    if (extractionScanTimer) {
+      clearInterval(extractionScanTimer)
+      extractionScanTimer = undefined
     }
     entries.length = 0
     autoContinueCounts.clear()

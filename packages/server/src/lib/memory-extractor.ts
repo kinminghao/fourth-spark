@@ -1,4 +1,4 @@
-import { eq, and, isNull, desc } from "drizzle-orm"
+import { eq, and, isNull, isNotNull, desc } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, sessions as sessionsTable, customAgents } from "../db/schema"
 import { getMessagesFromDB, getTodosFromDB } from "../db/query"
@@ -302,4 +302,42 @@ export async function getSessionCustomAgentId(sessionId: string): Promise<string
   if (!agent || agent.isSystem === 1) return null
 
   return session.customAgentId
+}
+
+export async function sessionNeedsExtraction(sessionId: string): Promise<boolean> {
+  const [session] = await db.select({ timeUpdated: sessionsTable.timeUpdated })
+    .from(sessionsTable)
+    .where(eq(sessionsTable.id, sessionId))
+  if (!session) return false
+
+  const [latestMemory] = await db.select({ createdAt: agentMemories.createdAt })
+    .from(agentMemories)
+    .where(eq(agentMemories.sessionId, sessionId))
+    .orderBy(desc(agentMemories.createdAt))
+    .limit(1)
+
+  if (!latestMemory) return true
+  return session.timeUpdated > latestMemory.createdAt
+}
+
+export async function listExtractableSessions(): Promise<Array<{ id: string; customAgentId: string }>> {
+  const rows = await db.select({
+    id: sessionsTable.id,
+    customAgentId: sessionsTable.customAgentId,
+    timeUpdated: sessionsTable.timeUpdated,
+  })
+    .from(sessionsTable)
+    .innerJoin(customAgents, eq(sessionsTable.customAgentId, customAgents.id))
+    .where(and(
+      isNotNull(sessionsTable.customAgentId),
+      eq(customAgents.isSystem, 0),
+    ))
+
+  const result: Array<{ id: string; customAgentId: string }> = []
+  for (const row of rows) {
+    if (!row.customAgentId) continue
+    const needs = await sessionNeedsExtraction(row.id)
+    if (needs) result.push({ id: row.id, customAgentId: row.customAgentId })
+  }
+  return result
 }
