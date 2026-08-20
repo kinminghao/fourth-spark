@@ -510,7 +510,7 @@ async function pollExtractionSessions(): Promise<void> {
         if (lastAssistant?.parts) {
           const textParts = lastAssistant.parts
             .filter(p => p.type === "text")
-            .map(p => (p as Record<string, unknown>).content as string ?? "")
+            .map(p => { const r = p as Record<string, unknown>; return (r.content as string) ?? (r.text as string) ?? "" })
           const fullText = textParts.join("\n").trim()
           if (fullText) {
             const actions = parseExtractionResult(fullText)
