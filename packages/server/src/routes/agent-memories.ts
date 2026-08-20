@@ -3,12 +3,13 @@ import { eq, and, isNull, desc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
 import { runtimeManager } from "../lib/process-manager"
-import { buildExtractionPrompt, parseExtractionResult, executeActions } from "../lib/memory-extractor"
+import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions } from "../lib/memory-extractor"
 import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "../lib/system-agents"
 import { resolveAgent } from "../lib/agent-validator"
 import { syncMessagesList } from "../db/sync"
 import { DEFAULT_VARIANT } from "../lib/config"
 import { logger } from "../middleware/logger"
+import { unlink } from "node:fs/promises"
 import type { RuntimeClient } from "../core/runtime-client"
 
 async function requireNonSystemAgent(agentId: string): Promise<{ error?: string; status?: number }> {
@@ -146,13 +147,16 @@ agentMemoryRoutes.post("/extract", async (c) => {
 
   if (validSessions.length === 0) return c.json({ error: "No matching sessions found", status: 404 }, 404)
 
-  const results: Array<{ sessionId: string; status: string; actions?: number; error?: string; debug?: Record<string, unknown> }> = []
+  const results: Array<{ sessionId: string; status: string; actions?: number; error?: string }> = []
 
   for (const session of validSessions) {
+    const outputPath = `/tmp/memory-extract-${crypto.randomUUID()}.json`
+    let extractionSessionId: string | undefined
+    let client: RuntimeClient | null = null
     try {
       const found = await findClientForSession(session.id)
       if (!found) { results.push({ sessionId: session.id, status: "error", error: "no running client found" }); continue }
-      const { client } = found
+      client = found.client
 
       try {
         const msgs = await client.getMessages(session.id)
@@ -163,8 +167,11 @@ agentMemoryRoutes.post("/extract", async (c) => {
       const prompt = await buildExtractionPrompt(session.id, agentId)
       if (!prompt) { results.push({ sessionId: session.id, status: "skipped", error: "no content to extract" }); continue }
 
+      await Bun.write(outputPath, "[]")
+
       const agent = await resolveAgent(client, "Sisyphus - ultraworker")
       const extractionSession = await client.createSession({ agent, title: `[internal] memory extraction` })
+      extractionSessionId = extractionSession.id
 
       await db.insert(sessionsTable).values({
         id: extractionSession.id, title: `[internal] memory extraction`,
@@ -172,13 +179,11 @@ agentMemoryRoutes.post("/extract", async (c) => {
         timeCreated: Date.now(), timeUpdated: Date.now(),
       }).onConflictDoUpdate({ target: sessionsTable.id, set: { customAgentId: MEMORY_EXTRACTOR_ID, timeUpdated: Date.now() } })
 
-      const fullPrompt = `${MEMORY_EXTRACTOR_PROMPT}\n\n---\n\n${prompt}`
+      const fullPrompt = buildFullExtractionPrompt(MEMORY_EXTRACTOR_PROMPT, outputPath, prompt)
       await client.prompt(extractionSession.id, fullPrompt, { agent, variant: DEFAULT_VARIANT })
 
-      let resultText = ""
       const startedAt = Date.now()
       const TIMEOUT = 120_000
-
       while (Date.now() - startedAt < TIMEOUT) {
         await new Promise(r => setTimeout(r, 2_000))
         try {
@@ -186,49 +191,28 @@ agentMemoryRoutes.post("/extract", async (c) => {
           const s = statuses[extractionSession.id]
           if (s && (s.type === "busy" || s.type === "retry")) continue
         } catch { continue }
-
-        try {
-          const messages = await client.getMessages(extractionSession.id)
-          const lastAssistant = [...messages].reverse().find(m => m.role === "assistant")
-          if (lastAssistant?.parts) {
-            resultText = lastAssistant.parts
-              .filter(p => p.type === "text")
-              .map(p => { const r = p as Record<string, unknown>; return (r.content as string) ?? (r.text as string) ?? "" })
-              .join("\n").trim()
-          }
-          if (!resultText && lastAssistant) {
-            results.push({
-              sessionId: session.id, status: "error", error: "assistant responded but no text extracted",
-              debug: {
-                partsCount: lastAssistant.parts?.length ?? 0,
-                partTypes: lastAssistant.parts?.map(p => p.type) ?? [],
-                rawFirstPart: lastAssistant.parts?.[0] ? JSON.stringify(lastAssistant.parts[0]).slice(0, 500) : null,
-              },
-            })
-            client.deleteSession(extractionSession.id).catch(() => {})
-            continue
-          }
-        } catch (err) {
-          results.push({ sessionId: session.id, status: "error", error: `getMessages failed: ${err}` })
-          client.deleteSession(extractionSession.id).catch(() => {})
-          continue
-        }
         break
       }
 
-      client.deleteSession(extractionSession.id).catch(() => {})
+      const file = Bun.file(outputPath)
+      const resultText = (await file.exists()) ? (await file.text()).trim() : ""
 
-      if (!resultText) { results.push({ sessionId: session.id, status: "error", error: "timeout or empty result" }); continue }
-
-      const actions = parseExtractionResult(resultText)
-      if (actions.length > 0) {
-        await executeActions(agentId, session.id, actions)
-        results.push({ sessionId: session.id, status: "ok", actions: actions.length })
+      if (resultText && resultText !== "[]") {
+        const actions = parseExtractionResult(resultText)
+        if (actions.length > 0) {
+          await executeActions(agentId, session.id, actions)
+          results.push({ sessionId: session.id, status: "ok", actions: actions.length })
+        } else {
+          results.push({ sessionId: session.id, status: "empty", error: "parsed 0 actions" })
+        }
       } else {
-        results.push({ sessionId: session.id, status: "empty", error: "parsed 0 actions", debug: { resultTextPreview: resultText.slice(0, 300) } })
+        results.push({ sessionId: session.id, status: "empty", error: "no memories extracted" })
       }
     } catch (err) {
       results.push({ sessionId: session.id, status: "error", error: String(err) })
+    } finally {
+      if (extractionSessionId && client) client.deleteSession(extractionSessionId).catch(() => {})
+      try { await unlink(outputPath) } catch { /* cleanup */ }
     }
   }
 
