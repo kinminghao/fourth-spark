@@ -463,23 +463,39 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
     while (Date.now() - startedAt < EXTRACTION_TIMEOUT_MS) {
       await new Promise(r => setTimeout(r, 2_000))
 
+      let sessionDone = false
       try {
         const statuses = await client.getSessionStatus()
         const s = statuses[session.id]
+        logger.info({ sessionId: session.id, status: s?.type ?? "gone" }, "[extract-debug] poll status")
         if (s && (s.type === "busy" || s.type === "retry")) continue
-      } catch { continue }
+        sessionDone = true
+      } catch (err) {
+        logger.warn({ err, sessionId: session.id }, "[extract-debug] getSessionStatus failed")
+        continue
+      }
 
-      try {
-        const messages = await client.getMessages(session.id)
-        const lastAssistant = [...messages].reverse().find(m => m.role === "assistant")
-        if (lastAssistant?.parts) {
-          resultText = lastAssistant.parts
-            .filter(p => p.type === "text")
-            .map(p => { const r = p as Record<string, unknown>; return (r.content as string) ?? (r.text as string) ?? "" })
-            .join("\n").trim()
+      if (sessionDone) {
+        try {
+          const messages = await client.getMessages(session.id)
+          logger.info({ sessionId: session.id, msgCount: messages.length, roles: messages.map(m => m.role) }, "[extract-debug] getMessages")
+          const lastAssistant = [...messages].reverse().find(m => m.role === "assistant")
+          if (lastAssistant) {
+            const partsSummary = (lastAssistant.parts ?? []).map(p => ({ type: p.type, hasContent: !!(p as Record<string, unknown>).content, hasText: !!(p as Record<string, unknown>).text, contentLen: ((p as Record<string, unknown>).content as string)?.length, textLen: ((p as Record<string, unknown>).text as string)?.length }))
+            logger.info({ sessionId: session.id, partsSummary }, "[extract-debug] assistant parts")
+            resultText = (lastAssistant.parts ?? [])
+              .filter(p => p.type === "text")
+              .map(p => { const r = p as Record<string, unknown>; return (r.content as string) ?? (r.text as string) ?? "" })
+              .join("\n").trim()
+            logger.info({ sessionId: session.id, resultTextLen: resultText.length, resultTextPreview: resultText.slice(0, 200) }, "[extract-debug] extracted text")
+          } else {
+            logger.warn({ sessionId: session.id }, "[extract-debug] no assistant message found")
+          }
+        } catch (err) {
+          logger.warn({ err, sessionId: session.id }, "[extract-debug] getMessages failed")
         }
-      } catch { /* session might be gone, but we tried */ }
-      break
+        break
+      }
     }
 
     if (resultText) {

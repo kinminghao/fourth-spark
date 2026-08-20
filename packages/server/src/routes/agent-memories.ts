@@ -2,7 +2,14 @@ import { Hono } from "hono"
 import { eq, and, isNull, desc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
-import { sessionMonitor } from "../lib/session-monitor"
+import { runtimeManager } from "../lib/process-manager"
+import { buildExtractionPrompt, parseExtractionResult, executeActions } from "../lib/memory-extractor"
+import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "../lib/system-agents"
+import { resolveAgent } from "../lib/agent-validator"
+import { syncMessagesList } from "../db/sync"
+import { DEFAULT_VARIANT } from "../lib/config"
+import { logger } from "../middleware/logger"
+import type { RuntimeClient } from "../core/runtime-client"
 
 async function requireNonSystemAgent(agentId: string): Promise<{ error?: string; status?: number }> {
   const [agent] = await db.select({ id: customAgents.id, isSystem: customAgents.isSystem })
@@ -106,6 +113,20 @@ agentMemoryRoutes.delete("/:memId", async (c) => {
   return c.json({ ok: true })
 })
 
+async function findClientForSession(sessionId: string): Promise<{ repoId: string; client: RuntimeClient } | null> {
+  const { repos: repoRows } = await import("../db/schema").then(s => ({ repos: s.repos }))
+  const allRepoRows = await db.select({ id: repoRows.id }).from(repoRows)
+  for (const repo of allRepoRows) {
+    const client = runtimeManager.getClient(repo.id)
+    if (!client) continue
+    try {
+      await client.getSession(sessionId)
+      return { repoId: repo.id, client }
+    } catch { continue }
+  }
+  return null
+}
+
 agentMemoryRoutes.post("/extract", async (c) => {
   const agentId = c.req.param("agentId")
   if (!agentId) return c.json({ error: "Missing agentId", status: 400 }, 400)
@@ -125,11 +146,93 @@ agentMemoryRoutes.post("/extract", async (c) => {
 
   if (validSessions.length === 0) return c.json({ error: "No matching sessions found", status: 404 }, 404)
 
+  const results: Array<{ sessionId: string; status: string; actions?: number; error?: string; debug?: Record<string, unknown> }> = []
+
   for (const session of validSessions) {
-    sessionMonitor.extractMemory(session.id)
+    try {
+      const found = await findClientForSession(session.id)
+      if (!found) { results.push({ sessionId: session.id, status: "error", error: "no running client found" }); continue }
+      const { client } = found
+
+      try {
+        const msgs = await client.getMessages(session.id)
+        syncMessagesList(session.id, msgs)
+        await new Promise(r => setTimeout(r, 500))
+      } catch { /* best-effort */ }
+
+      const prompt = await buildExtractionPrompt(session.id, agentId)
+      if (!prompt) { results.push({ sessionId: session.id, status: "skipped", error: "no content to extract" }); continue }
+
+      const agent = await resolveAgent(client, "Sisyphus - ultraworker")
+      const extractionSession = await client.createSession({ agent, title: `[internal] memory extraction` })
+
+      await db.insert(sessionsTable).values({
+        id: extractionSession.id, title: `[internal] memory extraction`,
+        customAgentId: MEMORY_EXTRACTOR_ID, agent: agent ?? null,
+        timeCreated: Date.now(), timeUpdated: Date.now(),
+      }).onConflictDoUpdate({ target: sessionsTable.id, set: { customAgentId: MEMORY_EXTRACTOR_ID, timeUpdated: Date.now() } })
+
+      const fullPrompt = `${MEMORY_EXTRACTOR_PROMPT}\n\n---\n\n${prompt}`
+      await client.prompt(extractionSession.id, fullPrompt, { agent, variant: DEFAULT_VARIANT })
+
+      let resultText = ""
+      const startedAt = Date.now()
+      const TIMEOUT = 120_000
+
+      while (Date.now() - startedAt < TIMEOUT) {
+        await new Promise(r => setTimeout(r, 2_000))
+        try {
+          const statuses = await client.getSessionStatus()
+          const s = statuses[extractionSession.id]
+          if (s && (s.type === "busy" || s.type === "retry")) continue
+        } catch { continue }
+
+        try {
+          const messages = await client.getMessages(extractionSession.id)
+          const lastAssistant = [...messages].reverse().find(m => m.role === "assistant")
+          if (lastAssistant?.parts) {
+            resultText = lastAssistant.parts
+              .filter(p => p.type === "text")
+              .map(p => { const r = p as Record<string, unknown>; return (r.content as string) ?? (r.text as string) ?? "" })
+              .join("\n").trim()
+          }
+          if (!resultText && lastAssistant) {
+            results.push({
+              sessionId: session.id, status: "error", error: "assistant responded but no text extracted",
+              debug: {
+                partsCount: lastAssistant.parts?.length ?? 0,
+                partTypes: lastAssistant.parts?.map(p => p.type) ?? [],
+                rawFirstPart: lastAssistant.parts?.[0] ? JSON.stringify(lastAssistant.parts[0]).slice(0, 500) : null,
+              },
+            })
+            client.deleteSession(extractionSession.id).catch(() => {})
+            continue
+          }
+        } catch (err) {
+          results.push({ sessionId: session.id, status: "error", error: `getMessages failed: ${err}` })
+          client.deleteSession(extractionSession.id).catch(() => {})
+          continue
+        }
+        break
+      }
+
+      client.deleteSession(extractionSession.id).catch(() => {})
+
+      if (!resultText) { results.push({ sessionId: session.id, status: "error", error: "timeout or empty result" }); continue }
+
+      const actions = parseExtractionResult(resultText)
+      if (actions.length > 0) {
+        await executeActions(agentId, session.id, actions)
+        results.push({ sessionId: session.id, status: "ok", actions: actions.length })
+      } else {
+        results.push({ sessionId: session.id, status: "empty", error: "parsed 0 actions", debug: { resultTextPreview: resultText.slice(0, 300) } })
+      }
+    } catch (err) {
+      results.push({ sessionId: session.id, status: "error", error: String(err) })
+    }
   }
 
-  return c.json({ queued: validSessions.length })
+  return c.json({ results })
 })
 
 export const agentSessionRoutes = new Hono()

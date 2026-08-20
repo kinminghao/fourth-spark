@@ -940,13 +940,27 @@ function MemoryPanel({ agentId }: { agentId: string }) {
     })
   }
 
+  const [extractResult, setExtractResult] = useState<string | null>(null)
+
   const handleExtract = async () => {
     if (selected.size === 0) return
     setExtracting(true)
+    setExtractResult(null)
     try {
-      await api.extractAgentMemories(agentId, [...selected])
+      const res = await api.extractAgentMemories(agentId, [...selected])
+      const r = res as Record<string, unknown>
+      const results = r.results as Array<{ sessionId: string; status: string; actions?: number; error?: string }>
+      if (results) {
+        const ok = results.filter(x => x.status === "ok")
+        const failed = results.filter(x => x.status !== "ok")
+        if (ok.length > 0) setExtractResult(`提取成功 ${ok.reduce((s, x) => s + (x.actions ?? 0), 0)} 条记忆`)
+        if (failed.length > 0) setExtractResult(prev => (prev ? prev + "；" : "") + failed.map(x => x.error ?? x.status).join("；"))
+        if (ok.length > 0) await load()
+      }
       setSelected(new Set())
-    } catch { /* best-effort */ }
+    } catch (err) {
+      setExtractResult(`请求失败: ${err instanceof Error ? err.message : String(err)}`)
+    }
     setExtracting(false)
   }
 
@@ -1057,6 +1071,12 @@ function MemoryPanel({ agentId }: { agentId: string }) {
                     {extracting ? <Loader2 className="h-3.5 w-3.5 fs-spin" /> : <Brain className="h-3.5 w-3.5" />}
                     {extracting ? "提取中…" : `提取选中 Session 的记忆 (${selected.size})`}
                   </button>
+                )}
+                {extractResult && (
+                  <p className={clsx("mt-1.5 rounded-md px-3 py-1.5 text-xs",
+                    extractResult.includes("成功") ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400")}>
+                    {extractResult}
+                  </p>
                 )}
               </>
             )}
