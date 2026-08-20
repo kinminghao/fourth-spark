@@ -14,17 +14,23 @@
 Frontend (React+Vite :5173)
     │
     ▼
-Server (Bun+Hono :3000)
+Server (Bun+Hono :3000, HTTPS :3443)
     │
-    ├── ProcessManager
-    │   ├── Repo A → opencode serve :8081 (cwd /path/a)
-    │   ├── Repo B → opencode serve :8082 (cwd /path/b)
-    │   └── ...
+    ├── RuntimeManager (core/runtime-manager.ts)
+    │   ├── OpenCodeProvider   → opencode serve :8081-8199 (HTTP, 一个进程/repo)
+    │   ├── ClaudeCodeProvider → claude -p (stdio, 一个子进程/session)
+    │   └── ... (可插拔 RuntimeProvider)
+    │
+    ├── SyncScheduler ── 每小时自动同步 Issue/PR/Milestone/Comment/Tag
+    ├── SenseVoice ───── 本地语音转文字
+    ├── TLS Manager ──── 自签证书 LAN HTTPS
     │
     └── PostgreSQL (docker :5432)
 ```
 
-- 每个 repo 对应一个独立的 opencode 进程, 端口自动分配 (8081-8199, 127.0.0.1)
+- 每个 repo 对应一个独立的 Agent 运行时, 类型由 `repos.runtimeType` 决定 (默认 opencode)
+- OpenCode: 端口自动分配 (8081-8199, 127.0.0.1), HTTP API
+- Claude Code: 每个 session 按需 spawn `claude -p` 子进程, stdio 通信
 - 所有 session/event/agent API 挂在 `/api/repos/:repoId/` 下
 - Repo CRUD API 在 `/api/repos`
 
@@ -41,6 +47,8 @@ Server (Bun+Hono :3000)
 | `update_issue` | 更新 issue (标题/正文/状态) |
 | `create_comment` | 给 issue 添加评论 |
 | `list_comments` | 列出 issue 的评论 |
+| `list_pull_requests` | 列出 PR (支持 state 筛选和分页) |
+| `get_pull_request` | 按编号获取单个 PR (含 diff stats) |
 | `create_pull_request` | 创建 PR (需指定 head/base 分支)；可选 issue_number 自动关联 issue |
 | `list_pr_comments` | 列出 PR 的评论 |
 | `create_pr_comment` | 给 PR 添加评论 |

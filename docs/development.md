@@ -4,7 +4,8 @@
 
 - [Bun](https://bun.sh/) >= 1.1
 - [Docker](https://docs.docker.com/get-docker/)（用于 PostgreSQL）
-- [OpenCode](https://opencode.ai/) CLI（`opencode serve`）
+- [OpenCode](https://opencode.ai/) CLI（`opencode serve`）— 默认运行时
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI（`claude`）— 可选运行时，按仓库配置
 
 ## 初始化
 
@@ -23,7 +24,8 @@ make dev      # 启动 Server + Web（前台）
 
 - **PostgreSQL** 通过 `docker-compose` 运行（容器名 `fourth-spark-db`）
 - **Server** 和 **Web** 在宿主机直接运行，不在容器里
-- Server 启动时会自动为数据库中所有已注册的 repo 拉起独立的 `opencode serve` 进程
+- Server 启动时会自动为数据库中所有已注册的 repo 拉起独立的 Agent 运行时进程（OpenCode 或 Claude Code，由 `repos.runtimeType` 决定）
+- 首次启动会自动下载 SenseVoice 语音识别模型（~240 MB），下载到 `~/.fourth-spark/models/sensevoice/`
 
 ### 热重载
 
@@ -91,25 +93,29 @@ make db-migrate    # 执行 migration
 
 ## 路由结构
 
-所有 API 路由挂在两个层级：
+所有 API 路由挂在两个层级（22 个路由模块）：
 
 ```
 /api/                          全局路由
-├── repos                      仓库 CRUD
+├── repos                      仓库 CRUD + 进程控制
 ├── settings                   全局设置 KV
 ├── git-hosts                  Git 平台凭证
 ├── health                     服务健康检查
-├── usage                      用量统计
+├── usage                      用量统计 + 账号切换
+├── cloud                      Cloud 账号池管理
 ├── push                       设备 Token 注册
+├── transcribe                 语音转文字 (SenseVoice)
 ├── agents-md                  全局 AGENTS.md
 ├── custom-agents              全局自定义 Agent
+├── custom-agents/:id/memories Agent 记忆 CRUD
+├── custom-agents/:id/sessions Agent 可提取会话列表
 └── prompt-fragments           全局 Prompt 片段
 
 /api/repos/:repoId/            仓库作用域路由
 ├── sessions                   会话管理 + prompt
 ├── sessions/:id/events        单会话 SSE 事件流
 ├── events                     全局 SSE 事件流
-├── agents                     内置 Agent 列表
+├── agents                     运行时内置 Agent 列表
 ├── custom-agents              仓库级自定义 Agent
 ├── prompt-fragments           仓库级 Prompt 片段
 ├── models                     LLM 模型列表
@@ -117,8 +123,9 @@ make db-migrate    # 执行 migration
 ├── pulls                      PR 管理
 ├── tags                       标签管理
 ├── milestones                 里程碑管理
+├── workspaces                 Workspace 管理
 ├── mcp                        MCP 协议端点
-└── health                     OpenCode 进程健康检查
+└── health                     运行时进程健康检查
 ```
 
 ## Git 平台操作
@@ -164,4 +171,12 @@ make stop-opencode           # 杀死所有 opencode 进程
 
 ### PID 文件
 
-进程管理器维护 `/tmp/fourth-spark/pid-map.json`，记录所有 opencode 子进程的 PID、端口和 repoId。Server 启动时会检查此文件，收养存活的旧进程或杀死孤儿进程。
+OpenCode 运行时维护 `/tmp/fourth-spark/pid-map.opencode.json`，记录所有 opencode 子进程的 PID、端口和 repoId。Server 启动时会检查此文件，收养存活的旧进程或杀死孤儿进程。Claude Code 运行时不使用 PID 文件（每个 session 按需 spawn 子进程）。
+
+### SenseVoice 模型
+
+语音识别模型存放在 `~/.fourth-spark/models/sensevoice/`，首次启动自动下载。支持 linux-x64、linux-arm64、darwin-arm64 三个平台。可通过 `HF_MIRROR` 环境变量配置 HuggingFace 镜像地址。
+
+### TLS 证书
+
+自签 TLS 证书存放在 `~/.fourth-spark/tls/`，自动生成。当本机 IP 变化时会自动重新生成。可通过 `TLS_CERT` / `TLS_KEY` 环境变量指定自定义证书。

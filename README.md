@@ -12,18 +12,21 @@
 Browser (React + Vite)  ·  iOS App (Capacitor)
     │
     ▼
-Server (Bun + Hono :3000)
+Server (Bun + Hono :3000 / HTTPS :3443)
     │
-    ├── ProcessManager ──── 每个 Repo/Workspace 一个 OpenCode 进程 (:8081–8199)
+    ├── RuntimeManager ──── 可插拔多运行时：OpenCode (:8081–8199) + Claude Code (stdio)
     ├── SessionMonitor ──── 状态轮询 / 截断续写 / 空响应重试 / 停滞检测
     ├── WorkspaceManager ── Git Worktree 任务隔离
+    ├── SyncScheduler ───── 每小时自动同步 Issue/PR/Milestone/Comment/Tag
     ├── AccountPool ─────── 本地多账号轮换 或 Cloud 账号池 (lease)
     ├── MCP Server ──────── Git 平台操作代理 (GitHub · Gitea · GitLab)
+    ├── SenseVoice ──────── 本地语音转文字 (离线 STT)
+    ├── TLS Manager ─────── 自签证书，LAN HTTPS 访问
     ├── Notifications ───── macOS 桌面通知 + iOS APNs 推送
-    └── PostgreSQL ──────── 19 张表全量持久化
+    └── PostgreSQL ──────── 21 张表全量持久化
 ```
 
-每个仓库对应一个独立的 [OpenCode](https://opencode.ai/) 进程，端口自动分配，互不干扰。
+每个仓库对应一个独立的 Agent 运行时进程（OpenCode 或 Claude Code），端口/进程自动管理，互不干扰。
 
 ## 快速开始
 
@@ -35,13 +38,15 @@ fourth-spark start              # 拉起 PostgreSQL + 后台启动
 
 访问 **http://localhost:3000**，注册你的第一个仓库即可开始。
 
-> 前置依赖：[Docker](https://docs.docker.com/get-docker/)（用于 PostgreSQL）、[OpenCode](https://opencode.ai/) CLI
+> 前置依赖：[Docker](https://docs.docker.com/get-docker/)（用于 PostgreSQL）、[OpenCode](https://opencode.ai/) CLI 和/或 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
 
 ## 核心能力
 
 **[Agent 对话](docs/features/agent-conversation.md)** — SSE 流式渲染，工具调用可视化，Thinking 折叠展开，交互式 Question 应答，Todo 进度追踪，Token/Cost 实时统计，消息草稿自动保存
 
 **[Workspace 隔离](docs/features/workspace-isolation.md)** — 为每个任务创建独立的 Git Worktree，自动 symlink AGENTS.md，支持状态追踪（active / idle / merged / stale）、磁盘用量监控、批量清理已合并分支
+
+**[多运行时支持](docs/features/repo-management.md)** — 每个仓库可选 OpenCode 或 Claude Code CLI 作为 Agent 运行时，通过可插拔 RuntimeProvider 架构统一管理，运行时可按仓库独立配置
 
 **[多仓库管理](docs/features/repo-management.md)** — 注册多个 Git 仓库，独立运行 Agent 进程，支持启停、代码拉取、分支切换，Worktree 开关按仓库配置
 
@@ -55,7 +60,15 @@ fourth-spark start              # 拉起 PostgreSQL + 后台启动
 
 **[Cloud 账号池](docs/features/cloud-account-pool.md)** — 可选连接 [claude-accounts-pool](https://github.com/nicepkg/claude-accounts-pool) Master 服务器，多台机器共享账号池，自动 lease 续约和 rate limit 上报，在设置页面一键切换本地 / 云端模式
 
-**[数据持久化](docs/features/data-persistence.md)** — 会话、消息、工具调用、Todo、Issue、PR、Milestone、标签、Custom Agent、Prompt 片段、Workspace、Session 关联、Agent 记忆等全量存入 PostgreSQL（19 张表），进程重启不丢数据
+**语音输入** — 集成 SenseVoice 本地语音识别（~240 MB 模型，首次启动自动下载），支持离线语音转文字输入 Agent 对话
+
+**Agent 记忆** — 自定义 Agent 的会话记忆自动提取与管理，支持新增、更新、合并、强化等操作，按分类和重要度排序，跨会话持久化
+
+**后台数据同步** — SyncScheduler 每小时自动从 Git 平台全量同步 Issue、PR、Milestone、Comment、Tag，无需手动触发
+
+**LAN HTTPS 访问** — TLS Manager 自动生成自签证书，局域网内其他设备可通过 HTTPS :3443 安全访问
+
+**[数据持久化](docs/features/data-persistence.md)** — 会话、消息、工具调用、Todo、Issue、PR、Milestone、标签、Custom Agent、Prompt 片段、Workspace、Session 关联、Agent 记忆等全量存入 PostgreSQL（21 张表），进程重启不丢数据
 
 ## CLI
 
