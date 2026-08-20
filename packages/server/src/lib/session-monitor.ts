@@ -493,17 +493,15 @@ async function pollExtractionSessions(): Promise<void> {
     }
 
     // Check if extraction session is idle
-    let status: SessionStatus
     try {
       const statuses = await client.getSessionStatus()
       const s = statuses[sessionId]
-      if (!s || s.type === "busy" || s.type === "retry") continue
-      status = s
+      if (s && (s.type === "busy" || s.type === "retry")) continue
     } catch {
       continue
     }
 
-    if (status.type === "idle") {
+    {
       try {
         const messages = await client.getMessages(sessionId)
         const lastAssistant = [...messages].reverse().find(m => m.role === "assistant")
