@@ -446,7 +446,10 @@ sessions.get("/:id/messages", async (c) => {
       if (limit > 0) {
         let slice = allMsgs
         if (before) {
-          const idx = allMsgs.findIndex((m: { id: string }) => m.id === before)
+          const idx = allMsgs.findIndex((m: Record<string, unknown>) => {
+            const info = m.info as Record<string, unknown> | undefined
+            return (info?.id ?? m.id) === before
+          })
           if (idx > 0) slice = allMsgs.slice(0, idx)
         }
         const hasMore = slice.length > limit
