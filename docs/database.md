@@ -7,6 +7,8 @@ PostgreSQL 16，通过 Docker 运行，使用 [Drizzle ORM](https://orm.drizzle.
 ```
 repos ─────────────┬──── milestones
   │                │
+  ├── workspaces   │
+  │                │
   ├── issues ──────┤    ┌── issueComments
   │    │           │    │
   │    ├───────────┼────┘
@@ -21,6 +23,8 @@ repos ─────────────┬──── milestones
   │    └── sessionLinks
   │
   ├── customAgents ──── customAgentFragments ──── promptFragments
+  │    │
+  │    └── agentMemories
   │
   └── (promptFragments: repoId nullable → 全局或仓库级)
 
@@ -39,8 +43,10 @@ deviceTokens          (iOS 推送 Token，无 FK)
 | name | text | 显示名称 |
 | gitUrl | text | Git 远程 URL |
 | localPath | text (unique) | 本地克隆路径 |
-| port | integer | 分配的 OpenCode 端口 |
+| runtimeType | text | 运行时类型，默认 `opencode`，可选 `claude-code` |
+| port | integer | 分配的运行时端口（OpenCode 使用） |
 | status | text | `active` / `inactive` / `error` |
+| worktreeEnabled | integer | 是否启用 Worktree 隔离 (0/1) |
 | createdAt | bigint | 创建时间戳 |
 | updatedAt | bigint | 更新时间戳 |
 
@@ -63,6 +69,7 @@ deviceTokens          (iOS 推送 Token，无 FK)
 | tokensCacheRead | bigint | 缓存读取 Token |
 | tokensCacheWrite | bigint | 缓存写入 Token |
 | userId | text | 用户标识 |
+| completedAt | bigint | 会话完成时间戳 |
 | timeCreated | bigint | 创建时间戳 |
 | timeUpdated | bigint | 更新时间戳 |
 
@@ -150,6 +157,11 @@ deviceTokens          (iOS 推送 Token，无 FK)
 | mergeable | text | 可合并状态 |
 | draft | integer | 是否草稿 (0/1) |
 | commentCount | integer | 评论数 |
+| additions | integer | 新增行数 |
+| deletions | integer | 删除行数 |
+| changedFilesCount | integer | 变更文件数 |
+| commitCount | integer | 提交数 |
+| diffStats | jsonb | `[{filename, status, additions, deletions}]` |
 | createdAt | bigint | 创建时间戳 |
 | updatedAt | bigint | 更新时间戳 |
 | mergedAt | bigint | 合并时间戳 |
@@ -261,6 +273,21 @@ deviceTokens          (iOS 推送 Token，无 FK)
 | createdAt | bigint | 创建时间戳 |
 | updatedAt | bigint | 更新时间戳 |
 
+### agentMemories — Agent 记忆
+
+| 列 | 类型 | 说明 |
+|----|------|------|
+| id | text PK | `mem_` + 12 位 UUID |
+| customAgentId | text FK→customAgents | 所属自定义 Agent |
+| sessionId | text FK→sessions | 提取来源会话（可 null） |
+| mergedFrom | jsonb | 合并来源 ID 列表 `[string]` |
+| content | text | 记忆内容（最长 1000 字符） |
+| category | text | 分类：`general` / `decision` / `lesson` / `preference` / `pattern` |
+| importance | real | 重要度 0–1（reinforce 操作 ×1.2） |
+| supersededBy | text | 被合并后指向新记忆 ID |
+| createdAt | bigint | 创建时间戳 |
+| updatedAt | bigint | 更新时间戳 |
+
 ### settings — 全局设置
 
 | 列 | 类型 | 说明 |
@@ -296,18 +323,32 @@ deviceTokens          (iOS 推送 Token，无 FK)
 除主键外，schema 定义了以下索引：
 
 - `repos_local_path_idx` — 按本地路径唯一查找
+- `workspaces_repo_idx` — 按仓库查 workspace
+- `workspaces_local_path_idx` — 按本地路径唯一查找
+- `workspaces_status_idx` — 按仓库+状态筛选
 - `milestones_repo_number_idx` — 按仓库+编号唯一查找
+- `milestones_repo_idx` — 按仓库查里程碑
 - `issues_repo_number_idx` — 按仓库+编号唯一查找
 - `issues_repo_state_idx` — Issue 列表按状态筛选
 - `issues_parent_idx` — 子 Issue 查询
 - `issues_milestone_idx` — 按里程碑筛选
+- `prompt_fragments_repo_idx` — 按仓库查片段
+- `custom_agents_repo_idx` — 按仓库查 Agent
+- `sessions_user_idx` — 按用户查会话
 - `sessions_time_created_idx` — 会话时间排序
+- `sessions_workspace_idx` — 按 Workspace 查关联会话
 - `sessions_issue_idx` — 按 Issue 查关联会话
+- `sessions_custom_agent_idx` — 按自定义 Agent 查会话
 - `messages_session_idx` — 按会话+时间查消息
 - `parts_message_idx` / `parts_session_idx` — 消息内容查询
+- `agent_memories_agent_idx` — 按 Agent 查记忆
+- `agent_memories_category_idx` — 按 Agent+分类查记忆
+- `agent_memories_active_idx` — 按 Agent+重要度排序
+- `issue_comments_issue_idx` / `issue_comments_repo_idx` — 评论查询
 - `pull_requests_repo_number_idx` — PR 唯一查找
 - `pull_requests_repo_state_idx` — PR 列表按状态筛选
 - `tags_repo_name_idx` — 标签唯一性
+- `tags_repo_idx` — 按仓库查标签
 - `git_hosts_host_idx` — 按主机名唯一查找
 - `device_tokens_token_idx` — 设备 Token 去重
 
