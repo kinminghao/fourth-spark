@@ -5,6 +5,8 @@ import { ReposPage } from "./pages/ReposPage"
 import { RunPage } from "./pages/RunPage"
 import { IssuesPage } from "./pages/IssuesPage"
 import { PullRequestsPage } from "./pages/PullRequestsPage"
+import { AgentsPage } from "./pages/AgentsPage"
+import { AgentDetailPage } from "./pages/AgentDetailPage"
 import { SettingsPage } from "./pages/SettingsPage"
 import { useRepoStore, selectActiveRepoName } from "./stores/repo-store"
 import { useSessionStore } from "./stores/session-store"
@@ -17,7 +19,7 @@ import { orchestrator } from "./lib/session-orchestrator"
 import { initPushNotifications } from "./lib/push-notifications"
 
 function extractRepoSlugFromUrl(pathname: string): string | null {
-  const match = pathname.match(/^\/([^/]+)\/(run|issues|pulls)/)
+  const match = pathname.match(/^\/([^/]+)\/(run|agents|issues|pulls)/)
   return match ? decodeURIComponent(match[1]) : null
 }
 
@@ -79,6 +81,8 @@ function AppInner() {
           <Route path="/repos" element={<ReposPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/:repoId/run" element={<RunPage />} />
+          <Route path="/:repoId/agents" element={<AgentsPage />} />
+          <Route path="/:repoId/agents/:agentId" element={<AgentDetailPage />} />
           <Route path="/:repoId/issues" element={<IssuesPage />} />
           <Route path="/:repoId/pulls" element={<PullRequestsPage />} />
           <Route path="/:repoId" element={<Navigate to="run" replace />} />

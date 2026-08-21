@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
-import { Box, Check, ChevronDown, ChevronsLeft, ChevronsRight, CircleDot, GitBranch, GitPullRequest, Loader2, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
+import { Bot, Box, Check, ChevronDown, ChevronsLeft, ChevronsRight, CircleDot, GitBranch, GitPullRequest, Loader2, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
 import clsx from "clsx"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useThemeStore } from "../stores/theme-store"
@@ -10,6 +10,7 @@ import { listBranches, checkoutBranch, type BranchList } from "../lib/api-client
 const NAV_ITEMS = [
   { segment: "repos", icon: Box, label: "仓库管理", global: true },
   { segment: "run", icon: Play, label: "运行面板", global: false },
+  { segment: "agents", icon: Bot, label: "Agents", global: false },
   { segment: "issues", icon: CircleDot, label: "Issues", global: false },
   { segment: "pulls", icon: GitPullRequest, label: "PRs", global: false },
   { segment: "settings", icon: Settings, label: "设置", global: true },
