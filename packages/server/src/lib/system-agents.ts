@@ -84,6 +84,7 @@ const MEMORY_EXTRACTOR_PROMPT = `你是一个记忆提炼助手。
 const SYSTEM_AGENTS: Array<{
   id: string
   name: string
+  description: string
   baseAgent: string
   systemPrompt: string
   isSystem: number
@@ -92,6 +93,7 @@ const SYSTEM_AGENTS: Array<{
   {
     id: DEFAULT_AGENT_ID,
     name: "默认助手",
+    description: "通用开发助手，适合日常编码、调试和问答",
     baseAgent: "Sisyphus - ultraworker",
     systemPrompt: "",
     isSystem: 1,
@@ -100,6 +102,7 @@ const SYSTEM_AGENTS: Array<{
   {
     id: COMMENT_POLISHER_ID,
     name: "评论助手",
+    description: "润色 Issue 评论，优化表达和结构",
     baseAgent: "Sisyphus - ultraworker",
     systemPrompt: COMMENT_POLISHER_PROMPT,
     isSystem: 2,
@@ -108,6 +111,7 @@ const SYSTEM_AGENTS: Array<{
   {
     id: ISSUE_POLISHER_ID,
     name: "Issue 润色助手",
+    description: "润色 Issue 标题和正文，补充结构化内容",
     baseAgent: "Sisyphus - ultraworker",
     systemPrompt: ISSUE_POLISHER_PROMPT,
     isSystem: 2,
@@ -116,6 +120,7 @@ const SYSTEM_AGENTS: Array<{
   {
     id: MEMORY_EXTRACTOR_ID,
     name: "记忆提炼助手",
+    description: "从对话中提取跨 Session 的关键记忆",
     baseAgent: "Sisyphus - ultraworker",
     systemPrompt: MEMORY_EXTRACTOR_PROMPT,
     isSystem: 3,
@@ -131,6 +136,7 @@ export async function seedSystemAgents(): Promise<void> {
 
     if (existing) {
       await db.update(customAgents).set({
+        description: agent.description,
         baseAgent: agent.baseAgent,
         systemPrompt: agent.systemPrompt,
         isSystem: agent.isSystem,
@@ -144,6 +150,7 @@ export async function seedSystemAgents(): Promise<void> {
     await db.insert(customAgents).values({
       id: agent.id,
       name: agent.name,
+      description: agent.description,
       baseAgent: agent.baseAgent,
       model: null,
       systemPrompt: agent.systemPrompt,

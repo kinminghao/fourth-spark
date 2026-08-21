@@ -11,6 +11,25 @@ const BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atl
 const PINNED_MODELS_KEY = "pinned_models"
 const SP_KEY = "__system_prompt__"
 
+// Deterministic initial-letter avatar. Static class strings so Tailwind can pick them up.
+const AGENT_AVATAR_PALETTE = [
+  { bg: "bg-blue-500/15", text: "text-blue-500" },
+  { bg: "bg-purple-500/15", text: "text-purple-500" },
+  { bg: "bg-emerald-500/15", text: "text-emerald-500" },
+  { bg: "bg-amber-500/15", text: "text-amber-500" },
+  { bg: "bg-rose-500/15", text: "text-rose-500" },
+  { bg: "bg-cyan-500/15", text: "text-cyan-500" },
+  { bg: "bg-indigo-500/15", text: "text-indigo-500" },
+  { bg: "bg-orange-500/15", text: "text-orange-500" },
+] as const
+
+function agentAvatar(name: string): { bg: string; text: string; initial: string } {
+  const trimmed = name.trim()
+  const code = trimmed.charCodeAt(0) || 0
+  const palette = AGENT_AVATAR_PALETTE[code % AGENT_AVATAR_PALETTE.length]
+  return { ...palette, initial: (trimmed.charAt(0) || "?").toUpperCase() }
+}
+
 const CATEGORY_STYLES: Record<string, { bg: string; text: string }> = {
   decision: { bg: "bg-blue-500/10", text: "text-blue-400" },
   lesson: { bg: "bg-amber-500/10", text: "text-amber-400" },
@@ -422,11 +441,12 @@ function SessionList({ agentId }: { agentId: string }) {
 function ConfigSection({ agent, fragments, onSave }: {
   agent: CustomAgent
   fragments: PromptFragment[]
-  onSave: (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => Promise<void>
+  onSave: (data: { name: string; description?: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => Promise<void>
 }) {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(agent.name)
+  const [description, setDescription] = useState(agent.description ?? "")
   const [baseAgent, setBaseAgent] = useState(agent.baseAgent)
   const [model, setModel] = useState(agent.model ?? "")
   const [systemPrompt, setSystemPrompt] = useState(agent.systemPrompt)
@@ -496,7 +516,7 @@ function ConfigSection({ agent, fragments, onSave }: {
     if (!name.trim() || !baseAgent) return
     setSaving(true)
     try {
-      await onSave({ name: name.trim(), baseAgent, model: model.trim() || undefined, systemPrompt, systemPromptPosition: spPosition, fragmentIds: selectedIds })
+      await onSave({ name: name.trim(), description: description.trim() || undefined, baseAgent, model: model.trim() || undefined, systemPrompt, systemPromptPosition: spPosition, fragmentIds: selectedIds })
       setEditing(false)
     } finally {
       setSaving(false)
@@ -564,6 +584,11 @@ function ConfigSection({ agent, fragments, onSave }: {
           </select>
         </label>
       </div>
+      <label className="block">
+        <span className="text-xs font-medium text-fg-3">描述（可选）</span>
+        <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="一句话描述这个 Agent 的用途"
+          className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+      </label>
       <div>
         <span className="text-xs font-medium text-fg-3">模型（可选）</span>
         <select value={model} onChange={(e) => setModel(e.target.value)}
@@ -710,6 +735,7 @@ export function AgentDetailPage() {
   }
 
   const isSystem = agent.isSystem >= 1
+  const avatar = agentAvatar(agent.name)
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -723,6 +749,13 @@ export function AgentDetailPage() {
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
+          <div className={clsx(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold",
+            avatar.bg,
+            avatar.text,
+          )}>
+            {avatar.initial}
+          </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h1 className="truncate text-lg font-bold text-fg">{agent.name}</h1>
@@ -737,6 +770,9 @@ export function AgentDetailPage() {
               <span className="font-mono">{agent.baseAgent}</span>
               {agent.model && <span className="ml-1.5 text-fg-5">· {agent.model}</span>}
             </p>
+            {agent.description && (
+              <p className="mt-1 text-xs text-fg-4">{agent.description}</p>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <button type="button" onClick={() => void handleExportDownload()} title="导出 JSON"

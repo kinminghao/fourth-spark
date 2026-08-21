@@ -162,6 +162,7 @@ export interface PromptFragment {
 export interface CustomAgent {
   id: string
   name: string
+  description: string
   baseAgent: string
   model: string | null
   systemPrompt: string
