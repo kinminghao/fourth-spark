@@ -87,6 +87,7 @@ export const promptFragments = pgTable("prompt_fragments", {
 export const customAgents = pgTable("custom_agents", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  description: text("description").notNull().default(""),
   baseAgent: text("base_agent").notNull(),
   model: text("model"),
   systemPrompt: text("system_prompt").notNull().default(""),

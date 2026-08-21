@@ -41,6 +41,25 @@ const STATUS_META: Record<
   error: { glyph: "✗", label: "error", color: "text-red-400", spin: false },
 }
 
+// Deterministic initial-letter avatar. Static class strings so Tailwind can pick them up.
+const AGENT_AVATAR_PALETTE = [
+  { bg: "bg-blue-500/15", text: "text-blue-500" },
+  { bg: "bg-purple-500/15", text: "text-purple-500" },
+  { bg: "bg-emerald-500/15", text: "text-emerald-500" },
+  { bg: "bg-amber-500/15", text: "text-amber-500" },
+  { bg: "bg-rose-500/15", text: "text-rose-500" },
+  { bg: "bg-cyan-500/15", text: "text-cyan-500" },
+  { bg: "bg-indigo-500/15", text: "text-indigo-500" },
+  { bg: "bg-orange-500/15", text: "text-orange-500" },
+] as const
+
+function agentAvatar(name: string): { bg: string; text: string; initial: string } {
+  const trimmed = name.trim()
+  const code = trimmed.charCodeAt(0) || 0
+  const palette = AGENT_AVATAR_PALETTE[code % AGENT_AVATAR_PALETTE.length]
+  return { ...palette, initial: (trimmed.charAt(0) || "?").toUpperCase() }
+}
+
 function StatusBadge({ status, reason }: { status: string | undefined; reason?: string }) {
   const meta = STATUS_META[status ?? "idle"] ?? STATUS_META.idle
   return (
@@ -448,21 +467,31 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
 
           {visibleAgents.length > 0 && (
             <div className="flex gap-1.5 overflow-x-auto px-4 pt-3 pb-1 scrollbar-none">
-              {visibleAgents.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => setCustomAgentId(a.id)}
-                  className={clsx(
-                    "shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                    customAgentId === a.id
-                      ? "bg-blue-500/15 text-blue-400 ring-1 ring-inset ring-blue-500/30"
-                      : "text-fg-4 hover:bg-elevated hover:text-fg-3",
-                  )}
-                >
-                  {a.name}
-                </button>
-              ))}
+              {visibleAgents.map((a) => {
+                const avatar = agentAvatar(a.name)
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => setCustomAgentId(a.id)}
+                    className={clsx(
+                      "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                      customAgentId === a.id
+                        ? "bg-blue-500/15 text-blue-400 ring-1 ring-inset ring-blue-500/30"
+                        : "text-fg-4 hover:bg-elevated hover:text-fg-3",
+                    )}
+                  >
+                    <span className={clsx(
+                      "inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold",
+                      avatar.bg,
+                      avatar.text,
+                    )}>
+                      {avatar.initial}
+                    </span>
+                    {a.name}
+                  </button>
+                )
+              })}
             </div>
           )}
 
