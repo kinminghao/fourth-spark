@@ -9,6 +9,9 @@ const LOG_DIR = join(DATA_DIR, "logs")
 export const PID_FILE = join(DATA_DIR, "fourth-spark.pid")
 export const LOG_FILE = join(LOG_DIR, "server.log")
 
+/** Single log file size cap in bytes (5 MB). */
+export const MAX_LOG_BYTES = 5 * 1024 * 1024
+
 export function ensureDataDir(): void {
   mkdirSync(LOG_DIR, { recursive: true })
 }

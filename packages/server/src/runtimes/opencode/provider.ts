@@ -15,7 +15,7 @@
 
 import { type Subprocess } from "bun"
 import { eq } from "drizzle-orm"
-import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync, openSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs"
 import { join } from "node:path"
 
 import type { RuntimeProvider, RuntimeHealth } from "../../core/runtime-provider"
@@ -28,6 +28,7 @@ import { logger } from "../../middleware/logger"
 import { injectMcpConfig, removeMcpConfig } from "./mcp"
 import { HttpRuntimeClient } from "./client"
 import { openCodeCredentialWriter } from "./credential"
+import { getRotatingLogFd } from "../../lib/log-rotate"
 
 const RUNTIME_ID = "opencode"
 
@@ -243,9 +244,7 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
     injectMcpConfig(localPath, repoId, serverPort)
 
     mkdirSync(PID_DIR, { recursive: true })
-    const logFile = join(PID_DIR, `opencode-${repoId.slice(0, 8)}.log`)
-    const logFd = openSync(logFile, "a")
-    logger.info({ repoId, logFile }, "opencode debug log enabled")
+    const logFd = getRotatingLogFd()
 
     const proc = Bun.spawn([
       "opencode", "serve",
