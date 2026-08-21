@@ -1,17 +1,34 @@
 import type { MiddlewareHandler } from "hono"
 import { pino } from "pino"
+import { LOG_FILE } from "../cli/paths"
+import { initRotatingLog, writeRotatingLog } from "../lib/log-rotate"
+import { Writable } from "node:stream"
+
+function createRotatingDestination(): Writable {
+  initRotatingLog(LOG_FILE)
+  return new Writable({
+    write(chunk: Buffer, _encoding, callback) {
+      try {
+        writeRotatingLog(chunk)
+        callback()
+      } catch (err) {
+        callback(err instanceof Error ? err : new Error(String(err)))
+      }
+    },
+  })
+}
 
 function createLogger() {
+  const level = process.env.LOG_LEVEL ?? "info"
   if (process.env.LOG_PRETTY === "1") {
     return pino({
-      level: process.env.LOG_LEVEL ?? "info",
+      level,
       transport: { target: "pino-pretty", options: { colorize: true } },
     })
   }
-  return pino({ level: process.env.LOG_LEVEL ?? "info" })
+  return pino({ level }, createRotatingDestination())
 }
 
-// Shared structured logger instance (imported by index + error handler too).
 export const logger = createLogger()
 
 // Logs method, path, status, and duration for every request as structured JSON.
