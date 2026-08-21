@@ -206,9 +206,16 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const sendError = useSessionStore((state) => state.sendError)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
   const customAgents = useCustomAgentStore((state) => state.agents)
+  const visibleAgents = customAgents.filter((a) => a.isSystem < 2)
   const issues = useIssueStore((state) => state.issues)
   const selectedIssueId = useIssueStore((state) => state.selectedIssueId)
   const pendingDraft = useIssueStore((state) => state.pendingDraft)
+
+  useEffect(() => {
+    if (visibleAgents.length > 0 && !customAgentId) {
+      setCustomAgentId(visibleAgents[0].id)
+    }
+  }, [visibleAgents, customAgentId])
 
   useEffect(() => {
     if (!activeRepoId) { setModels([]); return }
@@ -258,7 +265,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     ? openIssues
     : openIssues.filter((i) => `#${i.number} ${i.title}`.toLowerCase().includes(iq))
 
-  const hasContext = Boolean(customAgentId) || Boolean(issueId)
+  const hasContext = Boolean(issueId)
 
   const submit = () => {
     const text = draft.trim()
@@ -439,6 +446,26 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
             </div>
           )}
 
+          {visibleAgents.length > 0 && (
+            <div className="flex gap-1.5 overflow-x-auto px-4 pt-3 pb-1 scrollbar-none">
+              {visibleAgents.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => setCustomAgentId(a.id)}
+                  className={clsx(
+                    "shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                    customAgentId === a.id
+                      ? "bg-blue-500/15 text-blue-400 ring-1 ring-inset ring-blue-500/30"
+                      : "text-fg-4 hover:bg-elevated hover:text-fg-3",
+                  )}
+                >
+                  {a.name}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div
             className="flex items-start gap-2 px-4 py-3"
           >
@@ -482,21 +509,8 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
             </button>
           </div>
 
-          <div className="flex flex-col gap-2 border-t border-line/60 px-4 py-2 sm:flex-row sm:items-center sm:gap-3">
-            <label className="flex items-center gap-1.5 font-mono text-[11px] text-fg-4">
-              <span className="shrink-0">Agent</span>
-              <select
-                value={customAgentId}
-                onChange={(e) => setCustomAgentId(e.target.value)}
-                className="rounded border border-line bg-surface px-2 py-1 font-mono text-xs text-fg focus:border-fg-5 focus:outline-none"
-              >
-                <option value="">默认</option>
-                {customAgents.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </select>
-            </label>
-            {issues.length > 0 && (
+          {issues.length > 0 && (
+            <div className="flex items-center gap-3 border-t border-line/60 px-4 py-2">
               <div ref={issueComboRef} className="relative hidden min-w-0 flex-1 items-center gap-1.5 font-mono text-[11px] text-fg-4 sm:flex">
                 <span className="shrink-0">Issue</span>
                 <button
@@ -574,8 +588,8 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
                   </div>
                 )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {stt.phase === "idle" ? (

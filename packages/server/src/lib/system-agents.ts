@@ -3,6 +3,7 @@ import { db } from "../db/index"
 import { customAgents } from "../db/schema"
 import { logger } from "../middleware/logger"
 
+const DEFAULT_AGENT_ID = "system-default"
 const COMMENT_POLISHER_ID = "system-comment-polisher"
 const ISSUE_POLISHER_ID = "system-issue-polisher"
 
@@ -80,24 +81,45 @@ const MEMORY_EXTRACTOR_PROMPT = `你是一个记忆提炼助手。
 - 只使用 Write 工具写入输出文件，不要使用 Bash、Grep 等其他工具
 - 不要修改任何项目文件，只写入指定的输出文件`
 
-const SYSTEM_AGENTS = [
+const SYSTEM_AGENTS: Array<{
+  id: string
+  name: string
+  baseAgent: string
+  systemPrompt: string
+  isSystem: number
+  sortOrder: number
+}> = [
+  {
+    id: DEFAULT_AGENT_ID,
+    name: "默认助手",
+    baseAgent: "Sisyphus - ultraworker",
+    systemPrompt: "",
+    isSystem: 1,
+    sortOrder: -100,
+  },
   {
     id: COMMENT_POLISHER_ID,
     name: "评论助手",
     baseAgent: "Sisyphus - ultraworker",
     systemPrompt: COMMENT_POLISHER_PROMPT,
+    isSystem: 2,
+    sortOrder: -1,
   },
   {
     id: ISSUE_POLISHER_ID,
     name: "Issue 润色助手",
     baseAgent: "Sisyphus - ultraworker",
     systemPrompt: ISSUE_POLISHER_PROMPT,
+    isSystem: 2,
+    sortOrder: -1,
   },
   {
     id: MEMORY_EXTRACTOR_ID,
     name: "记忆提炼助手",
     baseAgent: "Sisyphus - ultraworker",
     systemPrompt: MEMORY_EXTRACTOR_PROMPT,
+    isSystem: 3,
+    sortOrder: -1,
   },
 ]
 
@@ -111,6 +133,8 @@ export async function seedSystemAgents(): Promise<void> {
       await db.update(customAgents).set({
         baseAgent: agent.baseAgent,
         systemPrompt: agent.systemPrompt,
+        isSystem: agent.isSystem,
+        sortOrder: agent.sortOrder,
         updatedAt: Date.now(),
       }).where(eq(customAgents.id, agent.id))
       continue
@@ -124,9 +148,9 @@ export async function seedSystemAgents(): Promise<void> {
       model: null,
       systemPrompt: agent.systemPrompt,
       systemPromptPosition: -1,
-      isSystem: 1,
+      isSystem: agent.isSystem,
       repoId: null,
-      sortOrder: -1,
+      sortOrder: agent.sortOrder,
       createdAt: now,
       updatedAt: now,
     })
@@ -134,4 +158,4 @@ export async function seedSystemAgents(): Promise<void> {
   }
 }
 
-export { COMMENT_POLISHER_ID, ISSUE_POLISHER_ID, MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT }
+export { DEFAULT_AGENT_ID, COMMENT_POLISHER_ID, ISSUE_POLISHER_ID, MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT }

@@ -166,6 +166,7 @@ export interface CustomAgent {
   model: string | null
   systemPrompt: string
   systemPromptPosition: number
+  isSystem: number
   fragments: Array<{ id: string; name: string; content: string }>
   repoId: string | null
   sortOrder: number
