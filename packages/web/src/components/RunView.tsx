@@ -6,8 +6,8 @@ import {
   useState,
   type KeyboardEvent,
 } from "react"
-import { useNavigate } from "react-router-dom"
-import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, ExternalLink, GitBranch, Loader2, Menu, PanelRight, Play, Plus, RotateCcw, Search, Send, Square, X } from "lucide-react"
+import { useNavigate, useSearchParams } from "react-router-dom"
+import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, Loader2, Menu, PanelRight, Plus, RotateCcw, Search, Send, Square, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
@@ -228,7 +228,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const visibleAgents = customAgents.filter((a) => a.isSystem < 2)
   const issues = useIssueStore((state) => state.issues)
   const selectedIssueId = useIssueStore((state) => state.selectedIssueId)
-  const pendingDraft = useIssueStore((state) => state.pendingDraft)
+  const [searchParams, setSearchParams] = useSearchParams()
 
   useEffect(() => {
     if (visibleAgents.length > 0 && !customAgentId) {
@@ -254,11 +254,12 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   }, [selectedIssueId])
 
   useEffect(() => {
-    if (pendingDraft) {
-      setDraft(pendingDraft)
-      useIssueStore.getState().setPendingDraft(null)
+    const paramDraft = searchParams.get("draft")
+    if (paramDraft) {
+      setDraft(paramDraft)
+      setSearchParams({}, { replace: true })
     }
-  }, [pendingDraft])
+  }, [searchParams, setSearchParams])
 
   useLayoutEffect(() => {
     const el = textareaRef.current
@@ -805,90 +806,6 @@ function IssueMatchView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   )
 }
 
-function IssuePreview({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
-  const previewId = useIssueStore((s) => s.previewIssueId)
-  const issue = useIssueStore((s) => s.issues.find((i) => i.id === previewId))
-
-  if (!issue) return <NewSessionInput onToggleSidebar={onToggleSidebar} />
-
-  const startSession = () => {
-    useIssueStore.getState().setSelectedIssue(issue.id)
-    useIssueStore.getState().setPreviewIssue(null)
-  }
-
-  return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-term">
-      <header className="flex items-center gap-3 border-b border-line bg-base px-4 py-2.5">
-        <button
-          type="button"
-          onClick={onToggleSidebar}
-          aria-label="Open sidebar"
-          className="-ml-1 rounded-lg p-1.5 text-fg-3 hover:bg-elevated md:hidden"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className={clsx(
-              "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
-              issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-            )}>
-              #{issue.number} {issue.state}
-            </span>
-            {issue.labels?.map((l) => (
-              <span key={l.id} className="rounded px-1.5 py-0.5 text-[10px] font-medium" style={{ backgroundColor: `#${l.color}20`, color: `#${l.color}` }}>
-                {l.name}
-              </span>
-            ))}
-          </div>
-          <h2 className="mt-0.5 truncate text-sm font-medium text-fg">{issue.title}</h2>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {issue.htmlUrl && (
-            <a
-              href={issue.htmlUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 font-mono text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              源站
-            </a>
-          )}
-          <button
-            type="button"
-            onClick={() => useIssueStore.getState().enterMatchMode(issue.id)}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 text-xs text-fg-3 transition-colors hover:border-blue-500/50 hover:text-blue-400"
-          >
-            <GitBranch className="h-3.5 w-3.5" />
-            匹配子任务
-          </button>
-          <button
-            type="button"
-            onClick={startSession}
-            className="flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-blue-500"
-          >
-            <Play className="h-3.5 w-3.5 fill-current" />
-            开始处理
-          </button>
-        </div>
-      </header>
-
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-4xl px-6 py-6">
-          {issue.body ? (
-            <div className="markdown-body leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ table: MarkdownTable }}>{issue.body}</ReactMarkdown>
-            </div>
-          ) : (
-            <p className="py-10 text-center font-mono text-xs text-fg-5">该 Issue 没有描述内容</p>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export function RunView({
   onToggleSidebar,
   onToggleRightPanel,
@@ -901,7 +818,6 @@ export function RunView({
   const navigate = useNavigate()
   const repoName = useRepoStore(selectActiveRepoName)
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
-  const previewIssueId = useIssueStore((state) => state.previewIssueId)
   const session = useSessionStore(
     (state) =>
       state.sessions.find((item) => item.id === state.activeSessionId) ?? null,
@@ -983,7 +899,6 @@ export function RunView({
 
   if (!activeSessionId) {
     if (matchingParentId) return <IssueMatchView onToggleSidebar={onToggleSidebar} />
-    if (previewIssueId) return <IssuePreview onToggleSidebar={onToggleSidebar} />
     return <NewSessionInput onToggleSidebar={onToggleSidebar} />
   }
 
@@ -1068,7 +983,7 @@ export function RunView({
                   <span className="w-14 shrink-0 font-mono text-xs text-fg-5">Issue</span>
                   <button
                     type="button"
-                    onClick={() => navigate(`/${encodeURIComponent(repoName!)}/issues?issueId=${linkedIssue.id}`)}
+                    onClick={() => navigate(`/${encodeURIComponent(repoName!)}/dev/issues?id=${linkedIssue.id}`)}
                     className="flex items-center gap-1.5 truncate font-mono text-xs text-fg-3 transition-colors hover:text-blue-400"
                   >
                     <span className={clsx(
@@ -1122,7 +1037,7 @@ export function RunView({
         {linkedIssue && (
           <button
             type="button"
-            onClick={() => navigate(`/${encodeURIComponent(repoName!)}/issues?issueId=${linkedIssue.id}`)}
+            onClick={() => navigate(`/${encodeURIComponent(repoName!)}/dev/issues?id=${linkedIssue.id}`)}
             className="flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
           >
             <span className={clsx(
