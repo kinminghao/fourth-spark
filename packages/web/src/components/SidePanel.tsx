@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import clsx from "clsx"
-import { ListTodo, MessageSquare, Link2, GitBranch, Plus, X, Search } from "lucide-react"
+import { Link2, Plus, X, Search } from "lucide-react"
 import type { Message, Todo, SessionLinks, Session } from "../lib/api-client"
 import { normalizeTodoStatus, type TodoStatus } from "../lib/message-parts"
 import { useIssueStore } from "../stores/issue-store"
@@ -545,72 +545,60 @@ export function SidePanel({
           type="button"
           onClick={() => setActiveTab("todo")}
           className={clsx(
-            "flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
+            "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
             activeTab === "todo"
               ? "border-blue-500 text-blue-500"
               : "border-transparent text-fg-4 hover:text-fg-2",
           )}
         >
-          <ListTodo className="h-3.5 w-3.5" />
           待办
           {todos.length > 0 && (
-            <span className="rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">
-              {todos.length}
-            </span>
+            <span className="font-mono text-[10px] text-fg-5">{todos.length}</span>
           )}
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("prompts")}
           className={clsx(
-            "flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
+            "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
             activeTab === "prompts"
               ? "border-blue-500 text-blue-500"
               : "border-transparent text-fg-4 hover:text-fg-2",
           )}
         >
-          <MessageSquare className="h-3.5 w-3.5" />
           输入
           {userCount > 0 && (
-            <span className="rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">
-              {userCount}
-            </span>
+            <span className="font-mono text-[10px] text-fg-5">{userCount}</span>
           )}
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("links")}
           className={clsx(
-            "flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
+            "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
             activeTab === "links"
               ? "border-blue-500 text-blue-500"
               : "border-transparent text-fg-4 hover:text-fg-2",
           )}
         >
-          <Link2 className="h-3.5 w-3.5" />
           关联
           {linkCount > 0 && (
-            <span className="rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">
-              {linkCount}
-            </span>
+            <span className="font-mono text-[10px] text-fg-5">{linkCount}</span>
           )}
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("subtasks")}
           className={clsx(
-            "flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
+            "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
             activeTab === "subtasks"
               ? "border-blue-500 text-blue-500"
               : "border-transparent text-fg-4 hover:text-fg-2",
           )}
         >
-          <GitBranch className="h-3.5 w-3.5" />
           子任务
           {subtaskCount > 0 && (
-            <span className="rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">
-              {subtaskCount}
-            </span>
+            <span className="font-mono text-[10px] text-fg-5">{subtaskCount}</span>
           )}
         </button>
       </div>
