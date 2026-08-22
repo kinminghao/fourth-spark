@@ -225,7 +225,9 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
         params.set("type", "issues")
       }
 
-      return request<GitIssue[]>("GET", `/issues?${params}`)
+      const raw = await request<(GitIssue & { pull_request?: unknown })[]>("GET", `/issues?${params}`)
+      // GitHub's Issues API returns PRs mixed in; filter them out
+      return platform === "github" ? raw.filter((i) => !i.pull_request) : raw
     },
 
     getIssue(number) {
