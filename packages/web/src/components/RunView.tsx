@@ -6,7 +6,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, Loader2, Menu, PanelRight, Plus, RotateCcw, Search, Send, Square, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -228,7 +228,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const visibleAgents = customAgents.filter((a) => a.isSystem < 2)
   const issues = useIssueStore((state) => state.issues)
   const selectedIssueId = useIssueStore((state) => state.selectedIssueId)
-  const pendingDraft = useIssueStore((state) => state.pendingDraft)
+  const [searchParams, setSearchParams] = useSearchParams()
 
   useEffect(() => {
     if (visibleAgents.length > 0 && !customAgentId) {
@@ -254,11 +254,12 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   }, [selectedIssueId])
 
   useEffect(() => {
-    if (pendingDraft) {
-      setDraft(pendingDraft)
-      useIssueStore.getState().setPendingDraft(null)
+    const paramDraft = searchParams.get("draft")
+    if (paramDraft) {
+      setDraft(paramDraft)
+      setSearchParams({}, { replace: true })
     }
-  }, [pendingDraft])
+  }, [searchParams, setSearchParams])
 
   useLayoutEffect(() => {
     const el = textareaRef.current

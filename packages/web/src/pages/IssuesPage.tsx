@@ -759,10 +759,8 @@ function IssueDetail({ issue, milestone, onBack, onClose, onToggleSidebar }: { i
   const handleResolveConflict = () => {
     if (!pr) return
     const draft = `请解决 PR #${pr.number} 的合并冲突: ${pr.title}`
-    useIssueStore.getState().setSelectedIssue(issue.id)
-    useIssueStore.getState().setPendingDraft(draft)
     useSessionStore.setState({ activeSessionId: null })
-    navigate(`/${encodeURIComponent(repoName!)}/run`)
+    navigate(`/${encodeURIComponent(repoName!)}/run?draft=${encodeURIComponent(draft)}`)
   }
 
   const handleStart = () => {

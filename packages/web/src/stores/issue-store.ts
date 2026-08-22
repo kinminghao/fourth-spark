@@ -16,10 +16,8 @@ interface IssueState {
   selectedIssueId: string | null
   matchingParentId: string | null
   matchingCandidateId: string | null
-  pendingDraft: string | null
   clearIssues: () => void
   setSelectedIssue: (id: string | null) => void
-  setPendingDraft: (draft: string | null) => void
   enterMatchMode: (parentId: string) => void
   exitMatchMode: () => void
   setMatchCandidate: (id: string | null) => void
@@ -46,7 +44,6 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   selectedIssueId: null,
   matchingParentId: null,
   matchingCandidateId: null,
-  pendingDraft: null,
   clearIssues: () => set({
     issues: [],
     tags: [],
@@ -57,10 +54,8 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     selectedIssueId: null,
     matchingParentId: null,
     matchingCandidateId: null,
-    pendingDraft: null,
   }),
   setSelectedIssue: (id) => set({ selectedIssueId: id }),
-  setPendingDraft: (draft) => set({ pendingDraft: draft }),
   enterMatchMode: (parentId) => set({ matchingParentId: parentId, matchingCandidateId: null }),
   exitMatchMode: () => {
     set({ matchingParentId: null, matchingCandidateId: null })

@@ -16,6 +16,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Wrench,
   X,
   XCircle,
 } from "lucide-react"
@@ -27,6 +28,7 @@ import { ApiError, listPrLinkedIssues, listPullComments, mergePull, updateIssue,
 import { usePrStore } from "../stores/pr-store"
 import { useIssueStore } from "../stores/issue-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
+import { useSessionStore } from "../stores/session-store"
 import { useToastStore } from "../stores/toast-store"
 
 type StateFilter = "open" | "closed" | "merged" | "all"
@@ -310,6 +312,12 @@ function PrDetail({
     if (ok) setLinkedIssues((prev) => prev.filter((i) => i.number !== issueNumber))
   }
 
+  const handleResolveConflict = () => {
+    const draft = `请解决 PR #${pr.number} 的合并冲突: ${pr.title}`
+    useSessionStore.setState({ activeSessionId: null })
+    navigate(`/${encodeURIComponent(repoName!)}/run?draft=${encodeURIComponent(draft)}`)
+  }
+
   const fmtDate = (iso: string) => {
     const d = new Date(iso)
     return d.toLocaleDateString("zh-CN", { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
@@ -389,6 +397,16 @@ function PrDetail({
           </button>
           {pr.state === "open" && (
             <>
+              {pr.mergeable === "false" && (
+                <button
+                  type="button"
+                  onClick={handleResolveConflict}
+                  className="flex h-8 items-center gap-1.5 rounded-md border border-amber-500/30 px-2.5 text-xs font-medium text-amber-400 transition-colors hover:border-amber-500/60 hover:bg-amber-500/10"
+                >
+                  <Wrench className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">解冲突</span>
+                </button>
+              )}
               <button
                 type="button"
                 disabled={merging || pr.mergeable === "false"}
