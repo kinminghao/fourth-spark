@@ -8,7 +8,6 @@ import {
   CircleDot,
   ExternalLink,
   Flag,
-  GitBranch,
   GitMerge,
   GitPullRequest,
   Network,
@@ -761,14 +760,12 @@ function IssueDetail({ issue, milestone, onBack, onClose, onToggleSidebar }: { i
     const draft = `请解决 PR #${pr.number} 的合并冲突: ${pr.title}`
     useIssueStore.getState().setSelectedIssue(issue.id)
     useIssueStore.getState().setPendingDraft(draft)
-    useIssueStore.getState().setPreviewIssue(null)
     useSessionStore.setState({ activeSessionId: null })
     navigate(`/${encodeURIComponent(repoName!)}/run`)
   }
 
   const handleStart = () => {
     useIssueStore.getState().setSelectedIssue(issue.id)
-    useIssueStore.getState().setPreviewIssue(null)
     useSessionStore.setState({ activeSessionId: null })
     navigate(`/${encodeURIComponent(repoName!)}/run`)
   }
@@ -860,18 +857,6 @@ function IssueDetail({ issue, milestone, onBack, onClose, onToggleSidebar }: { i
               <span className="hidden sm:inline">源站</span>
             </a>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              useIssueStore.getState().enterMatchMode(issue.id)
-              useSessionStore.setState({ activeSessionId: null })
-              navigate(`/${encodeURIComponent(repoName!)}/run`)
-            }}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 text-xs text-fg-3 transition-colors hover:border-blue-500/50 hover:text-blue-400"
-          >
-            <GitBranch className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">匹配子任务</span>
-          </button>
           <button
             type="button"
             disabled={togglingState}
