@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   AlertTriangle,
+  ArrowLeft,
+  CircleDot,
   GitPullRequest,
   Link2,
   RefreshCw,
@@ -14,7 +16,11 @@ import { usePrStore } from "../stores/pr-store"
 import { useIssueStore } from "../stores/issue-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { PrDetailPanel } from "../components/PrDetailPanel"
+import { IssueDetailPanel } from "../components/IssueDetailPanel"
+import { LinkedIssueList } from "../components/LinkedIssueList"
 import { relativeTime } from "../lib/date-utils"
+
+type PrDetailTab = "pr" | "issue"
 
 type StateFilter = "open" | "closed" | "merged" | "all"
 
@@ -207,10 +213,123 @@ function IssueMatchRow({
   )
 }
 
+function PrDetailWithTabs({
+  pr,
+  tab,
+  issueId,
+  onTabChange,
+  onSelectIssue,
+  onBackToIssueList,
+  onBack,
+  onClose,
+  onEnterMatch,
+  onNavigateToIssue,
+}: {
+  pr: PersistentPullRequest
+  tab: PrDetailTab
+  issueId: string | null
+  onTabChange: (tab: PrDetailTab) => void
+  onSelectIssue: (issueId: string) => void
+  onBackToIssueList: () => void
+  onBack?: () => void
+  onClose?: () => void
+  onEnterMatch: () => void
+  onNavigateToIssue?: (issueId: string) => void
+}) {
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
+  const allIssues = useIssueStore((s) => s.issues)
+  const [linkedIssues, setLinkedIssues] = useState<Issue[]>([])
+
+  useEffect(() => {
+    if (!activeRepoId) {
+      setLinkedIssues([])
+      return
+    }
+    listPrLinkedIssues(activeRepoId, pr.number)
+      .then(setLinkedIssues)
+      .catch(() => setLinkedIssues([]))
+  }, [activeRepoId, pr.number])
+
+  const selectedIssue = issueId ? allIssues.find((i) => i.id === issueId) ?? linkedIssues.find((i) => i.id === issueId) ?? null : null
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      {linkedIssues.length > 0 && (
+        <div className="flex shrink-0 items-center border-b border-line bg-surface">
+          <button
+            type="button"
+            onClick={() => onTabChange("pr")}
+            className={clsx(
+              "flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-medium transition-colors",
+              tab === "pr"
+                ? "border-blue-500 text-fg"
+                : "border-transparent text-fg-4 hover:text-fg-2",
+            )}
+          >
+            <GitPullRequest className="h-3.5 w-3.5" />
+            PR
+          </button>
+          <button
+            type="button"
+            onClick={() => onTabChange("issue")}
+            className={clsx(
+              "flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-medium transition-colors",
+              tab === "issue"
+                ? "border-blue-500 text-fg"
+                : "border-transparent text-fg-4 hover:text-fg-2",
+            )}
+          >
+            <CircleDot className="h-3.5 w-3.5" />
+            Issue
+            <span className={clsx(
+              "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+              tab === "issue" ? "bg-blue-500/10 text-blue-500" : "bg-elevated text-fg-5",
+            )}>
+              {linkedIssues.length}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {tab === "pr" || linkedIssues.length === 0 ? (
+        <PrDetailPanel
+          pr={pr}
+          onBack={onBack}
+          onClose={onClose}
+          onEnterMatch={onEnterMatch}
+          onNavigateToIssue={onNavigateToIssue}
+        />
+      ) : selectedIssue ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex shrink-0 items-center border-b border-line bg-elevated/30 px-4 py-2">
+            <button
+              type="button"
+              onClick={onBackToIssueList}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-fg-3 transition-colors hover:bg-elevated hover:text-fg"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              返回列表
+            </button>
+          </div>
+          <IssueDetailPanel
+            issue={selectedIssue}
+            onBack={onBackToIssueList}
+          />
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
+            <LinkedIssueList issues={linkedIssues} onSelect={onSelectIssue} />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function PullRequestsPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("open")
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [issueSearchQuery, setIssueSearchQuery] = useState("")
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -226,13 +345,43 @@ export function PullRequestsPage() {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const allIssues = useIssueStore((s) => s.issues)
 
+  const selectedId = searchParams.get("id")
+  const tab: PrDetailTab = searchParams.get("tab") === "issue" ? "issue" : "pr"
+  const issueId = searchParams.get("issueId")
+
   useEffect(() => {
-    const paramId = searchParams.get("prId")
-    if (paramId && pulls.some((p) => p.id === paramId)) {
-      setSelectedId(paramId)
-      setSearchParams({}, { replace: true })
-    }
-  }, [searchParams, setSearchParams, pulls])
+    const legacy = searchParams.get("prId")
+    if (!legacy) return
+    const next = new URLSearchParams(searchParams)
+    next.delete("prId")
+    next.set("id", legacy)
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  const openPr = useCallback((id: string) => {
+    setSearchParams({ id }, { replace: false })
+  }, [setSearchParams])
+
+  const closePr = useCallback(() => {
+    setSearchParams({}, { replace: false })
+  }, [setSearchParams])
+
+  const changeTab = useCallback((newTab: PrDetailTab) => {
+    if (!selectedId) return
+    const params: Record<string, string> = { id: selectedId }
+    if (newTab === "issue") params.tab = "issue"
+    setSearchParams(params, { replace: false })
+  }, [selectedId, setSearchParams])
+
+  const openIssueTab = useCallback((iid: string) => {
+    if (!selectedId) return
+    setSearchParams({ id: selectedId, tab: "issue", issueId: iid }, { replace: false })
+  }, [selectedId, setSearchParams])
+
+  const backToIssueList = useCallback(() => {
+    if (!selectedId) return
+    setSearchParams({ id: selectedId, tab: "issue" }, { replace: false })
+  }, [selectedId, setSearchParams])
 
   const matchingPr = matchingPrId ? pulls.find((p) => p.id === matchingPrId) ?? null : null
 
@@ -480,13 +629,13 @@ export function PullRequestsPage() {
                       key={pr.id}
                       pr={pr}
                       isActive={pr.id === (selectedId ?? matchingPrId)}
-                      onSelect={() => setSelectedId(pr.id)}
+                      onSelect={() => openPr(pr.id)}
                     />
                   ) : (
                     <FullWidthPrRow
                       key={pr.id}
                       pr={pr}
-                      onSelect={() => setSelectedId(pr.id)}
+                      onSelect={() => openPr(pr.id)}
                     />
                   ),
                 )}
@@ -497,15 +646,20 @@ export function PullRequestsPage() {
       </div>
 
       {showDetail ? (
-        <PrDetailPanel
+        <PrDetailWithTabs
           key={`${showDetail.id}-${matchingPrId ?? "view"}`}
           pr={showDetail}
-          onBack={() => { setSelectedId(null); if (matchingPrId) exitMatchMode() }}
-          onClose={() => { setSelectedId(null); if (matchingPrId) exitMatchMode() }}
+          tab={tab}
+          issueId={issueId}
+          onTabChange={changeTab}
+          onSelectIssue={openIssueTab}
+          onBackToIssueList={backToIssueList}
+          onBack={() => { closePr(); if (matchingPrId) exitMatchMode() }}
+          onClose={() => { closePr(); if (matchingPrId) exitMatchMode() }}
           onEnterMatch={() => enterMatchMode(showDetail.id)}
-          onNavigateToIssue={(issueId) => {
+          onNavigateToIssue={(iid) => {
             if (!repoName) return
-            navigate(`/${encodeURIComponent(repoName)}/dev/issues?id=${encodeURIComponent(issueId)}`)
+            navigate(`/${encodeURIComponent(repoName)}/dev/issues?id=${encodeURIComponent(iid)}`)
           }}
         />
       ) : (
