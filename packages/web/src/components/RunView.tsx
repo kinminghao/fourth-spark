@@ -983,7 +983,7 @@ export function RunView({
                   <span className="w-14 shrink-0 font-mono text-xs text-fg-5">Issue</span>
                   <button
                     type="button"
-                    onClick={() => navigate(`/${encodeURIComponent(repoName!)}/issues?issueId=${linkedIssue.id}`)}
+                    onClick={() => navigate(`/${encodeURIComponent(repoName!)}/dev/issues?id=${linkedIssue.id}`)}
                     className="flex items-center gap-1.5 truncate font-mono text-xs text-fg-3 transition-colors hover:text-blue-400"
                   >
                     <span className={clsx(
@@ -1037,7 +1037,7 @@ export function RunView({
         {linkedIssue && (
           <button
             type="button"
-            onClick={() => navigate(`/${encodeURIComponent(repoName!)}/issues?issueId=${linkedIssue.id}`)}
+            onClick={() => navigate(`/${encodeURIComponent(repoName!)}/dev/issues?id=${linkedIssue.id}`)}
             className="flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
           >
             <span className={clsx(
