@@ -10,7 +10,7 @@ export type Toast = {
   persistent?: boolean
 }
 
-export interface AddToastOpts {
+interface AddToastOpts {
   id?: string
   persistent?: boolean
 }

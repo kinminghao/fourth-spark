@@ -9,7 +9,7 @@ import { create } from "zustand"
 import * as api from "../lib/api-client"
 import type { Message, MessagePart, PromptFile, Session, Todo, SessionLinks, SessionLinkSummary } from "../lib/api-client"
 
-export type SessionFilter = "active" | "all"
+type SessionFilter = "active" | "all"
 import { isQuestionTool, isQuestionPending, getPartText } from "../lib/message-parts"
 import { useRepoStore } from "./repo-store"
 import { useAgentStore } from "./agent-store"
@@ -71,7 +71,7 @@ async function refreshSessionLinks(id: string, set: (fn: (s: SessionState) => Pa
 
 const MESSAGES_PAGE_SIZE = 20
 
-export interface MessagesMeta {
+interface MessagesMeta {
   total: number
   hasMore: boolean
   loading: boolean

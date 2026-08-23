@@ -3,7 +3,7 @@ import { GlobalEventDispatcher } from "./global-event-dispatcher"
 import { SessionSupervisor } from "./session-supervisor"
 import { useSessionStore } from "../stores/session-store"
 
-export class SessionOrchestrator {
+class SessionOrchestrator {
   private workers = new Map<string, SessionWorker>()
   private dispatcher: GlobalEventDispatcher | null = null
   private supervisor: SessionSupervisor | null = null

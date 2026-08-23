@@ -9,7 +9,7 @@ const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/web
 
 let attachmentSeq = 0
 
-export interface AttachmentFile extends PromptFile {
+interface AttachmentFile extends PromptFile {
   _id: string
 }
 
@@ -22,7 +22,7 @@ function readAsDataUrl(file: File): Promise<string> {
   })
 }
 
-export function ImageLightbox({ url, label, onClose }: { url: string; label: string; onClose: () => void }) {
+function ImageLightbox({ url, label, onClose }: { url: string; label: string; onClose: () => void }) {
   useEffect(() => {
     // Capture phase + preventDefault so RunView's Escape-to-abort skips this keypress
     const onKeyDown = (event: globalThis.KeyboardEvent) => {

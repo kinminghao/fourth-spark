@@ -6,7 +6,7 @@
 
 import type { MessagePart, Todo } from "./api-client"
 
-export type PartKind = "text" | "thinking" | "tool" | "file" | "other"
+type PartKind = "text" | "thinking" | "tool" | "file" | "other"
 
 const TOOL_TYPES = new Set([
   "tool",
@@ -118,7 +118,7 @@ export function countCompletedTodos(todos: readonly Todo[]): number {
     .length
 }
 
-export interface QuestionOption {
+interface QuestionOption {
   label: string
   description?: string
 }
