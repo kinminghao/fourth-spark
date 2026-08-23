@@ -1,20 +1,20 @@
 import {
   Fragment,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
-  type KeyboardEvent,
 } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
-import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, Loader2, Menu, PanelRight, Plus, RotateCcw, Search, Send, Square, X } from "lucide-react"
+import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, Menu, PanelRight, Plus, RotateCcw, Search, Square, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
 import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
 import { VoiceButton } from "./VoiceButton"
-import { useSpeechToText } from "../hooks/use-speech-to-text"
-import { MarkdownTable } from "./MarkdownTable"
+import { VoiceOverlay, VoiceStatusBar } from "./VoiceOverlay"
+import { useVoiceInput } from "../hooks/use-voice-input"
 import {
   EMPTY_MESSAGES,
   EMPTY_QUEUE,
@@ -164,47 +164,6 @@ function ContextInfo({ session, messages }: { session: Session | null; messages:
 
 const MAX_NEW_HEIGHT_PX = 144
 const STICK_TO_BOTTOM_THRESHOLD_PX = 64
-const VOICE_TEXTAREA_MAX_HEIGHT_PX = 240
-const VOICE_TICK_INTERVAL_MS = 1000
-
-// Per-bar amplitude multipliers so the 7 bars scale volumeLevel at slightly
-// different intensities — otherwise every bar would move in perfect lockstep
-// even as the mic level fluctuates. Values center around 1.0.
-const VOICE_BAR_MULTIPLIERS = [0.85, 1.25, 0.65, 1.4, 0.75, 1.15, 0.95] as const
-const VOICE_BAR_MIN_HEIGHT_PX = 4
-const VOICE_BAR_MAX_HEIGHT_PX = 24
-
-function formatVoiceDuration(totalSeconds: number): string {
-  const mm = Math.floor(totalSeconds / 60).toString().padStart(2, "0")
-  const ss = Math.floor(totalSeconds % 60).toString().padStart(2, "0")
-  return `${mm}:${ss}`
-}
-
-function VoiceWaveform({ volumeLevel }: { volumeLevel: number }) {
-  const clampedVolume = Math.min(Math.max(volumeLevel, 0), 1)
-  return (
-    <div className="flex h-6 items-center gap-1" aria-hidden="true">
-      {VOICE_BAR_MULTIPLIERS.map((multiplier, i) => {
-        const raw =
-          VOICE_BAR_MIN_HEIGHT_PX +
-          clampedVolume *
-            multiplier *
-            (VOICE_BAR_MAX_HEIGHT_PX - VOICE_BAR_MIN_HEIGHT_PX)
-        const height = Math.max(
-          VOICE_BAR_MIN_HEIGHT_PX,
-          Math.min(VOICE_BAR_MAX_HEIGHT_PX, raw),
-        )
-        return (
-          <span
-            key={i}
-            className="w-1 rounded-full bg-red-400 transition-[height] duration-150 ease-out"
-            style={{ height: `${height}px` }}
-          />
-        )
-      })}
-    </div>
-  )
-}
 
 function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const [draft, setDraft] = useState("")
@@ -212,15 +171,9 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const [issueId, setIssueId] = useState("")
   const [issueQuery, setIssueQuery] = useState("")
   const [issueDropdownOpen, setIssueDropdownOpen] = useState(false)
-  const [voiceEditText, setVoiceEditText] = useState("")
-  const [voiceElapsed, setVoiceElapsed] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const issueComboRef = useRef<HTMLDivElement>(null)
-  const voiceTextareaRef = useRef<HTMLTextAreaElement>(null)
-  const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const voiceStartTimeRef = useRef(0)
   const [models, setModels] = useState<ModelInfo[]>([])
-  const stt = useSpeechToText()
   const createSession = useSessionStore((state) => state.createSession)
   const sendError = useSessionStore((state) => state.sendError)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
@@ -295,7 +248,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined, promptFiles.length > 0 ? promptFiles : undefined)
   }
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
@@ -303,96 +256,14 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     }
   }
 
-  const handleVoiceCancel = () => {
-    void stt.stop()
-    stt.resetTranscript()
-    setVoiceEditText("")
-  }
+  const handleVoiceSubmit = useCallback(
+    (text: string) => {
+      void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined)
+    },
+    [createSession, issueId, customAgentId],
+  )
 
-  const handleVoiceConfirm = () => {
-    const text = voiceEditText.trim()
-    if (!text) { handleVoiceCancel(); return }
-    stt.resetTranscript()
-    setVoiceEditText("")
-    void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined)
-  }
-
-  useEffect(() => {
-    if (stt.phase === "recording") {
-      voiceStartTimeRef.current = Date.now()
-      setVoiceElapsed(0)
-      voiceTimerRef.current = setInterval(() => {
-        setVoiceElapsed(
-          Math.floor((Date.now() - voiceStartTimeRef.current) / 1000),
-        )
-      }, VOICE_TICK_INTERVAL_MS)
-    } else {
-      if (voiceTimerRef.current) {
-        clearInterval(voiceTimerRef.current)
-        voiceTimerRef.current = null
-      }
-    }
-    return () => {
-      if (voiceTimerRef.current) {
-        clearInterval(voiceTimerRef.current)
-        voiceTimerRef.current = null
-      }
-    }
-  }, [stt.phase])
-
-  useEffect(() => {
-    if (stt.phase === "done") {
-      setVoiceEditText(stt.transcript)
-      requestAnimationFrame(() => {
-        const el = voiceTextareaRef.current
-        if (!el) return
-        el.focus()
-        el.setSelectionRange(el.value.length, el.value.length)
-      })
-    }
-  }, [stt.phase, stt.transcript])
-
-  useLayoutEffect(() => {
-    if (stt.phase !== "done") return
-    const el = voiceTextareaRef.current
-    if (!el) return
-    el.style.height = "auto"
-    el.style.height = `${Math.min(el.scrollHeight, VOICE_TEXTAREA_MAX_HEIGHT_PX)}px`
-  }, [stt.phase, voiceEditText])
-
-  useEffect(() => {
-    if (stt.phase === "idle") return
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape" && stt.phase !== "recognizing") {
-        e.preventDefault()
-        handleVoiceCancel()
-        return
-      }
-      if (
-        stt.phase === "done" &&
-        e.key === "Enter" &&
-        (e.metaKey || e.ctrlKey)
-      ) {
-        if ((e as unknown as { isComposing?: boolean }).isComposing) return
-        e.preventDefault()
-        handleVoiceConfirm()
-      }
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stt.phase, voiceEditText])
-
-  const handleVoiceTextareaKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.nativeEvent.isComposing || e.keyCode === 229) return
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault()
-      handleVoiceConfirm()
-    }
-  }
-
-  const combinedRecordingHasText =
-    stt.transcript.length > 0 || stt.interimTranscript.length > 0
+  const voice = useVoiceInput(handleVoiceSubmit)
 
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center bg-term">
@@ -419,52 +290,16 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
           "relative rounded-xl border bg-base/80 shadow-sm transition-colors",
           "border-line focus-within:border-fg-5",
         )}>
-          {stt.phase !== "idle" && (
-            <div className="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-xl border border-line bg-surface/95 backdrop-blur-sm">
-              <div className="max-h-[40vh] overflow-y-auto px-4 py-4">
-                {stt.phase === "recording" && (
-                  <div className="text-xl leading-relaxed">
-                    {combinedRecordingHasText ? (
-                      <>
-                        <span className="text-fg">{stt.transcript}</span>
-                        {stt.interimTranscript && (
-                          <span className="text-fg-4">{stt.interimTranscript}</span>
-                        )}
-                      </>
-                    ) : (
-                      <span className="italic text-fg-5">正在聆听…</span>
-                    )}
-                  </div>
-                )}
-
-                {stt.phase === "recognizing" && (
-                  <div className="flex items-center gap-3">
-                    <Loader2 className="h-5 w-5 shrink-0 text-emerald-400 fs-spin" />
-                    <span className="font-mono text-sm text-emerald-400">
-                      识别中…
-                    </span>
-                    {stt.interimTranscript && (
-                      <span className="truncate text-base text-fg-4">
-                        {stt.interimTranscript}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {stt.phase === "done" && (
-                  <textarea
-                    ref={voiceTextareaRef}
-                    value={voiceEditText}
-                    onChange={(e) => setVoiceEditText(e.target.value)}
-                    onKeyDown={handleVoiceTextareaKey}
-                    rows={2}
-                    placeholder="识别结果（可编辑）"
-                    className="w-full resize-none bg-transparent text-xl leading-relaxed text-fg placeholder:text-fg-5 focus:outline-none"
-                  />
-                )}
-              </div>
-            </div>
-          )}
+          <VoiceOverlay
+            phase={voice.stt.phase}
+            transcript={voice.stt.transcript}
+            interimTranscript={voice.stt.interimTranscript}
+            editText={voice.editText}
+            onEditTextChange={voice.setEditText}
+            onTextareaKeyDown={voice.handleTextareaKeyDown}
+            textareaRef={voice.textareaRef}
+            wrapperClassName="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-xl border border-line bg-surface/95 backdrop-blur-sm"
+          />
 
           {visibleAgents.length > 0 && (
             <div className="flex gap-1.5 overflow-x-auto px-4 pt-3 pb-1 scrollbar-none">
@@ -523,10 +358,10 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
               allowed
             />
             <VoiceButton
-              isListening={stt.isListening}
+              isListening={voice.stt.isListening}
               disabled={!activeRepoId}
-              onStart={stt.start}
-              onStop={() => void stt.stop()}
+              onStart={voice.stt.start}
+              onStop={() => void voice.stt.stop()}
             />
             <button
               type="button"
@@ -622,62 +457,17 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
           )}
         </div>
 
-        {stt.phase === "idle" ? (
-          <div className="mt-2 flex items-center justify-center gap-2 font-mono text-[10px] text-fg-6">
-            {stt.error ? (
-              <span className="text-red-400">{stt.error}</span>
-            ) : (
-              <span>⌘⏎ / ctrl+⏎ 开始运行</span>
-            )}
-          </div>
-        ) : stt.phase === "done" ? (
-          <div className="mt-2 flex items-center gap-2 px-1">
-            <span className="hidden font-mono text-[10px] text-fg-6 sm:inline">
-              ⌘/Ctrl+⏎ 发送 · Esc 取消
-            </span>
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleVoiceCancel}
-                className="rounded-md border border-line px-3 py-1 text-xs text-fg-3 transition-colors hover:bg-elevated hover:text-fg"
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={handleVoiceConfirm}
-                disabled={voiceEditText.trim().length === 0}
-                aria-label="发送"
-                className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6/30 disabled:text-fg-5"
-              >
-                <Send className="h-3.5 w-3.5" strokeWidth={2.5} />
-                <span>发送</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-2 flex items-center gap-3 px-1">
-            {stt.phase === "recording" ? (
-              <>
-                <VoiceWaveform volumeLevel={stt.volumeLevel} />
-                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium text-red-400">
-                  <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-red-400" />
-                  录音中
-                </span>
-                <span className="font-mono text-[11px] tabular-nums text-fg-4">
-                  {formatVoiceDuration(voiceElapsed)}
-                </span>
-              </>
-            ) : (
-              <>
-                <Loader2 className="h-4 w-4 shrink-0 text-emerald-400 fs-spin" />
-                <span className="font-mono text-[11px] text-emerald-400">
-                  识别中…
-                </span>
-              </>
-            )}
-          </div>
-        )}
+        <VoiceStatusBar
+          phase={voice.stt.phase}
+          volumeLevel={voice.stt.volumeLevel}
+          elapsed={voice.elapsed}
+          editText={voice.editText}
+          error={voice.stt.error}
+          onCancel={voice.cancel}
+          onConfirm={() => void voice.confirm()}
+          idleHint="⌘⏎ / ctrl+⏎ 开始运行"
+          className="mt-2 flex items-center justify-center gap-2"
+        />
 
         {sendError && (
           <div className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2 font-mono text-xs text-red-400">
@@ -689,14 +479,6 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   )
 }
 
-function IssueBody({ body }: { body?: string }) {
-  if (!body) return <p className="py-10 text-center font-mono text-xs text-fg-5">没有描述内容</p>
-  return (
-    <div className="markdown-body leading-relaxed">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ table: MarkdownTable }}>{body}</ReactMarkdown>
-    </div>
-  )
-}
 
 function IssueHeader({ issue }: { issue: { number: number; title: string; state: string; labels?: Array<{ id: number; name: string; color: string }> } }) {
   return (
@@ -894,8 +676,6 @@ export function RunView({
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [status, abortSession])
-
-  const matchingParentId = useIssueStore((state) => state.matchingParentId)
 
   if (!activeSessionId) {
     if (matchingParentId) return <IssueMatchView onToggleSidebar={onToggleSidebar} />
