@@ -8,8 +8,6 @@ interface LayoutState {
   sessionPanelCollapsed: boolean
   toggleNav: () => void
   toggleSessionPanel: () => void
-  setNavCollapsed: (collapsed: boolean) => void
-  setSessionPanelCollapsed: (collapsed: boolean) => void
 }
 
 export const useLayoutStore = create<LayoutState>((set) => ({
@@ -30,15 +28,5 @@ export const useLayoutStore = create<LayoutState>((set) => ({
       localStorage.setItem(SESSION_PANEL_KEY, String(next))
       return { sessionPanelCollapsed: next }
     })
-  },
-
-  setNavCollapsed(collapsed: boolean) {
-    localStorage.setItem(NAV_KEY, String(collapsed))
-    set({ navCollapsed: collapsed })
-  },
-
-  setSessionPanelCollapsed(collapsed: boolean) {
-    localStorage.setItem(SESSION_PANEL_KEY, String(collapsed))
-    set({ sessionPanelCollapsed: collapsed })
   },
 }))

@@ -20,7 +20,6 @@ interface IssueState {
   setSelectedIssue: (id: string | null) => void
   enterMatchMode: (parentId: string) => void
   exitMatchMode: () => void
-  setMatchCandidate: (id: string | null) => void
   linkChild: (parentNumber: number, childNumber: number) => Promise<boolean>
   updateIssueState: (issueNumber: number, state: "open" | "closed") => Promise<boolean>
   loadIssues: () => Promise<void>
@@ -60,7 +59,6 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   exitMatchMode: () => {
     set({ matchingParentId: null, matchingCandidateId: null })
   },
-  setMatchCandidate: (id) => set({ matchingCandidateId: id }),
   linkChild: async (parentNumber, childNumber) => {
     const repoId = useRepoStore.getState().activeRepoId
     if (!repoId) return false

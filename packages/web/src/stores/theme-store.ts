@@ -31,7 +31,6 @@ function applyToDOM(preference: Preference) {
 interface ThemeState {
   preference: Preference
   resolved: Resolved
-  setPreference: (preference: Preference) => void
   cycle: () => void
   init: () => () => void
 }
@@ -42,17 +41,13 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     (localStorage.getItem(STORAGE_KEY) as Preference) ?? "system",
   ),
 
-  setPreference(preference: Preference) {
-    const resolved = resolve(preference)
-    localStorage.setItem(STORAGE_KEY, preference)
-    applyToDOM(preference)
-    set({ preference, resolved })
-  },
-
   cycle() {
     const order: Preference[] = ["system", "light", "dark"]
     const next = order[(order.indexOf(get().preference) + 1) % order.length]
-    get().setPreference(next)
+    const resolved = resolve(next)
+    localStorage.setItem(STORAGE_KEY, next)
+    applyToDOM(next)
+    set({ preference: next, resolved })
   },
 
   init() {

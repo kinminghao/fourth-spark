@@ -4,38 +4,24 @@
  * agent configurations.
  */
 
+/*
+ * Small standalone store for the available agent list.
+ *
+ * NOTE: `loadAgents` was removed (dead code — never called by any component).
+ * The store is still imported by session-store to read `.loaded` / `.agents`,
+ * so the shell is kept.  A future PR should either re-wire loading or remove
+ * the store entirely.
+ */
+
 import { create } from "zustand"
-import * as api from "../lib/api-client"
 import type { Agent } from "../lib/api-client"
-import { useRepoStore } from "./repo-store"
 
 interface AgentState {
   agents: Agent[]
   loaded: boolean
-  loadAgents: () => Promise<void>
 }
 
-const ALLOWED_AGENTS = ["Sisyphus", "Prometheus", "Atlas"]
-
-function isAllowed(agent: Agent): boolean {
-  const name = (agent.name || agent.id || "").toLowerCase()
-  return ALLOWED_AGENTS.some((key) => name.startsWith(key.toLowerCase()))
-}
-
-export const useAgentStore = create<AgentState>((set) => ({
+export const useAgentStore = create<AgentState>(() => ({
   agents: [],
   loaded: false,
-  loadAgents: async () => {
-    const repoId = useRepoStore.getState().activeRepoId
-    if (!repoId) {
-      set({ agents: [], loaded: true })
-      return
-    }
-    try {
-      const all = await api.listAgents(repoId)
-      set({ agents: all.filter(isAllowed), loaded: true })
-    } catch {
-      set({ loaded: true })
-    }
-  },
 }))
