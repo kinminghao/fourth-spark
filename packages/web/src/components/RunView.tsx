@@ -222,6 +222,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     el.style.height = `${Math.min(el.scrollHeight, MAX_NEW_HEIGHT_PX)}px`
   }, [draft])
 
+  const selectedAgentDesc = visibleAgents.find((a) => a.id === customAgentId)?.description
   const hasContext = Boolean(issueId)
 
   const submit = () => {
@@ -286,33 +287,38 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
           />
 
           {visibleAgents.length > 0 && (
-            <div className="flex gap-1.5 overflow-x-auto px-4 pt-3 pb-1 scrollbar-none">
-              {visibleAgents.map((a) => {
-                const avatar = agentAvatar(a.name)
-                return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => setCustomAgentId(a.id)}
-                    className={clsx(
-                      "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                      customAgentId === a.id
-                        ? "bg-blue-500/15 text-blue-400 ring-1 ring-inset ring-blue-500/30"
-                        : "text-fg-4 hover:bg-elevated hover:text-fg-3",
-                    )}
-                  >
-                    <span className={clsx(
-                      "inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold",
-                      avatar.bg,
-                      avatar.text,
-                    )}>
-                      {avatar.initial}
-                    </span>
-                    {a.name}
-                  </button>
-                )
-              })}
-            </div>
+            <>
+              <div className="flex gap-1.5 overflow-x-auto px-4 pt-3 pb-1 scrollbar-none">
+                {visibleAgents.map((a) => {
+                  const avatar = agentAvatar(a.name)
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => setCustomAgentId(a.id)}
+                      className={clsx(
+                        "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                        customAgentId === a.id
+                          ? "bg-blue-500/15 text-blue-400 ring-1 ring-inset ring-blue-500/30"
+                          : "text-fg-4 hover:bg-elevated hover:text-fg-3",
+                      )}
+                    >
+                      <span className={clsx(
+                        "inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold",
+                        avatar.bg,
+                        avatar.text,
+                      )}>
+                        {avatar.initial}
+                      </span>
+                      {a.name}
+                    </button>
+                  )
+                })}
+              </div>
+              {selectedAgentDesc && (
+                <p className="px-4 pb-1 text-[11px] leading-relaxed text-fg-5">{selectedAgentDesc}</p>
+              )}
+            </>
           )}
 
           <div
