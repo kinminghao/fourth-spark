@@ -1,54 +1,46 @@
-import { useEffect, useState, useRef, useCallback, type KeyboardEvent } from "react"
-import { useNavigate } from "react-router-dom"
+import { useCallback, useState, type KeyboardEvent } from "react"
 import { Plus, Sparkles } from "lucide-react"
 import {
   deleteIssueCreateDraft,
   getIssueCreateDraft,
-  getSessionStatus,
   polishIssueCreate,
 } from "../lib/api-client"
 import { useIssueStore } from "../stores/issue-store"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
-import { useSessionStore } from "../stores/session-store"
-import { useToastStore } from "../stores/toast-store"
+import { useRepoStore } from "../stores/repo-store"
+import { useAiPolish } from "../hooks/use-ai-polish"
+
+interface CreateDraft {
+  title: string
+  body: string
+}
 
 export function IssueCreateForm({ onDone }: { onDone: () => void }) {
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
-  const [busy, setBusy] = useState(false)
-  const [phase, setPhase] = useState<"idle" | "polishing" | "preview">("idle")
-  const [polishedTitle, setPolishedTitle] = useState("")
-  const [polishedBody, setPolishedBody] = useState("")
-  const [polishSessionId, setPolishSessionId] = useState<string | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const createIssue = useIssueStore((s) => s.createIssue)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
-  const repoName = useRepoStore(selectActiveRepoName)
-  const navigate = useNavigate()
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
-    }
-  }, [])
+  const startPolish = useCallback(
+    () => polishIssueCreate(activeRepoId!, title.trim(), body.trim() || undefined),
+    [activeRepoId, title, body],
+  )
+  const fetchResult = useCallback(
+    () => getIssueCreateDraft(activeRepoId!),
+    [activeRepoId],
+  )
+  const loadExisting = useCallback(
+    () => getIssueCreateDraft(activeRepoId!).then((r) => r.title ? r : null),
+    [activeRepoId],
+  )
+  const cleanup = useCallback(
+    () => deleteIssueCreateDraft(activeRepoId!),
+    [activeRepoId],
+  )
 
-  useEffect(() => () => stopPolling(), [stopPolling])
-
-  useEffect(() => {
-    if (!activeRepoId) return
-    let cancelled = false
-    getIssueCreateDraft(activeRepoId)
-      .then((result) => {
-        if (!cancelled && result.title) {
-          setPolishedTitle(result.title)
-          setPolishedBody(result.body)
-          setPhase("preview")
-        }
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [activeRepoId])
+  const {
+    phase, result: polished, busy, setBusy,
+    polish, discard, escalate, setResult: setPolished,
+  } = useAiPolish<CreateDraft>({ repoId: activeRepoId, startPolish, fetchResult, loadExisting, cleanup })
 
   const submit = async () => {
     if (!title.trim() || busy) return
@@ -59,60 +51,12 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
   }
 
   const submitPolished = async () => {
-    if (!polishedTitle.trim() || busy) return
+    if (!polished?.title.trim() || busy) return
     setBusy(true)
-    await createIssue(polishedTitle.trim(), polishedBody.trim() || undefined)
-    if (activeRepoId) deleteIssueCreateDraft(activeRepoId).catch(() => {})
+    await createIssue(polished.title.trim(), polished.body.trim() || undefined)
     setBusy(false)
-    setPhase("idle")
-    setPolishedTitle("")
-    setPolishedBody("")
-    setPolishSessionId(null)
+    discard()
     onDone()
-  }
-
-  const handlePolish = async () => {
-    if (!title.trim() || !activeRepoId || phase === "polishing") return
-    setPhase("polishing")
-    try {
-      const { sessionId } = await polishIssueCreate(activeRepoId, title.trim(), body.trim() || undefined)
-      setPolishSessionId(sessionId)
-
-      pollRef.current = setInterval(async () => {
-        try {
-          const status = await getSessionStatus(activeRepoId, sessionId)
-          if (status.type === "idle") {
-            stopPolling()
-            const result = await getIssueCreateDraft(activeRepoId)
-            setPolishedTitle(result.title)
-            setPolishedBody(result.body)
-            setPhase("preview")
-          }
-        } catch {
-          stopPolling()
-          setPhase("idle")
-          useToastStore.getState().addToast("润色状态检查失败", "error")
-        }
-      }, 2000)
-    } catch (err) {
-      setPhase("idle")
-      useToastStore.getState().addToast(err instanceof Error ? err.message : "润色启动失败", "error")
-    }
-  }
-
-  const handleDiscard = () => {
-    stopPolling()
-    if (activeRepoId) deleteIssueCreateDraft(activeRepoId).catch(() => {})
-    setPolishedTitle("")
-    setPolishedBody("")
-    setPolishSessionId(null)
-    setPhase("idle")
-  }
-
-  const handleEscalate = () => {
-    if (!polishSessionId || !repoName) return
-    useSessionStore.setState({ activeSessionId: polishSessionId })
-    navigate(`/${encodeURIComponent(repoName)}/run`)
   }
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -122,7 +66,7 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
     }
   }
 
-  if (phase === "preview") {
+  if (phase === "preview" && polished) {
     return (
       <div className="border-b border-line px-3 py-3">
         <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fg-4">
@@ -132,14 +76,14 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5">
           <input
             type="text"
-            value={polishedTitle}
-            onChange={(e) => setPolishedTitle(e.target.value)}
+            value={polished.title}
+            onChange={(e) => setPolished({ ...polished, title: e.target.value })}
             className="w-full bg-transparent text-xs font-medium text-fg placeholder:text-fg-6 focus:outline-none"
             placeholder="润色后标题"
           />
           <textarea
-            value={polishedBody}
-            onChange={(e) => setPolishedBody(e.target.value)}
+            value={polished.body}
+            onChange={(e) => setPolished({ ...polished, body: e.target.value })}
             rows={5}
             className="mt-2 w-full resize-none bg-transparent text-xs text-fg placeholder:text-fg-6 focus:outline-none"
             placeholder="润色后描述"
@@ -148,7 +92,7 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
         <div className="mt-2 flex items-center gap-2">
           <button
             type="button"
-            disabled={!polishedTitle.trim() || busy}
+            disabled={!polished.title.trim() || busy}
             onClick={() => void submitPolished()}
             className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
           >
@@ -157,7 +101,7 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
           </button>
           <button
             type="button"
-            onClick={() => void handlePolish()}
+            onClick={() => void polish()}
             className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
           >
             <Sparkles className="h-3.5 w-3.5" />
@@ -165,14 +109,14 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
           </button>
           <button
             type="button"
-            onClick={handleEscalate}
+            onClick={escalate}
             className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs text-fg-3 transition-colors hover:border-blue-500/50 hover:text-blue-400"
           >
             转入深度对话
           </button>
           <button
             type="button"
-            onClick={handleDiscard}
+            onClick={discard}
             className="ml-auto rounded-md px-2.5 py-1 text-xs text-fg-5 transition-colors hover:text-fg-3"
           >
             放弃
@@ -214,7 +158,7 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
         <button
           type="button"
           disabled={!title.trim() || phase === "polishing"}
-          onClick={() => void handlePolish()}
+          onClick={() => void polish()}
           className="flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-500/20 disabled:opacity-40"
         >
           <Sparkles className="h-3.5 w-3.5" />

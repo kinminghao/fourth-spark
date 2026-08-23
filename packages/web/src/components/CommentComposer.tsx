@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useCallback, useState } from "react"
 import { Send, Sparkles } from "lucide-react"
-import { createIssueComment, getDraft, getSessionStatus, polishComment, type IssueComment } from "../lib/api-client"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
-import { useSessionStore } from "../stores/session-store"
+import { createIssueComment, getDraft, polishComment, type IssueComment } from "../lib/api-client"
+import { useAiPolish } from "../hooks/use-ai-polish"
 import { useToastStore } from "../stores/toast-store"
 
 export function CommentComposer({
@@ -15,37 +13,25 @@ export function CommentComposer({
   issueNumber: number
   onPublished: (comment: IssueComment) => void
 }) {
-  const navigate = useNavigate()
-  const repoName = useRepoStore(selectActiveRepoName)
-
   const [draft, setDraft] = useState("")
-  const [phase, setPhase] = useState<"idle" | "polishing" | "preview">("idle")
-  const [polishedBody, setPolishedBody] = useState("")
-  const [polishSessionId, setPolishSessionId] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
-    }
-  }, [])
+  const startPolish = useCallback(
+    () => polishComment(repoId, issueNumber, draft.trim()),
+    [repoId, issueNumber, draft],
+  )
+  const fetchResult = useCallback(
+    () => getDraft(repoId, issueNumber).then((r) => r.body),
+    [repoId, issueNumber],
+  )
+  const loadExisting = useCallback(
+    () => getDraft(repoId, issueNumber).then((r) => r.body || null),
+    [repoId, issueNumber],
+  )
 
-  useEffect(() => () => stopPolling(), [stopPolling])
-
-  useEffect(() => {
-    let cancelled = false
-    getDraft(repoId, issueNumber)
-      .then((result) => {
-        if (!cancelled && result.body) {
-          setPolishedBody(result.body)
-          setPhase("preview")
-        }
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [repoId, issueNumber])
+  const {
+    phase, result: polishedBody, busy, setBusy,
+    polish, discard, escalate, setResult: setPolishedBody,
+  } = useAiPolish<string>({ repoId, startPolish, fetchResult, loadExisting })
 
   const handleDirectSend = async () => {
     if (!draft.trim() || busy) return
@@ -62,63 +48,20 @@ export function CommentComposer({
     }
   }
 
-  const handlePolish = async () => {
-    if (!draft.trim() || phase === "polishing") return
-    setPhase("polishing")
-    try {
-      const { sessionId } = await polishComment(repoId, issueNumber, draft.trim())
-      setPolishSessionId(sessionId)
-
-      pollRef.current = setInterval(async () => {
-        try {
-          const status = await getSessionStatus(repoId, sessionId)
-          if (status.type === "idle") {
-            stopPolling()
-            const result = await getDraft(repoId, issueNumber)
-            setPolishedBody(result.body)
-            setPhase("preview")
-          }
-        } catch {
-          stopPolling()
-          setPhase("idle")
-          useToastStore.getState().addToast("润色状态检查失败", "error")
-        }
-      }, 2000)
-    } catch (err) {
-      setPhase("idle")
-      useToastStore.getState().addToast(err instanceof Error ? err.message : "润色启动失败", "error")
-    }
-  }
-
   const handlePublishPolished = async () => {
-    if (!polishedBody.trim() || busy) return
+    if (!polishedBody?.trim() || busy) return
     setBusy(true)
     try {
       const comment = await createIssueComment(repoId, issueNumber, polishedBody.trim())
       onPublished(comment)
       setDraft("")
-      setPolishedBody("")
-      setPolishSessionId(null)
-      setPhase("idle")
+      discard()
       useToastStore.getState().addToast("评论已发布", "success")
     } catch (err) {
       useToastStore.getState().addToast(err instanceof Error ? err.message : "发布失败", "error")
     } finally {
       setBusy(false)
     }
-  }
-
-  const handleDiscard = () => {
-    stopPolling()
-    setPolishedBody("")
-    setPolishSessionId(null)
-    setPhase("idle")
-  }
-
-  const handleEscalate = () => {
-    if (!polishSessionId || !repoName) return
-    useSessionStore.setState({ activeSessionId: polishSessionId })
-    navigate(`/${encodeURIComponent(repoName)}/run`)
   }
 
   if (phase === "preview") {
@@ -130,7 +73,7 @@ export function CommentComposer({
         </h3>
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
           <textarea
-            value={polishedBody}
+            value={polishedBody ?? ""}
             onChange={(e) => setPolishedBody(e.target.value)}
             rows={6}
             className="w-full resize-none bg-transparent text-sm text-fg placeholder:text-fg-6 focus:outline-none"
@@ -148,7 +91,7 @@ export function CommentComposer({
           </button>
           <button
             type="button"
-            onClick={() => void handlePolish()}
+            onClick={() => void polish()}
             className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
           >
             <Sparkles className="h-3.5 w-3.5" />
@@ -156,14 +99,14 @@ export function CommentComposer({
           </button>
           <button
             type="button"
-            onClick={handleEscalate}
+            onClick={escalate}
             className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs text-fg-3 transition-colors hover:border-blue-500/50 hover:text-blue-400"
           >
             转入深度对话
           </button>
           <button
             type="button"
-            onClick={handleDiscard}
+            onClick={discard}
             className="ml-auto rounded-md px-2.5 py-1.5 text-xs text-fg-5 transition-colors hover:text-fg-3"
           >
             放弃
@@ -199,7 +142,7 @@ export function CommentComposer({
         <button
           type="button"
           disabled={!draft.trim() || phase === "polishing"}
-          onClick={() => void handlePolish()}
+          onClick={() => void polish()}
           className="flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-500/20 disabled:opacity-40"
         >
           <Sparkles className="h-3.5 w-3.5" />
