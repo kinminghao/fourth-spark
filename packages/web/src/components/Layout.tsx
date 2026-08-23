@@ -16,11 +16,10 @@ interface NavItem {
   matchPrefix?: string
 }
 
-const NAV_ITEMS: NavItem[] = [
+const MAIN_NAV_ITEMS: NavItem[] = [
   { segment: "run", icon: Play, label: "运行面板", global: false },
   { segment: "agents", icon: Bot, label: "Agents", global: false },
   { segment: "dev/issues", icon: Code2, label: "研发", global: false, matchPrefix: "dev" },
-  { segment: "settings", icon: Settings, label: "设置", global: true },
 ]
 
 function navPath(segment: string, global: boolean, repoName: string | null): string {
@@ -325,6 +324,14 @@ function Header() {
               )}
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => navigate("/settings")}
+            aria-label="设置"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
           <a
             href="https://github.com/kinminghao/fourth-spark"
             target="_blank"
@@ -371,7 +378,7 @@ function Sidebar() {
       )}
     >
       <div className="flex flex-1 flex-col">
-        {NAV_ITEMS.map((item) => {
+        {MAIN_NAV_ITEMS.map((item) => {
           const forceActive = isNavItemActive(item, location.pathname, repoName)
           return (
             <NavLink
@@ -402,6 +409,29 @@ function Sidebar() {
         })}
       </div>
 
+      <NavLink
+        to="/settings"
+        title={collapsed ? "设置" : undefined}
+        className={({ isActive }) =>
+          clsx(
+            "mx-2 flex items-center rounded-md py-2 text-sm transition-colors",
+            collapsed ? "justify-center px-2" : "gap-2.5 px-3",
+            isActive
+              ? "bg-blue-500/10 font-medium text-blue-600"
+              : "text-fg-4 hover:bg-elevated hover:text-fg-2",
+          )
+        }
+      >
+        <Settings className="h-4 w-4 shrink-0" />
+        <span
+          className={clsx(
+            "truncate transition-[opacity,max-width] duration-200 ease-in-out",
+            collapsed ? "max-w-0 opacity-0" : "max-w-[8rem] opacity-100",
+          )}
+        >
+          设置
+        </span>
+      </NavLink>
       <button
         type="button"
         onClick={toggle}
@@ -423,7 +453,7 @@ function BottomBar() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-line bg-surface pb-[var(--safe-bottom)] md:hidden">
       <div className="flex h-14 items-center justify-around">
-        {NAV_ITEMS.map((item) => {
+        {MAIN_NAV_ITEMS.map((item) => {
           const forceActive = isNavItemActive(item, location.pathname, repoName)
           return (
             <NavLink
