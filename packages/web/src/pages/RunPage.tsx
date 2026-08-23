@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 import { Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Pencil, Plus, Trash2, X } from "lucide-react"
 import clsx from "clsx"
-import type { Session } from "../lib/api-client"
+import type { Session, Todo } from "../lib/api-client"
 import { useSessionStore, EMPTY_TODOS, EMPTY_MESSAGES } from "../stores/session-store"
+import { countCompletedTodos, normalizeTodoStatus } from "../lib/message-parts"
 import { useRepoStore } from "../stores/repo-store"
 import { useIssueStore } from "../stores/issue-store"
 import { useDraftStore } from "../stores/draft-store"
@@ -63,7 +64,7 @@ function statusDotClass(status: string | undefined): string {
 function SessionItem({
   session, isActive, isConfirming,
   onSelect, onDelete, onConfirm, onCancelConfirm, onRename, onToggleComplete,
-  status, issue, linkedItems,
+  status, issue, linkedItems, todos,
 }: {
   session: Session; isActive: boolean; isConfirming: boolean
   onSelect: () => void; onDelete: () => void; onConfirm: () => void; onCancelConfirm: () => void
@@ -71,6 +72,7 @@ function SessionItem({
   status: string | undefined
   issue?: { number: number; title: string; state: string }
   linkedItems?: Array<{ number: number; state: string; type: "issue" | "pr"; mergedAt?: number | null }>
+  todos: readonly Todo[]
 }) {
   const draft = useDraftStore((s) => s.drafts[session.id])
   const isCompleted = !!session.completedAt
@@ -270,6 +272,33 @@ function SessionItem({
                   ✏️ {draft}
                 </span>
               )}
+              {todos.length > 0 && (() => {
+                const total = todos.length
+                const completed = countCompletedTodos(todos)
+                return (
+                  <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px]">
+                    <span className="shrink-0 tracking-tight">
+                      {todos.map((todo) => {
+                        const s = normalizeTodoStatus(todo.status)
+                        return (
+                          <span
+                            key={todo.id}
+                            className={
+                              s === "completed" ? "text-emerald-400"
+                                : s === "in_progress" ? "text-amber-400"
+                                : s === "cancelled" ? "text-fg-6"
+                                : "text-fg-5"
+                            }
+                          >
+                            {s === "pending" ? "□" : "■"}
+                          </span>
+                        )
+                      })}
+                    </span>
+                    <span className="tabular-nums text-fg-4">{completed}/{total}</span>
+                  </span>
+                )
+              })()}
             </div>
           )}
         </button>
@@ -333,6 +362,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const issues = useIssueStore((s) => s.issues)
   const allSessionLinks = useSessionStore((s) => s.allSessionLinks)
+  const allTodos = useSessionStore((s) => s.todos)
 
   const topLevel = [...sessions]
     .filter((s) => {
@@ -368,6 +398,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
             onCancelConfirm={() => setConfirmingId(null)}
             onRename={(title) => void renameSession(session.id, title)}
             onToggleComplete={() => void toggleSessionComplete(session.id)}
+            todos={allTodos[session.id] ?? EMPTY_TODOS}
           />
         )
       })}
