@@ -1,5 +1,5 @@
-import { useCallback, useState, type KeyboardEvent } from "react"
-import { Plus, Sparkles } from "lucide-react"
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react"
+import { Ellipsis, Plus, Sparkles } from "lucide-react"
 import {
   deleteIssueCreateDraft,
   getIssueCreateDraft,
@@ -17,6 +17,8 @@ interface CreateDraft {
 export function IssueCreateForm({ onDone }: { onDone: () => void }) {
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreRef = useRef<HTMLDivElement>(null)
   const createIssue = useIssueStore((s) => s.createIssue)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
 
@@ -41,6 +43,17 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
     phase, result: polished, busy, setBusy,
     polish, discard, escalate, setResult: setPolished,
   } = useAiPolish<CreateDraft>({ repoId: activeRepoId, startPolish, fetchResult, loadExisting, cleanup })
+
+  useEffect(() => {
+    if (!moreOpen) return
+    const handler = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [moreOpen])
 
   const submit = async () => {
     if (!title.trim() || busy) return
@@ -101,26 +114,39 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
           </button>
           <button
             type="button"
-            onClick={() => void polish()}
-            className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            重新润色
-          </button>
-          <button
-            type="button"
-            onClick={escalate}
-            className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs text-fg-3 transition-colors hover:border-blue-500/50 hover:text-blue-400"
-          >
-            转入深度对话
-          </button>
-          <button
-            type="button"
             onClick={discard}
             className="ml-auto rounded-md px-2.5 py-1 text-xs text-fg-5 transition-colors hover:text-fg-3"
           >
             放弃
           </button>
+          <div className="relative" ref={moreRef}>
+            <button
+              type="button"
+              onClick={() => setMoreOpen(!moreOpen)}
+              className="flex h-6 w-6 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+            >
+              <Ellipsis className="h-3.5 w-3.5" />
+            </button>
+            {moreOpen && (
+              <div className="absolute right-0 bottom-full z-20 mb-1 min-w-[140px] overflow-hidden rounded-lg border border-line bg-elevated shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => { setMoreOpen(false); void polish() }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-base/60"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  重新润色
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMoreOpen(false); escalate() }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-base/60"
+                >
+                  转入深度对话
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     )
