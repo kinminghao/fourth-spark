@@ -333,7 +333,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={onPaste}
-              placeholder={activeRepoId ? "让 Agent 做什么？" : "请先选择一个仓库"}
+              placeholder={!activeRepoId ? "请先选择一个仓库" : issueId ? "输入补充指令，或直接发送" : "让 Agent 做什么？"}
               className="flex-1 resize-none bg-transparent font-mono text-sm leading-6 text-fg placeholder:text-fg-6 focus:outline-none disabled:cursor-not-allowed"
             />
             <AttachButton

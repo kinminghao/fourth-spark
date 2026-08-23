@@ -185,7 +185,7 @@ export function IssueDetailPanel({
             className="flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-blue-500"
           >
             <Play className="h-3.5 w-3.5 fill-current" />
-            <span className="hidden sm:inline">开始处理</span>
+            <span className="hidden sm:inline">新建任务</span>
           </button>
           {onToggleSidebar && (
             <button
