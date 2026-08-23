@@ -8,19 +8,7 @@
 
 import type { Message, MessagePart, Session, Todo } from "./api-client"
 
-export const KNOWN_SSE_EVENTS = [
-  "message.updated",
-  "message.part.updated",
-  "message.part.delta",
-  "message.removed",
-  "todo.updated",
-  "session.status",
-  "session.idle",
-  "session.error",
-  "session.updated",
-] as const
-
-export interface SseDispatchTarget {
+interface SseDispatchTarget {
   updateMessage: (sessionId: string, message: Message) => void
   updateMessagePart: (
     sessionId: string,
