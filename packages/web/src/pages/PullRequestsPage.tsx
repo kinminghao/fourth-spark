@@ -285,7 +285,7 @@ export function PullRequestsPage() {
   const showDetail = matchingPr ?? selectedPr
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <div
         className={clsx(
           "shrink-0 flex-col bg-surface",
