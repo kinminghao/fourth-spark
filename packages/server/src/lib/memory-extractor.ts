@@ -296,10 +296,10 @@ export async function getSessionCustomAgentId(sessionId: string): Promise<string
     .where(eq(sessionsTable.id, sessionId))
   if (!session?.customAgentId) return null
 
-  const [agent] = await db.select({ isSystem: customAgents.isSystem })
+  const [agent] = await db.select({ memoryEnabled: customAgents.memoryEnabled })
     .from(customAgents)
     .where(eq(customAgents.id, session.customAgentId))
-  if (!agent || agent.isSystem === 1) return null
+  if (!agent || agent.memoryEnabled !== 1) return null
 
   return session.customAgentId
 }
@@ -330,7 +330,7 @@ export async function listExtractableSessions(): Promise<Array<{ id: string; cus
     .innerJoin(customAgents, eq(sessionsTable.customAgentId, customAgents.id))
     .where(and(
       isNotNull(sessionsTable.customAgentId),
-      eq(customAgents.isSystem, 0),
+      eq(customAgents.memoryEnabled, 1),
     ))
 
   const result: Array<{ id: string; customAgentId: string }> = []

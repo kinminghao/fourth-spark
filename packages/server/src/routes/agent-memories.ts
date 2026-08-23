@@ -12,12 +12,12 @@ import { logger } from "../middleware/logger"
 import { unlink } from "node:fs/promises"
 import type { RuntimeClient } from "../core/runtime-client"
 
-async function requireNonSystemAgent(agentId: string): Promise<{ error?: string; status?: number }> {
-  const [agent] = await db.select({ id: customAgents.id, isSystem: customAgents.isSystem })
+async function requireMemoryEnabled(agentId: string): Promise<{ error?: string; status?: number }> {
+  const [agent] = await db.select({ id: customAgents.id, memoryEnabled: customAgents.memoryEnabled })
     .from(customAgents)
     .where(eq(customAgents.id, agentId))
   if (!agent) return { error: "Custom agent not found", status: 404 }
-  if (agent.isSystem === 1) return { error: "Cannot manage memories for system agents", status: 403 }
+  if (agent.memoryEnabled !== 1) return { error: "Memory is not enabled for this agent", status: 403 }
   return {}
 }
 
@@ -27,7 +27,7 @@ agentMemoryRoutes.get("/", async (c) => {
   const agentId = c.req.param("agentId")
   if (!agentId) return c.json({ error: "Missing agentId", status: 400 }, 400)
 
-  const check = await requireNonSystemAgent(agentId)
+  const check = await requireMemoryEnabled(agentId)
   if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
 
   const category = c.req.query("category")
@@ -52,7 +52,7 @@ agentMemoryRoutes.post("/", async (c) => {
   const agentId = c.req.param("agentId")
   if (!agentId) return c.json({ error: "Missing agentId", status: 400 }, 400)
 
-  const check = await requireNonSystemAgent(agentId)
+  const check = await requireMemoryEnabled(agentId)
   if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
 
   const body = await c.req.json<{ content: string; category?: string; importance?: number }>()
@@ -80,7 +80,7 @@ agentMemoryRoutes.put("/:memId", async (c) => {
   const memId = c.req.param("memId")
   if (!agentId || !memId) return c.json({ error: "Missing agentId or memId", status: 400 }, 400)
 
-  const check = await requireNonSystemAgent(agentId)
+  const check = await requireMemoryEnabled(agentId)
   if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
 
   const body = await c.req.json<{ content?: string; category?: string; importance?: number }>()
@@ -103,7 +103,7 @@ agentMemoryRoutes.delete("/:memId", async (c) => {
   const memId = c.req.param("memId")
   if (!agentId || !memId) return c.json({ error: "Missing agentId or memId", status: 400 }, 400)
 
-  const check = await requireNonSystemAgent(agentId)
+  const check = await requireMemoryEnabled(agentId)
   if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
 
   const [existing] = await db.select().from(agentMemories)
@@ -132,7 +132,7 @@ agentMemoryRoutes.post("/extract", async (c) => {
   const agentId = c.req.param("agentId")
   if (!agentId) return c.json({ error: "Missing agentId", status: 400 }, 400)
 
-  const check = await requireNonSystemAgent(agentId)
+  const check = await requireMemoryEnabled(agentId)
   if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
 
   const body = await c.req.json<{ sessionIds: string[] }>()
