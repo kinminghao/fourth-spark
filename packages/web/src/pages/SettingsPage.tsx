@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, Ban, Check, Clock, Cloud, Cpu, Eye, EyeOff, FileText, Gauge, GitBranch, Loader2, Plus, RefreshCw, Save, Search, Trash2, User, Users, Wifi, X, Zap } from "lucide-react"
+import { AlertTriangle, Ban, Box, Check, Clock, Cloud, Cpu, Eye, EyeOff, FileText, Gauge, GitBranch, Loader2, Plus, RefreshCw, Save, Search, Trash2, User, Users, Wifi, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
 import type { AccountUsage, GitHost, ModelInfo, UsageResult, UsageWindow } from "../lib/api-client"
 import { useRepoStore } from "../stores/repo-store"
 import { isNativePlatform, getServerUrl, setServerUrl } from "../lib/config"
+import { RepoListContent } from "./ReposPage"
 
 
 let usageCache: { data: UsageResult; fetchedAt: number } | null = null
@@ -17,9 +18,10 @@ function formatElapsed(ts: number): string {
   return `${Math.floor(m / 60)} 小时前`
 }
 
-type Tab = "usage" | "git" | "models" | "agents" | "server"
+type Tab = "repos" | "usage" | "git" | "models" | "agents" | "server"
 
 const BASE_TABS: { id: Tab; label: string; icon: typeof Zap }[] = [
+  { id: "repos", label: "仓库", icon: Box },
   { id: "usage", label: "Claude 账号", icon: Zap },
   { id: "git", label: "Git 源站", icon: GitBranch },
   { id: "models", label: "模型", icon: Cpu },
@@ -1212,7 +1214,7 @@ export function SettingsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <div className="mx-auto max-w-2xl">
+      <div className={clsx("mx-auto", tab === "repos" ? "max-w-4xl" : "max-w-2xl")}>
         <h1 className="text-lg font-semibold text-fg">设置</h1>
         <p className="mt-0.5 text-sm text-fg-4">全局配置</p>
 
@@ -1236,6 +1238,7 @@ export function SettingsPage() {
         </div>
 
         <div className="mt-4">
+          {tab === "repos" && <RepoListContent />}
           {tab === "usage" && <AccountSection />}
           {tab === "git" && <GitHostSection />}
           {tab === "models" && <ModelManagementSection />}

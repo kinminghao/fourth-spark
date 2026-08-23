@@ -17,7 +17,6 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { segment: "repos", icon: Box, label: "仓库管理", global: true },
   { segment: "run", icon: Play, label: "运行面板", global: false },
   { segment: "agents", icon: Bot, label: "Agents", global: false },
   { segment: "dev/issues", icon: Code2, label: "研发", global: false, matchPrefix: "dev" },
@@ -54,6 +53,7 @@ function RepoSwitcher({
   activeRepoId: string | null
   onRepoChange: (repoId: string) => void
 }) {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const activeRepo = repos.find((r) => r.id === activeRepoId)
@@ -107,6 +107,16 @@ function RepoSwitcher({
                 <span className="truncate">{r.name}</span>
               </button>
             ))}
+          </div>
+          <div className="border-t border-line">
+            <button
+              type="button"
+              onClick={() => { navigate("/repos"); close() }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-elevated hover:text-fg"
+            >
+              <Settings className="h-3 w-3 shrink-0" />
+              <span>管理仓库</span>
+            </button>
           </div>
         </div>
       )}

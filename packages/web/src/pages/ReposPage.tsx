@@ -218,7 +218,7 @@ function WorkspacesSection({ repoId }: { repoId: string }) {
   )
 }
 
-export function ReposPage() {
+export function RepoListContent() {
   const repos = useRepoStore((s) => s.repos)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const setActiveRepo = useRepoStore((s) => s.setActiveRepo)
@@ -276,254 +276,252 @@ export function ReposPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-6 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-fg">仓库管理</h1>
-            <p className="mt-0.5 text-sm text-fg-4">管理代码仓库，每个仓库对应一个独立的 Agent 运行环境</p>
+    <>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold text-fg">仓库管理</h1>
+          <p className="mt-0.5 text-sm text-fg-4">管理代码仓库，每个仓库对应一个独立的 Agent 运行环境</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowAdd(true)}
+          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 md:px-4"
+        >
+          <Plus className="h-4 w-4" />
+          <span className="hidden md:inline">添加仓库</span>
+        </button>
+      </div>
+
+      {repos.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-line-hard py-16 text-center">
+          <div className="rounded-full bg-elevated p-3">
+            <Plus className="h-6 w-6 text-fg-4" />
           </div>
+          <p className="text-sm font-medium text-fg-3">暂无代码仓库</p>
+          <p className="text-xs text-fg-5">添加一个本地仓库开始使用</p>
           <button
             type="button"
             onClick={() => setShowAdd(true)}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 md:px-4"
+            className="mt-2 rounded-lg border border-line px-4 py-2 text-sm text-fg-3 transition-colors hover:bg-elevated hover:text-fg"
           >
-            <Plus className="h-4 w-4" />
-            <span className="hidden md:inline">添加仓库</span>
+            添加仓库
           </button>
         </div>
-
-        {repos.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-line-hard py-16 text-center">
-            <div className="rounded-full bg-elevated p-3">
-              <Plus className="h-6 w-6 text-fg-4" />
-            </div>
-            <p className="text-sm font-medium text-fg-3">暂无代码仓库</p>
-            <p className="text-xs text-fg-5">添加一个本地仓库开始使用</p>
-            <button
-              type="button"
-              onClick={() => setShowAdd(true)}
-              className="mt-2 rounded-lg border border-line px-4 py-2 text-sm text-fg-3 transition-colors hover:bg-elevated hover:text-fg"
-            >
-              添加仓库
-            </button>
-          </div>
-        ) : (
-          <>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {repos.map((repo) => {
-              const isActive = repo.id === activeRepoId
-              return (
-                <div
-                  key={repo.id}
-                  className={clsx(
-                    "rounded-xl border p-4 transition-colors",
-                    isActive ? "border-blue-500/40 bg-blue-500/5" : "border-line",
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setActiveRepo(repo.id)}
-                      className="flex min-w-0 items-center gap-2 text-left"
-                    >
-                      {isActive ? (
-                        <CircleDot className="h-4 w-4 shrink-0 text-blue-500" />
-                      ) : (
-                        <Circle className="h-4 w-4 shrink-0 text-fg-5" />
-                      )}
-                      <span className={clsx("truncate font-medium", isActive ? "text-fg" : "text-fg-2")}>
-                        {repo.name}
-                      </span>
-                    </button>
-                    <span
-                      className={clsx(
-                        "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-                        repo.running
-                          ? "bg-emerald-500/10 text-emerald-600"
-                          : "bg-fg-6/30 text-fg-4",
-                      )}
-                    >
-                      <span className={clsx("h-1.5 w-1.5 rounded-full", repo.running ? "bg-emerald-500" : "bg-fg-5")} />
-                      {repo.running ? "运行中" : "已停止"}
+      ) : (
+        <>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {repos.map((repo) => {
+            const isActive = repo.id === activeRepoId
+            return (
+              <div
+                key={repo.id}
+                className={clsx(
+                  "rounded-xl border p-4 transition-colors",
+                  isActive ? "border-blue-500/40 bg-blue-500/5" : "border-line",
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveRepo(repo.id)}
+                    className="flex min-w-0 items-center gap-2 text-left"
+                  >
+                    {isActive ? (
+                      <CircleDot className="h-4 w-4 shrink-0 text-blue-500" />
+                    ) : (
+                      <Circle className="h-4 w-4 shrink-0 text-fg-5" />
+                    )}
+                    <span className={clsx("truncate font-medium", isActive ? "text-fg" : "text-fg-2")}>
+                      {repo.name}
                     </span>
-                  </div>
+                  </button>
+                  <span
+                    className={clsx(
+                      "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
+                      repo.running
+                        ? "bg-emerald-500/10 text-emerald-600"
+                        : "bg-fg-6/30 text-fg-4",
+                    )}
+                  >
+                    <span className={clsx("h-1.5 w-1.5 rounded-full", repo.running ? "bg-emerald-500" : "bg-fg-5")} />
+                    {repo.running ? "运行中" : "已停止"}
+                  </span>
+                </div>
 
-                  <dl className="mt-3 space-y-1 font-mono text-xs text-fg-4">
-                    <div className="flex gap-2">
-                      <dt className="shrink-0 text-fg-5">Git</dt>
-                      <dd className="min-w-0 truncate">{repo.gitUrl}</dd>
-                    </div>
-                    <div className="flex gap-2">
-                      <dt className="shrink-0 text-fg-5">路径</dt>
+                <dl className="mt-3 space-y-1 font-mono text-xs text-fg-4">
+                  <div className="flex gap-2">
+                    <dt className="shrink-0 text-fg-5">Git</dt>
+                    <dd className="min-w-0 truncate">{repo.gitUrl}</dd>
+                  </div>
+                  <div className="flex gap-2">
+                    <dt className="shrink-0 text-fg-5">路径</dt>
+                    <dd className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate">{repo.localPath}</span>
+                      <button
+                        type="button"
+                        onClick={() => void navigator.clipboard.writeText(repo.localPath)}
+                        title="复制路径"
+                        className="shrink-0 rounded p-0.5 text-fg-5 transition-colors hover:text-fg-3"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    </dd>
+                  </div>
+                  {repo.running && repo.port && (
+                    <div className="flex items-center gap-2">
+                      <dt className="shrink-0 text-fg-5">直连</dt>
                       <dd className="flex min-w-0 items-center gap-1.5">
-                        <span className="truncate">{repo.localPath}</span>
+                        <a
+                          href={`http://127.0.0.1:${repo.port}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="truncate text-blue-500 hover:underline"
+                        >
+                          127.0.0.1:{repo.port}
+                        </a>
                         <button
                           type="button"
-                          onClick={() => void navigator.clipboard.writeText(repo.localPath)}
-                          title="复制路径"
+                          onClick={() => void navigator.clipboard.writeText(`http://127.0.0.1:${repo.port}`)}
+                          title="复制链接"
                           className="shrink-0 rounded p-0.5 text-fg-5 transition-colors hover:text-fg-3"
                         >
                           <Copy className="h-3 w-3" />
                         </button>
                       </dd>
                     </div>
-                    {repo.running && repo.port && (
-                      <div className="flex items-center gap-2">
-                        <dt className="shrink-0 text-fg-5">直连</dt>
-                        <dd className="flex min-w-0 items-center gap-1.5">
-                          <a
-                            href={`http://127.0.0.1:${repo.port}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="truncate text-blue-500 hover:underline"
-                          >
-                            127.0.0.1:{repo.port}
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => void navigator.clipboard.writeText(`http://127.0.0.1:${repo.port}`)}
-                            title="复制链接"
-                            className="shrink-0 rounded p-0.5 text-fg-5 transition-colors hover:text-fg-3"
-                          >
-                            <Copy className="h-3 w-3" />
-                          </button>
-                        </dd>
+                  )}
+                </dl>
+
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handlePull(repo.id)}
+                    disabled={pullingId === repo.id}
+                    className="flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-blue-500/30 px-2.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/10 disabled:opacity-50"
+                  >
+                    {pullingId === repo.id ? (
+                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    ) : (
+                      <><ArrowDownToLine className="h-3 w-3" />拉取</>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleToggle(repo.id, repo.running)}
+                    disabled={togglingId === repo.id}
+                    className={clsx(
+                      "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md border text-xs font-medium transition-colors disabled:opacity-50",
+                      repo.running
+                        ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
+                        : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10",
+                    )}
+                  >
+                    {togglingId === repo.id ? (
+                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    ) : repo.running ? (
+                      <><Square className="h-3 w-3 fill-current" />停止</>
+                    ) : (
+                      <><Play className="h-3 w-3 fill-current" />启动</>
+                    )}
+                  </button>
+                  <div className="relative" ref={menuOpenId === repo.id ? menuRef : undefined}>
+                    <button
+                      type="button"
+                      onClick={() => setMenuOpenId(menuOpenId === repo.id ? null : repo.id)}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+                    >
+                      <Ellipsis className="h-4 w-4" />
+                    </button>
+                    {menuOpenId === repo.id && (
+                      <div className="absolute right-0 top-full z-20 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-line bg-elevated shadow-lg">
+                        <button
+                          type="button"
+                          className={clsx(
+                            "flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-base/60",
+                            repo.runtimeType === "claude-code" ? "text-orange-500" : "text-sky-500",
+                          )}
+                          onClick={async () => {
+                            setMenuOpenId(null)
+                            const next = repo.runtimeType === "claude-code" ? "opencode" : "claude-code"
+                            await api.switchRuntime(repo.id, next)
+                            loadRepos()
+                          }}
+                        >
+                          {repo.runtimeType === "claude-code" ? "Claude → OpenCode" : "OpenCode → Claude"}
+                        </button>
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-base/60"
+                          onClick={async () => {
+                            setMenuOpenId(null)
+                            await api.toggleWorktree(repo.id, !repo.worktreeEnabled)
+                            loadRepos()
+                          }}
+                        >
+                          <GitBranch className="h-3 w-3" />
+                          <span>Worktree</span>
+                          <span className={clsx("ml-auto text-[10px]", repo.worktreeEnabled ? "text-violet-500" : "text-fg-5")}>
+                            {repo.worktreeEnabled ? "已开启" : "已关闭"}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-base/60"
+                          onClick={() => {
+                            setMenuOpenId(null)
+                            setAgentsMdRepo({ id: repo.id, name: repo.name })
+                          }}
+                        >
+                          <FileText className="h-3 w-3" />
+                          配置
+                        </button>
+                        <div className="my-0.5 border-t border-line" />
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-500 transition-colors hover:bg-red-500/10"
+                          onClick={() => {
+                            setMenuOpenId(null)
+                            setConfirmingId(repo.id)
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          删除仓库
+                        </button>
                       </div>
                     )}
-                  </dl>
-
-                  <div className="mt-3 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handlePull(repo.id)}
-                      disabled={pullingId === repo.id}
-                      className="flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-blue-500/30 px-2.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/10 disabled:opacity-50"
-                    >
-                      {pullingId === repo.id ? (
-                        <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      ) : (
-                        <><ArrowDownToLine className="h-3 w-3" />拉取</>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleToggle(repo.id, repo.running)}
-                      disabled={togglingId === repo.id}
-                      className={clsx(
-                        "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md border text-xs font-medium transition-colors disabled:opacity-50",
-                        repo.running
-                          ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
-                          : "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10",
-                      )}
-                    >
-                      {togglingId === repo.id ? (
-                        <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      ) : repo.running ? (
-                        <><Square className="h-3 w-3 fill-current" />停止</>
-                      ) : (
-                        <><Play className="h-3 w-3 fill-current" />启动</>
-                      )}
-                    </button>
-                    <div className="relative" ref={menuOpenId === repo.id ? menuRef : undefined}>
+                  </div>
+                </div>
+                {confirmingId === repo.id && (
+                  <div className="mt-2 flex items-center justify-between rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2">
+                    <span className="text-xs text-red-500">确认删除此仓库？</span>
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setMenuOpenId(menuOpenId === repo.id ? null : repo.id)}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+                        onClick={() => { void removeRepo(repo.id); setConfirmingId(null) }}
+                        className="flex h-6 items-center gap-1 rounded border border-red-500/30 px-2 text-xs text-red-500 transition-colors hover:bg-red-500/10"
                       >
-                        <Ellipsis className="h-4 w-4" />
+                        <Check className="h-3 w-3" />确认
                       </button>
-                      {menuOpenId === repo.id && (
-                        <div className="absolute right-0 top-full z-20 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-line bg-elevated shadow-lg">
-                          <button
-                            type="button"
-                            className={clsx(
-                              "flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-base/60",
-                              repo.runtimeType === "claude-code" ? "text-orange-500" : "text-sky-500",
-                            )}
-                            onClick={async () => {
-                              setMenuOpenId(null)
-                              const next = repo.runtimeType === "claude-code" ? "opencode" : "claude-code"
-                              await api.switchRuntime(repo.id, next)
-                              loadRepos()
-                            }}
-                          >
-                            {repo.runtimeType === "claude-code" ? "Claude → OpenCode" : "OpenCode → Claude"}
-                          </button>
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-base/60"
-                            onClick={async () => {
-                              setMenuOpenId(null)
-                              await api.toggleWorktree(repo.id, !repo.worktreeEnabled)
-                              loadRepos()
-                            }}
-                          >
-                            <GitBranch className="h-3 w-3" />
-                            <span>Worktree</span>
-                            <span className={clsx("ml-auto text-[10px]", repo.worktreeEnabled ? "text-violet-500" : "text-fg-5")}>
-                              {repo.worktreeEnabled ? "已开启" : "已关闭"}
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-base/60"
-                            onClick={() => {
-                              setMenuOpenId(null)
-                              setAgentsMdRepo({ id: repo.id, name: repo.name })
-                            }}
-                          >
-                            <FileText className="h-3 w-3" />
-                            配置
-                          </button>
-                          <div className="my-0.5 border-t border-line" />
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-500 transition-colors hover:bg-red-500/10"
-                            onClick={() => {
-                              setMenuOpenId(null)
-                              setConfirmingId(repo.id)
-                            }}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            删除仓库
-                          </button>
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingId(null)}
+                        className="flex h-6 items-center gap-1 rounded border border-line px-2 text-xs text-fg-4 transition-colors hover:bg-elevated"
+                      >
+                        取消
+                      </button>
                     </div>
                   </div>
-                  {confirmingId === repo.id && (
-                    <div className="mt-2 flex items-center justify-between rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2">
-                      <span className="text-xs text-red-500">确认删除此仓库？</span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => { void removeRepo(repo.id); setConfirmingId(null) }}
-                          className="flex h-6 items-center gap-1 rounded border border-red-500/30 px-2 text-xs text-red-500 transition-colors hover:bg-red-500/10"
-                        >
-                          <Check className="h-3 w-3" />确认
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmingId(null)}
-                          className="flex h-6 items-center gap-1 rounded border border-line px-2 text-xs text-fg-4 transition-colors hover:bg-elevated"
-                        >
-                          取消
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                )}
 
-                  {repo.worktreeEnabled && <WorkspacesSection repoId={repo.id} />}
-                </div>
-              )
-            })}
-          </div>
-          </>
-        )}
+                {repo.worktreeEnabled && <WorkspacesSection repoId={repo.id} />}
+              </div>
+            )
+          })}
+        </div>
+        </>
+      )}
 
-        <p className="mt-3 text-xs text-fg-5">{repos.length} 个仓库</p>
-      </div>
+      <p className="mt-3 text-xs text-fg-5">{repos.length} 个仓库</p>
 
       {showAdd && <AddRepoModal onClose={() => setShowAdd(false)} />}
       {agentsMdRepo && (
@@ -533,6 +531,16 @@ export function ReposPage() {
           onClose={() => setAgentsMdRepo(null)}
         />
       )}
+    </>
+  )
+}
+
+export function ReposPage() {
+  return (
+    <div className="flex-1 overflow-y-auto p-6">
+      <div className="mx-auto max-w-4xl">
+        <RepoListContent />
+      </div>
     </div>
   )
 }
