@@ -321,7 +321,7 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
                 <li key={issue.id} className="group flex items-start gap-1">
                   <button
                     type="button"
-                    onClick={() => navigate(`/${encodeURIComponent(repoName!)}/issues?issueId=${encodeURIComponent(issue.id)}`)}
+                    onClick={() => navigate(`/${encodeURIComponent(repoName!)}/dev/issues?id=${encodeURIComponent(issue.id)}`)}
                     className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
                   >
                     <span className={clsx(
@@ -356,7 +356,7 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
                 <li key={pr.id} className="group flex items-start gap-1">
                   <button
                     type="button"
-                    onClick={() => navigate(`/${encodeURIComponent(repoName!)}/pulls?prId=${encodeURIComponent(pr.id)}`)}
+                    onClick={() => navigate(`/${encodeURIComponent(repoName!)}/dev/pulls?id=${encodeURIComponent(pr.id)}`)}
                     className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
                   >
                     <span className={clsx(
