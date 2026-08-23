@@ -480,6 +480,15 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
 }
 
 
+function IssueBody({ body }: { body?: string }) {
+  if (!body) return <p className="py-10 text-center font-mono text-xs text-fg-5">该 Issue 没有描述内容</p>
+  return (
+    <div className="markdown-body leading-relaxed">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
+    </div>
+  )
+}
+
 function IssueHeader({ issue }: { issue: { number: number; title: string; state: string; labels?: Array<{ id: number; name: string; color: string }> } }) {
   return (
     <div>
@@ -676,6 +685,8 @@ export function RunView({
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [status, abortSession])
+
+  const matchingParentId = useIssueStore((state) => state.matchingParentId)
 
   if (!activeSessionId) {
     if (matchingParentId) return <IssueMatchView onToggleSidebar={onToggleSidebar} />
