@@ -7,7 +7,7 @@ import {
   useState,
 } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
-import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, Menu, PanelRight, Plus, RotateCcw, Search, Square, X } from "lucide-react"
+import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, Menu, PanelRight, Plus, RotateCcw, Square, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
@@ -169,18 +169,19 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const [draft, setDraft] = useState("")
   const [customAgentId, setCustomAgentId] = useState("")
   const [issueId, setIssueId] = useState("")
-  const [issueQuery, setIssueQuery] = useState("")
-  const [issueDropdownOpen, setIssueDropdownOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const issueComboRef = useRef<HTMLDivElement>(null)
   const [models, setModels] = useState<ModelInfo[]>([])
   const createSession = useSessionStore((state) => state.createSession)
   const sendError = useSessionStore((state) => state.sendError)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
   const customAgents = useCustomAgentStore((state) => state.agents)
   const visibleAgents = customAgents.filter((a) => a.isSystem < 2)
-  const issues = useIssueStore((state) => state.issues)
   const selectedIssueId = useIssueStore((state) => state.selectedIssueId)
+  const linkedIssueLabel = useIssueStore((state) => {
+    if (!issueId) return null
+    const issue = state.issues.find((i) => i.id === issueId)
+    return issue ? `#${issue.number} ${issue.title}` : null
+  })
   const [searchParams, setSearchParams] = useSearchParams()
 
   useEffect(() => {
@@ -220,23 +221,6 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     el.style.height = "auto"
     el.style.height = `${Math.min(el.scrollHeight, MAX_NEW_HEIGHT_PX)}px`
   }, [draft])
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (issueComboRef.current && !issueComboRef.current.contains(e.target as Node)) {
-        setIssueDropdownOpen(false)
-      }
-    }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [])
-
-  const openIssues = issues.filter((i) => i.state === "open")
-  const selectedIssue = issues.find((i) => i.id === issueId)
-  const iq = issueQuery.trim().toLowerCase()
-  const filteredIssues = !iq
-    ? openIssues
-    : openIssues.filter((i) => `#${i.number} ${i.title}`.toLowerCase().includes(iq))
 
   const hasContext = Boolean(issueId)
 
@@ -374,85 +358,20 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
             </button>
           </div>
 
-          {issues.length > 0 && (
-            <div className="flex items-center gap-3 border-t border-line/60 px-4 py-2">
-              <div ref={issueComboRef} className="relative hidden min-w-0 flex-1 items-center gap-1.5 font-mono text-[11px] text-fg-4 sm:flex">
-                <span className="shrink-0">Issue</span>
-                <button
-                  type="button"
-                  onClick={() => { setIssueDropdownOpen((v) => !v); setIssueQuery("") }}
-                  className="flex min-w-0 flex-1 items-center gap-1 truncate rounded border border-line bg-surface px-2 py-1 font-mono text-xs text-fg transition-colors hover:border-fg-5 focus:border-fg-5 focus:outline-none"
-                >
-                  <span className="min-w-0 flex-1 truncate text-left">
-                    {selectedIssue ? `#${selectedIssue.number} ${selectedIssue.title}` : "无"}
-                  </span>
-                  <ChevronDown className="h-3 w-3 shrink-0 text-fg-5" />
-                </button>
-                {issueId && (
-                  <button
-                    type="button"
-                    onClick={() => { setIssueId(""); setIssueQuery("") }}
-                    className="shrink-0 text-fg-5 hover:text-fg-3"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-                {issueDropdownOpen && (
-                  <div className="absolute left-0 top-full z-50 mt-1 w-full min-w-[280px] rounded-md border border-line bg-surface shadow-lg">
-                    <div className="flex items-center gap-1.5 border-b border-line px-2 py-1.5">
-                      <Search className="h-3 w-3 shrink-0 text-fg-5" />
-                      <input
-                        type="text"
-                        value={issueQuery}
-                        onChange={(e) => setIssueQuery(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Escape") setIssueDropdownOpen(false) }}
-                        placeholder="搜索 issue..."
-                        autoFocus
-                        className="min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-fg-6 focus:outline-none"
-                      />
-                    </div>
-                    <ul className="max-h-48 overflow-y-auto py-1">
-                      {!iq && (
-                        <li>
-                          <button
-                            type="button"
-                            onClick={() => { setIssueId(""); setIssueDropdownOpen(false) }}
-                            className={clsx(
-                              "w-full px-2.5 py-1.5 text-left font-mono text-xs transition-colors hover:bg-elevated/60",
-                              !issueId ? "text-blue-400" : "text-fg-4",
-                            )}
-                          >
-                            无
-                          </button>
-                        </li>
-                      )}
-                      {filteredIssues.map((issue) => (
-                        <li key={issue.id}>
-                          <button
-                            type="button"
-                            onClick={() => { setIssueId(issue.id); setIssueQuery(""); setIssueDropdownOpen(false) }}
-                            className={clsx(
-                              "flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors hover:bg-elevated/60",
-                              issue.id === issueId ? "bg-blue-500/10" : "",
-                            )}
-                          >
-                            <span className={clsx(
-                              "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium",
-                              issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-                            )}>
-                              #{issue.number}
-                            </span>
-                            <span className="min-w-0 truncate font-mono text-xs text-fg-3">{issue.title}</span>
-                          </button>
-                        </li>
-                      ))}
-                      {filteredIssues.length === 0 && (
-                        <li className="px-2.5 py-3 text-center font-mono text-[10px] text-fg-5">无匹配结果</li>
-                      )}
-                    </ul>
-                  </div>
-                )}
-              </div>
+          {linkedIssueLabel && (
+            <div className="flex items-center gap-2 border-t border-line/60 px-4 py-1.5">
+              <span className="shrink-0 font-mono text-[11px] text-fg-5">关联</span>
+              <span className="min-w-0 truncate rounded bg-blue-500/10 px-1.5 py-0.5 font-mono text-[11px] text-blue-400">
+                {linkedIssueLabel}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIssueId("")}
+                className="shrink-0 text-fg-5 hover:text-fg-3"
+                aria-label="取消关联"
+              >
+                <X className="h-3 w-3" />
+              </button>
             </div>
           )}
         </div>
