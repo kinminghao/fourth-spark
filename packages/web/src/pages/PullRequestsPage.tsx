@@ -1,33 +1,25 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
-  AlertTriangle,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
+  ArrowLeft,
   CircleDot,
-  ExternalLink,
-  FileText,
-  GitCommit,
-  GitMerge,
   GitPullRequest,
   Link2,
-  Minus,
-  Plus,
   RefreshCw,
   Search,
   X,
-  XCircle,
 } from "lucide-react"
-import ReactMarkdown from "react-markdown"
-import rehypeRaw from "rehype-raw"
-import remarkGfm from "remark-gfm"
 import clsx from "clsx"
-import { ApiError, listPrLinkedIssues, listPullComments, mergePull, updateIssue, type Issue, type IssueComment, type PersistentPullRequest } from "../lib/api-client"
+import { listPrLinkedIssues, type Issue, type PersistentPullRequest } from "../lib/api-client"
 import { usePrStore } from "../stores/pr-store"
 import { useIssueStore } from "../stores/issue-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
-import { useToastStore } from "../stores/toast-store"
+import { PrDetailPanel } from "../components/PrDetailPanel"
+import { IssueDetailPanel } from "../components/IssueDetailPanel"
+import { LinkedIssueList } from "../components/LinkedIssueList"
+import { CompactPrRow, FullWidthPrRow } from "../components/PrRow"
+
+type PrDetailTab = "pr" | "issue"
 
 type StateFilter = "open" | "closed" | "merged" | "all"
 
@@ -37,165 +29,6 @@ const STATE_FILTERS: { key: StateFilter; label: string }[] = [
   { key: "closed", label: "已关闭" },
   { key: "all", label: "全部" },
 ]
-
-function relativeTime(ts: number): string {
-  const ms = ts < 1_000_000_000_000 ? ts * 1000 : ts
-  const diff = Date.now() - ms
-  if (diff < 60_000) return "刚刚"
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}分钟前`
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}小时前`
-  if (diff < 2_592_000_000) return `${Math.floor(diff / 86_400_000)}天前`
-  const d = new Date(ms)
-  return d.toLocaleDateString("zh-CN", { month: "short", day: "numeric" })
-}
-
-function stateColor(state: string) {
-  if (state === "merged") return "bg-purple-500/15 text-purple-400"
-  if (state === "closed") return "bg-red-500/15 text-red-400"
-  return "bg-emerald-500/15 text-emerald-400"
-}
-
-function CompactPrRow({
-  pr,
-  isActive,
-  onSelect,
-}: {
-  pr: PersistentPullRequest
-  isActive: boolean
-  onSelect: () => void
-}) {
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={onSelect}
-        className={clsx(
-          "group flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors",
-          isActive
-            ? "border-l-2 border-blue-500 bg-elevated/80"
-            : "border-l-2 border-transparent hover:bg-elevated/50",
-        )}
-      >
-        <span
-          className={clsx(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-mono text-sm font-bold ring-1",
-            pr.state === "merged"
-              ? "bg-gradient-to-br from-purple-500/20 to-purple-500/5 text-purple-400 ring-purple-500/25"
-              : pr.state === "closed"
-                ? "bg-gradient-to-br from-red-500/20 to-red-500/5 text-red-400 ring-red-500/25"
-                : "bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 text-emerald-400 ring-emerald-500/25",
-          )}
-        >
-          {pr.number}
-        </span>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            {pr.draft === 1 && (
-              <span className="shrink-0 rounded px-1 py-0.5 text-[9px] font-bold bg-fg-6/15 text-fg-4">DRAFT</span>
-            )}
-            <span className="min-w-0 text-xs font-medium text-fg-2 group-hover:text-fg">{pr.title}</span>
-          </div>
-          <div className="mt-0.5 truncate font-mono text-[10px] text-fg-6">
-            {pr.headBranch} → {pr.baseBranch}
-          </div>
-          {pr.labels && pr.labels.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {pr.labels.map((l) => (
-                <span
-                  key={l.id}
-                  className="rounded px-1 py-0.5 text-[10px] font-medium"
-                  style={{ backgroundColor: `#${l.color}20`, color: `#${l.color}` }}
-                >
-                  {l.name}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      </button>
-    </li>
-  )
-}
-
-function FullWidthPrRow({
-  pr,
-  onSelect,
-}: {
-  pr: PersistentPullRequest
-  onSelect: () => void
-}) {
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={onSelect}
-        className="group flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left transition-colors hover:bg-elevated/50"
-      >
-        <span
-          className={clsx(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-mono text-sm font-bold ring-1",
-            pr.state === "merged"
-              ? "bg-gradient-to-br from-purple-500/20 to-purple-500/5 text-purple-400 ring-purple-500/25"
-              : pr.state === "closed"
-                ? "bg-gradient-to-br from-red-500/20 to-red-500/5 text-red-400 ring-red-500/25"
-                : "bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 text-emerald-400 ring-emerald-500/25",
-          )}
-        >
-          {pr.number}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            {pr.draft === 1 && (
-              <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide bg-fg-6/15 text-fg-4">DRAFT</span>
-            )}
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg-2 group-hover:text-fg">{pr.title}</span>
-            {pr.mergeable === "false" && pr.state === "open" && (
-              <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-500/15 text-red-400">
-                <AlertTriangle className="inline h-3 w-3 -mt-px" /> Conflict
-              </span>
-            )}
-            {pr.assignees && pr.assignees.length > 0 && (
-              <div className="hidden shrink-0 items-center -space-x-1.5 sm:flex">
-                {pr.assignees.slice(0, 3).map((a) => (
-                  <img key={a.login} src={a.avatar_url} alt={a.login} title={a.login} className="h-5 w-5 rounded-full ring-2 ring-surface" />
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-1">
-            <span className="shrink-0 font-mono text-[11px] text-fg-5">{pr.headBranch} → {pr.baseBranch}</span>
-            <span className="text-fg-6">·</span>
-            {pr.authorLogin && (
-              <>
-                <span className="shrink-0 text-[11px] text-fg-5" title={pr.authorLogin}>
-                  {pr.authorAvatar && <img src={pr.authorAvatar} alt="" className="mr-1 inline-block h-3.5 w-3.5 rounded-full align-text-bottom" />}
-                  {pr.authorLogin}
-                </span>
-                <span className="text-fg-6">·</span>
-              </>
-            )}
-            <span className="shrink-0 text-[11px] text-fg-6">{relativeTime(pr.createdAt)}</span>
-            {pr.labels && pr.labels.length > 0 && (
-              <>
-                <span className="text-fg-6">·</span>
-                {pr.labels.map((l) => (
-                  <span
-                    key={l.id}
-                    className="rounded px-1.5 py-0.5 text-[11px] font-medium"
-                    style={{ backgroundColor: `#${l.color}20`, color: `#${l.color}` }}
-                  >
-                    {l.name}
-                  </span>
-                ))}
-              </>
-            )}
-          </div>
-        </div>
-      </button>
-    </li>
-  )
-}
 
 function IssueMatchRow({
   issue,
@@ -237,333 +70,116 @@ function IssueMatchRow({
   )
 }
 
-function PrDetail({
+function PrDetailWithTabs({
   pr,
+  tab,
+  issueId,
+  onTabChange,
+  onSelectIssue,
+  onBackToIssueList,
   onBack,
   onClose,
   onEnterMatch,
+  onNavigateToIssue,
 }: {
   pr: PersistentPullRequest
+  tab: PrDetailTab
+  issueId: string | null
+  onTabChange: (tab: PrDetailTab) => void
+  onSelectIssue: (issueId: string) => void
+  onBackToIssueList: () => void
   onBack?: () => void
   onClose?: () => void
   onEnterMatch: () => void
+  onNavigateToIssue?: (issueId: string) => void
 }) {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
-  const repoName = useRepoStore(selectActiveRepoName)
-  const [merging, setMerging] = useState(false)
-  const [comments, setComments] = useState<IssueComment[]>([])
-  const [loadingComments, setLoadingComments] = useState(false)
+  const allIssues = useIssueStore((s) => s.issues)
   const [linkedIssues, setLinkedIssues] = useState<Issue[]>([])
-  const [filesExpanded, setFilesExpanded] = useState(false)
-  const navigate = useNavigate()
-  const unlinkIssue = usePrStore((s) => s.unlinkIssue)
 
   useEffect(() => {
-    if (!activeRepoId) return
-    setLoadingComments(true)
-    listPullComments(activeRepoId, pr.number)
-      .then(setComments)
-      .catch(() => setComments([]))
-      .finally(() => setLoadingComments(false))
-  }, [activeRepoId, pr.number])
-
-  useEffect(() => {
-    if (!activeRepoId) return
+    if (!activeRepoId) {
+      setLinkedIssues([])
+      return
+    }
     listPrLinkedIssues(activeRepoId, pr.number)
       .then(setLinkedIssues)
       .catch(() => setLinkedIssues([]))
   }, [activeRepoId, pr.number])
 
-  const handleMerge = async (closeLinkedIssues: boolean) => {
-    if (merging || !activeRepoId) return
-    setMerging(true)
-    try {
-      await mergePull(activeRepoId, pr.number)
-      if (closeLinkedIssues && linkedIssues.length > 0) {
-        const openIssues = linkedIssues.filter((i) => i.state === "open")
-        await Promise.all(openIssues.map((i) => updateIssue(activeRepoId, i.number, { state: "closed" })))
-        setLinkedIssues((prev) => prev.map((i) => i.state === "open" ? { ...i, state: "closed" as const } : i))
-        void useIssueStore.getState().loadIssues()
-        useToastStore.getState().addToast(`PR #${pr.number} 合入成功，已关闭 ${openIssues.length} 个 Issue`, "success")
-      } else {
-        useToastStore.getState().addToast(`PR #${pr.number} 合入成功`, "success")
-      }
-      void usePrStore.getState().loadPulls()
-    } catch (err) {
-      let msg = "合入失败"
-      if (err instanceof ApiError) {
-        try {
-          const parsed = JSON.parse(err.message)
-          msg = parsed.error ?? msg
-        } catch {
-          msg = err.message
-        }
-      }
-      useToastStore.getState().addToast(msg, "error")
-    } finally {
-      setMerging(false)
-    }
-  }
-
-  const handleUnlink = async (issueNumber: number) => {
-    const ok = await unlinkIssue(pr.number, issueNumber)
-    if (ok) setLinkedIssues((prev) => prev.filter((i) => i.number !== issueNumber))
-  }
-
-  const fmtDate = (iso: string) => {
-    const d = new Date(iso)
-    return d.toLocaleDateString("zh-CN", { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
-  }
+  const selectedIssue = issueId ? allIssues.find((i) => i.id === issueId) ?? linkedIssues.find((i) => i.id === issueId) ?? null : null
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <header className="flex flex-col gap-2 border-b border-line px-4 py-3 md:flex-row md:items-center md:gap-3 md:px-6">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+      {linkedIssues.length > 0 && (
+        <div className="flex shrink-0 items-center border-b border-line bg-surface">
           <button
             type="button"
-            onClick={onBack}
-            aria-label="返回列表"
-            className="-ml-1 shrink-0 rounded-md p-1.5 text-fg-3 transition-colors hover:bg-elevated hover:text-fg md:hidden"
+            onClick={() => onTabChange("pr")}
+            className={clsx(
+              "flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-medium transition-colors",
+              tab === "pr"
+                ? "border-blue-500 text-fg"
+                : "border-transparent text-fg-4 hover:text-fg-2",
+            )}
           >
-            <ChevronLeft className="h-5 w-5" />
+            <GitPullRequest className="h-3.5 w-3.5" />
+            PR
           </button>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className={clsx("shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold", stateColor(pr.state))}>
-                #{pr.number} {pr.state}
-              </span>
-              {pr.draft === 1 && (
-                <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold bg-fg-6/15 text-fg-4">DRAFT</span>
-              )}
-              {pr.mergeable === "false" && pr.state === "open" && (
-                <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-500/15 text-red-400">Conflict</span>
-              )}
-              {pr.labels?.map((l) => (
-                <span
-                  key={l.id}
-                  className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
-                  style={{ backgroundColor: `#${l.color}20`, color: `#${l.color}` }}
-                >
-                  {l.name}
-                </span>
-              ))}
-            </div>
-            <h2 className="mt-1 text-base font-semibold text-fg">{pr.title}</h2>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-fg-4">
-              <span className="flex min-w-0 items-center gap-1 font-mono text-[11px] text-fg-5">
-                <GitPullRequest className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{pr.headBranch} → {pr.baseBranch}</span>
-              </span>
-              {pr.authorLogin && (
-                <span className="flex items-center gap-1.5">
-                  {pr.authorAvatar && <img src={pr.authorAvatar} alt="" className="h-4 w-4 rounded-full" />}
-                  {pr.authorLogin}
-                </span>
-              )}
-              {pr.mergedAt && (
-                <span className="text-purple-400">合并于 {relativeTime(pr.mergedAt)}</span>
-              )}
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => onTabChange("issue")}
+            className={clsx(
+              "flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-medium transition-colors",
+              tab === "issue"
+                ? "border-blue-500 text-fg"
+                : "border-transparent text-fg-4 hover:text-fg-2",
+            )}
+          >
+            <CircleDot className="h-3.5 w-3.5" />
+            Issue
+            <span className={clsx(
+              "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+              tab === "issue" ? "bg-blue-500/10 text-blue-500" : "bg-elevated text-fg-5",
+            )}>
+              {linkedIssues.length}
+            </span>
+          </button>
         </div>
+      )}
 
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {pr.htmlUrl && (
-            <a
-              href={pr.htmlUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 font-mono text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">源站</span>
-            </a>
-          )}
-          <button
-            type="button"
-            onClick={onEnterMatch}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 text-xs text-fg-3 transition-colors hover:border-blue-500/50 hover:text-blue-400"
-          >
-            <Link2 className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">关联 Issue</span>
-          </button>
-          {pr.state === "open" && (
-            <>
-              <button
-                type="button"
-                disabled={merging || pr.mergeable === "false"}
-                onClick={() => void handleMerge(false)}
-                className="flex h-8 items-center gap-1.5 rounded-md border border-emerald-500/30 px-2.5 text-xs font-medium text-emerald-400 transition-colors hover:border-emerald-500/60 hover:bg-emerald-500/10 disabled:opacity-40"
-              >
-                <GitMerge className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">合入</span>
-              </button>
-              {linkedIssues.some((i) => i.state === "open") && (
-                <button
-                  type="button"
-                  disabled={merging || pr.mergeable === "false"}
-                  onClick={() => void handleMerge(true)}
-                  className="flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
-                >
-                  <GitMerge className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">合入并关闭 Issues</span>
-                </button>
-              )}
-            </>
-          )}
-          {onClose && (
+      {tab === "pr" || linkedIssues.length === 0 ? (
+        <PrDetailPanel
+          pr={pr}
+          onBack={onBack}
+          onClose={onClose}
+          onEnterMatch={onEnterMatch}
+          onNavigateToIssue={onNavigateToIssue}
+        />
+      ) : selectedIssue ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex shrink-0 items-center border-b border-line bg-elevated/30 px-4 py-2">
             <button
               type="button"
-              onClick={onClose}
-              title="关闭详情"
-              className="hidden h-8 w-8 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-2 md:flex"
+              onClick={onBackToIssueList}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-fg-3 transition-colors hover:bg-elevated hover:text-fg"
             >
-              <X className="h-4 w-4" />
+              <ArrowLeft className="h-3.5 w-3.5" />
+              返回列表
             </button>
-          )}
+          </div>
+          <IssueDetailPanel
+            issue={selectedIssue}
+            onBack={onBackToIssueList}
+          />
         </div>
-      </header>
-
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
-          {linkedIssues.length > 0 && (
-            <div className="mb-6 rounded-lg border border-line bg-elevated/30 px-4 py-3">
-              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fg-4">
-                <CircleDot className="h-3.5 w-3.5" />
-                关联 Issues ({linkedIssues.length})
-              </h3>
-              <div className="space-y-1.5">
-                {linkedIssues.map((issue) => (
-                  <div key={issue.id} className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/${encodeURIComponent(repoName!)}/issues?issueId=${encodeURIComponent(issue.id)}`)}
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-elevated/60"
-                    >
-                      <span
-                        className={clsx(
-                          "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium",
-                          issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-                        )}
-                      >
-                        #{issue.number}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-left text-sm text-fg-2">{issue.title}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleUnlink(issue.number)}
-                      title="取消关联"
-                      className="shrink-0 rounded p-0.5 text-fg-5 transition-colors hover:bg-red-500/10 hover:text-red-400"
-                    >
-                      <XCircle className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {(pr.commitCount != null || pr.additions != null) && (
-            <div className="mb-6 rounded-lg border border-line bg-elevated/30 px-4 py-3">
-              <div className="flex flex-wrap items-center gap-3 text-xs text-fg-3">
-                {pr.commitCount != null && (
-                  <span className="flex items-center gap-1">
-                    <GitCommit className="h-3.5 w-3.5 text-fg-5" />
-                    <span className="font-medium">{pr.commitCount}</span> 次提交
-                  </span>
-                )}
-                {pr.changedFilesCount != null && (
-                  <span className="flex items-center gap-1">
-                    <FileText className="h-3.5 w-3.5 text-fg-5" />
-                    <span className="font-medium">{pr.changedFilesCount}</span> 个文件
-                  </span>
-                )}
-                {pr.additions != null && (
-                  <span className="flex items-center gap-1 text-emerald-400">
-                    <Plus className="h-3 w-3" />
-                    <span className="font-mono font-medium">{pr.additions}</span>
-                  </span>
-                )}
-                {pr.deletions != null && (
-                  <span className="flex items-center gap-1 text-red-400">
-                    <Minus className="h-3 w-3" />
-                    <span className="font-mono font-medium">{pr.deletions}</span>
-                  </span>
-                )}
-              </div>
-
-              {pr.diffStats && pr.diffStats.length > 0 && (
-                <div className="mt-3 border-t border-line pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setFilesExpanded((v) => !v)}
-                    className="flex w-full items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fg-4 transition-colors hover:text-fg-2"
-                  >
-                    {filesExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                    变更文件 ({pr.diffStats.length})
-                  </button>
-                  {filesExpanded && (
-                    <div className="mt-2 space-y-0.5">
-                      {pr.diffStats.map((f) => (
-                        <div key={f.filename} className="flex items-center gap-2 rounded px-2 py-1 text-xs hover:bg-elevated/50">
-                          <span className={clsx(
-                            "w-14 shrink-0 rounded px-1 py-0.5 text-center font-mono text-[10px] font-medium",
-                            f.status === "added" ? "bg-emerald-500/15 text-emerald-400"
-                              : f.status === "removed" ? "bg-red-500/15 text-red-400"
-                              : "bg-blue-500/15 text-blue-400",
-                          )}>
-                            {f.status === "added" ? "新增" : f.status === "removed" ? "删除" : f.status === "renamed" ? "重命名" : "修改"}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate font-mono text-fg-3" title={f.filename}>{f.filename}</span>
-                          <span className="shrink-0 font-mono text-[11px] text-emerald-400">+{f.additions}</span>
-                          <span className="shrink-0 font-mono text-[11px] text-red-400">-{f.deletions}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {pr.body ? (
-            <div className="markdown-body leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                {pr.body}
-              </ReactMarkdown>
-            </div>
-          ) : (
-            <p className="py-10 text-center font-mono text-xs text-fg-5">该 PR 没有描述内容</p>
-          )}
-
-          {loadingComments ? (
-            <p className="mt-8 text-center font-mono text-xs text-fg-6">加载评论…</p>
-          ) : comments.length > 0 && (
-            <div className="mt-8 border-t border-line pt-6">
-              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-fg-4">
-                评论 ({comments.length})
-              </h3>
-              <div className="space-y-4">
-                {comments.map((c) => (
-                  <div key={c.id} className="rounded-lg border border-line bg-elevated/40 px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <img src={c.user.avatar_url} alt={c.user.login} className="h-5 w-5 rounded-full" />
-                      <span className="text-xs font-semibold text-fg-2">{c.user.login}</span>
-                      <span className="text-[10px] text-fg-6">{fmtDate(c.created_at)}</span>
-                    </div>
-                    <div className="markdown-body mt-2 text-sm leading-relaxed text-fg-3">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                        {c.body}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
+            <LinkedIssueList issues={linkedIssues} onSelect={onSelectIssue} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -571,9 +187,10 @@ function PrDetail({
 export function PullRequestsPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("open")
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [issueSearchQuery, setIssueSearchQuery] = useState("")
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const repoName = useRepoStore(selectActiveRepoName)
 
   const pulls = usePrStore((s) => s.pulls)
   const syncing = usePrStore((s) => s.syncing)
@@ -585,13 +202,43 @@ export function PullRequestsPage() {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const allIssues = useIssueStore((s) => s.issues)
 
+  const selectedId = searchParams.get("id")
+  const tab: PrDetailTab = searchParams.get("tab") === "issue" ? "issue" : "pr"
+  const issueId = searchParams.get("issueId")
+
   useEffect(() => {
-    const paramId = searchParams.get("prId")
-    if (paramId && pulls.some((p) => p.id === paramId)) {
-      setSelectedId(paramId)
-      setSearchParams({}, { replace: true })
-    }
-  }, [searchParams, setSearchParams, pulls])
+    const legacy = searchParams.get("prId")
+    if (!legacy) return
+    const next = new URLSearchParams(searchParams)
+    next.delete("prId")
+    next.set("id", legacy)
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  const openPr = useCallback((id: string) => {
+    setSearchParams({ id }, { replace: false })
+  }, [setSearchParams])
+
+  const closePr = useCallback(() => {
+    setSearchParams({}, { replace: false })
+  }, [setSearchParams])
+
+  const changeTab = useCallback((newTab: PrDetailTab) => {
+    if (!selectedId) return
+    const params: Record<string, string> = { id: selectedId }
+    if (newTab === "issue") params.tab = "issue"
+    setSearchParams(params, { replace: false })
+  }, [selectedId, setSearchParams])
+
+  const openIssueTab = useCallback((iid: string) => {
+    if (!selectedId) return
+    setSearchParams({ id: selectedId, tab: "issue", issueId: iid }, { replace: false })
+  }, [selectedId, setSearchParams])
+
+  const backToIssueList = useCallback(() => {
+    if (!selectedId) return
+    setSearchParams({ id: selectedId, tab: "issue" }, { replace: false })
+  }, [selectedId, setSearchParams])
 
   const matchingPr = matchingPrId ? pulls.find((p) => p.id === matchingPrId) ?? null : null
 
@@ -638,7 +285,7 @@ export function PullRequestsPage() {
   const showDetail = matchingPr ?? selectedPr
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <div
         className={clsx(
           "shrink-0 flex-col bg-surface",
@@ -839,13 +486,13 @@ export function PullRequestsPage() {
                       key={pr.id}
                       pr={pr}
                       isActive={pr.id === (selectedId ?? matchingPrId)}
-                      onSelect={() => setSelectedId(pr.id)}
+                      onSelect={() => openPr(pr.id)}
                     />
                   ) : (
                     <FullWidthPrRow
                       key={pr.id}
                       pr={pr}
-                      onSelect={() => setSelectedId(pr.id)}
+                      onSelect={() => openPr(pr.id)}
                     />
                   ),
                 )}
@@ -856,12 +503,21 @@ export function PullRequestsPage() {
       </div>
 
       {showDetail ? (
-        <PrDetail
+        <PrDetailWithTabs
           key={`${showDetail.id}-${matchingPrId ?? "view"}`}
           pr={showDetail}
-          onBack={() => { setSelectedId(null); if (matchingPrId) exitMatchMode() }}
-          onClose={() => { setSelectedId(null); if (matchingPrId) exitMatchMode() }}
+          tab={tab}
+          issueId={issueId}
+          onTabChange={changeTab}
+          onSelectIssue={openIssueTab}
+          onBackToIssueList={backToIssueList}
+          onBack={() => { closePr(); if (matchingPrId) exitMatchMode() }}
+          onClose={() => { closePr(); if (matchingPrId) exitMatchMode() }}
           onEnterMatch={() => enterMatchMode(showDetail.id)}
+          onNavigateToIssue={(iid) => {
+            if (!repoName) return
+            navigate(`/${encodeURIComponent(repoName)}/dev/issues?id=${encodeURIComponent(iid)}`)
+          }}
         />
       ) : (
         <div className="hidden flex-1 items-center justify-center md:flex">

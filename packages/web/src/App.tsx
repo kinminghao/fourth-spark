@@ -1,10 +1,9 @@
 import { useEffect } from "react"
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from "react-router-dom"
 import { Layout } from "./components/Layout"
 import { ReposPage } from "./pages/ReposPage"
 import { RunPage } from "./pages/RunPage"
-import { IssuesPage } from "./pages/IssuesPage"
-import { PullRequestsPage } from "./pages/PullRequestsPage"
+import { DevPage } from "./pages/DevPage"
 import { AgentsPage } from "./pages/AgentsPage"
 import { AgentDetailPage } from "./pages/AgentDetailPage"
 import { SettingsPage } from "./pages/SettingsPage"
@@ -19,7 +18,7 @@ import { orchestrator } from "./lib/session-orchestrator"
 import { initPushNotifications } from "./lib/push-notifications"
 
 function extractRepoSlugFromUrl(pathname: string): string | null {
-  const match = pathname.match(/^\/([^/]+)\/(run|agents|issues|pulls)/)
+  const match = pathname.match(/^\/([^/]+)\/(run|agents|issues|pulls|dev)/)
   return match ? decodeURIComponent(match[1]) : null
 }
 
@@ -29,6 +28,13 @@ function DefaultRedirect() {
   const fallbackName = activeRepoName ?? (repos.length > 0 ? repos[0].name : null)
   if (fallbackName) return <Navigate to={`/${encodeURIComponent(fallbackName)}/run`} replace />
   return <Navigate to="/repos" replace />
+}
+
+function LegacyDevRedirect({ segment }: { segment: "issues" | "pulls" }) {
+  const { repoId } = useParams<{ repoId: string }>()
+  const { search } = useLocation()
+  if (!repoId) return <Navigate to="/repos" replace />
+  return <Navigate to={`/${encodeURIComponent(repoId)}/dev/${segment}${search}`} replace />
 }
 
 function AppInner() {
@@ -83,8 +89,11 @@ function AppInner() {
           <Route path="/:repoId/run" element={<RunPage />} />
           <Route path="/:repoId/agents" element={<AgentsPage />} />
           <Route path="/:repoId/agents/:agentId" element={<AgentDetailPage />} />
-          <Route path="/:repoId/issues" element={<IssuesPage />} />
-          <Route path="/:repoId/pulls" element={<PullRequestsPage />} />
+          <Route path="/:repoId/dev" element={<Navigate to="issues" replace />} />
+          <Route path="/:repoId/dev/issues" element={<DevPage />} />
+          <Route path="/:repoId/dev/pulls" element={<DevPage />} />
+          <Route path="/:repoId/issues" element={<LegacyDevRedirect segment="issues" />} />
+          <Route path="/:repoId/pulls" element={<LegacyDevRedirect segment="pulls" />} />
           <Route path="/:repoId" element={<Navigate to="run" replace />} />
           <Route path="*" element={<DefaultRedirect />} />
         </Route>

@@ -14,14 +14,10 @@ interface IssueState {
   loaded: boolean
   syncing: boolean
   selectedIssueId: string | null
-  previewIssueId: string | null
   matchingParentId: string | null
   matchingCandidateId: string | null
-  pendingDraft: string | null
   clearIssues: () => void
   setSelectedIssue: (id: string | null) => void
-  setPreviewIssue: (id: string | null) => void
-  setPendingDraft: (draft: string | null) => void
   enterMatchMode: (parentId: string) => void
   exitMatchMode: () => void
   setMatchCandidate: (id: string | null) => void
@@ -46,10 +42,8 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   loaded: false,
   syncing: false,
   selectedIssueId: null,
-  previewIssueId: null,
   matchingParentId: null,
   matchingCandidateId: null,
-  pendingDraft: null,
   clearIssues: () => set({
     issues: [],
     tags: [],
@@ -58,18 +52,13 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     selectedMilestoneId: null,
     loaded: false,
     selectedIssueId: null,
-    previewIssueId: null,
     matchingParentId: null,
     matchingCandidateId: null,
-    pendingDraft: null,
   }),
   setSelectedIssue: (id) => set({ selectedIssueId: id }),
-  setPreviewIssue: (id) => set({ previewIssueId: id }),
-  setPendingDraft: (draft) => set({ pendingDraft: draft }),
-  enterMatchMode: (parentId) => set({ matchingParentId: parentId, matchingCandidateId: null, previewIssueId: null }),
+  enterMatchMode: (parentId) => set({ matchingParentId: parentId, matchingCandidateId: null }),
   exitMatchMode: () => {
-    const parentId = get().matchingParentId
-    set({ matchingParentId: null, matchingCandidateId: null, previewIssueId: parentId })
+    set({ matchingParentId: null, matchingCandidateId: null })
   },
   setMatchCandidate: (id) => set({ matchingCandidateId: id }),
   linkChild: async (parentNumber, childNumber) => {
