@@ -571,7 +571,8 @@ function PrDetail({
 export function PullRequestsPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("open")
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selectedId = usePrStore((s) => s.viewingPrId)
+  const setViewingPr = usePrStore((s) => s.setViewingPr)
   const [issueSearchQuery, setIssueSearchQuery] = useState("")
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -588,7 +589,7 @@ export function PullRequestsPage() {
   useEffect(() => {
     const paramId = searchParams.get("prId")
     if (paramId && pulls.some((p) => p.id === paramId)) {
-      setSelectedId(paramId)
+      setViewingPr(paramId)
       setSearchParams({}, { replace: true })
     }
   }, [searchParams, setSearchParams, pulls])
@@ -839,13 +840,13 @@ export function PullRequestsPage() {
                       key={pr.id}
                       pr={pr}
                       isActive={pr.id === (selectedId ?? matchingPrId)}
-                      onSelect={() => setSelectedId(pr.id)}
+                      onSelect={() => setViewingPr(pr.id)}
                     />
                   ) : (
                     <FullWidthPrRow
                       key={pr.id}
                       pr={pr}
-                      onSelect={() => setSelectedId(pr.id)}
+                      onSelect={() => setViewingPr(pr.id)}
                     />
                   ),
                 )}
@@ -859,8 +860,8 @@ export function PullRequestsPage() {
         <PrDetail
           key={`${showDetail.id}-${matchingPrId ?? "view"}`}
           pr={showDetail}
-          onBack={() => { setSelectedId(null); if (matchingPrId) exitMatchMode() }}
-          onClose={() => { setSelectedId(null); if (matchingPrId) exitMatchMode() }}
+          onBack={() => { setViewingPr(null); if (matchingPrId) exitMatchMode() }}
+          onClose={() => { setViewingPr(null); if (matchingPrId) exitMatchMode() }}
           onEnterMatch={() => enterMatchMode(showDetail.id)}
         />
       ) : (

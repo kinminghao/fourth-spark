@@ -10,10 +10,12 @@ interface PrState {
   loaded: boolean
   syncing: boolean
   selectedPrId: string | null
+  viewingPrId: string | null
   matchingPrId: string | null
   matchingCandidateIssueId: string | null
   clearPulls: () => void
   setSelectedPr: (id: string | null) => void
+  setViewingPr: (id: string | null) => void
   loadPulls: () => Promise<void>
   syncPulls: () => Promise<void>
   enterMatchMode: (prId: string) => void
@@ -28,6 +30,7 @@ export const usePrStore = create<PrState>((set, get) => ({
   loaded: false,
   syncing: false,
   selectedPrId: null,
+  viewingPrId: null,
   matchingPrId: null,
   matchingCandidateIssueId: null,
 
@@ -35,11 +38,13 @@ export const usePrStore = create<PrState>((set, get) => ({
     pulls: [],
     loaded: false,
     selectedPrId: null,
+    viewingPrId: null,
     matchingPrId: null,
     matchingCandidateIssueId: null,
   }),
 
   setSelectedPr: (id) => set({ selectedPrId: id }),
+  setViewingPr: (id) => set({ viewingPrId: id }),
 
   enterMatchMode: (prId) => set({ matchingPrId: prId, matchingCandidateIssueId: null }),
 

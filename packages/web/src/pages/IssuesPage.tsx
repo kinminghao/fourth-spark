@@ -1415,8 +1415,9 @@ export function IssuesPage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("stray")
   const [creating, setCreating] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [treeRootId, setTreeRootId] = useState<string | null>(null)
+  const selectedId = useIssueStore((s) => s.viewingIssueId)
+  const treeRootId = useIssueStore((s) => s.viewingTreeRootId)
+  const setViewingIssue = useIssueStore((s) => s.setViewingIssue)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [listDrawerOpen, setListDrawerOpen] = useState(false)
   const [expandedFilter, setExpandedFilter] = useState<"type" | "tag" | "milestone" | "author" | "assignee" | null>(null)
@@ -1444,7 +1445,7 @@ export function IssuesPage() {
   useEffect(() => {
     const paramId = searchParams.get("issueId")
     if (paramId && issues.some((i) => i.id === paramId)) {
-      setSelectedId(paramId)
+      setViewingIssue(paramId)
       setSearchParams({}, { replace: true })
     }
   }, [searchParams, setSearchParams, issues])
@@ -1991,8 +1992,7 @@ export function IssuesPage() {
                     isEpic={issueType(issue) === "epic"}
                     milestone={issue.milestoneId ? milestoneMap.get(issue.milestoneId) : undefined}
                     onSelect={() => {
-                      setSelectedId(issue.id)
-                      setTreeRootId(issueType(issue) === "epic" ? issue.id : null)
+                      setViewingIssue(issue.id, issueType(issue) === "epic" ? issue.id : null)
                     }}
                   />
                 ) : (
@@ -2003,8 +2003,7 @@ export function IssuesPage() {
                     isEpic={issueType(issue) === "epic"}
                     milestone={issue.milestoneId ? milestoneMap.get(issue.milestoneId) : undefined}
                     onSelect={() => {
-                      setSelectedId(issue.id)
-                      setTreeRootId(issueType(issue) === "epic" ? issue.id : null)
+                      setViewingIssue(issue.id, issueType(issue) === "epic" ? issue.id : null)
                     }}
                   />
                 ),
@@ -2034,8 +2033,7 @@ export function IssuesPage() {
                     isEpic={issueType(issue) === "epic"}
                     milestone={issue.milestoneId ? milestoneMap.get(issue.milestoneId) : undefined}
                     onSelect={() => {
-                      setSelectedId(issue.id)
-                      setTreeRootId(issueType(issue) === "epic" ? issue.id : null)
+                      setViewingIssue(issue.id, issueType(issue) === "epic" ? issue.id : null)
                       setListDrawerOpen(false)
                     }}
                   />
@@ -2055,8 +2053,8 @@ export function IssuesPage() {
             <IssueDetail
               issue={selectedIssue}
               milestone={selectedIssue.milestoneId ? milestoneMap.get(selectedIssue.milestoneId) : undefined}
-              onBack={() => { setSelectedId(null); setTreeRootId(null); setSidebarOpen(false) }}
-              onClose={() => { setSelectedId(null); setTreeRootId(null); setSidebarOpen(false) }}
+              onBack={() => { setViewingIssue(null); setSidebarOpen(false) }}
+              onClose={() => { setViewingIssue(null); setSidebarOpen(false) }}
               onToggleSidebar={() => setSidebarOpen((v) => !v)}
             />
 
@@ -2089,7 +2087,7 @@ export function IssuesPage() {
                           rootIssue={rootIssue}
                           childrenMap={childrenMap}
                           currentId={selectedId}
-                          onSelect={(id) => { setSelectedId(id); setSidebarOpen(false) }}
+                          onSelect={(id) => { setViewingIssue(id, treeRootId); setSidebarOpen(false) }}
                           sessions={selectedIssueSessions}
                           onSessionSelect={handleSessionSelect}
                         />

@@ -15,12 +15,15 @@ interface IssueState {
   syncing: boolean
   selectedIssueId: string | null
   previewIssueId: string | null
+  viewingIssueId: string | null
+  viewingTreeRootId: string | null
   matchingParentId: string | null
   matchingCandidateId: string | null
   pendingDraft: string | null
   clearIssues: () => void
   setSelectedIssue: (id: string | null) => void
   setPreviewIssue: (id: string | null) => void
+  setViewingIssue: (id: string | null, treeRootId?: string | null) => void
   setPendingDraft: (draft: string | null) => void
   enterMatchMode: (parentId: string) => void
   exitMatchMode: () => void
@@ -47,6 +50,8 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   syncing: false,
   selectedIssueId: null,
   previewIssueId: null,
+  viewingIssueId: null,
+  viewingTreeRootId: null,
   matchingParentId: null,
   matchingCandidateId: null,
   pendingDraft: null,
@@ -59,12 +64,15 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     loaded: false,
     selectedIssueId: null,
     previewIssueId: null,
+    viewingIssueId: null,
+    viewingTreeRootId: null,
     matchingParentId: null,
     matchingCandidateId: null,
     pendingDraft: null,
   }),
   setSelectedIssue: (id) => set({ selectedIssueId: id }),
   setPreviewIssue: (id) => set({ previewIssueId: id }),
+  setViewingIssue: (id, treeRootId) => set({ viewingIssueId: id, viewingTreeRootId: treeRootId ?? null }),
   setPendingDraft: (draft) => set({ pendingDraft: draft }),
   enterMatchMode: (parentId) => set({ matchingParentId: parentId, matchingCandidateId: null, previewIssueId: null }),
   exitMatchMode: () => {
