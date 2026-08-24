@@ -9,7 +9,7 @@ import { create } from "zustand"
 import * as api from "../lib/api-client"
 import type { Message, MessagePart, PromptFile, Session, Todo, SessionLinks, SessionLinkSummary } from "../lib/api-client"
 
-export type SessionFilter = "active" | "all"
+type SessionFilter = "active" | "all"
 import { isQuestionTool, isQuestionPending, getPartText } from "../lib/message-parts"
 import { useRepoStore } from "./repo-store"
 import { useAgentStore } from "./agent-store"
@@ -51,9 +51,27 @@ function getRepoId(): string | null {
   return useRepoStore.getState().activeRepoId
 }
 
+async function refreshSessionLinks(id: string, set: (fn: (s: SessionState) => Partial<SessionState>) => void): Promise<void> {
+  const repoId = getRepoId()
+  if (!repoId) return
+  try {
+    const [links, allLinks] = await Promise.all([
+      api.getSessionLinks(repoId, id),
+      api.getAllSessionLinks(repoId).catch(() => null),
+    ])
+    set((state) => {
+      const next: Partial<SessionState> = { sessionLinks: { ...state.sessionLinks, [id]: links } }
+      if (allLinks) next.allSessionLinks = allLinks
+      return next
+    })
+  } catch {
+    // best-effort
+  }
+}
+
 const MESSAGES_PAGE_SIZE = 20
 
-export interface MessagesMeta {
+interface MessagesMeta {
   total: number
   hasMore: boolean
   loading: boolean
@@ -82,7 +100,6 @@ interface SessionState {
   setActiveSession: (id: string) => Promise<void>
   refreshSessionData: (id: string) => Promise<void>
   loadMoreMessages: (sessionId: string) => Promise<void>
-  refreshSessionLinks: (id: string) => Promise<void>
   addLink: (sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
   removeLink: (sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
   deleteSession: (id: string) => Promise<void>
@@ -299,30 +316,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  refreshSessionLinks: async (id) => {
-    const repoId = getRepoId()
-    if (!repoId) return
-    try {
-      const [links, allLinks] = await Promise.all([
-        api.getSessionLinks(repoId, id),
-        api.getAllSessionLinks(repoId).catch(() => null),
-      ])
-      set((state) => {
-        const next: Partial<SessionState> = { sessionLinks: { ...state.sessionLinks, [id]: links } }
-        if (allLinks) next.allSessionLinks = allLinks
-        return next
-      })
-    } catch {
-      // best-effort
-    }
-  },
-
   addLink: async (sessionId, type, targetId) => {
     const repoId = getRepoId()
     if (!repoId) return false
     try {
       await api.addSessionLink(repoId, sessionId, type, targetId)
-      await get().refreshSessionLinks(sessionId)
+      await refreshSessionLinks(sessionId, set)
       return true
     } catch {
       return false
@@ -334,7 +333,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (!repoId) return false
     try {
       await api.removeSessionLink(repoId, sessionId, type, targetId)
-      await get().refreshSessionLinks(sessionId)
+      await refreshSessionLinks(sessionId, set)
       return true
     } catch {
       return false

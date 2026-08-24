@@ -1,11 +1,12 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
 } from "react"
-import { ArrowUp, Loader2, Send } from "lucide-react"
+import { ArrowUp } from "lucide-react"
 import clsx from "clsx"
 import { useSessionStore, EMPTY_MESSAGES } from "../stores/session-store"
 import { useRepoStore } from "../stores/repo-store"
@@ -15,48 +16,10 @@ import type { ModelInfo } from "../lib/api-client"
 import { getSettings, listModels } from "../lib/api-client"
 import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
 import { VoiceButton } from "./VoiceButton"
-import { useSpeechToText } from "../hooks/use-speech-to-text"
+import { VoiceOverlay, VoiceStatusBar } from "./VoiceOverlay"
+import { useVoiceInput } from "../hooks/use-voice-input"
 
 const MAX_HEIGHT_PX = 200
-const VOICE_TEXTAREA_MAX_HEIGHT_PX = 240
-const TICK_INTERVAL_MS = 1000
-
-// Per-bar amplitude multipliers so the 7 bars scale volumeLevel at slightly
-// different intensities — otherwise every bar would move in perfect lockstep
-// even as the mic level fluctuates. Values center around 1.0.
-const BAR_MULTIPLIERS = [0.85, 1.25, 0.65, 1.4, 0.75, 1.15, 0.95] as const
-const BAR_MIN_HEIGHT_PX = 4
-const BAR_MAX_HEIGHT_PX = 24
-
-function formatDuration(totalSeconds: number): string {
-  const mm = Math.floor(totalSeconds / 60).toString().padStart(2, "0")
-  const ss = Math.floor(totalSeconds % 60).toString().padStart(2, "0")
-  return `${mm}:${ss}`
-}
-
-function Waveform({ volumeLevel }: { volumeLevel: number }) {
-  const clampedVolume = Math.min(Math.max(volumeLevel, 0), 1)
-  return (
-    <div className="flex h-6 items-center gap-1" aria-hidden="true">
-      {BAR_MULTIPLIERS.map((multiplier, i) => {
-        const raw =
-          BAR_MIN_HEIGHT_PX +
-          clampedVolume * multiplier * (BAR_MAX_HEIGHT_PX - BAR_MIN_HEIGHT_PX)
-        const height = Math.max(
-          BAR_MIN_HEIGHT_PX,
-          Math.min(BAR_MAX_HEIGHT_PX, raw),
-        )
-        return (
-          <span
-            key={i}
-            className="w-1 rounded-full bg-red-400 transition-[height] duration-150 ease-out"
-            style={{ height: `${height}px` }}
-          />
-        )
-      })}
-    </div>
-  )
-}
 
 function useHasPendingQuestion(): boolean {
   return useSessionStore((state) => {
@@ -78,13 +41,7 @@ export function InputBar() {
   const [value, setValue] = useState("")
   const [selectedModel, setSelectedModel] = useState("")
   const [pinnedModels, setPinnedModels] = useState<ModelInfo[]>([])
-  const [voiceEditText, setVoiceEditText] = useState("")
-  const [voiceElapsed, setVoiceElapsed] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const voiceTextareaRef = useRef<HTMLTextAreaElement>(null)
-  const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const voiceStartTimeRef = useRef(0)
-  const stt = useSpeechToText()
 
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
@@ -96,6 +53,16 @@ export function InputBar() {
   const setDraft = useDraftStore((s) => s.setDraft)
   const clearDraft = useDraftStore((s) => s.clearDraft)
   const hasPendingQuestion = useHasPendingQuestion()
+
+  const handleVoiceSubmit = useCallback(
+    async (text: string) => {
+      const ok = await sendMessage(text, selectedModel || undefined)
+      if (!ok) return false
+    },
+    [sendMessage, selectedModel],
+  )
+
+  const voice = useVoiceInput(handleVoiceSubmit)
 
   useEffect(() => {
     if (!activeRepoId) { setPinnedModels([]); return }
@@ -136,54 +103,8 @@ export function InputBar() {
   useEffect(() => {
     setValue(activeSessionId ? useDraftStore.getState().drafts[activeSessionId] ?? "" : "")
     clear()
-    stt.stop()
-  }, [activeSessionId, clear, stt.stop])
-
-  // Recording elapsed timer (only ticks while recording).
-  useEffect(() => {
-    if (stt.phase === "recording") {
-      voiceStartTimeRef.current = Date.now()
-      setVoiceElapsed(0)
-      voiceTimerRef.current = setInterval(() => {
-        setVoiceElapsed(
-          Math.floor((Date.now() - voiceStartTimeRef.current) / 1000),
-        )
-      }, TICK_INTERVAL_MS)
-    } else {
-      if (voiceTimerRef.current) {
-        clearInterval(voiceTimerRef.current)
-        voiceTimerRef.current = null
-      }
-    }
-    return () => {
-      if (voiceTimerRef.current) {
-        clearInterval(voiceTimerRef.current)
-        voiceTimerRef.current = null
-      }
-    }
-  }, [stt.phase])
-
-  // Seed editable buffer when phase transitions into "done" and focus it.
-  useEffect(() => {
-    if (stt.phase === "done") {
-      setVoiceEditText(stt.transcript)
-      requestAnimationFrame(() => {
-        const el = voiceTextareaRef.current
-        if (!el) return
-        el.focus()
-        el.setSelectionRange(el.value.length, el.value.length)
-      })
-    }
-  }, [stt.phase, stt.transcript])
-
-  // Auto-resize voice-edit textarea up to a max height.
-  useLayoutEffect(() => {
-    if (stt.phase !== "done") return
-    const el = voiceTextareaRef.current
-    if (!el) return
-    el.style.height = "auto"
-    el.style.height = `${Math.min(el.scrollHeight, VOICE_TEXTAREA_MAX_HEIGHT_PX)}px`
-  }, [stt.phase, voiceEditText])
+    voice.stt.stop()
+  }, [activeSessionId, clear, voice.stt.stop])
 
   const submit = async () => {
     const text = value.trim()
@@ -206,55 +127,6 @@ export function InputBar() {
     }
   }
 
-  const handleVoiceCancel = () => {
-    void stt.stop()
-    stt.resetTranscript()
-    setVoiceEditText("")
-  }
-
-  const handleVoiceConfirm = async () => {
-    const text = voiceEditText.trim()
-    if (!text) { handleVoiceCancel(); return }
-    const ok = await sendMessage(text, selectedModel || undefined)
-    if (ok) {
-      stt.resetTranscript()
-      setVoiceEditText("")
-    }
-  }
-
-  // Escape → cancel (except during "recognizing" — that's uninterruptable server work).
-  // Cmd/Ctrl+Enter during "done" → confirm.
-  useEffect(() => {
-    if (stt.phase === "idle") return
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape" && stt.phase !== "recognizing") {
-        e.preventDefault()
-        handleVoiceCancel()
-        return
-      }
-      if (
-        stt.phase === "done" &&
-        e.key === "Enter" &&
-        (e.metaKey || e.ctrlKey)
-      ) {
-        if ((e as unknown as { isComposing?: boolean }).isComposing) return
-        e.preventDefault()
-        void handleVoiceConfirm()
-      }
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stt.phase, voiceEditText])
-
-  const handleVoiceTextareaKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.nativeEvent.isComposing || e.keyCode === 229) return
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault()
-      void handleVoiceConfirm()
-    }
-  }
-
   const placeholder = !activeSessionId
     ? "select or start a run"
     : hasPendingQuestion
@@ -271,57 +143,18 @@ export function InputBar() {
         ? "text-blue-400"
         : "text-emerald-400"
 
-  const combinedRecordingHasText =
-    stt.transcript.length > 0 || stt.interimTranscript.length > 0
-
   return (
     <div className="relative border-t border-line bg-term px-4 py-4">
-      {stt.phase !== "idle" && (
-        <div className="absolute bottom-full left-0 right-0 z-20 border-t border-line bg-surface/95 backdrop-blur-sm">
-          <div className="mx-auto max-h-[40vh] w-full max-w-4xl overflow-y-auto px-4 py-4">
-            {stt.phase === "recording" && (
-              <div className="text-xl leading-relaxed">
-                {combinedRecordingHasText ? (
-                  <>
-                    <span className="text-fg">{stt.transcript}</span>
-                    {stt.interimTranscript && (
-                      <span className="text-fg-4">{stt.interimTranscript}</span>
-                    )}
-                  </>
-                ) : (
-                  <span className="italic text-fg-5">正在聆听…</span>
-                )}
-              </div>
-            )}
-
-            {stt.phase === "recognizing" && (
-              <div className="flex items-center gap-3">
-                <Loader2 className="h-5 w-5 shrink-0 text-emerald-400 fs-spin" />
-                <span className="font-mono text-sm text-emerald-400">
-                  识别中…
-                </span>
-                {stt.interimTranscript && (
-                  <span className="truncate text-base text-fg-4">
-                    {stt.interimTranscript}
-                  </span>
-                )}
-              </div>
-            )}
-
-            {stt.phase === "done" && (
-              <textarea
-                ref={voiceTextareaRef}
-                value={voiceEditText}
-                onChange={(e) => setVoiceEditText(e.target.value)}
-                onKeyDown={handleVoiceTextareaKey}
-                rows={2}
-                placeholder="识别结果（可编辑）"
-                className="w-full resize-none bg-transparent text-xl leading-relaxed text-fg placeholder:text-fg-5 focus:outline-none"
-              />
-            )}
-          </div>
-        </div>
-      )}
+      <VoiceOverlay
+        phase={voice.stt.phase}
+        transcript={voice.stt.transcript}
+        interimTranscript={voice.stt.interimTranscript}
+        editText={voice.editText}
+        onEditTextChange={voice.setEditText}
+        onTextareaKeyDown={voice.handleTextareaKeyDown}
+        textareaRef={voice.textareaRef}
+        wrapperClassName="absolute bottom-full left-0 right-0 z-20 border-t border-line bg-surface/95 backdrop-blur-sm"
+      />
 
       <AttachmentStrip
         attachments={attachments}
@@ -361,10 +194,10 @@ export function InputBar() {
           allowed={imagesAllowed}
         />
         <VoiceButton
-          isListening={stt.isListening}
+          isListening={voice.stt.isListening}
           disabled={disabled}
-          onStart={stt.start}
-          onStop={() => void stt.stop()}
+          onStart={voice.stt.start}
+          onStop={() => void voice.stt.stop()}
         />
         <button
           type="button"
@@ -377,10 +210,10 @@ export function InputBar() {
         </button>
       </div>
 
-      {stt.phase === "idle" ? (
+      {voice.stt.phase === "idle" ? (
         <div className="mx-auto mt-1.5 flex max-w-4xl items-center gap-3 pl-5">
-          {stt.error && (
-            <span className="font-mono text-[10px] text-red-400">{stt.error}</span>
+          {voice.stt.error && (
+            <span className="font-mono text-[10px] text-red-400">{voice.stt.error}</span>
           )}
           <span className="font-mono text-[10px] text-fg-6">⏎ to run · shift+⏎ for newline</span>
           {pinnedModels.length > 0 && (
@@ -396,53 +229,17 @@ export function InputBar() {
             </select>
           )}
         </div>
-      ) : stt.phase === "done" ? (
-        <div className="mx-auto mt-1.5 flex max-w-4xl items-center gap-2 pl-5">
-          <span className="hidden font-mono text-[10px] text-fg-6 sm:inline">
-            ⌘/Ctrl+⏎ 发送 · Esc 取消
-          </span>
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleVoiceCancel}
-              className="rounded-md border border-line px-3 py-1 text-xs text-fg-3 transition-colors hover:bg-elevated hover:text-fg"
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleVoiceConfirm()}
-              disabled={voiceEditText.trim().length === 0}
-              aria-label="发送"
-              className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6/30 disabled:text-fg-5"
-            >
-              <Send className="h-3.5 w-3.5" strokeWidth={2.5} />
-              <span>发送</span>
-            </button>
-          </div>
-        </div>
       ) : (
-        <div className="mx-auto mt-1.5 flex max-w-4xl items-center gap-3 pl-5">
-          {stt.phase === "recording" ? (
-            <>
-              <Waveform volumeLevel={stt.volumeLevel} />
-              <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium text-red-400">
-                <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-red-400" />
-                录音中
-              </span>
-              <span className="font-mono text-[11px] tabular-nums text-fg-4">
-                {formatDuration(voiceElapsed)}
-              </span>
-            </>
-          ) : (
-            <>
-              <Loader2 className="h-4 w-4 shrink-0 text-emerald-400 fs-spin" />
-              <span className="font-mono text-[11px] text-emerald-400">
-                识别中…
-              </span>
-            </>
-          )}
-        </div>
+        <VoiceStatusBar
+          phase={voice.stt.phase}
+          volumeLevel={voice.stt.volumeLevel}
+          elapsed={voice.elapsed}
+          editText={voice.editText}
+          error={voice.stt.error}
+          onCancel={voice.cancel}
+          onConfirm={() => void voice.confirm()}
+          className="mx-auto mt-1.5 flex max-w-4xl items-center gap-3 pl-5"
+        />
       )}
     </div>
   )

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 import { Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Pencil, Plus, Trash2, X } from "lucide-react"
 import clsx from "clsx"
-import type { Session } from "../lib/api-client"
+import type { Session, Todo } from "../lib/api-client"
 import { useSessionStore, EMPTY_TODOS, EMPTY_MESSAGES } from "../stores/session-store"
+import { countCompletedTodos, normalizeTodoStatus } from "../lib/message-parts"
 import { useRepoStore } from "../stores/repo-store"
 import { useIssueStore } from "../stores/issue-store"
 import { useDraftStore } from "../stores/draft-store"
@@ -60,17 +61,20 @@ function statusDotClass(status: string | undefined): string {
   }
 }
 
+const SWIPE_HINT_KEY = "fs:swipe-hint-shown"
+
 function SessionItem({
-  session, isActive, isConfirming,
+  session, isActive, isConfirming, peekHint,
   onSelect, onDelete, onConfirm, onCancelConfirm, onRename, onToggleComplete,
-  status, issue, linkedItems,
+  status, issue, linkedItems, todos,
 }: {
-  session: Session; isActive: boolean; isConfirming: boolean
+  session: Session; isActive: boolean; isConfirming: boolean; peekHint?: boolean
   onSelect: () => void; onDelete: () => void; onConfirm: () => void; onCancelConfirm: () => void
   onRename: (title: string) => void; onToggleComplete: () => void
   status: string | undefined
   issue?: { number: number; title: string; state: string }
   linkedItems?: Array<{ number: number; state: string; type: "issue" | "pr"; mergedAt?: number | null }>
+  todos: readonly Todo[]
 }) {
   const draft = useDraftStore((s) => s.drafts[session.id])
   const isCompleted = !!session.completedAt
@@ -93,8 +97,17 @@ function SessionItem({
     }
   }
 
+  /* ---- Long-press context menu (mobile) ---- */
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressTriggered = useRef(false)
+
+  const clearLongPress = () => {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
+  }
+
   /* ---- iOS-style swipe-to-reveal (mobile) ---- */
-  const REVEAL_W = 192
+  const REVEAL_W = 144
   const contentRef = useRef<HTMLDivElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
   const currentX = useRef(0)
@@ -117,14 +130,25 @@ function SessionItem({
     touch.current = { x0: t.clientX, y0: t.clientY, base: currentX.current, dir: null, on: true }
     if (contentRef.current) contentRef.current.style.transition = "none"
     if (actionsRef.current) actionsRef.current.style.transition = "none"
+    /* Start long-press timer */
+    longPressTriggered.current = false
+    clearLongPress()
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true
+      touch.current.on = false
+      setCtxMenu({ x: t.clientX, y: t.clientY })
+    }, 500)
   }
   const onTM = (e: React.TouchEvent) => {
     const c = touch.current
-    if (!c.on) return
+    if (!c.on) { clearLongPress(); return }
     const dx = e.touches[0].clientX - c.x0
     const dy = e.touches[0].clientY - c.y0
     if (!c.dir) {
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) c.dir = Math.abs(dx) > Math.abs(dy) ? "h" : "v"
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        c.dir = Math.abs(dx) > Math.abs(dy) ? "h" : "v"
+        clearLongPress()
+      }
       return
     }
     if (c.dir === "v") return
@@ -138,10 +162,32 @@ function SessionItem({
     applyX(target)
   }
   const onTE = () => {
+    clearLongPress()
+    if (longPressTriggered.current) { longPressTriggered.current = false; return }
     touch.current.on = false
     snapTo(currentX.current < -REVEAL_W / 2 ? -REVEAL_W : 0)
   }
   const closeSwipe = () => snapTo(0)
+
+  /* ---- First-visit peek animation ---- */
+  useEffect(() => {
+    if (!peekHint) return
+    const PEEK_X = -60
+    const delay = setTimeout(() => {
+      const el = contentRef.current
+      const ac = actionsRef.current
+      if (el) el.style.transition = "transform 400ms cubic-bezier(.25,.8,.25,1)"
+      if (ac) ac.style.transition = "width 400ms cubic-bezier(.25,.8,.25,1)"
+      applyX(PEEK_X)
+      const hold = setTimeout(() => {
+        if (el) el.style.transition = "transform 500ms cubic-bezier(.25,.8,.25,1)"
+        if (ac) ac.style.transition = "width 500ms cubic-bezier(.25,.8,.25,1)"
+        applyX(0)
+      }, 800)
+      return () => clearTimeout(hold)
+    }, 600)
+    return () => clearTimeout(delay)
+  }, [peekHint])
 
   return (
     <li className="relative overflow-hidden rounded-md">
@@ -166,29 +212,22 @@ function SessionItem({
             <button
               type="button"
               onClick={() => { onToggleComplete(); closeSwipe() }}
-              className={clsx("flex w-12 items-center justify-center text-white", isCompleted ? "bg-neutral-500 active:bg-neutral-600" : "bg-emerald-500 active:bg-emerald-600")}
+              className={clsx("flex w-12 flex-col items-center justify-center gap-0.5 text-white", isCompleted ? "bg-neutral-500 active:bg-neutral-600" : "bg-emerald-500 active:bg-emerald-600")}
             >
-              <CheckCircle2 className="h-4 w-4" />
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              <span className="text-[9px] leading-none">{isCompleted ? "撤销" : "完成"}</span>
             </button>
             <button
               type="button"
               onClick={() => { startEditing(); closeSwipe() }}
-              className="flex w-12 items-center justify-center bg-amber-500 text-white active:bg-amber-600"
+              className="flex w-12 flex-col items-center justify-center gap-0.5 bg-amber-500 text-white active:bg-amber-600"
             >
-              <Pencil className="h-4 w-4" />
+              <Pencil className="h-3.5 w-3.5" />
+              <span className="text-[9px] leading-none">重命名</span>
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                copyText(JSON.stringify({ id: session.id, name: session.title?.trim() || "" }, null, 2))
-                closeSwipe()
-              }}
-              className="flex w-12 items-center justify-center bg-blue-500 text-white active:bg-blue-600"
-            >
-              <Copy className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={() => onConfirm()} className="flex w-12 items-center justify-center bg-red-500 text-white active:bg-red-600">
-              <Trash2 className="h-4 w-4" />
+            <button type="button" onClick={() => onConfirm()} className="flex w-12 flex-col items-center justify-center gap-0.5 bg-red-500 text-white active:bg-red-600">
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="text-[9px] leading-none">删除</span>
             </button>
           </>
         )}
@@ -205,6 +244,7 @@ function SessionItem({
         onTouchStart={onTS}
         onTouchMove={onTM}
         onTouchEnd={onTE}
+        onContextMenu={(e) => e.preventDefault()}
       >
         <button
           type="button"
@@ -270,6 +310,33 @@ function SessionItem({
                   ✏️ {draft}
                 </span>
               )}
+              {todos.length > 0 && (() => {
+                const total = todos.length
+                const completed = countCompletedTodos(todos)
+                return (
+                  <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px]">
+                    <span className="shrink-0 tracking-tight">
+                      {todos.map((todo) => {
+                        const s = normalizeTodoStatus(todo.status)
+                        return (
+                          <span
+                            key={todo.id}
+                            className={
+                              s === "completed" ? "text-emerald-400"
+                                : s === "in_progress" ? "text-amber-400"
+                                : s === "cancelled" ? "text-fg-6"
+                                : "text-fg-5"
+                            }
+                          >
+                            {s === "pending" ? "□" : "■"}
+                          </span>
+                        )
+                      })}
+                    </span>
+                    <span className="tabular-nums text-fg-4">{completed}/{total}</span>
+                  </span>
+                )
+              })()}
             </div>
           )}
         </button>
@@ -314,12 +381,41 @@ function SessionItem({
           </span>
         )}
       </div>
+
+      {/* Long-press context menu (mobile) */}
+      {ctxMenu && (
+        <>
+          <div className="fixed inset-0 z-50" onClick={() => setCtxMenu(null)} onTouchEnd={() => setCtxMenu(null)} />
+          <div
+            className="fixed z-50 min-w-[160px] rounded-lg border border-line bg-surface py-1 shadow-xl"
+            style={{ left: Math.min(ctxMenu.x, window.innerWidth - 176), top: ctxMenu.y, animation: "ctx-fade-in 150ms ease-out" }}
+          >
+            <button
+              type="button"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-fg-2 active:bg-elevated"
+              onClick={() => {
+                copyText(JSON.stringify({ id: session.id, name: session.title?.trim() || "" }, null, 2))
+                setCtxMenu(null)
+              }}
+            >
+              <Copy className="h-3.5 w-3.5 text-fg-5" />
+              复制 Session JSON
+            </button>
+          </div>
+        </>
+      )}
     </li>
   )
 }
 
 function SessionPanel({ onClose }: { onClose?: () => void }) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [showPeekHint] = useState(() => {
+    if (typeof window === "undefined") return false
+    if (localStorage.getItem(SWIPE_HINT_KEY)) return false
+    localStorage.setItem(SWIPE_HINT_KEY, "1")
+    return true
+  })
 
   const sessions = useSessionStore((s) => s.sessions)
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
@@ -333,6 +429,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const issues = useIssueStore((s) => s.issues)
   const allSessionLinks = useSessionStore((s) => s.allSessionLinks)
+  const allTodos = useSessionStore((s) => s.todos)
 
   const topLevel = [...sessions]
     .filter((s) => {
@@ -345,7 +442,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
   const issueMap = new Map(issues.map((i) => [i.id, i]))
   const renderSessionList = (list: Session[]) => (
     <ul className="space-y-0.5">
-      {list.map((session) => {
+      {list.map((session, idx) => {
         const linkedIssue = session.issueId ? issueMap.get(session.issueId) : undefined
         const sLinks = allSessionLinks[session.id]
         const linkedItems: Array<{ number: number; state: string; type: "issue" | "pr"; mergedAt?: number | null }> = []
@@ -359,6 +456,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
             session={session}
             isActive={session.id === activeSessionId}
             isConfirming={confirmingId === session.id}
+            peekHint={showPeekHint && idx === 0}
             status={statuses[session.id]}
             issue={linkedIssue ? { number: linkedIssue.number, title: linkedIssue.title, state: linkedIssue.state } : undefined}
             linkedItems={linkedItems.length > 0 ? linkedItems : undefined}
@@ -368,6 +466,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
             onCancelConfirm={() => setConfirmingId(null)}
             onRename={(title) => void renameSession(session.id, title)}
             onToggleComplete={() => void toggleSessionComplete(session.id)}
+            todos={allTodos[session.id] ?? EMPTY_TODOS}
           />
         )
       })}

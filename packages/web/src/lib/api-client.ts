@@ -149,16 +149,6 @@ export interface PromptFragment {
   updatedAt: number
 }
 
-export interface PromptFragment {
-  id: string
-  name: string
-  content: string
-  repoId: string | null
-  sortOrder: number
-  createdAt: number
-  updatedAt: number
-}
-
 export interface CustomAgent {
   id: string
   name: string
@@ -407,10 +397,6 @@ export async function createSession(
   })
 }
 
-export async function getSession(repoId: string, id: string): Promise<Session> {
-  return apiFetch<Session>(`${repoBase(repoId)}/sessions/${encodeURIComponent(id)}`)
-}
-
 export async function deleteSession(repoId: string, id: string): Promise<void> {
   await apiFetch<void>(`${repoBase(repoId)}/sessions/${encodeURIComponent(id)}`, {
     method: "DELETE",
@@ -490,13 +476,6 @@ export async function getMessages(
     total: data.total ?? msgList.length,
     hasMore: data.hasMore ?? false,
   }
-}
-
-export async function getTodos(repoId: string, sessionId: string): Promise<Todo[]> {
-  return unwrapList<Todo>(
-    await apiFetch<unknown>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/todos`),
-    "todos",
-  )
 }
 
 export async function getSessionStatus(repoId: string, sessionId: string): Promise<SessionStatus> {
@@ -683,10 +662,6 @@ export async function deleteFragment(id: string): Promise<void> {
   await apiFetch<void>(`/api/prompt-fragments/${encodeURIComponent(id)}`, { method: "DELETE" })
 }
 
-export async function listRepoFragments(repoId: string): Promise<PromptFragment[]> {
-  return unwrapList<PromptFragment>(await apiFetch<unknown>(`${repoBase(repoId)}/prompt-fragments`))
-}
-
 // ---------------------------------------------------------------------------
 // Tag API — /api/repos/:repoId/tags
 // ---------------------------------------------------------------------------
@@ -716,35 +691,6 @@ export interface Milestone {
 
 export async function listTags(repoId: string): Promise<Tag[]> {
   return unwrapList<Tag>(await apiFetch<unknown>(`${repoBase(repoId)}/tags`))
-}
-
-export async function createTag(repoId: string, name: string, color?: string, description?: string): Promise<Tag> {
-  return apiFetch<Tag>(`${repoBase(repoId)}/tags`, {
-    method: "POST",
-    body: JSON.stringify({ name, color, description }),
-  })
-}
-
-export async function updateTag(repoId: string, tagId: string, updates: { name?: string; color?: string; description?: string }): Promise<Tag> {
-  return apiFetch<Tag>(`${repoBase(repoId)}/tags/${encodeURIComponent(tagId)}`, {
-    method: "PATCH",
-    body: JSON.stringify(updates),
-  })
-}
-
-export async function deleteTag(repoId: string, tagId: string): Promise<void> {
-  await apiFetch<void>(`${repoBase(repoId)}/tags/${encodeURIComponent(tagId)}`, { method: "DELETE" })
-}
-
-export async function setIssueTags(repoId: string, issueNumber: number, tagIds: string[]): Promise<Tag[]> {
-  return apiFetch<Tag[]>(`${repoBase(repoId)}/issues/${issueNumber}/tags`, {
-    method: "PUT",
-    body: JSON.stringify({ tagIds }),
-  })
-}
-
-export async function getIssueTags(repoId: string, issueNumber: number): Promise<Tag[]> {
-  return unwrapList<Tag>(await apiFetch<unknown>(`${repoBase(repoId)}/issues/${issueNumber}/tags`))
 }
 
 // ---------------------------------------------------------------------------
@@ -864,21 +810,6 @@ export interface PersistentPullRequest {
   mergedAt?: number | null
 }
 
-export interface PrFile {
-  filename: string
-  status: string
-  additions: number
-  deletions: number
-}
-
-export interface PrCommit {
-  sha: string
-  message: string
-  author: { name: string; email: string; date: string }
-  committer: { name: string; email: string; date: string }
-  html_url?: string
-}
-
 export async function listPulls(repoId: string, state = "open"): Promise<PersistentPullRequest[]> {
   return unwrapList<PersistentPullRequest>(
     await apiFetch<unknown>(`${repoBase(repoId)}/pulls?state=${encodeURIComponent(state)}`),
@@ -913,14 +844,6 @@ export async function linkPrToIssue(repoId: string, prNumber: number, issueNumbe
 
 export async function unlinkPrFromIssue(repoId: string, prNumber: number, issueNumber: number): Promise<void> {
   await apiFetch<void>(`${repoBase(repoId)}/pulls/${prNumber}/issues/${issueNumber}`, { method: "DELETE" })
-}
-
-export async function listPrFiles(repoId: string, prNumber: number): Promise<PrFile[]> {
-  return apiFetch<PrFile[]>(`${repoBase(repoId)}/pulls/${prNumber}/files`)
-}
-
-export async function listPrCommits(repoId: string, prNumber: number): Promise<PrCommit[]> {
-  return apiFetch<PrCommit[]>(`${repoBase(repoId)}/pulls/${prNumber}/commits`)
 }
 
 export async function listPullComments(repoId: string, prNumber: number): Promise<IssueComment[]> {
@@ -962,13 +885,6 @@ export async function getIssueCreateDraft(repoId: string): Promise<{ title: stri
 
 export async function deleteIssueCreateDraft(repoId: string): Promise<void> {
   await apiFetch<{ ok: boolean }>(`${repoBase(repoId)}/issues/draft-create`, { method: "DELETE" })
-}
-
-export async function updateSessionIssue(repoId: string, sessionId: string, issueId: string | null): Promise<void> {
-  await apiFetch<void>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`,
-    { method: "PATCH", body: JSON.stringify({ issueId }) },
-  )
 }
 
 export async function renameSession(repoId: string, sessionId: string, title: string): Promise<void> {
@@ -1038,10 +954,6 @@ export async function updateSetting(key: string, value: string): Promise<void> {
   })
 }
 
-export async function deleteSetting(key: string): Promise<void> {
-  await apiFetch<void>(`/api/settings/${encodeURIComponent(key)}`, { method: "DELETE" })
-}
-
 // ---------------------------------------------------------------------------
 // Cloud Worker API — /api/cloud
 // ---------------------------------------------------------------------------
@@ -1098,13 +1010,6 @@ export async function createGitHost(host: string, name: string, token: string, p
   return apiFetch<GitHost>("/api/git-hosts", {
     method: "POST",
     body: JSON.stringify({ host, name, token, platform }),
-  })
-}
-
-export async function updateGitHost(id: string, updates: { host?: string; name?: string; token?: string; platform?: string }): Promise<GitHost> {
-  return apiFetch<GitHost>(`/api/git-hosts/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    body: JSON.stringify(updates),
   })
 }
 
@@ -1168,12 +1073,5 @@ export async function registerPushToken(token: string, platform = "ios"): Promis
   await apiFetch<void>("/api/push/register", {
     method: "POST",
     body: JSON.stringify({ token, platform }),
-  })
-}
-
-export async function unregisterPushToken(token: string): Promise<void> {
-  await apiFetch<void>("/api/push/unregister", {
-    method: "DELETE",
-    body: JSON.stringify({ token }),
   })
 }

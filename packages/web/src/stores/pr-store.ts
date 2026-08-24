@@ -14,13 +14,11 @@ interface PrState {
   matchingPrId: string | null
   matchingCandidateIssueId: string | null
   clearPulls: () => void
-  setSelectedPr: (id: string | null) => void
   setViewingPr: (id: string | null) => void
   loadPulls: () => Promise<void>
   syncPulls: () => Promise<void>
   enterMatchMode: (prId: string) => void
   exitMatchMode: () => void
-  setMatchCandidate: (issueId: string | null) => void
   linkIssue: (prNumber: number, issueNumber: number) => Promise<boolean>
   unlinkIssue: (prNumber: number, issueNumber: number) => Promise<boolean>
 }
@@ -43,8 +41,8 @@ export const usePrStore = create<PrState>((set, get) => ({
     matchingCandidateIssueId: null,
   }),
 
-  setSelectedPr: (id) => set({ selectedPrId: id }),
   setViewingPr: (id) => set({ viewingPrId: id }),
+
 
   enterMatchMode: (prId) => set({ matchingPrId: prId, matchingCandidateIssueId: null }),
 
@@ -52,8 +50,6 @@ export const usePrStore = create<PrState>((set, get) => ({
     const prId = get().matchingPrId
     set({ matchingPrId: null, matchingCandidateIssueId: null, selectedPrId: prId })
   },
-
-  setMatchCandidate: (issueId) => set({ matchingCandidateIssueId: issueId }),
 
   linkIssue: async (prNumber, issueNumber) => {
     const repoId = useRepoStore.getState().activeRepoId

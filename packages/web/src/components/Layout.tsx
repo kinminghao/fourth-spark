@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
-import { Bot, Box, Check, ChevronDown, ChevronsLeft, ChevronsRight, CircleDot, GitBranch, GitPullRequest, Loader2, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
+import { Bot, Box, Check, ChevronDown, ChevronsLeft, ChevronsRight, Code2, GitBranch, Loader2, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import clsx from "clsx"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useThemeStore } from "../stores/theme-store"
@@ -7,18 +8,34 @@ import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { useLayoutStore } from "../stores/layout-store"
 import { listBranches, checkoutBranch, type BranchList } from "../lib/api-client"
 
-const NAV_ITEMS = [
-  { segment: "repos", icon: Box, label: "仓库管理", global: true },
+interface NavItem {
+  segment: string
+  icon: LucideIcon
+  label: string
+  global: boolean
+  matchPrefix?: string
+}
+
+const MAIN_NAV_ITEMS: NavItem[] = [
   { segment: "run", icon: Play, label: "运行面板", global: false },
   { segment: "agents", icon: Bot, label: "Agents", global: false },
-  { segment: "issues", icon: CircleDot, label: "Issues", global: false },
-  { segment: "pulls", icon: GitPullRequest, label: "PRs", global: false },
-  { segment: "settings", icon: Settings, label: "设置", global: true },
+  { segment: "dev/issues", icon: Code2, label: "研发", global: false, matchPrefix: "dev" },
 ]
 
 function navPath(segment: string, global: boolean, repoName: string | null): string {
   if (global) return `/${segment}`
   return repoName ? `/${encodeURIComponent(repoName)}/${segment}` : `/${segment}`
+}
+
+function isNavItemActive(item: NavItem, pathname: string, repoName: string | null): boolean {
+  if (!item.matchPrefix) return false
+  const prefix = item.global
+    ? `/${item.matchPrefix}`
+    : repoName
+      ? `/${encodeURIComponent(repoName)}/${item.matchPrefix}`
+      : null
+  if (!prefix) return false
+  return pathname === prefix || pathname.startsWith(`${prefix}/`)
 }
 
 function shortRepoName(name: string): string {
@@ -35,6 +52,7 @@ function RepoSwitcher({
   activeRepoId: string | null
   onRepoChange: (repoId: string) => void
 }) {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const activeRepo = repos.find((r) => r.id === activeRepoId)
@@ -88,6 +106,16 @@ function RepoSwitcher({
                 <span className="truncate">{r.name}</span>
               </button>
             ))}
+          </div>
+          <div className="border-t border-line">
+            <button
+              type="button"
+              onClick={() => { navigate("/repos"); close() }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-elevated hover:text-fg"
+            >
+              <Settings className="h-3 w-3 shrink-0" />
+              <span>管理仓库</span>
+            </button>
           </div>
         </div>
       )}
@@ -262,7 +290,12 @@ function Header() {
     setActiveRepo(newRepoId)
     const repo = repos.find((r) => r.id === newRepoId)
     if (!repo) return
-    const subPage = location.pathname.match(/\/(run|issues|pulls)/)?.[1] ?? "run"
+    const devMatch = location.pathname.match(/\/dev\/(issues|pulls)/)
+    if (devMatch) {
+      navigate(`/${encodeURIComponent(repo.name)}/dev/${devMatch[1]}`)
+      return
+    }
+    const subPage = location.pathname.match(/\/(run|agents|issues|pulls)/)?.[1] ?? "run"
     navigate(`/${encodeURIComponent(repo.name)}/${subPage}`)
   }
 
@@ -291,6 +324,14 @@ function Header() {
               )}
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => navigate("/settings")}
+            aria-label="设置"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
           <a
             href="https://github.com/kinminghao/fourth-spark"
             target="_blank"
@@ -327,6 +368,7 @@ function Sidebar() {
   const repoName = useRepoStore(selectActiveRepoName)
   const collapsed = useLayoutStore((s) => s.navCollapsed)
   const toggle = useLayoutStore((s) => s.toggleNav)
+  const location = useLocation()
 
   return (
     <nav
@@ -336,34 +378,60 @@ function Sidebar() {
       )}
     >
       <div className="flex flex-1 flex-col">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.segment}
-            to={navPath(item.segment, item.global, repoName)}
-            title={collapsed ? item.label : undefined}
-            className={({ isActive }) =>
-              clsx(
-                "mx-2 flex items-center rounded-md py-2 text-sm transition-colors",
-                collapsed ? "justify-center px-2" : "gap-2.5 px-3",
-                isActive
-                  ? "bg-blue-500/10 font-medium text-blue-600"
-                  : "text-fg-3 hover:bg-elevated hover:text-fg",
-              )
-            }
-          >
-            <item.icon className="h-4 w-4 shrink-0" />
-            <span
-              className={clsx(
-                "truncate transition-[opacity,max-width] duration-200 ease-in-out",
-                collapsed ? "max-w-0 opacity-0" : "max-w-[8rem] opacity-100",
-              )}
+        {MAIN_NAV_ITEMS.map((item) => {
+          const forceActive = isNavItemActive(item, location.pathname, repoName)
+          return (
+            <NavLink
+              key={item.segment}
+              to={navPath(item.segment, item.global, repoName)}
+              title={collapsed ? item.label : undefined}
+              className={({ isActive }) =>
+                clsx(
+                  "mx-2 flex items-center rounded-md py-2 text-sm transition-colors",
+                  collapsed ? "justify-center px-2" : "gap-2.5 px-3",
+                  isActive || forceActive
+                    ? "bg-blue-500/10 font-medium text-blue-600"
+                    : "text-fg-3 hover:bg-elevated hover:text-fg",
+                )
+              }
             >
-              {item.label}
-            </span>
-          </NavLink>
-        ))}
+              <item.icon className="h-4 w-4 shrink-0" />
+              <span
+                className={clsx(
+                  "truncate transition-[opacity,max-width] duration-200 ease-in-out",
+                  collapsed ? "max-w-0 opacity-0" : "max-w-[8rem] opacity-100",
+                )}
+              >
+                {item.label}
+              </span>
+            </NavLink>
+          )
+        })}
       </div>
 
+      <NavLink
+        to="/settings"
+        title={collapsed ? "设置" : undefined}
+        className={({ isActive }) =>
+          clsx(
+            "mx-2 flex items-center rounded-md py-2 text-sm transition-colors",
+            collapsed ? "justify-center px-2" : "gap-2.5 px-3",
+            isActive
+              ? "bg-blue-500/10 font-medium text-blue-600"
+              : "text-fg-4 hover:bg-elevated hover:text-fg-2",
+          )
+        }
+      >
+        <Settings className="h-4 w-4 shrink-0" />
+        <span
+          className={clsx(
+            "truncate transition-[opacity,max-width] duration-200 ease-in-out",
+            collapsed ? "max-w-0 opacity-0" : "max-w-[8rem] opacity-100",
+          )}
+        >
+          设置
+        </span>
+      </NavLink>
       <button
         type="button"
         onClick={toggle}
@@ -381,26 +449,30 @@ function Sidebar() {
 
 function BottomBar() {
   const repoName = useRepoStore(selectActiveRepoName)
+  const location = useLocation()
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-line bg-surface pb-[var(--safe-bottom)] md:hidden">
       <div className="flex h-14 items-center justify-around">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.segment}
-            to={navPath(item.segment, item.global, repoName)}
-            aria-label={item.label}
-            className={({ isActive }) =>
-              clsx(
-                "flex h-10 w-10 items-center justify-center rounded-md transition-colors",
-                isActive
-                  ? "bg-blue-500/10 text-blue-600"
-                  : "text-fg-3 hover:bg-elevated hover:text-fg",
-              )
-            }
-          >
-            <item.icon className="h-5 w-5 shrink-0" />
-          </NavLink>
-        ))}
+        {MAIN_NAV_ITEMS.map((item) => {
+          const forceActive = isNavItemActive(item, location.pathname, repoName)
+          return (
+            <NavLink
+              key={item.segment}
+              to={navPath(item.segment, item.global, repoName)}
+              aria-label={item.label}
+              className={({ isActive }) =>
+                clsx(
+                  "flex h-10 w-10 items-center justify-center rounded-md transition-colors",
+                  isActive || forceActive
+                    ? "bg-blue-500/10 text-blue-600"
+                    : "text-fg-3 hover:bg-elevated hover:text-fg",
+                )
+              }
+            >
+              <item.icon className="h-5 w-5 shrink-0" />
+            </NavLink>
+          )
+        })}
       </div>
     </nav>
   )

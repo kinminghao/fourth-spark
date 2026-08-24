@@ -88,6 +88,7 @@ const SYSTEM_AGENTS: Array<{
   baseAgent: string
   systemPrompt: string
   isSystem: number
+  memoryEnabled: number
   sortOrder: number
 }> = [
   {
@@ -97,6 +98,7 @@ const SYSTEM_AGENTS: Array<{
     baseAgent: "Sisyphus - ultraworker",
     systemPrompt: "",
     isSystem: 1,
+    memoryEnabled: 1,
     sortOrder: -100,
   },
   {
@@ -106,6 +108,7 @@ const SYSTEM_AGENTS: Array<{
     baseAgent: "Sisyphus - ultraworker",
     systemPrompt: COMMENT_POLISHER_PROMPT,
     isSystem: 2,
+    memoryEnabled: 0,
     sortOrder: -1,
   },
   {
@@ -115,6 +118,7 @@ const SYSTEM_AGENTS: Array<{
     baseAgent: "Sisyphus - ultraworker",
     systemPrompt: ISSUE_POLISHER_PROMPT,
     isSystem: 2,
+    memoryEnabled: 0,
     sortOrder: -1,
   },
   {
@@ -124,6 +128,7 @@ const SYSTEM_AGENTS: Array<{
     baseAgent: "Sisyphus - ultraworker",
     systemPrompt: MEMORY_EXTRACTOR_PROMPT,
     isSystem: 3,
+    memoryEnabled: 0,
     sortOrder: -1,
   },
 ]
@@ -140,6 +145,7 @@ export async function seedSystemAgents(): Promise<void> {
         baseAgent: agent.baseAgent,
         systemPrompt: agent.systemPrompt,
         isSystem: agent.isSystem,
+        memoryEnabled: agent.memoryEnabled,
         sortOrder: agent.sortOrder,
         updatedAt: Date.now(),
       }).where(eq(customAgents.id, agent.id))
@@ -156,6 +162,7 @@ export async function seedSystemAgents(): Promise<void> {
       systemPrompt: agent.systemPrompt,
       systemPromptPosition: -1,
       isSystem: agent.isSystem,
+      memoryEnabled: agent.memoryEnabled,
       repoId: null,
       sortOrder: agent.sortOrder,
       createdAt: now,
