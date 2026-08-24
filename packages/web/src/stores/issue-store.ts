@@ -14,10 +14,13 @@ interface IssueState {
   loaded: boolean
   syncing: boolean
   selectedIssueId: string | null
+  viewingIssueId: string | null
+  viewingTreeRootId: string | null
   matchingParentId: string | null
   matchingCandidateId: string | null
   clearIssues: () => void
   setSelectedIssue: (id: string | null) => void
+  setViewingIssue: (id: string | null, treeRootId?: string | null) => void
   enterMatchMode: (parentId: string) => void
   exitMatchMode: () => void
   linkChild: (parentNumber: number, childNumber: number) => Promise<boolean>
@@ -41,6 +44,8 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   loaded: false,
   syncing: false,
   selectedIssueId: null,
+  viewingIssueId: null,
+  viewingTreeRootId: null,
   matchingParentId: null,
   matchingCandidateId: null,
   clearIssues: () => set({
@@ -51,10 +56,13 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     selectedMilestoneId: null,
     loaded: false,
     selectedIssueId: null,
+    viewingIssueId: null,
+    viewingTreeRootId: null,
     matchingParentId: null,
     matchingCandidateId: null,
   }),
   setSelectedIssue: (id) => set({ selectedIssueId: id }),
+  setViewingIssue: (id, treeRootId) => set({ viewingIssueId: id, viewingTreeRootId: treeRootId ?? null }),
   enterMatchMode: (parentId) => set({ matchingParentId: parentId, matchingCandidateId: null }),
   exitMatchMode: () => {
     set({ matchingParentId: null, matchingCandidateId: null })

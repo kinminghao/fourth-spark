@@ -187,6 +187,7 @@ function PrDetailWithTabs({
 export function PullRequestsPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("open")
   const [searchQuery, setSearchQuery] = useState("")
+  const setViewingPr = usePrStore((s) => s.setViewingPr)
   const [issueSearchQuery, setIssueSearchQuery] = useState("")
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -215,13 +216,21 @@ export function PullRequestsPage() {
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
 
+  useEffect(() => {
+    if (searchParams.get("id")) return
+    const stored = usePrStore.getState().viewingPrId
+    if (stored) setSearchParams({ id: stored }, { replace: true })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const openPr = useCallback((id: string) => {
     setSearchParams({ id }, { replace: false })
-  }, [setSearchParams])
+    setViewingPr(id)
+  }, [setSearchParams, setViewingPr])
 
   const closePr = useCallback(() => {
     setSearchParams({}, { replace: false })
-  }, [setSearchParams])
+    setViewingPr(null)
+  }, [setSearchParams, setViewingPr])
 
   const changeTab = useCallback((newTab: PrDetailTab) => {
     if (!selectedId) return

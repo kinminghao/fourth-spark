@@ -20,7 +20,8 @@ export function IssuesPage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("stray")
   const [creating, setCreating] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
-  const [treeRootId, setTreeRootId] = useState<string | null>(null)
+  const treeRootId = useIssueStore((s) => s.viewingTreeRootId)
+  const setViewingIssue = useIssueStore((s) => s.setViewingIssue)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [listDrawerOpen, setListDrawerOpen] = useState(false)
   const [expandedFilter, setExpandedFilter] = useState<ExpandedFilter>(null)
@@ -59,13 +60,20 @@ export function IssuesPage() {
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
 
+  useEffect(() => {
+    if (searchParams.get("id")) return
+    const stored = useIssueStore.getState().viewingIssueId
+    if (stored) setSearchParams({ id: stored }, { replace: true })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const openIssue = useCallback((id: string) => {
     setSearchParams({ id }, { replace: false })
   }, [setSearchParams])
 
   const closeIssue = useCallback(() => {
     setSearchParams({}, { replace: false })
-  }, [setSearchParams])
+    setViewingIssue(null)
+  }, [setSearchParams, setViewingIssue])
 
   const changeTab = useCallback((newTab: DetailTab) => {
     if (!selectedId) return
@@ -142,8 +150,8 @@ export function IssuesPage() {
 
   const handleSelectIssue = useCallback((id: string, type: ReturnType<typeof issueType>) => {
     openIssue(id)
-    setTreeRootId(type === "epic" ? id : null)
-  }, [openIssue])
+    setViewingIssue(id, type === "epic" ? id : null)
+  }, [openIssue, setViewingIssue])
 
   // --- Swipe ---
 
@@ -343,8 +351,8 @@ export function IssuesPage() {
               onTabChange={changeTab}
               onSelectPr={openPr}
               onBackToPrList={backToPrList}
-              onBack={() => { closeIssue(); setTreeRootId(null); setSidebarOpen(false) }}
-              onClose={() => { closeIssue(); setTreeRootId(null); setSidebarOpen(false) }}
+              onBack={() => { closeIssue(); setSidebarOpen(false) }}
+              onClose={() => { closeIssue(); setSidebarOpen(false) }}
               onToggleSidebar={() => setSidebarOpen((v) => !v)}
             />
 
@@ -377,7 +385,7 @@ export function IssuesPage() {
                           rootIssue={rootIssue}
                           childrenMap={childrenMap}
                           currentId={selectedId}
-                          onSelect={(id) => { openIssue(id); setSidebarOpen(false) }}
+                          onSelect={(id) => { openIssue(id); setViewingIssue(id, treeRootId); setSidebarOpen(false) }}
                           sessions={selectedIssueSessions}
                           onSessionSelect={handleSessionSelect}
                         />
