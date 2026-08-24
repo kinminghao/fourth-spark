@@ -154,13 +154,13 @@ sessions.post("/", async (c) => {
   let systemPrompt: string | undefined
   let systemPromptPosition = -1
   let customAgentId: string | null = null
-  let isSystemAgent = false
+  let memoryEnabled = false
 
   if (body.customAgentId) {
     const [ca] = await db.select().from(customAgents).where(eq(customAgents.id, body.customAgentId))
     if (ca) {
       customAgentId = ca.id
-      isSystemAgent = ca.isSystem === 1
+      memoryEnabled = ca.memoryEnabled === 1
       agent = ca.baseAgent
       if (ca.model) model = ca.model
       if (ca.systemPrompt) systemPrompt = ca.systemPrompt
@@ -185,7 +185,7 @@ sessions.post("/", async (c) => {
       : parts.length
     parts.splice(insertAt, 0, systemPrompt)
   }
-  if (customAgentId && !isSystemAgent) {
+  if (customAgentId && memoryEnabled) {
     const memories = await db.select().from(agentMemories)
       .where(and(
         eq(agentMemories.customAgentId, customAgentId),
