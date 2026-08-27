@@ -49,3 +49,52 @@ export function getDockerComposeCmd(): string[] | null {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Pre-flight dependency check — call before starting the server.
+// Exits with a clear error listing if any critical dependency is missing.
+// ---------------------------------------------------------------------------
+
+export function ensureDependencies(): void {
+  const errors: string[] = []
+
+  try {
+    execSync("git --version", { stdio: "pipe" })
+  } catch {
+    errors.push(
+      "git is not installed\n" +
+      "  Install: https://git-scm.com/downloads",
+    )
+  }
+
+  if (!process.env.DATABASE_URL) {
+    let dockerOk = false
+    try {
+      execSync("docker --version", { stdio: "pipe" })
+      dockerOk = true
+    } catch {
+      errors.push(
+        "Docker is not installed (required for PostgreSQL)\n" +
+        "  Install: https://docs.docker.com/get-docker/\n" +
+        "  Or set DATABASE_URL to use an external PostgreSQL",
+      )
+    }
+
+    if (dockerOk && !getDockerComposeCmd()) {
+      errors.push(
+        "Docker Compose is not available\n" +
+        "  Usually included with Docker Desktop\n" +
+        "  Or set DATABASE_URL to use an external PostgreSQL",
+      )
+    }
+  }
+
+  if (errors.length > 0) {
+    console.error("Cannot start: missing required dependencies\n")
+    for (const msg of errors) {
+      console.error(`  ✗ ${msg}`)
+    }
+    console.error()
+    process.exit(1)
+  }
+}
