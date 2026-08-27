@@ -37,6 +37,8 @@ switch (command) {
   }
   case "serve":
   case undefined: {
+    const { ensureDependencies } = await import("./cli/paths")
+    ensureDependencies()
     const { default: serverConfig } = await import("./index")
     Bun.serve(serverConfig)
     const { checkForUpdates } = await import("./cli/upgrade")

@@ -1,7 +1,7 @@
 import { spawn, execSync } from "node:child_process"
 import { readFileSync, writeFileSync, existsSync, openSync, statSync, truncateSync } from "node:fs"
 import { createServer, createConnection } from "node:net"
-import { PID_FILE, LOG_FILE, MAX_LOG_BYTES, ensureDataDir, isProcessRunning, findDockerCompose, getDockerComposeCmd } from "./paths"
+import { PID_FILE, LOG_FILE, MAX_LOG_BYTES, ensureDataDir, isProcessRunning, findDockerCompose, getDockerComposeCmd, ensureDependencies } from "./paths"
 
 const DEFAULT_PORT = 3000
 const PG_PORT = 5432
@@ -53,6 +53,7 @@ function isPortOccupiedByOther(port: number, containerName: string): boolean {
 }
 
 export async function startCommand(args: string[]): Promise<void> {
+  ensureDependencies()
   ensureDataDir()
 
   if (existsSync(PID_FILE)) {
