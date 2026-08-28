@@ -189,6 +189,18 @@ async function startup() {
     logger.warn({ err }, "TLS certificate setup failed — HTTPS disabled")
   }
 
+  try {
+    await initWorkerConfig(getSetting)
+    await runtimeManager.startAll()
+    logger.info("all repos initialized")
+  } catch (err) {
+    logger.error({ err }, "failed to initialize repos")
+  }
+
+  startSyncScheduler()
+
+  // Start HTTP/HTTPS servers only after all initialization is complete.
+  // This prevents clients from hitting 500s during the startup window.
   if (httpsReady) {
     const tls = getTlsPaths()
     Bun.serve({
@@ -203,15 +215,28 @@ async function startup() {
     logger.info({ port: HTTPS_PORT, ips: [...localIPs] }, "HTTPS server started for LAN access")
   }
 
-  try {
-    await initWorkerConfig(getSetting)
-    await runtimeManager.startAll()
-    logger.info("all repos initialized")
-  } catch (err) {
-    logger.error({ err }, "failed to initialize repos")
-  }
+  Bun.serve({
+    port: PORT,
+    idleTimeout: 0,
+    fetch(req: Request, server: { requestIP(req: Request): { address: string } | null }) {
+      const url = new URL(req.url)
+      const hostname = url.hostname
 
-  startSyncScheduler()
+      if (hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "::1" && localIPs.has(hostname)) {
+        const clientAddr = server.requestIP(req)?.address
+        if (isLocalClient(clientAddr, localIPs)) {
+          return Response.redirect(`http://localhost:${PORT}${url.pathname}${url.search}`, 302)
+        }
+        if (httpsReady) {
+          return Response.redirect(`https://${hostname}:${HTTPS_PORT}${url.pathname}${url.search}`, 302)
+        }
+      }
+
+      return app.fetch(req)
+    },
+  })
+
+  logger.info({ port: PORT }, "HTTP server ready")
 }
 
 startup()
@@ -233,25 +258,4 @@ process.on("SIGHUP", () => {
   process.exit(0)
 })
 
-// Bun serves the default export. `idleTimeout: 0` disables the socket idle
-// timeout so long-lived SSE connections are not dropped.
-export default {
-  port: PORT,
-  idleTimeout: 0,
-  fetch(req: Request, server: { requestIP(req: Request): { address: string } | null }) {
-    const url = new URL(req.url)
-    const hostname = url.hostname
 
-    if (hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "::1" && localIPs.has(hostname)) {
-      const clientAddr = server.requestIP(req)?.address
-      if (isLocalClient(clientAddr, localIPs)) {
-        return Response.redirect(`http://localhost:${PORT}${url.pathname}${url.search}`, 302)
-      }
-      if (httpsReady) {
-        return Response.redirect(`https://${hostname}:${HTTPS_PORT}${url.pathname}${url.search}`, 302)
-      }
-    }
-
-    return app.fetch(req)
-  },
-}
