@@ -2,6 +2,8 @@
 
 ## npm 安装（推荐）
 
+> 需要 Node.js 且全局 bin 目录在 PATH 中。新机器搭建环境参见 [Node.js 安装指南](setup-node.md)。
+
 ```bash
 npm install -g fourth-spark
 ```
