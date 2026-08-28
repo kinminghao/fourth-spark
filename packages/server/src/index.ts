@@ -33,7 +33,7 @@ import { ensureSenseVoice } from "./lib/sensevoice-manager"
 import { transcribeRoute } from "./routes/transcribe"
 import { runMigrations } from "./db/migrate"
 import { resolve, join, dirname } from "node:path"
-import { existsSync, realpathSync } from "node:fs"
+import { existsSync, realpathSync, unlinkSync } from "node:fs"
 import { execSync } from "node:child_process"
 import "./db/index"
 
@@ -191,16 +191,22 @@ async function startup() {
 
   if (httpsReady) {
     const tls = getTlsPaths()
-    Bun.serve({
-      port: HTTPS_PORT,
-      idleTimeout: 0,
-      tls: {
-        cert: Bun.file(tls.cert),
-        key: Bun.file(tls.key),
-      },
-      fetch: app.fetch,
-    })
-    logger.info({ port: HTTPS_PORT, ips: [...localIPs] }, "HTTPS server started for LAN access")
+    try {
+      Bun.serve({
+        port: HTTPS_PORT,
+        idleTimeout: 0,
+        tls: {
+          cert: Bun.file(tls.cert),
+          key: Bun.file(tls.key),
+        },
+        fetch: app.fetch,
+      })
+      logger.info({ port: HTTPS_PORT, ips: [...localIPs] }, "HTTPS server started for LAN access")
+    } catch (err) {
+      logger.warn({ err }, "HTTPS server failed to start (bad TLS cert?) — removing cert and falling back to HTTP-only")
+      try { unlinkSync(tls.cert) } catch {}
+      try { unlinkSync(tls.key) } catch {}
+    }
   }
 
   try {
