@@ -107,6 +107,7 @@ make dev      # 启动 Server (:3000) + Web (:5173)
 | [开发指南](docs/development.md) | 环境搭建、Makefile 命令、Schema 变更、调试 |
 | [数据库设计](docs/database.md) | 完整 Schema、表关系、设计说明 |
 | [部署运维](docs/deployment.md) | npm 分发、CLI 详解、CI/CD、环境变量、跨平台构建 |
+| [Node.js 安装](docs/setup-node.md) | 新机器 Node.js 环境搭建、PATH 验证、常见陷阱 |
 
 ### 功能详解
 
