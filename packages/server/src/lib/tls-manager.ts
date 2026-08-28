@@ -87,7 +87,7 @@ keyUsage = digitalSignature, keyEncipherment
   try {
     const result = Bun.spawnSync([
       "openssl", "req", "-x509",
-      "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1",
+      "-newkey", "rsa:2048",
       "-keyout", KEY_PATH,
       "-out", CERT_PATH,
       "-days", "3650",
