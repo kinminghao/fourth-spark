@@ -1,6 +1,6 @@
 import { homedir, arch, platform } from "node:os"
 import { join } from "node:path"
-import { existsSync, mkdirSync, chmodSync, renameSync, unlinkSync, rmSync } from "node:fs"
+import { existsSync, mkdirSync, chmodSync, renameSync, unlinkSync, rmSync, statfsSync, readdirSync } from "node:fs"
 import { logger } from "../middleware/logger"
 
 const SENSEVOICE_VERSION = "runtime-llamacpp-v0.1.9"
@@ -42,31 +42,82 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function hasDiskSpace(dir: string, requiredBytes: number, label: string): boolean {
+  try {
+    const stats = statfsSync(dir)
+    const available = stats.bavail * stats.bsize
+    if (available < requiredBytes) {
+      logger.warn(
+        { file: label, required: formatBytes(requiredBytes), available: formatBytes(available) },
+        `insufficient disk space to download ${label} — skipping`,
+      )
+      return false
+    }
+    return true
+  } catch {
+    return true
+  }
+}
+
+function cleanDownloadingResiduals(dir: string): void {
+  try {
+    for (const entry of readdirSync(dir)) {
+      if (entry.endsWith(".downloading")) {
+        const fullPath = join(dir, entry)
+        try {
+          unlinkSync(fullPath)
+          logger.info({ file: entry }, "removed incomplete download residual")
+        } catch {}
+      }
+    }
+  } catch {}
+}
+
 async function downloadWithProgress(url: string, dest: string, label: string): Promise<void> {
+  const tmpDest = `${dest}.downloading`
+
   const res = await fetch(url, { redirect: "follow", headers: { "User-Agent": "fourth-spark" } })
   if (!res.ok) throw new Error(`HTTP ${res.status} downloading ${label}`)
   if (!res.body) throw new Error(`empty response body for ${label}`)
 
   const total = Number(res.headers.get("content-length") || 0)
+
+  if (total > 0 && !hasDiskSpace(join(dest, ".."), total, label)) {
+    for await (const _ of res.body) { /* drain */ }
+    return
+  }
+
   let received = 0
   let lastLogPercent = -10
 
-  const file = Bun.file(dest).writer()
-  for await (const chunk of res.body) {
-    file.write(chunk)
-    received += chunk.byteLength
-    if (total > 0) {
-      const percent = Math.floor((received / total) * 100)
-      if (percent - lastLogPercent >= 10) {
-        logger.info(
-          { file: label, progress: `${percent}%`, received: formatBytes(received), total: formatBytes(total) },
-          `downloading ${label}`,
-        )
-        lastLogPercent = percent
+  try {
+    const file = Bun.file(tmpDest).writer()
+    for await (const chunk of res.body) {
+      file.write(chunk)
+      received += chunk.byteLength
+      if (total > 0) {
+        const percent = Math.floor((received / total) * 100)
+        if (percent - lastLogPercent >= 10) {
+          logger.info(
+            { file: label, progress: `${percent}%`, received: formatBytes(received), total: formatBytes(total) },
+            `downloading ${label}`,
+          )
+          lastLogPercent = percent
+        }
       }
     }
+    await file.end()
+  } catch (err) {
+    try { unlinkSync(tmpDest) } catch {}
+    throw err
   }
-  await file.end()
+
+  if (total > 0 && received !== total) {
+    try { unlinkSync(tmpDest) } catch {}
+    throw new Error(`${label} size mismatch: expected ${formatBytes(total)}, got ${formatBytes(received)}`)
+  }
+
+  renameSync(tmpDest, dest)
   logger.info({ file: label, size: formatBytes(received) }, `${label} download complete`)
 }
 
@@ -128,6 +179,7 @@ export async function ensureSenseVoice(): Promise<boolean> {
   }
 
   mkdirSync(MODELS_DIR, { recursive: true })
+  cleanDownloadingResiduals(MODELS_DIR)
 
   if (getSenseVoicePaths().available) {
     logger.info("SenseVoice models already present")
