@@ -52,27 +52,25 @@ repoRoutes.post("/", async (c) => {
   }
 
   const runtimeType = body.runtimeType ?? "opencode"
+
+  const [existing] = await db.select({ id: repos.id, name: repos.name }).from(repos).where(eq(repos.localPath, body.localPath))
+  if (existing) {
+    return c.json({ error: `Local path already registered as repo "${existing.name}". Delete it first before re-adding.`, status: 409 }, 409)
+  }
+
   const id = crypto.randomUUID()
   const now = Date.now()
 
-  try {
-    await db.insert(repos).values({
-      id,
-      name: body.name,
-      gitUrl: body.gitUrl,
-      localPath: body.localPath,
-      runtimeType,
-      status: "inactive",
-      createdAt: now,
-      updatedAt: now,
-    })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    if (msg.includes("unique") || msg.includes("duplicate")) {
-      return c.json({ error: "A repo with this local path already exists", status: 409 }, 409)
-    }
-    throw err
-  }
+  await db.insert(repos).values({
+    id,
+    name: body.name,
+    gitUrl: body.gitUrl,
+    localPath: body.localPath,
+    runtimeType,
+    status: "inactive",
+    createdAt: now,
+    updatedAt: now,
+  })
 
   try {
     await runtimeManager.start(id, body.localPath, runtimeType)
