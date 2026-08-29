@@ -236,6 +236,15 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
+    if (event.key === "Tab" && visibleAgents.length > 1) {
+      event.preventDefault()
+      const currentIdx = visibleAgents.findIndex((a) => a.id === customAgentId)
+      const nextIdx = event.shiftKey
+        ? (currentIdx - 1 + visibleAgents.length) % visibleAgents.length
+        : (currentIdx + 1) % visibleAgents.length
+      setCustomAgentId(visibleAgents[nextIdx].id)
+      return
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
       submit()
