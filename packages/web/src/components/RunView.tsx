@@ -199,7 +199,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   }, [activeRepoId])
 
   const imagesAllowed = models.length === 0 || models.some((m) => m.supportsImage !== false)
-  const { attachments, promptFiles, error: attachError, addFiles, onPaste, remove, clear } = useAttachments(imagesAllowed)
+  const { attachments, foldedTexts, promptFiles, error: attachError, addFiles, onPaste, remove, removeFoldedText, clear } = useAttachments(imagesAllowed)
 
   useEffect(() => {
     if (selectedIssueId) {
@@ -227,7 +227,9 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const hasContext = Boolean(issueId)
 
   const submit = () => {
-    const text = draft.trim()
+    const typed = draft.trim()
+    const foldedContent = foldedTexts.map((f) => f.text).join("\n\n")
+    const text = [foldedContent, typed].filter(Boolean).join("\n\n")
     if (!activeRepoId || (!text && !hasContext && attachments.length === 0)) return
     setDraft("")
     clear()
@@ -279,7 +281,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
           </div>
         </div>
 
-        <AttachmentStrip attachments={attachments} error={attachError} onRemove={remove} />
+        <AttachmentStrip attachments={attachments} foldedTexts={foldedTexts} error={attachError} onRemove={remove} onRemoveFoldedText={removeFoldedText} />
 
         <div className={clsx(
           "relative rounded-xl border bg-base/80 shadow-sm transition-colors",
@@ -366,7 +368,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
             <button
               type="button"
               onClick={submit}
-              disabled={!activeRepoId || (!draft.trim() && !hasContext && attachments.length === 0)}
+              disabled={!activeRepoId || (!draft.trim() && !hasContext && attachments.length === 0 && foldedTexts.length === 0)}
               aria-label="Start run"
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white transition-colors duration-150 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6/30 disabled:text-fg-5"
             >
