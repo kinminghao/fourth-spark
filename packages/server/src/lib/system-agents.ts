@@ -166,7 +166,7 @@ const SYSTEM_AGENTS: Array<{
   },
 ]
 
-export async function seedSystemAgents(): Promise<void> {
+async function seedOnce(): Promise<void> {
   for (const agent of SYSTEM_AGENTS) {
     const [existing] = await db.select({ id: customAgents.id })
       .from(customAgents)
@@ -202,6 +202,30 @@ export async function seedSystemAgents(): Promise<void> {
       updatedAt: now,
     })
     logger.info({ agentId: agent.id, name: agent.name }, "seeded system agent")
+  }
+}
+
+const SEED_MAX_RETRIES = 5
+const SEED_BASE_DELAY_MS = 1_000
+
+/**
+ * Seed system agents with exponential backoff retry.
+ * On slow devices PostgreSQL may not be reachable on the first attempt
+ * (Docker port forwarding lag, first-time DB init, etc.).
+ */
+export async function seedSystemAgents(): Promise<void> {
+  for (let attempt = 0; attempt <= SEED_MAX_RETRIES; attempt++) {
+    try {
+      await seedOnce()
+      return
+    } catch (err) {
+      if (attempt === SEED_MAX_RETRIES) {
+        throw err
+      }
+      const delay = SEED_BASE_DELAY_MS * 2 ** attempt
+      logger.warn({ err, attempt: attempt + 1, nextRetryMs: delay }, "seedSystemAgents failed, retrying")
+      await new Promise((r) => setTimeout(r, delay))
+    }
   }
 }
 

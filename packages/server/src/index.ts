@@ -174,7 +174,7 @@ async function startup() {
     await seedSystemAgents()
     logger.info("system agents seeded")
   } catch (err) {
-    logger.warn({ err }, "failed to seed system agents — continuing")
+    logger.error({ err }, "failed to seed system agents after retries — continuing")
   }
 
   try {
