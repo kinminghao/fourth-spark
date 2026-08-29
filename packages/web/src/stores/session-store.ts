@@ -14,6 +14,7 @@ import { isQuestionTool, isQuestionPending, getPartText } from "../lib/message-p
 import { useRepoStore } from "./repo-store"
 import { useAgentStore } from "./agent-store"
 import { useToastStore } from "./toast-store"
+import { useToastStore } from "./toast-store"
 
 function questionToastId(sessionId: string): string {
   return `question-${sessionId}`
@@ -203,6 +204,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         messages: { ...state.messages, [session.id]: [] },
       }))
       get().setSessionStatus(session.id, "busy")
+      if (issueId) {
+        useToastStore.getState().addToast("已自动分配为处理人", "success")
+      }
       return session
     } catch (error) {
       set({
