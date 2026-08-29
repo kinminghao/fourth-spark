@@ -18,8 +18,8 @@ interface NavItem {
 
 const MAIN_NAV_ITEMS: NavItem[] = [
   { segment: "run", icon: Play, label: "运行面板", global: false },
-  { segment: "agents", icon: Bot, label: "Agents", global: false },
   { segment: "dev/issues", icon: Code2, label: "研发", global: false, matchPrefix: "dev" },
+  { segment: "agents", icon: Bot, label: "Agents", global: false },
 ]
 
 function navPath(segment: string, global: boolean, repoName: string | null): string {
