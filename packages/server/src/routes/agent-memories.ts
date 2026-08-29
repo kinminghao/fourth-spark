@@ -3,6 +3,7 @@ import { eq, and, isNull, desc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
 import { runtimeManager } from "../lib/process-manager"
+import { getConsolidationStats } from "../lib/memory-consolidation"
 import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions } from "../lib/memory-extractor"
 import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "../lib/system-agents"
 import { resolveAgent } from "../lib/agent-validator"
@@ -46,6 +47,17 @@ agentMemoryRoutes.get("/", async (c) => {
     .orderBy(desc(agentMemories.importance), desc(agentMemories.updatedAt))
 
   return c.json(rows)
+})
+
+agentMemoryRoutes.get("/stats", async (c) => {
+  const agentId = c.req.param("agentId")
+  if (!agentId) return c.json({ error: "Missing agentId", status: 400 }, 400)
+
+  const check = await requireMemoryEnabled(agentId)
+  if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
+
+  const stats = await getConsolidationStats(agentId)
+  return c.json(stats)
 })
 
 agentMemoryRoutes.post("/", async (c) => {

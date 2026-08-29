@@ -38,6 +38,7 @@ const CONSOLIDATION_SESSION_TITLE = "[internal] memory consolidation"
 
 const lastConsolidated = new Map<string, number>()
 const consolidatingAgents = new Set<string>()
+const lastRunSummaries = new Map<string, { update: number; merge: number; delete: number; skip: number; decayed: number }>()
 
 // ---------------------------------------------------------------------------
 // Flags & action validation
@@ -264,7 +265,7 @@ async function processConsolidationBatch(
   batch: MemoryWithFlags[],
   batchIdx: number,
   totalBatches: number,
-): Promise<void> {
+): Promise<ExtractionAction[]> {
   let consolidationSessionId: string | undefined
   const outputPath = `/tmp/memory-consolidate-${crypto.randomUUID()}.json`
 
@@ -330,7 +331,7 @@ async function processConsolidationBatch(
         totalBatches,
         batchSize: batch.length,
       })
-      return
+      return []
     }
 
     const rawActions = parseExtractionResult(resultText)
@@ -377,8 +378,10 @@ async function processConsolidationBatch(
       { customAgentId, batchIdx, actionCount: actions.length, byAction: countByAction(actions), dryRun: DRY_RUN },
       "memory consolidation batch completed",
     )
+    return actions
   } catch (err) {
     logger.warn({ err, customAgentId, batchIdx }, "memory consolidation batch failed")
+    return []
   } finally {
     if (consolidationSessionId) {
       client.deleteSession(consolidationSessionId).catch(() => { /* best-effort cleanup */ })
@@ -433,9 +436,15 @@ async function consolidateAgent(customAgentId: string, client: RuntimeClient): P
     "starting memory consolidation",
   )
 
+  const accumulated = { update: 0, merge: 0, delete: 0, skip: 0 }
   for (let i = 0; i < batches.length; i++) {
-    await processConsolidationBatch(customAgentId, client, batches[i], i + 1, batches.length)
+    const batchActions = await processConsolidationBatch(customAgentId, client, batches[i], i + 1, batches.length)
+    for (const a of batchActions) {
+      const key = a.action as keyof typeof accumulated
+      if (key in accumulated) accumulated[key]++
+    }
   }
+  lastRunSummaries.set(customAgentId, { ...accumulated, decayed: 0 })
 }
 
 // ---------------------------------------------------------------------------
@@ -491,9 +500,52 @@ export async function runMemoryConsolidation(
     // Decay runs unconditionally for every memory-enabled agent, regardless of
     // whether consolidation was skipped (too few memories, mostly clean, etc.).
     try {
-      await applyImportanceDecay(agentId)
+      const decayResult = await applyImportanceDecay(agentId)
+      const prev = lastRunSummaries.get(agentId)
+      if (prev) {
+        prev.decayed = decayResult.decayed
+      } else {
+        lastRunSummaries.set(agentId, { update: 0, merge: 0, delete: 0, skip: 0, decayed: decayResult.decayed })
+      }
     } catch (err) {
       logger.error({ err, agentId }, "importance decay failed for agent")
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Stats query (for API / frontend)
+// ---------------------------------------------------------------------------
+
+export interface ConsolidationStats {
+  totalActive: number
+  flagged: number
+  stale: number
+  lastConsolidatedAt: number | null
+  lastActions: { update: number; merge: number; delete: number; skip: number; decayed: number } | null
+}
+
+export async function getConsolidationStats(agentId: string): Promise<ConsolidationStats> {
+  const memories = await db.select({ content: agentMemories.content, updatedAt: agentMemories.updatedAt })
+    .from(agentMemories)
+    .where(and(
+      eq(agentMemories.customAgentId, agentId),
+      isNull(agentMemories.supersededBy),
+    ))
+
+  const cutoff = Date.now() - DECAY_STALE_DAYS * 86_400_000
+  let flagged = 0
+  let stale = 0
+  for (const m of memories) {
+    if (computeFlags(m.content).length > 0) flagged++
+    if (m.updatedAt < cutoff) stale++
+  }
+
+  return {
+    totalActive: memories.length,
+    flagged,
+    stale,
+    lastConsolidatedAt: lastConsolidated.get(agentId) ?? null,
+    lastActions: lastRunSummaries.get(agentId) ?? null,
   }
 }
