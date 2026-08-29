@@ -441,7 +441,7 @@ function SessionList({ agentId }: { agentId: string }) {
 function ConfigSection({ agent, fragments, onSave }: {
   agent: CustomAgent
   fragments: PromptFragment[]
-  onSave: (data: { name: string; description?: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => Promise<void>
+  onSave: (data: { name: string; description?: string; baseAgent: string; model?: string; variant?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => Promise<void>
 }) {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const [editing, setEditing] = useState(false)
@@ -449,6 +449,7 @@ function ConfigSection({ agent, fragments, onSave }: {
   const [description, setDescription] = useState(agent.description ?? "")
   const [baseAgent, setBaseAgent] = useState(agent.baseAgent)
   const [model, setModel] = useState(agent.model ?? "")
+  const [variant, setVariant] = useState(agent.variant ?? "")
   const [systemPrompt, setSystemPrompt] = useState(agent.systemPrompt)
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -516,7 +517,7 @@ function ConfigSection({ agent, fragments, onSave }: {
     if (!name.trim() || !baseAgent) return
     setSaving(true)
     try {
-      await onSave({ name: name.trim(), description: description.trim() || undefined, baseAgent, model: model.trim() || undefined, systemPrompt, systemPromptPosition: spPosition, fragmentIds: selectedIds })
+      await onSave({ name: name.trim(), description: description.trim() || undefined, baseAgent, model: model.trim() || undefined, variant: variant.trim() || undefined, systemPrompt, systemPromptPosition: spPosition, fragmentIds: selectedIds })
       setEditing(false)
     } finally {
       setSaving(false)
@@ -545,6 +546,10 @@ function ConfigSection({ agent, fragments, onSave }: {
           <div className="flex items-center gap-2 text-xs">
             <span className="w-20 shrink-0 text-fg-5">模型</span>
             <span className="font-mono text-fg">{agent.model || "默认"}</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-20 shrink-0 text-fg-5">Variant</span>
+            <span className="font-mono text-fg">{agent.variant || "默认"}</span>
           </div>
           {agent.fragments.length > 0 && (
             <div className="flex items-start gap-2 text-xs">
@@ -589,13 +594,24 @@ function ConfigSection({ agent, fragments, onSave }: {
         <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="一句话描述这个 Agent 的用途"
           className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
       </label>
-      <div>
-        <span className="text-xs font-medium text-fg-3">模型（可选）</span>
-        <select value={model} onChange={(e) => setModel(e.target.value)}
-          className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none">
-          <option value="">默认模型</option>
-          {pinnedModels.map((m) => <option key={m.id} value={m.id}>{m.name || m.id}</option>)}
-        </select>
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <span className="text-xs font-medium text-fg-3">模型（可选）</span>
+          <select value={model} onChange={(e) => setModel(e.target.value)}
+            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none">
+            <option value="">默认模型</option>
+            {pinnedModels.map((m) => <option key={m.id} value={m.id}>{m.name || m.id}</option>)}
+          </select>
+        </div>
+        <div className="w-28">
+          <span className="text-xs font-medium text-fg-3">Variant</span>
+          <select value={variant} onChange={(e) => setVariant(e.target.value)}
+            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none">
+            <option value="">默认</option>
+            <option value="max">max</option>
+            <option value="high">high</option>
+          </select>
+        </div>
       </div>
 
       <div>
@@ -693,7 +709,7 @@ export function AgentDetailPage() {
     }
   }, [agents, agent, navigate, repoName])
 
-  const handleSave = async (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
+  const handleSave = async (data: { name: string; baseAgent: string; model?: string; variant?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
     if (!agentId) return
     await api.updateCustomAgent(agentId, data)
     void useCustomAgentStore.getState().loadAgents()

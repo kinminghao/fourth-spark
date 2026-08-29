@@ -168,6 +168,7 @@ const STICK_TO_BOTTOM_THRESHOLD_PX = 64
 function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const [draft, setDraft] = useState("")
   const [customAgentId, setCustomAgentId] = useState("")
+  const [selectedVariant, setSelectedVariant] = useState("")
   const [issueId, setIssueId] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [models, setModels] = useState<ModelInfo[]>([])
@@ -230,7 +231,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     if (!activeRepoId || (!text && !hasContext && attachments.length === 0)) return
     setDraft("")
     clear()
-    void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined, promptFiles.length > 0 ? promptFiles : undefined)
+    void createSession(text, undefined, undefined, selectedVariant || undefined, issueId || undefined, customAgentId || undefined, promptFiles.length > 0 ? promptFiles : undefined)
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -243,9 +244,9 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
 
   const handleVoiceSubmit = useCallback(
     (text: string) => {
-      void createSession(text, undefined, undefined, undefined, issueId || undefined, customAgentId || undefined)
+      void createSession(text, undefined, undefined, selectedVariant || undefined, issueId || undefined, customAgentId || undefined)
     },
-    [createSession, issueId, customAgentId],
+    [createSession, issueId, customAgentId, selectedVariant],
   )
 
   const voice = useVoiceInput(handleVoiceSubmit)
@@ -364,22 +365,36 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
             </button>
           </div>
 
-          {linkedIssueLabel && (
-            <div className="flex items-center gap-2 border-t border-line/60 px-4 py-1.5">
-              <span className="shrink-0 font-mono text-[11px] text-fg-5">关联</span>
-              <span className="min-w-0 truncate rounded bg-blue-500/10 px-1.5 py-0.5 font-mono text-[11px] text-blue-400">
-                {linkedIssueLabel}
-              </span>
-              <button
-                type="button"
-                onClick={() => setIssueId("")}
-                className="shrink-0 text-fg-5 hover:text-fg-3"
-                aria-label="取消关联"
+          <div className="flex items-center gap-2 border-t border-line/60 px-4 py-1.5">
+            {linkedIssueLabel && (
+              <>
+                <span className="shrink-0 font-mono text-[11px] text-fg-5">关联</span>
+                <span className="min-w-0 truncate rounded bg-blue-500/10 px-1.5 py-0.5 font-mono text-[11px] text-blue-400">
+                  {linkedIssueLabel}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIssueId("")}
+                  className="shrink-0 text-fg-5 hover:text-fg-3"
+                  aria-label="取消关联"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </>
+            )}
+            <div className="ml-auto flex items-center gap-1.5">
+              <span className="font-mono text-[11px] text-fg-5">variant</span>
+              <select
+                value={selectedVariant}
+                onChange={(e) => setSelectedVariant(e.target.value)}
+                className="rounded border border-line bg-surface px-2 py-0.5 font-mono text-[11px] text-fg-4 focus:border-fg-5 focus:outline-none"
               >
-                <X className="h-3 w-3" />
-              </button>
+                <option value="">默认</option>
+                <option value="max">max</option>
+                <option value="high">high</option>
+              </select>
             </div>
-          )}
+          </div>
         </div>
 
         <VoiceStatusBar
