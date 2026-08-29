@@ -54,6 +54,7 @@ globalCustomAgents.post("/", async (c) => {
     name?: string
     baseAgent?: string
     model?: string
+    variant?: string
     systemPrompt?: string
     systemPromptPosition?: number
     fragmentIds?: string[]
@@ -72,6 +73,7 @@ globalCustomAgents.post("/", async (c) => {
     name: body.name.trim(),
     baseAgent: body.baseAgent,
     model: body.model?.trim() || null,
+    variant: body.variant?.trim() || null,
     systemPrompt: body.systemPrompt ?? "",
     systemPromptPosition: body.systemPromptPosition ?? -1,
     repoId: null,
@@ -97,6 +99,7 @@ globalCustomAgents.put("/:id", async (c) => {
     name?: string
     baseAgent?: string
     model?: string | null
+    variant?: string | null
     systemPrompt?: string
     systemPromptPosition?: number
     sortOrder?: number
@@ -112,6 +115,7 @@ globalCustomAgents.put("/:id", async (c) => {
   if (body.name !== undefined) updates.name = body.name.trim()
   if (body.baseAgent !== undefined) updates.baseAgent = body.baseAgent
   if (body.model !== undefined) updates.model = body.model?.trim() || null
+  if (body.variant !== undefined) updates.variant = body.variant?.trim() || null
   if (body.systemPrompt !== undefined) updates.systemPrompt = body.systemPrompt
   if (body.systemPromptPosition !== undefined) updates.systemPromptPosition = body.systemPromptPosition
   if (body.sortOrder !== undefined) updates.sortOrder = body.sortOrder
@@ -151,6 +155,7 @@ globalCustomAgents.get("/:id/export", async (c) => {
       name: withFragments.name,
       baseAgent: withFragments.baseAgent,
       model: withFragments.model,
+      variant: withFragments.variant,
       systemPrompt: withFragments.systemPrompt,
     },
     fragments: withFragments.fragments.map((f) => ({ name: f.name, content: f.content })),
@@ -165,7 +170,7 @@ globalCustomAgents.post("/import", async (c) => {
   const body = await c.req.json<{
     version?: number
     type?: string
-    agent?: { name?: string; baseAgent?: string; model?: string | null; systemPrompt?: string }
+    agent?: { name?: string; baseAgent?: string; model?: string | null; variant?: string | null; systemPrompt?: string }
     fragments?: Array<{ name?: string; content?: string }>
   }>().catch(() => null)
 
@@ -214,6 +219,7 @@ globalCustomAgents.post("/import", async (c) => {
     name: agentData.name.trim(),
     baseAgent: agentData.baseAgent,
     model: agentData.model?.trim() || null,
+    variant: agentData.variant?.trim() || null,
     systemPrompt: agentData.systemPrompt ?? "",
     repoId: null,
     sortOrder: 0,
@@ -243,6 +249,7 @@ repoCustomAgents.post("/", async (c) => {
     name?: string
     baseAgent?: string
     model?: string
+    variant?: string
     systemPrompt?: string
     systemPromptPosition?: number
     fragmentIds?: string[]
@@ -261,6 +268,7 @@ repoCustomAgents.post("/", async (c) => {
     name: body.name.trim(),
     baseAgent: body.baseAgent,
     model: body.model?.trim() || null,
+    variant: body.variant?.trim() || null,
     systemPrompt: body.systemPrompt ?? "",
     systemPromptPosition: body.systemPromptPosition ?? -1,
     repoId,

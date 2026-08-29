@@ -514,7 +514,7 @@ issueRoutes.post("/:number/polish", async (c) => {
   })
 
   try {
-    await client.prompt(session.id, prompt, { agent: resolvedAgent, model: agent.model ?? undefined, variant: DEFAULT_VARIANT })
+    await client.prompt(session.id, prompt, { agent: resolvedAgent, model: agent.model ?? undefined, variant: agent.variant ?? DEFAULT_VARIANT })
   } catch (err) {
     logger.error({ err, sessionId: session.id }, "polish prompt failed, cleaning up")
     await client.deleteSession(session.id).catch(() => {})
@@ -636,7 +636,7 @@ issueRoutes.post("/polish-create", async (c) => {
   })
 
   try {
-    await client.prompt(session.id, prompt, { agent: resolvedAgent, model: agent.model ?? undefined, variant: DEFAULT_VARIANT })
+    await client.prompt(session.id, prompt, { agent: resolvedAgent, model: agent.model ?? undefined, variant: agent.variant ?? DEFAULT_VARIANT })
   } catch (err) {
     logger.error({ err, sessionId: session.id }, "issue polish prompt failed, cleaning up")
     await client.deleteSession(session.id).catch(() => {})

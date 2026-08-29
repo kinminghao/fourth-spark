@@ -40,6 +40,7 @@ function useHasPendingQuestion(): boolean {
 export function InputBar() {
   const [value, setValue] = useState("")
   const [selectedModel, setSelectedModel] = useState("")
+  const [selectedVariant, setSelectedVariant] = useState("")
   const [pinnedModels, setPinnedModels] = useState<ModelInfo[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -56,10 +57,10 @@ export function InputBar() {
 
   const handleVoiceSubmit = useCallback(
     async (text: string) => {
-      const ok = await sendMessage(text, selectedModel || undefined)
+      const ok = await sendMessage(text, selectedModel || undefined, selectedVariant || undefined)
       if (!ok) return false
     },
-    [sendMessage, selectedModel],
+    [sendMessage, selectedModel, selectedVariant],
   )
 
   const voice = useVoiceInput(handleVoiceSubmit)
@@ -111,7 +112,7 @@ export function InputBar() {
     if (disabled || (!text && attachments.length === 0)) {
       return
     }
-    const ok = await sendMessage(text, selectedModel || undefined, promptFiles.length > 0 ? promptFiles : undefined)
+    const ok = await sendMessage(text, selectedModel || undefined, selectedVariant || undefined, promptFiles.length > 0 ? promptFiles : undefined)
     if (ok) {
       setValue("")
       clear()
@@ -216,18 +217,29 @@ export function InputBar() {
             <span className="font-mono text-[10px] text-red-400">{voice.stt.error}</span>
           )}
           <span className="font-mono text-[10px] text-fg-6">⏎ to run · shift+⏎ for newline</span>
-          {pinnedModels.length > 0 && (
+          <div className="ml-auto flex items-center gap-2">
             <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="ml-auto max-w-[200px] truncate rounded border border-line bg-surface px-2 py-0.5 font-mono text-[11px] text-fg-4 focus:border-fg-5 focus:outline-none"
+              value={selectedVariant}
+              onChange={(e) => setSelectedVariant(e.target.value)}
+              className="max-w-[100px] truncate rounded border border-line bg-surface px-2 py-0.5 font-mono text-[11px] text-fg-4 focus:border-fg-5 focus:outline-none"
             >
-              <option value="">默认模型</option>
-              {pinnedModels.map((m) => (
-                <option key={m.id} value={m.id}>{m.name || m.id}</option>
-              ))}
+              <option value="">默认</option>
+              <option value="max">max</option>
+              <option value="high">high</option>
             </select>
-          )}
+            {pinnedModels.length > 0 && (
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="max-w-[200px] truncate rounded border border-line bg-surface px-2 py-0.5 font-mono text-[11px] text-fg-4 focus:border-fg-5 focus:outline-none"
+              >
+                <option value="">默认模型</option>
+                {pinnedModels.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name || m.id}</option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
       ) : (
         <VoiceStatusBar

@@ -120,7 +120,7 @@ function AgentCard({ agent, memoryCount, sessionCount, onClick, onDelete }: {
 function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
   initial?: CustomAgent
   availableFragments: PromptFragment[]
-  onSave: (data: { name: string; description?: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => Promise<void>
+  onSave: (data: { name: string; description?: string; baseAgent: string; model?: string; variant?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => Promise<void>
   onCancel: () => void
 }) {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
@@ -128,6 +128,7 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
   const [description, setDescription] = useState(initial?.description ?? "")
   const [baseAgent, setBaseAgent] = useState(initial?.baseAgent ?? "Sisyphus - ultraworker")
   const [model, setModel] = useState(initial?.model ?? "")
+  const [variant, setVariant] = useState(initial?.variant ?? "")
   const [systemPrompt, setSystemPrompt] = useState(initial?.systemPrompt ?? "")
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -198,7 +199,7 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
     if (!name.trim() || !baseAgent) return
     setSaving(true)
     try {
-      await onSave({ name: name.trim(), description: description.trim() || undefined, baseAgent, model: model.trim() || undefined, systemPrompt, systemPromptPosition: spPosition, fragmentIds: selectedIds })
+      await onSave({ name: name.trim(), description: description.trim() || undefined, baseAgent, model: model.trim() || undefined, variant: variant.trim() || undefined, systemPrompt, systemPromptPosition: spPosition, fragmentIds: selectedIds })
     } finally {
       setSaving(false)
     }
@@ -225,21 +226,35 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
         <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="一句话描述这个 Agent 的用途"
           className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
       </label>
-      <div>
-        <span className="text-xs font-medium text-fg-3">模型（可选）</span>
-        <select
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none"
-        >
-          <option value="">默认模型</option>
-          {pinnedModels.map((m) => (
-            <option key={m.id} value={m.id}>{m.name || m.id}</option>
-          ))}
-        </select>
-        {pinnedModels.length === 0 && (
-          <p className="mt-1 text-[11px] text-fg-5">在设置的「模型」中勾选常用模型后可选择。</p>
-        )}
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <span className="text-xs font-medium text-fg-3">模型（可选）</span>
+          <select
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none"
+          >
+            <option value="">默认模型</option>
+            {pinnedModels.map((m) => (
+              <option key={m.id} value={m.id}>{m.name || m.id}</option>
+            ))}
+          </select>
+          {pinnedModels.length === 0 && (
+            <p className="mt-1 text-[11px] text-fg-5">在设置的「模型」中勾选常用模型后可选择。</p>
+          )}
+        </div>
+        <div className="w-28">
+          <span className="text-xs font-medium text-fg-3">Variant</span>
+          <select
+            value={variant}
+            onChange={(e) => setVariant(e.target.value)}
+            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none"
+          >
+            <option value="">默认</option>
+            <option value="max">max</option>
+            <option value="high">high</option>
+          </select>
+        </div>
       </div>
 
       <div>
@@ -520,7 +535,7 @@ export function AgentsPage() {
     return a.isSystem < 2
   })
 
-  const handleCreateAgent = async (data: { name: string; baseAgent: string; model?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
+  const handleCreateAgent = async (data: { name: string; baseAgent: string; model?: string; variant?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
     if (activeRepoId) {
       await api.createRepoCustomAgent(activeRepoId, data)
     } else {

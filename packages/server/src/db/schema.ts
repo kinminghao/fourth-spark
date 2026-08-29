@@ -90,6 +90,7 @@ export const customAgents = pgTable("custom_agents", {
   description: text("description").notNull().default(""),
   baseAgent: text("base_agent").notNull(),
   model: text("model"),
+  variant: text("variant"),
   systemPrompt: text("system_prompt").notNull().default(""),
   systemPromptPosition: integer("system_prompt_position").notNull().default(-1),
   isSystem: integer("is_system").notNull().default(0),
