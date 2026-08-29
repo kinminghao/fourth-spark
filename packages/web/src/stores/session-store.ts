@@ -382,6 +382,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const session = get().sessions.find((s) => s.id === sessionId)
     const wasBusy = get().sessionStatuses[sessionId] === "busy"
     set({ sendError: null })
+    if (session?.completedAt) {
+      set((state) => ({
+        sessions: state.sessions.map((s) =>
+          s.id === sessionId ? { ...s, completedAt: undefined } : s,
+        ),
+      }))
+    }
     if (!wasBusy) {
       get().setSessionStatus(sessionId, "busy")
     }

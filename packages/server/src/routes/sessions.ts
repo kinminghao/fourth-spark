@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { eq, and, asc, inArray, isNull, desc } from "drizzle-orm"
+import { eq, and, asc, inArray, isNull, isNotNull, desc } from "drizzle-orm"
 import { runtimeManager } from "../lib/process-manager"
 import { sessionMonitor } from "../lib/session-monitor"
 import { workspaceManager } from "../lib/workspace-manager"
@@ -402,7 +402,10 @@ sessions.post("/:id/prompt", async (c) => {
   if (body.content.length === 0 && files.length === 0) {
     return c.json({ error: "Body must include a non-empty 'content' string or at least one file", status: 400 }, 400)
   }
-  await client.prompt(c.req.param("id"), body.content, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT, files })
+  const sessionId = c.req.param("id")
+  await client.prompt(sessionId, body.content, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT, files })
+  // Auto-clear completedAt when sending a new message to a completed session
+  await db.update(sessionsTable).set({ completedAt: null }).where(and(eq(sessionsTable.id, sessionId), isNotNull(sessionsTable.completedAt)))
   return c.json({ ok: true })
 })
 
