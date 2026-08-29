@@ -531,12 +531,10 @@ function ConfigSection({ agent, fragments, onSave }: {
       <section className="rounded-xl border border-line bg-surface p-5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-fg">配置</h2>
-          {!isSystem && (
-            <button type="button" onClick={() => setEditing(true)}
-              className="flex items-center gap-1 rounded-md border border-line px-2.5 py-1 text-xs text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3">
-              <Edit3 className="h-3 w-3" /> 编辑
-            </button>
-          )}
+          <button type="button" onClick={() => setEditing(true)}
+            className="flex items-center gap-1 rounded-md border border-line px-2.5 py-1 text-xs text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3">
+            <Edit3 className="h-3 w-3" /> 编辑
+          </button>
         </div>
         <div className="mt-3 space-y-2.5">
           <div className="flex items-center gap-2 text-xs">
@@ -575,25 +573,29 @@ function ConfigSection({ agent, fragments, onSave }: {
   return (
     <section className="rounded-xl border border-blue-500/30 bg-surface p-5 space-y-3">
       <h2 className="text-sm font-semibold text-fg">编辑配置</h2>
-      <div className="flex gap-3">
-        <label className="flex-1">
-          <span className="text-xs font-medium text-fg-3">名称</span>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg focus:border-blue-500 focus:outline-none" />
-        </label>
-        <label className="w-36">
-          <span className="text-xs font-medium text-fg-3">Base Agent</span>
-          <select value={baseAgent} onChange={(e) => setBaseAgent(e.target.value)}
-            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg focus:border-blue-500 focus:outline-none">
-            {BASE_AGENTS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </label>
-      </div>
-      <label className="block">
-        <span className="text-xs font-medium text-fg-3">描述（可选）</span>
-        <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="一句话描述这个 Agent 的用途"
-          className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
-      </label>
+      {!isSystem && (
+        <>
+          <div className="flex gap-3">
+            <label className="flex-1">
+              <span className="text-xs font-medium text-fg-3">名称</span>
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+                className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg focus:border-blue-500 focus:outline-none" />
+            </label>
+            <label className="w-36">
+              <span className="text-xs font-medium text-fg-3">Base Agent</span>
+              <select value={baseAgent} onChange={(e) => setBaseAgent(e.target.value)}
+                className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg focus:border-blue-500 focus:outline-none">
+                {BASE_AGENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </label>
+          </div>
+          <label className="block">
+            <span className="text-xs font-medium text-fg-3">描述（可选）</span>
+            <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="一句话描述这个 Agent 的用途"
+              className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+          </label>
+        </>
+      )}
       <div className="flex gap-3">
         <div className="flex-1">
           <span className="text-xs font-medium text-fg-3">模型（可选）</span>
@@ -614,62 +616,66 @@ function ConfigSection({ agent, fragments, onSave }: {
         </div>
       </div>
 
-      <div>
-        <span className="text-xs font-medium text-fg-3">提示词组合</span>
-        <div className="mt-1.5 space-y-1">
-          {orderedItems.map((id, idx) => {
-            if (id === SP_KEY) {
-              return (
-                <div key={id} className="flex items-center gap-2 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1">
-                  <div className="flex flex-col">
-                    <button type="button" onClick={() => moveItem(idx, -1)} disabled={idx === 0} className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▲</button>
-                    <button type="button" onClick={() => moveItem(idx, 1)} disabled={idx === orderedItems.length - 1} className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▼</button>
+      {!isSystem && (
+        <>
+          <div>
+            <span className="text-xs font-medium text-fg-3">提示词组合</span>
+            <div className="mt-1.5 space-y-1">
+              {orderedItems.map((id, idx) => {
+                if (id === SP_KEY) {
+                  return (
+                    <div key={id} className="flex items-center gap-2 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1">
+                      <div className="flex flex-col">
+                        <button type="button" onClick={() => moveItem(idx, -1)} disabled={idx === 0} className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▲</button>
+                        <button type="button" onClick={() => moveItem(idx, 1)} disabled={idx === orderedItems.length - 1} className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▼</button>
+                      </div>
+                      <span className="flex-1 truncate text-xs font-medium text-amber-400">✎ 补充指令</span>
+                    </div>
+                  )
+                }
+                const frag = fragments.find((f) => f.id === id)
+                if (!frag) return null
+                return (
+                  <div key={id} className="flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1">
+                    <div className="flex flex-col">
+                      <button type="button" onClick={() => moveItem(idx, -1)} disabled={idx === 0} className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▲</button>
+                      <button type="button" onClick={() => moveItem(idx, 1)} disabled={idx === orderedItems.length - 1} className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▼</button>
+                    </div>
+                    <span className="flex-1 truncate text-xs text-fg">{frag.name}</span>
+                    <button type="button" onClick={() => toggleFragment(id)} className="text-fg-5 hover:text-red-400"><X className="h-3 w-3" /></button>
                   </div>
-                  <span className="flex-1 truncate text-xs font-medium text-amber-400">✎ 补充指令</span>
-                </div>
-              )
-            }
-            const frag = fragments.find((f) => f.id === id)
-            if (!frag) return null
-            return (
-              <div key={id} className="flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1">
-                <div className="flex flex-col">
-                  <button type="button" onClick={() => moveItem(idx, -1)} disabled={idx === 0} className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▲</button>
-                  <button type="button" onClick={() => moveItem(idx, 1)} disabled={idx === orderedItems.length - 1} className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▼</button>
-                </div>
-                <span className="flex-1 truncate text-xs text-fg">{frag.name}</span>
-                <button type="button" onClick={() => toggleFragment(id)} className="text-fg-5 hover:text-red-400"><X className="h-3 w-3" /></button>
-              </div>
-            )
-          })}
-          {fragments.filter((f) => !selectedIds.includes(f.id)).length > 0 && (
-            <select value="" onChange={(e) => { if (e.target.value) toggleFragment(e.target.value) }}
-              className="w-full rounded border border-dashed border-line bg-base px-2 py-1 text-xs text-fg-4 focus:border-blue-500 focus:outline-none">
-              <option value="">+ 添加片段…</option>
-              {fragments.filter((f) => !selectedIds.includes(f.id)).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-            </select>
-          )}
-        </div>
-      </div>
+                )
+              })}
+              {fragments.filter((f) => !selectedIds.includes(f.id)).length > 0 && (
+                <select value="" onChange={(e) => { if (e.target.value) toggleFragment(e.target.value) }}
+                  className="w-full rounded border border-dashed border-line bg-base px-2 py-1 text-xs text-fg-4 focus:border-blue-500 focus:outline-none">
+                  <option value="">+ 添加片段…</option>
+                  {fragments.filter((f) => !selectedIds.includes(f.id)).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              )}
+            </div>
+          </div>
 
-      <label className="block">
-        <span className="text-xs font-medium text-fg-3">补充指令内容</span>
-        <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={4}
-          className="mt-1 w-full resize-y rounded-md border border-line bg-base px-3 py-2 font-mono text-sm leading-relaxed text-fg focus:border-blue-500 focus:outline-none" />
-      </label>
+          <label className="block">
+            <span className="text-xs font-medium text-fg-3">补充指令内容</span>
+            <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={4}
+              className="mt-1 w-full resize-y rounded-md border border-line bg-base px-3 py-2 font-mono text-sm leading-relaxed text-fg focus:border-blue-500 focus:outline-none" />
+          </label>
 
-      {(selectedIds.length > 0 || systemPrompt) && (
-        <div>
-          <button type="button" onClick={() => setShowPreview(!showPreview)}
-            className="flex items-center gap-1 text-xs font-medium text-fg-4 hover:text-fg-3">
-            <span>{showPreview ? "▾" : "▸"}</span> 预览最终提示词
-          </button>
-          {showPreview && (
-            <pre className="mt-1 max-h-48 overflow-auto rounded border border-line bg-elevated px-3 py-2 font-mono text-xs leading-relaxed text-fg-4">
-              {preview || "(空)"}
-            </pre>
+          {(selectedIds.length > 0 || systemPrompt) && (
+            <div>
+              <button type="button" onClick={() => setShowPreview(!showPreview)}
+                className="flex items-center gap-1 text-xs font-medium text-fg-4 hover:text-fg-3">
+                <span>{showPreview ? "▾" : "▸"}</span> 预览最终提示词
+              </button>
+              {showPreview && (
+                <pre className="mt-1 max-h-48 overflow-auto rounded border border-line bg-elevated px-3 py-2 font-mono text-xs leading-relaxed text-fg-4">
+                  {preview || "(空)"}
+                </pre>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
 
       <div className="flex justify-end gap-2 pt-1">

@@ -91,9 +91,7 @@ globalCustomAgents.put("/:id", async (c) => {
   const id = c.req.param("id")
 
   const [existing] = await db.select({ isSystem: customAgents.isSystem }).from(customAgents).where(eq(customAgents.id, id))
-  if (existing?.isSystem === 1) {
-    return c.json({ error: "系统内置 Agent 不可修改" }, 403)
-  }
+  const isSystem = existing?.isSystem === 1
 
   const body = await c.req.json<{
     name?: string
@@ -112,16 +110,23 @@ globalCustomAgents.put("/:id", async (c) => {
   }
 
   const updates: Record<string, unknown> = { updatedAt: Date.now() }
-  if (body.name !== undefined) updates.name = body.name.trim()
-  if (body.baseAgent !== undefined) updates.baseAgent = body.baseAgent
-  if (body.model !== undefined) updates.model = body.model?.trim() || null
-  if (body.variant !== undefined) updates.variant = body.variant?.trim() || null
-  if (body.systemPrompt !== undefined) updates.systemPrompt = body.systemPrompt
-  if (body.systemPromptPosition !== undefined) updates.systemPromptPosition = body.systemPromptPosition
-  if (body.sortOrder !== undefined) updates.sortOrder = body.sortOrder
+  if (isSystem) {
+    // System agents: only model and variant are editable
+    if (body.model !== undefined) updates.model = body.model?.trim() || null
+    if (body.variant !== undefined) updates.variant = body.variant?.trim() || null
+    if (Object.keys(updates).length <= 1) return c.json({ error: "empty body" }, 400)
+  } else {
+    if (body.name !== undefined) updates.name = body.name.trim()
+    if (body.baseAgent !== undefined) updates.baseAgent = body.baseAgent
+    if (body.model !== undefined) updates.model = body.model?.trim() || null
+    if (body.variant !== undefined) updates.variant = body.variant?.trim() || null
+    if (body.systemPrompt !== undefined) updates.systemPrompt = body.systemPrompt
+    if (body.systemPromptPosition !== undefined) updates.systemPromptPosition = body.systemPromptPosition
+    if (body.sortOrder !== undefined) updates.sortOrder = body.sortOrder
+  }
 
   await db.update(customAgents).set(updates).where(eq(customAgents.id, id))
-  if (body.fragmentIds !== undefined) await syncFragmentIds(id, body.fragmentIds)
+  if (!isSystem && body.fragmentIds !== undefined) await syncFragmentIds(id, body.fragmentIds)
   const [row] = await db.select().from(customAgents).where(eq(customAgents.id, id))
   if (!row) return c.json({ error: "not found" }, 404)
   const [result] = await attachFragments([row])
