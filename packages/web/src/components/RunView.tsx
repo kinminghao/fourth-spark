@@ -298,7 +298,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
 
           {visibleAgents.length > 0 && (
             <>
-              <div className="flex gap-1.5 overflow-x-auto px-4 pt-3 pb-1 scrollbar-none">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-4 pt-3 pb-1 scrollbar-none">
                 {visibleAgents.map((a) => {
                   const avatar = agentAvatar(a.name)
                   return (
@@ -324,6 +324,9 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
                     </button>
                   )
                 })}
+                {visibleAgents.length > 1 && (
+                  <span className="hidden shrink-0 ml-auto font-mono text-[10px] text-fg-6 md:inline">Tab 切换</span>
+                )}
               </div>
               {selectedAgentDesc && (
                 <p className="px-4 pb-1 text-[11px] leading-relaxed text-fg-5">{selectedAgentDesc}</p>
