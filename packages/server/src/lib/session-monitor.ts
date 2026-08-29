@@ -8,6 +8,7 @@ import { logger } from "../middleware/logger"
 import { DEFAULT_VARIANT } from "./config"
 import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "./system-agents"
 import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions, getSessionCustomAgentId, listExtractableSessions } from "./memory-extractor"
+import { runMemoryConsolidation } from "./memory-consolidation"
 import { unlink } from "node:fs/promises"
 import { resolveAgent } from "./agent-validator"
 import { db } from "../db/index"
@@ -729,11 +730,15 @@ export const sessionMonitor = {
     }, POLL_INTERVAL_MS)
 
     if (!extractionScanTimer) {
+      const runExtractionAndConsolidation = async () => {
+        await runExtractionScan()
+        await runMemoryConsolidation(entries)
+      }
       extractionScanTimer = setInterval(() => {
-        runExtractionScan().catch((err) => logger.error({ err }, "memory extraction scan error"))
+        runExtractionAndConsolidation().catch((err) => logger.error({ err }, "memory extraction/consolidation scan error"))
       }, EXTRACTION_SCAN_INTERVAL_MS)
       setTimeout(() => {
-        runExtractionScan().catch((err) => logger.error({ err }, "initial memory extraction scan error"))
+        runExtractionAndConsolidation().catch((err) => logger.error({ err }, "initial memory extraction/consolidation scan error"))
       }, 60_000)
     }
 

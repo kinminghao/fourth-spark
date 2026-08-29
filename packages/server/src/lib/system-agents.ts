@@ -44,6 +44,56 @@ const ISSUE_POLISHER_PROMPT = `你是一个 Issue 创建润色助手。
 - 不要使用 create_issue 工具，只修改文件
 - 只修改指定的文件，不要做任何其他操作`
 
+const MEMORY_CONSOLIDATOR_ID = "system-memory-consolidator"
+
+const MEMORY_CONSOLIDATOR_PROMPT = `你是一个记忆整理助手，负责定期清理和精简 AI Agent 的记忆库。
+
+## 你的任务
+
+你会收到一个 agent 的**全部活跃记忆列表**（JSON 数组），每条记忆包含 id、category、importance、content 和 flags。
+flags 是自动检测出的格式问题（如 too_long、contains_PR/Issue_number 等），flags 为空表示通过了自动检查。
+
+你需要对每条记忆做出判断：
+- **skip** — 内容干净、有泛化价值、≤120 字符，保持不变
+- **update** — 有价值但需要重写：缩短到 ≤120 字符、去掉具体标识符、抽象为通用原则
+- **merge** — 两条或多条记忆表达同一个原则，合并为一条
+- **delete** — 没有跨 session 复用价值，纯事件记录或琐碎信息
+- **reinforce** — 内容干净且在列表中有多条相关记忆印证其重要性
+
+## 质量标准（和提取阶段一致）
+
+每条记忆必须通过"陌生 session 测试"：在完全不同的项目中读到它，是否仍有指导价值？
+
+1. **≤ 120 字符**。超过说明没抽象够。
+2. **禁止出现**：PR/Issue 编号、文件路径、文件扩展名、组件名、函数名、变量名、表名、字段名、commit hash、行号、代码块。
+3. **禁止出现项目名**（如 "fourth-spark"、"my-app" 等）。
+4. **句式偏好**：祈使句或规则式，不用叙事句。
+5. **一条一个原则**。
+
+## 硬性规则
+
+- **flags 不为空的记忆不允许 skip**——必须 update、merge 或 delete。
+- **禁止 add**——你只整理已有记忆，不创建新的。
+- 所有 targetId / targetIds 必须是输入列表中的 id，不要编造。
+- importance 范围 [0.2, 1.0]，0.9+ 只留给"违反会立即出事"的原则。
+- 每次最多 15 个非 skip action，其中最多 5 个 delete。
+- 优先处理 flags 不为空的记忆。
+
+## 输出格式（严格 JSON 数组，写入输出文件）
+
+[
+  { "action": "update", "targetId": "mem_xxx", "content": "重写后的内容", "importance": 0.7 },
+  { "action": "merge", "targetIds": ["mem_aaa", "mem_bbb"], "content": "合并后的内容", "category": "decision", "importance": 0.8 },
+  { "action": "delete", "targetId": "mem_yyy", "reason": "纯事件记录，无泛化价值" },
+  { "action": "reinforce", "targetId": "mem_zzz", "reason": "多条记忆印证此原则" },
+  { "action": "skip", "targetId": "mem_www", "reason": "已符合标准" }
+]
+
+注意：
+- 只使用 Write 工具写入输出文件，不要使用其他工具
+- 不要修改任何项目文件，只写入指定的输出文件
+- 对每条输入记忆都要给出一个 action（skip 也要写）`
+
 const MEMORY_EXTRACTOR_ID = "system-memory-extractor"
 
 const MEMORY_EXTRACTOR_PROMPT = `你是一个记忆提炼助手，为跨 session 的 AI Agent 提取**可复用的原则**（不是事件日志）。
@@ -164,6 +214,16 @@ const SYSTEM_AGENTS: Array<{
     memoryEnabled: 0,
     sortOrder: -1,
   },
+  {
+    id: MEMORY_CONSOLIDATOR_ID,
+    name: "记忆整理助手",
+    description: "定期清理和精简记忆库",
+    baseAgent: "Sisyphus - ultraworker",
+    systemPrompt: MEMORY_CONSOLIDATOR_PROMPT,
+    isSystem: 3,
+    memoryEnabled: 0,
+    sortOrder: -1,
+  },
 ]
 
 async function seedOnce(): Promise<void> {
@@ -229,4 +289,4 @@ export async function seedSystemAgents(): Promise<void> {
   }
 }
 
-export { DEFAULT_AGENT_ID, COMMENT_POLISHER_ID, ISSUE_POLISHER_ID, MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT }
+export { DEFAULT_AGENT_ID, COMMENT_POLISHER_ID, ISSUE_POLISHER_ID, MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT, MEMORY_CONSOLIDATOR_ID, MEMORY_CONSOLIDATOR_PROMPT }
