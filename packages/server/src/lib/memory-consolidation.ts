@@ -1,4 +1,4 @@
-import { eq, and, isNull, isNotNull, lt, desc, sql } from "drizzle-orm"
+import { eq, and, isNull, lt, desc, sql } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
 import { FORBIDDEN_CONTENT_PATTERNS, type ExtractionAction, parseExtractionResult, executeActions } from "./memory-extractor"
@@ -38,10 +38,6 @@ const CONSOLIDATION_SESSION_TITLE = "[internal] memory consolidation"
 
 const lastConsolidated = new Map<string, number>()
 const consolidatingAgents = new Set<string>()
-
-// `isNotNull` is exposed for future defensive filters (e.g. when adding a
-// content-null guard as the schema evolves); intentional unused import.
-void isNotNull
 
 // ---------------------------------------------------------------------------
 // Flags & action validation
@@ -440,8 +436,6 @@ async function consolidateAgent(customAgentId: string, client: RuntimeClient): P
   for (let i = 0; i < batches.length; i++) {
     await processConsolidationBatch(customAgentId, client, batches[i], i + 1, batches.length)
   }
-
-  await applyImportanceDecay(customAgentId)
 }
 
 // ---------------------------------------------------------------------------
@@ -492,6 +486,14 @@ export async function runMemoryConsolidation(
       logger.error({ err, agentId }, "memory consolidation failed for agent")
     } finally {
       consolidatingAgents.delete(agentId)
+    }
+
+    // Decay runs unconditionally for every memory-enabled agent, regardless of
+    // whether consolidation was skipped (too few memories, mostly clean, etc.).
+    try {
+      await applyImportanceDecay(agentId)
+    } catch (err) {
+      logger.error({ err, agentId }, "importance decay failed for agent")
     }
   }
 }
