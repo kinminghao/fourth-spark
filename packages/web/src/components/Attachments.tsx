@@ -1,16 +1,32 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent } from "react"
 import clsx from "clsx"
-import { ImagePlus, X } from "lucide-react"
+import { FileText, ImagePlus, X } from "lucide-react"
 import type { PromptFile } from "../lib/api-client"
 
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 const MAX_ATTACHMENTS = 10
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 
+const TEXT_FOLD_LINE_THRESHOLD = 5
+const TEXT_FOLD_CHAR_THRESHOLD = 500
+
 let attachmentSeq = 0
 
 interface AttachmentFile extends PromptFile {
   _id: string
+}
+
+export interface FoldedText {
+  _id: string
+  text: string
+  lineCount: number
+  byteSize: number
+}
+
+function formatByteSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
 }
 
 function readAsDataUrl(file: File): Promise<string> {
@@ -66,6 +82,7 @@ export function PreviewableImage({ url, label, className }: { url: string; label
 
 export function useAttachments(imagesAllowed = true) {
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
+  const [foldedTexts, setFoldedTexts] = useState<FoldedText[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -106,25 +123,127 @@ export function useAttachments(imagesAllowed = true) {
 
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(event.clipboardData.files)
-    if (files.length === 0) return
-    event.preventDefault()
-    if (!imagesAllowed) {
-      setError("当前模型不支持图片")
+    if (files.length > 0) {
+      event.preventDefault()
+      if (!imagesAllowed) {
+        setError("当前模型不支持图片")
+        return
+      }
+      void addFiles(files)
       return
     }
-    void addFiles(files)
+
+    const text = event.clipboardData.getData("text/plain")
+    if (!text) return
+
+    const lineCount = text.split("\n").length
+    if (lineCount <= TEXT_FOLD_LINE_THRESHOLD && text.length <= TEXT_FOLD_CHAR_THRESHOLD) {
+      return
+    }
+
+    event.preventDefault()
+    setFoldedTexts((prev) => [
+      ...prev,
+      {
+        _id: `fold-${++attachmentSeq}`,
+        text,
+        lineCount,
+        byteSize: new TextEncoder().encode(text).byteLength,
+      },
+    ])
   }
 
   const remove = (id: string) => setAttachments((prev) => prev.filter((a) => a._id !== id))
+  const removeFoldedText = (id: string) => setFoldedTexts((prev) => prev.filter((f) => f._id !== id))
 
   const clear = useCallback(() => {
     setAttachments([])
+    setFoldedTexts([])
     setError(null)
   }, [])
 
   const promptFiles: PromptFile[] = attachments.map(({ mime, url, filename }) => ({ mime, url, filename }))
 
-  return { attachments, promptFiles, error, setError, addFiles, onPaste, remove, clear }
+  return { attachments, foldedTexts, promptFiles, error, setError, addFiles, onPaste, remove, removeFoldedText, clear }
+}
+
+function TextPreviewLightbox({ text, label, onClose }: { text: string; label: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      event.preventDefault()
+      onClose()
+    }
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
+  }, [onClose])
+
+  const lines = text.split("\n")
+  const gutterWidth = String(lines.length).length
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm md:p-8"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-line bg-term"
+      >
+        <div className="flex items-center justify-between border-b border-line px-4 py-2">
+          <span className="font-mono text-xs text-fg-3">{label}</span>
+          <button type="button" onClick={onClose} className="text-fg-5 hover:text-fg-2">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <pre className="overflow-auto p-4 font-mono text-xs leading-relaxed text-fg-2">
+          {lines.map((line, i) => (
+            <div key={i}>
+              <span
+                className="mr-3 inline-block select-none text-right text-fg-6"
+                style={{ width: `${gutterWidth}ch` }}
+              >
+                {i + 1}
+              </span>
+              {line}
+            </div>
+          ))}
+        </pre>
+      </div>
+    </div>
+  )
+}
+
+function TextChip({ fold, index, onRemove }: { fold: FoldedText; index: number; onRemove: () => void }) {
+  const [preview, setPreview] = useState(false)
+  const label = `粘贴文本 #${index} · ${fold.lineCount}行 · ${formatByteSize(fold.byteSize)}`
+
+  return (
+    <>
+      <div className="group relative flex items-center gap-1.5 rounded-md border border-line bg-elevated/50 px-2.5 py-1.5">
+        <button
+          type="button"
+          onClick={() => setPreview(true)}
+          className="flex items-center gap-1.5 font-mono text-xs text-fg-3 transition-colors hover:text-fg"
+        >
+          <FileText className="h-3.5 w-3.5 shrink-0 text-fg-5" />
+          <span>{label}</span>
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label="移除粘贴文本"
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-fg-5 transition-colors hover:text-fg-2"
+        >
+          <X className="h-2.5 w-2.5" strokeWidth={2.5} />
+        </button>
+      </div>
+      {preview && <TextPreviewLightbox text={fold.text} label={label} onClose={() => setPreview(false)} />}
+    </>
+  )
 }
 
 export function AttachButton({
@@ -166,21 +285,26 @@ export function AttachButton({
 
 export function AttachmentStrip({
   attachments,
+  foldedTexts,
   error,
   onRemove,
+  onRemoveFoldedText,
   className,
 }: {
   attachments: AttachmentFile[]
+  foldedTexts?: FoldedText[]
   error: string | null
   onRemove: (id: string) => void
+  onRemoveFoldedText?: (id: string) => void
   className?: string
 }) {
-  if (attachments.length === 0 && !error) {
+  const hasContent = attachments.length > 0 || (foldedTexts ?? []).length > 0
+  if (!hasContent && !error) {
     return null
   }
   return (
     <div className={className}>
-      {attachments.length > 0 && (
+      {hasContent && (
         <div className="mb-2 flex flex-wrap gap-2">
           {attachments.map((file) => (
             <div key={file._id} className="group relative">
@@ -198,6 +322,14 @@ export function AttachmentStrip({
                 <X className="h-2.5 w-2.5" strokeWidth={2.5} />
               </button>
             </div>
+          ))}
+          {(foldedTexts ?? []).map((fold, i) => (
+            <TextChip
+              key={fold._id}
+              fold={fold}
+              index={i + 1}
+              onRemove={() => onRemoveFoldedText?.(fold._id)}
+            />
           ))}
         </div>
       )}

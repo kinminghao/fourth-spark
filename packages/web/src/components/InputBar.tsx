@@ -99,7 +99,7 @@ export function InputBar() {
 
   // Unknown model (default / unpinned) stays permissive; only a hard false blocks
   const imagesAllowed = pinnedModels.find((m) => m.id === selectedModel)?.supportsImage !== false
-  const { attachments, promptFiles, error: attachError, addFiles, onPaste, remove, clear } = useAttachments(imagesAllowed)
+  const { attachments, foldedTexts, promptFiles, error: attachError, addFiles, onPaste, remove, removeFoldedText, clear } = useAttachments(imagesAllowed)
 
   useEffect(() => {
     setValue(activeSessionId ? useDraftStore.getState().drafts[activeSessionId] ?? "" : "")
@@ -108,11 +108,13 @@ export function InputBar() {
   }, [activeSessionId, clear, voice.stt.stop])
 
   const submit = async () => {
-    const text = value.trim()
-    if (disabled || (!text && attachments.length === 0)) {
+    const typed = value.trim()
+    const foldedContent = foldedTexts.map((f) => f.text).join("\n\n")
+    const content = [foldedContent, typed].filter(Boolean).join("\n\n")
+    if (disabled || (!content && attachments.length === 0)) {
       return
     }
-    const ok = await sendMessage(text, selectedModel || undefined, selectedVariant || undefined, promptFiles.length > 0 ? promptFiles : undefined)
+    const ok = await sendMessage(content, selectedModel || undefined, selectedVariant || undefined, promptFiles.length > 0 ? promptFiles : undefined)
     if (ok) {
       setValue("")
       clear()
@@ -159,8 +161,10 @@ export function InputBar() {
 
       <AttachmentStrip
         attachments={attachments}
+        foldedTexts={foldedTexts}
         error={attachError}
         onRemove={remove}
+        onRemoveFoldedText={removeFoldedText}
         className="mx-auto max-w-4xl"
       />
       <div
@@ -203,7 +207,7 @@ export function InputBar() {
         <button
           type="button"
           onClick={submit}
-          disabled={disabled || (value.trim().length === 0 && attachments.length === 0)}
+          disabled={disabled || (value.trim().length === 0 && attachments.length === 0 && foldedTexts.length === 0)}
           aria-label="Send message"
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white transition-colors duration-150 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6/30 disabled:text-fg-5"
         >
