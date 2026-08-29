@@ -2,8 +2,10 @@
 
 ## 前置依赖
 
+> Docker、OpenCode、Claude Code 的安装详见 [部署运维 — 环境准备](deployment.md#环境准备)。
+
 - [Bun](https://bun.sh/) >= 1.1
-- [Docker](https://docs.docker.com/get-docker/)（用于 PostgreSQL）
+- [Docker](https://docs.docker.com/get-docker/) 或 [OrbStack](https://orbstack.dev/)（用于 PostgreSQL）
 - [OpenCode](https://opencode.ai/) CLI（`opencode serve`）— 默认运行时
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI（`claude`）— 可选运行时，按仓库配置
 

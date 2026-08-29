@@ -1,11 +1,172 @@
 # 部署运维
 
-## npm 安装（推荐）
+## 依赖总览
 
-> 需要 Node.js 且全局 bin 目录在 PATH 中。新机器搭建环境参见 [Node.js 安装指南](setup-node.md)。
+Fourth Spark 通过 `npm install -g` 分发，运行时依赖 PostgreSQL（容器）和 Agent CLI。
+
+| 依赖 | 用途 | 必须？ |
+|------|------|--------|
+| Node.js + npm | 安装和运行 fourth-spark | 是 |
+| Docker 或 OrbStack | 运行 PostgreSQL 容器 | 是（二选一） |
+| OpenCode CLI | 默认 Agent 运行时 | 是（至少装一个运行时） |
+| Claude Code CLI | 可选 Agent 运行时 | 否 |
+
+---
+
+## 环境准备
+
+### 1. Node.js & npm
+
+Fourth Spark 通过 `npm install -g` 安装，因此需要一个**全局 bin 目录在 PATH 中**的 Node.js 环境。
+
+#### macOS
+
+以下任一方式均可，它们都会自动处理 PATH：
+
+| 方式 | 命令 | 全局 bin 位置 |
+|------|------|--------------|
+| **Homebrew**（推荐） | `brew install node` | `/opt/homebrew/bin/` |
+| **官网 .pkg 安装器** | [下载安装](https://nodejs.org/) | `/usr/local/bin/` |
+| **nvm** | `nvm install --lts` | `~/.nvm/versions/node/vX.Y.Z/bin/` |
+| **fnm** | `fnm install --lts` | 由 fnm 管理 |
+
+#### Linux
+
+| 方式 | 命令 |
+|------|------|
+| **nvm**（推荐） | `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh \| bash && nvm install --lts` |
+| **fnm** | `curl -fsSL https://fnm.vercel.app/install \| bash && fnm install --lts` |
+| **apt（Ubuntu/Debian）** | `sudo apt update && sudo apt install -y nodejs npm` |
+| **dnf（Fedora/RHEL）** | `sudo dnf install -y nodejs npm` |
+
+> **注意**：部分 Linux 发行版的系统包管理器提供的 Node.js 版本较旧。推荐使用 nvm 或 fnm 获取最新 LTS 版本。
+
+#### 手动安装（解压 tarball）
+
+如果从 [nodejs.org](https://nodejs.org/en/download/) 下载 tarball 手动解压，**必须把解压目录的 `bin/` 加入 PATH**：
+
+```bash
+# 示例：解压到 ~/.local/node/
+tar -xf node-vX.Y.Z-linux-x64.tar.xz -C ~/.local/node --strip-components=1
+
+# ~/.zshrc 或 ~/.bashrc 中添加
+export PATH="$HOME/.local/node/bin:$PATH"
+```
+
+**常见错误**：只软链 `node`/`npm`/`npx` 到 PATH 中的目录，而不把 npm 全局 bin 目录整体加入 PATH：
+
+```bash
+# 错误做法 — 之后 npm install -g 装的包都不可达
+ln -s ~/.local/node/bin/node ~/.local/bin/node
+ln -s ~/.local/node/bin/npm  ~/.local/bin/npm
+```
+
+npm 的全局 prefix 决定了 `npm install -g` 的安装目标目录。可以用以下命令确认：
+
+```bash
+npm prefix -g
+# 输出即为全局 prefix，其下的 bin/ 目录必须在 PATH 中
+```
+
+#### 验证 Node.js 安装
+
+```bash
+node --version
+npm --version
+
+# 验证全局安装链路（关键！）
+npm install -g cowsay
+exec $SHELL
+command -v cowsay   # 应输出路径
+npm uninstall -g cowsay
+```
+
+> 关键点：验证包管理器不是验证「它自己能不能跑」，而是验证「**它装出来的东西能不能被 shell 找到**」。`npx` 不走全局 bin 目录，不能用来验证 PATH 是否正确。
+
+### 2. 容器运行时
+
+Fourth Spark 使用容器运行 PostgreSQL 数据库。
+
+#### macOS
+
+| 方式 | 安装 | 说明 |
+|------|------|------|
+| **OrbStack**（推荐） | `brew install orbstack` 或 [下载](https://orbstack.dev/) | 轻量快速，兼容 Docker CLI |
+| **Docker Desktop** | `brew install --cask docker` 或 [下载](https://docs.docker.com/desktop/install/mac-install/) | 官方工具，较重 |
+
+> OrbStack 和 Docker Desktop 都提供 `docker` 和 `docker-compose` 命令，二选一即可。
+
+#### Linux
+
+安装 Docker Engine（**不需要** Docker Desktop）：
+
+**Ubuntu/Debian：**
+
+```bash
+# 添加 Docker 官方源
+curl -fsSL https://get.docker.com | sh
+
+# 免 sudo 运行（需重新登录生效）
+sudo usermod -aG docker $USER
+```
+
+**Fedora/RHEL：**
+
+```bash
+sudo dnf install -y dnf-plugins-core
+sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
+```
+
+#### 验证容器运行时
+
+```bash
+docker run --rm hello-world
+```
+
+### 3. Agent 运行时
+
+Fourth Spark 支持多种 Agent 运行时，按仓库配置。至少需要安装一个。
+
+#### OpenCode CLI（默认，推荐）
+
+```bash
+# macOS
+brew install opencode-ai/tap/opencode
+
+# Linux
+curl -fsSL https://opencode.ai/install | bash
+```
+
+验证：
+
+```bash
+opencode version
+```
+
+#### Claude Code CLI（可选）
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+验证：
+
+```bash
+claude --version
+```
+
+> Claude Code 是按仓库可选配置的运行时。不安装不影响使用 OpenCode 运行时的仓库。
+
+---
+
+## 安装 Fourth Spark
 
 ```bash
 npm install -g fourth-spark
+fourth-spark start
 ```
 
 `postinstall` 脚本会根据当前平台自动从 GitHub Release 下载对应的编译二进制：
@@ -30,6 +191,13 @@ fourth-spark/
 ├── docker-compose.yml  # PostgreSQL 容器配置
 └── README.md
 ```
+
+首次启动会自动完成以下操作：
+1. 拉起 PostgreSQL 容器
+2. 执行数据库 migration
+3. 下载 SenseVoice 语音识别模型（约 240 MB，存放在 `~/.fourth-spark/models/sensevoice/`）
+
+---
 
 ## CLI 命令详解
 
@@ -81,6 +249,8 @@ fourth-spark/
 4. 原子替换当前二进制（先写临时文件，再 rename）
 5. 显示更新结果
 
+---
+
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
@@ -115,6 +285,47 @@ POSTGRES_DB: fourth_spark
 ```
 
 端口映射 `5432:5432`。Drizzle 连接字符串在 `packages/server/drizzle.config.ts` 中配置。
+
+---
+
+## 生产部署检查清单
+
+- [ ] Node.js + npm 已安装，全局 bin 在 PATH 中
+- [ ] Docker 或 OrbStack 已安装且可运行
+- [ ] OpenCode CLI 已安装（`opencode version`）
+- [ ] 端口 3000 可用（或通过 `--port` 指定其他端口）
+- [ ] 端口 5432 可用（PostgreSQL）
+- [ ] 端口 8081–8199 范围可用（OpenCode 子进程）
+- [ ] （可选）Claude Code CLI 已安装
+- [ ] （可选）配置 APNs 环境变量以启用 iOS 推送
+- [ ] （可选）配置 `EXTRA_ORIGINS` 以允许额外的前端来源
+
+```bash
+# 快速验证所有依赖
+node --version           # >= 18
+npm --version
+docker --version
+docker compose version
+opencode version         # OpenCode
+claude --version         # Claude Code（可选）
+fourth-spark status
+```
+
+---
+
+## 更新
+
+```bash
+# 方式一：自我更新
+fourth-spark upgrade
+
+# 方式二：通过 npm
+npm update -g fourth-spark
+```
+
+启动时如有新版本，终端会提示。Web UI 中也会显示版本更新通知。
+
+---
 
 ## CI/CD
 
@@ -194,25 +405,3 @@ git push origin v0.5.0
 # 3. GitHub Actions 自动执行
 #    → 5 平台构建 → GitHub Release → npm publish
 ```
-
-## 生产部署检查清单
-
-- [ ] Docker 已安装且可运行
-- [ ] OpenCode CLI 已安装（`opencode --version`）
-- [ ] 端口 3000 可用（或通过 `--port` 指定其他端口）
-- [ ] 端口 5432 可用（PostgreSQL）
-- [ ] 端口 8081–8199 范围可用（OpenCode 子进程）
-- [ ] （可选）配置 APNs 环境变量以启用 iOS 推送
-- [ ] （可选）配置 `EXTRA_ORIGINS` 以允许额外的前端来源
-
-## 更新
-
-```bash
-# 方式一：自我更新
-fourth-spark upgrade
-
-# 方式二：通过 npm
-npm update -g fourth-spark
-```
-
-启动时如有新版本，终端会提示。Web UI 中也会显示版本更新通知。
