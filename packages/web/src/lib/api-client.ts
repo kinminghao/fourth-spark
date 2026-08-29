@@ -611,6 +611,18 @@ export async function extractAgentMemories(agentId: string, sessionIds: string[]
   return apiFetch<{ queued: number }>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/extract`, { method: "POST", body: JSON.stringify({ sessionIds }) })
 }
 
+export interface ConsolidationStats {
+  totalActive: number
+  flagged: number
+  stale: number
+  lastConsolidatedAt: number | null
+  lastActions: { update: number; merge: number; delete: number; skip: number; decayed: number } | null
+}
+
+export async function getMemoryConsolidationStats(agentId: string): Promise<ConsolidationStats> {
+  return apiFetch<ConsolidationStats>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/stats`)
+}
+
 export interface AgentSession {
   id: string
   title: string

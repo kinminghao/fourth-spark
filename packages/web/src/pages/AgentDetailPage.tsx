@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { ArrowLeft, Brain, Check, Clipboard, Clock, Download, Edit3, Loader2, Trash2, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
-import type { AgentMemory, AgentSession, CustomAgent, ModelInfo, PromptFragment } from "../lib/api-client"
+import type { AgentMemory, AgentSession, ConsolidationStats, CustomAgent, ModelInfo, PromptFragment } from "../lib/api-client"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 
@@ -161,6 +161,53 @@ function MemoryItem({ memory, onUpdate, onDelete }: {
 // MemorySection
 // ---------------------------------------------------------------------------
 
+function ConsolidationStatsBar({ agentId }: { agentId: string }) {
+  const [stats, setStats] = useState<ConsolidationStats | null>(null)
+
+  useEffect(() => {
+    api.getMemoryConsolidationStats(agentId)
+      .then(setStats)
+      .catch(() => setStats(null))
+  }, [agentId])
+
+  if (!stats) return null
+
+  const parts: string[] = []
+
+  if (stats.lastConsolidatedAt) {
+    parts.push(`上次整理：${formatRelativeTime(stats.lastConsolidatedAt)}`)
+  }
+
+  if (stats.lastActions) {
+    const a = stats.lastActions
+    const actionParts: string[] = []
+    if (a.update > 0) actionParts.push(`${a.update} 条更新`)
+    if (a.merge > 0) actionParts.push(`${a.merge} 条合并`)
+    if (a.delete > 0) actionParts.push(`${a.delete} 条清理`)
+    if (a.decayed > 0) actionParts.push(`${a.decayed} 条降权`)
+    if (actionParts.length > 0) parts.push(actionParts.join("  "))
+  }
+
+  if (stats.flagged > 0) {
+    const pct = Math.round((stats.flagged / stats.totalActive) * 100)
+    parts.push(`待整理: ${stats.flagged}/${stats.totalActive} (${pct}%)`)
+  }
+
+  if (stats.stale > 0) {
+    parts.push(`衰减中: ${stats.stale}`)
+  }
+
+  if (parts.length === 0) return null
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-elevated px-3 py-1.5 text-[11px] tabular-nums text-fg-5">
+      {parts.map((p, i) => (
+        <span key={i}>{i > 0 && <span className="mr-3 text-fg-6">·</span>}{p}</span>
+      ))}
+    </div>
+  )
+}
+
 function MemorySection({ agentId }: { agentId: string }) {
   const [memories, setMemories] = useState<AgentMemory[]>([])
   const [loading, setLoading] = useState(true)
@@ -255,6 +302,8 @@ function MemorySection({ agentId }: { agentId: string }) {
           {!loading && <span className="rounded-full bg-elevated px-1.5 py-0.5 text-[10px] tabular-nums text-fg-4">{active.length}</span>}
         </div>
       </div>
+
+      <ConsolidationStatsBar agentId={agentId} />
 
       <div className="flex flex-wrap items-center gap-1.5">
         <button type="button" onClick={() => setFilter(null)}
