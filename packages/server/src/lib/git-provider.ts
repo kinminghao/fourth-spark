@@ -60,6 +60,7 @@ export interface UpdateIssueInput {
   title?: string
   body?: string
   state?: "open" | "closed"
+  assignees?: string[]
 }
 
 export interface GitComment {
@@ -383,6 +384,23 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
       }
     },
   }
+}
+
+export async function getAuthenticatedLogin(host: string, token: string, platform: Platform): Promise<string> {
+  const base = apiBase(host, platform)
+  const res = await fetch(`${base}/user`, {
+    headers: {
+      Authorization: authHeader(token, platform),
+      Accept: "application/json",
+    },
+  })
+  if (!res.ok) {
+    throw new GitApiError(`Failed to get authenticated user: ${res.status}`, res.status)
+  }
+  const data = (await res.json()) as Record<string, unknown>
+  const login = (data.login ?? data.username) as string | undefined
+  if (!login) throw new Error("Could not determine authenticated user login")
+  return login
 }
 
 export const githubPlatformFactory: GitPlatformFactory = {

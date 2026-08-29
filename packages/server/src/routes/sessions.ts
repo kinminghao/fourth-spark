@@ -9,6 +9,8 @@ import { syncSessionsList, syncMessagesList } from "../db/sync"
 import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getMessagesFromDB, getMessagesPaginated, getTodosFromDB, getSessionLinksFromDB } from "../db/query"
 import { db } from "../db/index"
 import { sessions as sessionsTable, issues, issueComments, customAgents, customAgentFragments, promptFragments, sessionLinks, pullRequests, repos, agentMemories } from "../db/schema"
+import { parseGitUrl } from "../lib/git-url"
+import { getHostInfo, getAuthenticatedLogin, createGitIssueClient } from "../lib/git-provider"
 import { logger } from "../middleware/logger"
 import type { SessionStatus, PromptFile } from "../core/runtime-types"
 
@@ -47,6 +49,29 @@ function validateFiles(raw: unknown): PromptFile[] {
 }
 
 export const sessions = new Hono()
+
+async function autoAssignIssue(repo: typeof repos.$inferSelect, issueId: string) {
+  const [issue] = await db.select().from(issues).where(eq(issues.id, issueId))
+  if (!issue) return
+
+  const remote = parseGitUrl(repo.gitUrl)
+  if (!remote) return
+  const info = await getHostInfo(remote.host)
+  if (!info) return
+
+  const login = await getAuthenticatedLogin(remote.host, info.token, info.platform)
+  const existing = issue.assignees ?? []
+  if (existing.some((a) => a.login === login)) return
+
+  const gitClient = createGitIssueClient(remote.host, remote.owner, remote.repo, info.token, info.platform)
+  const updated = await gitClient.updateIssue(issue.number, {
+    assignees: [...existing.map((a) => a.login), login],
+  })
+
+  await db.update(issues).set({
+    assignees: updated.assignees?.map((a) => ({ login: a.login, avatar_url: a.avatar_url })) ?? [],
+  }).where(eq(issues.id, issueId))
+}
 
 function stripMedia(text: string): string {
   return text
@@ -242,6 +267,13 @@ sessions.post("/", async (c) => {
     if (workspaceId) await workspaceManager.remove(workspaceId).catch(() => {})
     throw err
   }
+
+  if (body.issueId) {
+    autoAssignIssue(repo, body.issueId).catch((err) =>
+      logger.warn({ err, issueId: body!.issueId }, "auto-assign issue failed"),
+    )
+  }
+
   return c.json({ ...session, agent, issueId: body.issueId ?? null, customAgentId, workspaceId }, 201)
 })
 
