@@ -10,13 +10,14 @@ export type ExtractionAction =
   | { action: "merge"; targetIds: string[]; content: string; category: string; importance: number }
   | { action: "reinforce"; targetId: string; reason: string }
   | { action: "skip"; targetId: string; reason: string }
+  | { action: "delete"; targetId: string; reason: string }
 
 const MAX_PROMPT_CHARS = 24_000
-const MAX_EXISTING_MEMORIES = 20
+const MAX_EXISTING_MEMORIES = 100
 const MAX_NEW_MEMORIES = 3
 const TOOL_SUMMARY_LIMIT = 200
 const MAX_MEMORY_CONTENT_LENGTH = 200
-const VALID_CATEGORIES = new Set(["general", "decision", "lesson", "preference"])
+const VALID_CATEGORIES = new Set(["general", "decision", "lesson", "preference", "pattern"])
 const SENTINEL_PATTERNS = /\[\/?\s*AGENT\s*MEMORY\s*\]|<\|.*?\|>|^system\s*:/gim
 
 function newMemoryId(): string {
@@ -27,7 +28,7 @@ function sanitizeMemoryContent(content: string): string {
   return content.slice(0, MAX_MEMORY_CONTENT_LENGTH).replace(SENTINEL_PATTERNS, "")
 }
 
-const FORBIDDEN_CONTENT_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+export const FORBIDDEN_CONTENT_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /#\d+/, reason: "contains PR/Issue number" },
   { pattern: /\b\d{2,}\s*行\b/, reason: "contains line count" },
   { pattern: /\.(ts|tsx|js|jsx|py|go|rs|sql|md|json)\b/, reason: "contains file extension" },
@@ -311,6 +312,18 @@ export async function executeActions(customAgentId: string, sessionId: string, a
             }).where(eq(agentMemories.id, action.targetId))
             logger.info({ memId: action.targetId, importance: newImportance, customAgentId }, "memory reinforced")
           }
+          break
+        }
+
+        case "delete": {
+          await db.update(agentMemories).set({
+            supersededBy: "consolidated-out",
+            updatedAt: now,
+          }).where(and(
+            eq(agentMemories.id, action.targetId),
+            eq(agentMemories.customAgentId, customAgentId),
+          ))
+          logger.info({ memId: action.targetId, reason: action.reason, customAgentId, sessionId }, "memory deleted (consolidated-out)")
           break
         }
 

@@ -125,7 +125,7 @@ function MemoryItem({ memory, onUpdate, onDelete }: {
         {memory.supersededBy && (
           <>
             <span>·</span>
-            <span className="text-amber-400">{memory.supersededBy === "user-deleted" ? "已删除" : "已合并"}</span>
+            <span className="text-amber-400">{memory.supersededBy === "user-deleted" ? "已删除" : memory.supersededBy === "consolidated-out" ? "已整理" : "已合并"}</span>
           </>
         )}
         <div className="flex-1" />
