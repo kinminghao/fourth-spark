@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { ArrowLeft, Brain, Check, Clipboard, Clock, Download, Edit3, Loader2, Trash2, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
-import type { AgentMemory, AgentSession, ConsolidationStats, CustomAgent, MemoryChange, ModelInfo, PromptFragment } from "../lib/api-client"
+import type { AgentMemory, AgentSession, ConsolidationStats, CustomAgent, ModelInfo, PromptFragment } from "../lib/api-client"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 
@@ -51,23 +51,24 @@ function formatRelativeTime(ts: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// ChangeDetailModal
+// VersionHistoryModal
 // ---------------------------------------------------------------------------
 
-const CHANGE_LABELS: Record<MemoryChange["action"], string> = {
-  update: "重写",
-  merge: "合并",
-  delete: "清理",
-  reinforce: "强化",
-  decay: "衰减",
-  add: "新增",
+const VERSION_ACTION_LABELS: Record<string, { label: string; color: string }> = {
+  create: { label: "首次提取", color: "text-green-400" },
+  update: { label: "重写", color: "text-blue-400" },
+  merge: { label: "合并", color: "text-purple-400" },
+  decay: { label: "衰减", color: "text-amber-400" },
+  reinforce: { label: "强化", color: "text-emerald-400" },
+  manual: { label: "手动编辑", color: "text-fg-3" },
 }
 
-function ChangeDetailModal({ change, currentContent, onClose }: {
-  change: MemoryChange
-  currentContent: string
+function VersionHistoryModal({ memory, onClose }: {
+  memory: AgentMemory
   onClose: () => void
 }) {
+  const versions = [...(memory.history ?? [])].reverse()
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
@@ -75,86 +76,41 @@ function ChangeDetailModal({ change, currentContent, onClose }: {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-fg">变更详情 · {CHANGE_LABELS[change.action]}</h3>
+          <h3 className="text-sm font-semibold text-fg">版本历史 ({versions.length + 1} 个版本)</h3>
           <button type="button" onClick={onClose} className="rounded p-1 text-fg-4 hover:text-fg-3">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {change.oldImportance != null && change.newImportance != null && (
-          <div className="mb-3 text-xs text-fg-4">
-            权重：{change.oldImportance.toFixed(2)} → {change.newImportance.toFixed(2)}
-          </div>
-        )}
-
-        {change.action === "update" && (
-          <div className="space-y-3">
-            <div>
-              <div className="mb-1 text-[10px] font-medium text-fg-5">原文</div>
-              <div className="rounded-lg border border-line bg-base p-3 text-xs leading-relaxed text-fg-4">
-                {change.oldContent}
-              </div>
+        <div className="space-y-3">
+          <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
+            <div className="mb-1 flex items-center gap-2 text-[10px]">
+              <span className="font-medium text-blue-400">当前版本</span>
+              <span className="text-fg-5">{formatRelativeTime(memory.updatedAt)}</span>
+              <span className="text-fg-6">⚡ {memory.importance.toFixed(2)}</span>
             </div>
-            <div className="flex justify-center text-fg-6">↓</div>
-            <div>
-              <div className="mb-1 text-[10px] font-medium text-fg-5">现文</div>
-              <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-xs leading-relaxed text-fg">
-                {currentContent}
+            <p className="text-xs leading-relaxed text-fg">{memory.content}</p>
+          </div>
+
+          {versions.map((v, i) => {
+            const style = VERSION_ACTION_LABELS[v.action] ?? { label: v.action, color: "text-fg-4" }
+            return (
+              <div key={i} className="rounded-lg border border-line bg-base p-3">
+                <div className="mb-1 flex items-center gap-2 text-[10px]">
+                  <span className={clsx("font-medium", style.color)}>{style.label}</span>
+                  <span className="text-fg-5">{formatRelativeTime(v.ts)}</span>
+                  <span className="text-fg-6">⚡ {v.importance.toFixed(2)}</span>
+                  {v.source && <span className="text-fg-6">· {v.source}</span>}
+                </div>
+                <p className="text-xs leading-relaxed text-fg-4">{v.content}</p>
               </div>
-            </div>
-          </div>
-        )}
+            )
+          })}
 
-        {change.action === "merge" && (
-          <div className="space-y-3">
-            {change.sourceContents?.map((src, i) => (
-              <div key={i}>
-                <div className="mb-1 text-[10px] font-medium text-fg-5">源记忆 {i + 1}</div>
-                <div className="rounded-lg border border-line bg-base p-3 text-xs leading-relaxed text-fg-4">{src}</div>
-              </div>
-            ))}
-            <div className="flex justify-center text-fg-6">↓</div>
-            <div>
-              <div className="mb-1 text-[10px] font-medium text-fg-5">合并后</div>
-              <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-3 text-xs leading-relaxed text-fg">
-                {currentContent}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {change.action === "delete" && (
-          <div className="space-y-2">
-            <div>
-              <div className="mb-1 text-[10px] font-medium text-fg-5">已清理内容</div>
-              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-xs leading-relaxed text-fg-4 line-through">
-                {change.oldContent}
-              </div>
-            </div>
-            {change.reason && <div className="text-xs text-fg-5">原因：{change.reason}</div>}
-          </div>
-        )}
-
-        {change.action === "reinforce" && (
-          <div className="space-y-2">
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs leading-relaxed text-fg">
-              {currentContent}
-            </div>
-            {change.reason && <div className="text-xs text-fg-5">强化原因：{change.reason}</div>}
-          </div>
-        )}
-
-        {change.action === "decay" && (
-          <div className="text-xs text-fg-4">
-            此记忆超过 7 天未被验证，权重自动衰减。被 session 中再次验证（reinforce）后会恢复。
-          </div>
-        )}
-
-        {change.action === "add" && (
-          <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3 text-xs leading-relaxed text-fg">
-            {currentContent}
-          </div>
-        )}
+          {versions.length === 0 && (
+            <div className="py-4 text-center text-xs text-fg-5">暂无历史版本</div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -164,16 +120,8 @@ function ChangeDetailModal({ change, currentContent, onClose }: {
 // MemoryItem
 // ---------------------------------------------------------------------------
 
-const CHANGE_BADGE_STYLES: Record<Exclude<MemoryChange["action"], "delete" | "decay">, { className: string; label: (change: MemoryChange) => string }> = {
-  update: { className: "bg-blue-500/10 text-blue-400", label: () => "🔄 已重写" },
-  merge: { className: "bg-purple-500/10 text-purple-400", label: (c) => `🔗 由 ${c.sourceIds?.length ?? 0} 条合并` },
-  add: { className: "bg-green-500/10 text-green-400", label: () => "✨ 新增" },
-  reinforce: { className: "bg-emerald-500/10 text-emerald-400", label: () => "💪 已强化" },
-}
-
-function MemoryItem({ memory, change, onUpdate, onDelete }: {
+function MemoryItem({ memory, onUpdate, onDelete }: {
   memory: AgentMemory
-  change?: MemoryChange
   onUpdate: (memId: string, data: { content?: string; category?: string; importance?: number }) => Promise<void>
   onDelete: (memId: string) => Promise<void>
 }) {
@@ -182,12 +130,11 @@ function MemoryItem({ memory, change, onUpdate, onDelete }: {
   const [category, setCategory] = useState(memory.category)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [showChange, setShowChange] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
 
   const style = CATEGORY_STYLES[memory.category] ?? CATEGORY_STYLES.general
-  const badgeStyle = change && change.action !== "delete" && change.action !== "decay"
-    ? CHANGE_BADGE_STYLES[change.action]
-    : null
+  const lastVersion = memory.history?.[memory.history.length - 1]
+  const impChanged = lastVersion && Math.abs(lastVersion.importance - memory.importance) > 0.001
 
   const handleSave = async () => {
     setSaving(true)
@@ -241,8 +188,8 @@ function MemoryItem({ memory, change, onUpdate, onDelete }: {
       <div className="mt-1.5 flex items-center gap-2 text-[11px] text-fg-5">
         <span className="flex items-center gap-0.5">
           <Zap className="h-3 w-3" />
-          {change?.oldImportance != null
-            ? `${change.oldImportance.toFixed(2)}→${memory.importance.toFixed(2)}`
+          {impChanged && lastVersion
+            ? `${lastVersion.importance.toFixed(2)}→${memory.importance.toFixed(2)}`
             : memory.importance.toFixed(2)}
         </span>
         <span>·</span>
@@ -253,27 +200,23 @@ function MemoryItem({ memory, change, onUpdate, onDelete }: {
             <span className="text-amber-400">{memory.supersededBy === "user-deleted" ? "已删除" : memory.supersededBy === "consolidated-out" ? "已整理" : "已合并"}</span>
           </>
         )}
-        {badgeStyle && change && (
-          <button
-            type="button"
-            onClick={() => setShowChange(true)}
-            className={clsx("rounded px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-80", badgeStyle.className)}
-          >
-            {badgeStyle.label(change)}
-          </button>
-        )}
-        {change?.action === "decay" && (
-          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">📉 衰减中</span>
-        )}
-        {change?.action === "delete" && (
-          <button
-            type="button"
-            onClick={() => setShowChange(true)}
-            className="rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400 transition-opacity hover:opacity-80"
-          >
-            🗑 已清理
-          </button>
-        )}
+        {memory.history && memory.history.length > 0 && (() => {
+          const latest = memory.history[memory.history.length - 1]
+          const versionStyle = VERSION_ACTION_LABELS[latest.action]
+          return (
+            <button type="button" onClick={() => setShowHistory(true)}
+              className={clsx("rounded px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-80",
+                latest.action === "update" ? "bg-blue-500/10 text-blue-400" :
+                latest.action === "merge" ? "bg-purple-500/10 text-purple-400" :
+                latest.action === "decay" ? "bg-amber-500/10 text-amber-400" :
+                latest.action === "reinforce" ? "bg-emerald-500/10 text-emerald-400" :
+                latest.action === "manual" ? "bg-fg/10 text-fg-3" :
+                "bg-green-500/10 text-green-400"
+              )}>
+              {versionStyle?.label ?? latest.action} · {memory.history.length}版
+            </button>
+          )
+        })()}
         <div className="flex-1" />
         {!memory.supersededBy && (
           <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/mem:opacity-100">
@@ -299,9 +242,7 @@ function MemoryItem({ memory, change, onUpdate, onDelete }: {
           </div>
         )}
       </div>
-      {showChange && change && (
-        <ChangeDetailModal change={change} currentContent={memory.content} onClose={() => setShowChange(false)} />
-      )}
+      {showHistory && <VersionHistoryModal memory={memory} onClose={() => setShowHistory(false)} />}
     </div>
   )
 }
@@ -532,7 +473,6 @@ function MemorySection({ agentId }: { agentId: string }) {
             <MemoryItem
               key={m.id}
               memory={m}
-              change={consolidationStats?.recentChanges[m.id]}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
             />
@@ -550,7 +490,6 @@ function MemorySection({ agentId }: { agentId: string }) {
                     <MemoryItem
                       key={m.id}
                       memory={m}
-                      change={consolidationStats?.recentChanges[m.id]}
                       onUpdate={handleUpdate}
                       onDelete={handleDelete}
                     />

@@ -1,6 +1,7 @@
 import { eq, and, isNull, isNotNull, lt, gte, desc, sql } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
+import type { MemoryVersion } from "../db/schema"
 import { type ExtractionAction, parseExtractionResult, executeActions } from "./memory-extractor"
 import { MEMORY_CONSOLIDATOR_ID, MEMORY_CONSOLIDATOR_PROMPT } from "./system-agents"
 import { resolveAgent } from "./agent-validator"
@@ -189,13 +190,25 @@ async function applyImportanceDecay(customAgentId: string): Promise<{
     // staleness signal so future decay passes can identify which rows are
     // still stale (otherwise every decay would refresh timestamps and no
     // memory would ever decay a second time).
-    await db.update(agentMemories)
-      .set({ importance: sql`GREATEST(${DECAY_FLOOR}, importance * ${DECAY_FACTOR})` })
-      .where(and(
-        eq(agentMemories.customAgentId, customAgentId),
-        isNull(agentMemories.supersededBy),
-        lt(agentMemories.updatedAt, cutoff),
-      ))
+    for (const row of staleRows) {
+      const [full] = await db.select({
+        content: agentMemories.content,
+        category: agentMemories.category,
+        history: agentMemories.history,
+      }).from(agentMemories).where(eq(agentMemories.id, row.id))
+      if (!full) continue
+      const prev: MemoryVersion = {
+        content: full.content,
+        importance: row.importance,
+        category: full.category,
+        action: "decay",
+        ts: decayTs,
+      }
+      const history = [...(full.history ?? []), prev]
+      const newImp = Math.max(DECAY_FLOOR, row.importance * DECAY_FACTOR)
+      await db.update(agentMemories).set({ importance: newImp, history })
+        .where(eq(agentMemories.id, row.id))
+    }
   }
 
   logger.info(

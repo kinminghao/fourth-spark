@@ -167,6 +167,15 @@ export const parts = pgTable("parts", {
   index("parts_session_idx").on(t.sessionId),
 ])
 
+export type MemoryVersion = {
+  content: string
+  importance: number
+  category: string
+  action: "create" | "update" | "merge" | "decay" | "reinforce" | "manual"
+  ts: number
+  source?: string
+}
+
 export const agentMemories = pgTable("agent_memories", {
   id: text("id").primaryKey(),
   customAgentId: text("custom_agent_id").notNull().references(() => customAgents.id, { onDelete: "cascade" }),
@@ -176,6 +185,7 @@ export const agentMemories = pgTable("agent_memories", {
   category: text("category").notNull().default("general"),
   importance: real("importance").notNull().default(0.5),
   supersededBy: text("superseded_by"),
+  history: jsonb("history").$type<MemoryVersion[]>().default([]),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 }, (t) => [

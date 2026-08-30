@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { eq, and, isNull, desc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
+import type { MemoryVersion } from "../db/schema"
 import { runtimeManager } from "../lib/process-manager"
 import { getConsolidationStats, triggerManualConsolidation } from "../lib/memory-consolidation"
 import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions } from "../lib/memory-extractor"
@@ -132,6 +133,17 @@ agentMemoryRoutes.put("/:memId", async (c) => {
   if (body.content !== undefined) updates.content = body.content
   if (body.category !== undefined) updates.category = body.category
   if (body.importance !== undefined) updates.importance = body.importance
+
+  const prev: MemoryVersion = {
+    content: existing.content,
+    importance: existing.importance,
+    category: existing.category,
+    action: "manual",
+    ts: Date.now(),
+    source: "user",
+  }
+  const history = [...(existing.history ?? []), prev]
+  updates.history = history
 
   const [row] = await db.update(agentMemories).set(updates).where(eq(agentMemories.id, memId)).returning()
   return c.json(row)

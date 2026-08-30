@@ -1,6 +1,7 @@
-import { eq, and, isNull, isNotNull, desc } from "drizzle-orm"
+import { eq, and, isNull, isNotNull, desc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, sessions as sessionsTable, customAgents } from "../db/schema"
+import type { MemoryVersion } from "../db/schema"
 import { getMessagesFromDB, getTodosFromDB } from "../db/query"
 import { logger } from "../middleware/logger"
 
@@ -242,6 +243,14 @@ export async function executeActions(customAgentId: string, sessionId: string, a
       switch (action.action) {
         case "add": {
           const id = newMemoryId()
+          const createVersion: MemoryVersion = {
+            content: action.content,
+            importance: action.importance,
+            category: action.category,
+            action: "create",
+            ts: now,
+            source: sessionId,
+          }
           await db.insert(agentMemories).values({
             id,
             customAgentId,
@@ -249,6 +258,7 @@ export async function executeActions(customAgentId: string, sessionId: string, a
             content: action.content,
             category: action.category,
             importance: action.importance,
+            history: [createVersion],
             createdAt: now,
             updatedAt: now,
           })
@@ -257,9 +267,29 @@ export async function executeActions(customAgentId: string, sessionId: string, a
         }
 
         case "update": {
+          const [current] = await db.select({
+            content: agentMemories.content,
+            importance: agentMemories.importance,
+            category: agentMemories.category,
+            history: agentMemories.history,
+          }).from(agentMemories).where(and(
+            eq(agentMemories.id, action.targetId),
+            eq(agentMemories.customAgentId, customAgentId),
+          ))
+          if (!current) break
+          const prev: MemoryVersion = {
+            content: current.content,
+            importance: current.importance,
+            category: current.category,
+            action: "update",
+            ts: now,
+            source: sessionId,
+          }
+          const history = [...(current.history ?? []), prev]
           await db.update(agentMemories).set({
             content: action.content,
             importance: action.importance,
+            history,
             updatedAt: now,
           }).where(and(
             eq(agentMemories.id, action.targetId),
@@ -272,6 +302,30 @@ export async function executeActions(customAgentId: string, sessionId: string, a
         case "merge": {
           const newId = newMemoryId()
           await db.transaction(async (tx) => {
+            const sourceRows = await tx.select({
+              id: agentMemories.id,
+              content: agentMemories.content,
+              importance: agentMemories.importance,
+              category: agentMemories.category,
+              history: agentMemories.history,
+            }).from(agentMemories).where(and(
+              inArray(agentMemories.id, action.targetIds),
+              eq(agentMemories.customAgentId, customAgentId),
+            ))
+
+            const combinedHistory: MemoryVersion[] = []
+            for (const src of sourceRows) {
+              if (src.history) combinedHistory.push(...src.history)
+              combinedHistory.push({
+                content: src.content,
+                importance: src.importance,
+                category: src.category,
+                action: "merge",
+                ts: now,
+                source: sessionId,
+              })
+            }
+
             await tx.insert(agentMemories).values({
               id: newId,
               customAgentId,
@@ -280,6 +334,7 @@ export async function executeActions(customAgentId: string, sessionId: string, a
               content: action.content,
               category: action.category,
               importance: action.importance,
+              history: combinedHistory,
               createdAt: now,
               updatedAt: now,
             })
@@ -298,16 +353,29 @@ export async function executeActions(customAgentId: string, sessionId: string, a
         }
 
         case "reinforce": {
-          const [existing] = await db.select({ importance: agentMemories.importance })
-            .from(agentMemories)
-            .where(and(
-              eq(agentMemories.id, action.targetId),
-              eq(agentMemories.customAgentId, customAgentId),
-            ))
+          const [existing] = await db.select({
+            importance: agentMemories.importance,
+            content: agentMemories.content,
+            category: agentMemories.category,
+            history: agentMemories.history,
+          }).from(agentMemories).where(and(
+            eq(agentMemories.id, action.targetId),
+            eq(agentMemories.customAgentId, customAgentId),
+          ))
           if (existing) {
             const newImportance = Math.min(existing.importance * 1.2, 1.0)
+            const prev: MemoryVersion = {
+              content: existing.content,
+              importance: existing.importance,
+              category: existing.category,
+              action: "reinforce",
+              ts: now,
+              source: sessionId,
+            }
+            const history = [...(existing.history ?? []), prev]
             await db.update(agentMemories).set({
               importance: newImportance,
+              history,
               updatedAt: now,
             }).where(eq(agentMemories.id, action.targetId))
             logger.info({ memId: action.targetId, importance: newImportance, customAgentId }, "memory reinforced")
@@ -316,8 +384,28 @@ export async function executeActions(customAgentId: string, sessionId: string, a
         }
 
         case "delete": {
+          const [current] = await db.select({
+            content: agentMemories.content,
+            importance: agentMemories.importance,
+            category: agentMemories.category,
+            history: agentMemories.history,
+          }).from(agentMemories).where(and(
+            eq(agentMemories.id, action.targetId),
+            eq(agentMemories.customAgentId, customAgentId),
+          ))
+          if (!current) break
+          const prev: MemoryVersion = {
+            content: current.content,
+            importance: current.importance,
+            category: current.category,
+            action: "update",
+            ts: now,
+            source: sessionId,
+          }
+          const history = [...(current.history ?? []), prev]
           await db.update(agentMemories).set({
             supersededBy: "consolidated-out",
+            history,
             updatedAt: now,
           }).where(and(
             eq(agentMemories.id, action.targetId),

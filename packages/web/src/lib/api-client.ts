@@ -578,6 +578,15 @@ export async function importCustomAgent(data: CustomAgentExport): Promise<Custom
   return apiFetch<CustomAgent>("/api/custom-agents/import", { method: "POST", body: JSON.stringify(data) })
 }
 
+export interface MemoryVersion {
+  content: string
+  importance: number
+  category: string
+  action: "create" | "update" | "merge" | "decay" | "reinforce" | "manual"
+  ts: number
+  source?: string
+}
+
 export interface AgentMemory {
   id: string
   customAgentId: string
@@ -587,6 +596,7 @@ export interface AgentMemory {
   category: string
   importance: number
   supersededBy: string | null
+  history: MemoryVersion[] | null
   createdAt: number
   updatedAt: number
 }
