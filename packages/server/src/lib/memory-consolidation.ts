@@ -1,7 +1,7 @@
 import { eq, and, isNull, isNotNull, lt, gte, desc, sql } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
-import { FORBIDDEN_CONTENT_PATTERNS, type ExtractionAction, parseExtractionResult, executeActions } from "./memory-extractor"
+import { type ExtractionAction, parseExtractionResult, executeActions } from "./memory-extractor"
 import { MEMORY_CONSOLIDATOR_ID, MEMORY_CONSOLIDATOR_PROMPT } from "./system-agents"
 import { resolveAgent } from "./agent-validator"
 import { DEFAULT_VARIANT } from "./config"
@@ -27,9 +27,7 @@ export interface MemoryChange {
 
 export interface ConsolidationStats {
   totalActive: number
-  flagged: number
   stale: number
-  skippedFlagged: number
   lastConsolidatedAt: number | null
   lastActions: { update: number; merge: number; delete: number; skip: number; decayed: number } | null
   recentChanges: Record<string, MemoryChange>
@@ -49,10 +47,7 @@ const DECAY_FACTOR = 0.962
 const DECAY_FLOOR = 0.2
 const DRY_RUN = process.env.CONSOLIDATION_DRY_RUN === "true"
 
-const MAX_CONTENT_CHARS_BEFORE_FLAG = 120
-const FLAGGED_RATIO_THRESHOLD = 0.2
 const POLL_INTERVAL_MS = 2_000
-const PROJECT_NAME_PATTERN = /\b(fourth-spark|fourth_spark)\b/i
 const MEMORY_LOG_ROOT = join("data", "memory-logs")
 const CONSOLIDATION_SESSION_TITLE = "[internal] memory consolidation"
 
@@ -64,21 +59,6 @@ const lastConsolidated = new Map<string, number>()
 const consolidatingAgents = new Set<string>()
 const lastRunSummaries = new Map<string, { update: number; merge: number; delete: number; skip: number; decayed: number }>()
 const lastRecentChanges = new Map<string, Record<string, MemoryChange>>()
-const lastSkippedFlagged = new Map<string, number>()
-
-// ---------------------------------------------------------------------------
-// Flags & action validation
-// ---------------------------------------------------------------------------
-
-function computeFlags(content: string): string[] {
-  const flags: string[] = []
-  if (content.length > MAX_CONTENT_CHARS_BEFORE_FLAG) flags.push("too_long")
-  for (const { pattern, reason } of FORBIDDEN_CONTENT_PATTERNS) {
-    if (pattern.test(content)) flags.push(reason.replace(/\s+/g, "_"))
-  }
-  if (PROJECT_NAME_PATTERN.test(content)) flags.push("contains_project_name")
-  return flags
-}
 
 function extractReferencedIds(action: ExtractionAction): string[] {
   switch (action.action) {
@@ -225,12 +205,11 @@ async function applyImportanceDecay(customAgentId: string): Promise<{
 // Per-agent consolidation
 // ---------------------------------------------------------------------------
 
-type MemoryWithFlags = {
+type MemoryRow = {
   id: string
   category: string
   importance: number
   content: string
-  flags: string[]
 }
 
 function countByAction(actions: ExtractionAction[]): Record<string, number> {
@@ -307,10 +286,10 @@ function buildActionLogEntry(
 async function processConsolidationBatch(
   customAgentId: string,
   client: RuntimeClient,
-  batch: MemoryWithFlags[],
+  batch: MemoryRow[],
   batchIdx: number,
   totalBatches: number,
-): Promise<{ actions: ExtractionAction[]; changes: Record<string, MemoryChange>; skippedFlagged: number }> {
+): Promise<{ actions: ExtractionAction[]; changes: Record<string, MemoryChange> }> {
   let consolidationSessionId: string | undefined
   const outputPath = `/tmp/memory-consolidate-${crypto.randomUUID()}.json`
   const batchStartTs = Date.now()
@@ -339,7 +318,6 @@ async function processConsolidationBatch(
       category: m.category,
       importance: m.importance,
       content: m.content,
-      flags: m.flags,
     }))
 
     const fullPrompt =
@@ -377,24 +355,12 @@ async function processConsolidationBatch(
         totalBatches,
         batchSize: batch.length,
       })
-      return { actions: [], changes: {}, skippedFlagged: 0 }
+      return { actions: [], changes: {} }
     }
 
     const rawActions = parseExtractionResult(resultText)
     const activeIds = new Set(batch.map((m) => m.id))
-    const actions = validateConsolidationActions(rawActions, activeIds)
-
-    const flaggedIds = new Set(batch.filter((m) => m.flags.length > 0).map((m) => m.id))
-    let skippedFlagged = 0
-    for (const action of actions) {
-      if (action.action === "skip" && flaggedIds.has(action.targetId)) {
-        skippedFlagged++
-        logger.warn(
-          { customAgentId, batchIdx, memId: action.targetId },
-          "consolidation: LLM chose 'skip' for a flagged memory (allowed for now)",
-        )
-      }
-    }
+    const finalActions = validateConsolidationActions(rawActions, activeIds)
 
     const contentById = new Map<string, string>()
     const importanceById = new Map<string, number>()
@@ -405,14 +371,14 @@ async function processConsolidationBatch(
 
     if (DRY_RUN) {
       logger.info(
-        { customAgentId, batchIdx, actionCount: actions.length, byAction: countByAction(actions) },
+        { customAgentId, batchIdx, actionCount: finalActions.length, byAction: countByAction(finalActions) },
         "DRY_RUN: consolidation actions logged but not executed",
       )
     } else {
-      await executeActions(customAgentId, "consolidation", actions)
+      await executeActions(customAgentId, "consolidation", finalActions)
     }
 
-    for (const action of actions) {
+    for (const action of finalActions) {
       await writeMemoryLog(customAgentId, buildActionLogEntry(action, contentById, DRY_RUN))
     }
 
@@ -421,15 +387,15 @@ async function processConsolidationBatch(
       batchIdx,
       totalBatches,
       batchSize: batch.length,
-      actionCount: actions.length,
-      byAction: countByAction(actions),
+      actionCount: finalActions.length,
+      byAction: countByAction(finalActions),
       dryRun: DRY_RUN,
     })
 
     const changes: Record<string, MemoryChange> = {}
     if (!DRY_RUN) {
       const actionTs = Date.now()
-      for (const action of actions) {
+      for (const action of finalActions) {
         switch (action.action) {
           case "update":
             changes[action.targetId] = {
@@ -471,7 +437,7 @@ async function processConsolidationBatch(
         }
       }
 
-      const mergeActions = actions.filter(
+      const mergeActions = finalActions.filter(
         (a): a is Extract<ExtractionAction, { action: "merge" }> => a.action === "merge",
       )
       if (mergeActions.length > 0) {
@@ -501,13 +467,13 @@ async function processConsolidationBatch(
     }
 
     logger.info(
-      { customAgentId, batchIdx, actionCount: actions.length, byAction: countByAction(actions), dryRun: DRY_RUN },
+      { customAgentId, batchIdx, actionCount: finalActions.length, byAction: countByAction(finalActions), dryRun: DRY_RUN },
       "memory consolidation batch completed",
     )
-    return { actions, changes, skippedFlagged }
+    return { actions: finalActions, changes, skippedFlagged }
   } catch (err) {
     logger.warn({ err, customAgentId, batchIdx }, "memory consolidation batch failed")
-    return { actions: [], changes: {}, skippedFlagged: 0 }
+    return { actions: [], changes: {} }
   } finally {
     if (consolidationSessionId) {
       client.deleteSession(consolidationSessionId).catch(() => { /* best-effort cleanup */ })
@@ -532,39 +498,25 @@ async function consolidateAgent(customAgentId: string, client: RuntimeClient): P
     return
   }
 
-  const withFlags: MemoryWithFlags[] = memories.map((m) => ({
+  const rows: MemoryRow[] = memories.map((m) => ({
     id: m.id,
     category: m.category,
     importance: m.importance,
     content: m.content,
-    flags: computeFlags(m.content),
   }))
 
-  const total = withFlags.length
-  const flagged = withFlags.filter((m) => m.flags.length > 0).length
-  const flaggedRatio = total > 0 ? flagged / total : 0
-
-  if (flaggedRatio <= FLAGGED_RATIO_THRESHOLD) {
-    logger.info(
-      { customAgentId, total, flagged, flaggedRatio, threshold: FLAGGED_RATIO_THRESHOLD },
-      "consolidation skipped: memories are mostly clean",
-    )
-    return
-  }
-
-  const batches: MemoryWithFlags[][] = []
-  for (let i = 0; i < withFlags.length; i += CONSOLIDATION_BATCH_SIZE) {
-    batches.push(withFlags.slice(i, i + CONSOLIDATION_BATCH_SIZE))
+  const batches: MemoryRow[][] = []
+  for (let i = 0; i < rows.length; i += CONSOLIDATION_BATCH_SIZE) {
+    batches.push(rows.slice(i, i + CONSOLIDATION_BATCH_SIZE))
   }
 
   logger.info(
-    { customAgentId, total, flagged, flaggedRatio, batchCount: batches.length, dryRun: DRY_RUN },
+    { customAgentId, total: rows.length, batchCount: batches.length, dryRun: DRY_RUN },
     "starting memory consolidation",
   )
 
   const accumulated = { update: 0, merge: 0, delete: 0, skip: 0 }
   const allChanges: Record<string, MemoryChange> = {}
-  let allSkippedFlagged = 0
   for (let i = 0; i < batches.length; i++) {
     const result = await processConsolidationBatch(customAgentId, client, batches[i], i + 1, batches.length)
     for (const a of result.actions) {
@@ -572,11 +524,9 @@ async function consolidateAgent(customAgentId: string, client: RuntimeClient): P
       if (key in accumulated) accumulated[key]++
     }
     Object.assign(allChanges, result.changes)
-    allSkippedFlagged += result.skippedFlagged
   }
   lastRunSummaries.set(customAgentId, { ...accumulated, decayed: 0 })
   lastRecentChanges.set(customAgentId, allChanges)
-  lastSkippedFlagged.set(customAgentId, allSkippedFlagged)
 }
 
 // ---------------------------------------------------------------------------
@@ -741,10 +691,8 @@ export async function getConsolidationStats(agentId: string): Promise<Consolidat
     ))
 
   const cutoff = Date.now() - DECAY_STALE_DAYS * 86_400_000
-  let flagged = 0
   let stale = 0
   for (const m of memories) {
-    if (computeFlags(m.content).length > 0) flagged++
     if (m.updatedAt < cutoff) stale++
   }
 
@@ -765,9 +713,7 @@ export async function getConsolidationStats(agentId: string): Promise<Consolidat
 
   return {
     totalActive: memories.length,
-    flagged,
     stale,
-    skippedFlagged: lastSkippedFlagged.get(agentId) ?? 0,
     lastConsolidatedAt,
     lastActions,
     recentChanges: lastRecentChanges.get(agentId) ?? {},

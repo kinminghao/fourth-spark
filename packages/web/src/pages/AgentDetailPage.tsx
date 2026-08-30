@@ -333,7 +333,6 @@ function ConsolidationStatsBar({ stats, running, onTrigger }: {
   if (!stats) return null
 
   const a = stats.lastActions
-  const flaggedPct = stats.totalActive > 0 ? Math.round((stats.flagged / stats.totalActive) * 100) : 0
 
   return (
     <div className="rounded-lg bg-elevated px-3 py-2 text-[11px] tabular-nums text-fg-5">
@@ -362,13 +361,7 @@ function ConsolidationStatsBar({ stats, running, onTrigger }: {
             <span className="text-fg-6">·</span>
           </>
         )}
-        <span>待整理 {stats.flagged}/{stats.totalActive} ({flaggedPct}%)</span>
-        {stats.skippedFlagged > 0 && (
-          <>
-            <span className="text-fg-6">·</span>
-            <span>其中 {stats.skippedFlagged} 条跳过</span>
-          </>
-        )}
+        <span>活跃 {stats.totalActive} 条</span>
         <span className="text-fg-6">·</span>
         <span>衰减中 {stats.stale}</span>
       </div>

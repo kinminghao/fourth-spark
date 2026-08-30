@@ -624,9 +624,7 @@ export interface MemoryChange {
 
 export interface ConsolidationStats {
   totalActive: number
-  flagged: number
   stale: number
-  skippedFlagged: number
   lastConsolidatedAt: number | null
   lastActions: { update: number; merge: number; delete: number; skip: number; decayed: number } | null
   recentChanges: Record<string, MemoryChange>
