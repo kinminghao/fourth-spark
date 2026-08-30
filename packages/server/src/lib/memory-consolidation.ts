@@ -640,12 +640,14 @@ export async function runMemoryConsolidation(
 async function readLastRunFromLog(agentId: string): Promise<{
   lastConsolidatedAt: number | null
   lastActions: { update: number; merge: number; delete: number; skip: number; decayed: number } | null
+  recentChanges: Record<string, MemoryChange>
 }> {
+  const empty = { lastConsolidatedAt: null, lastActions: null, recentChanges: {} as Record<string, MemoryChange> }
   try {
     const dir = join(MEMORY_LOG_ROOT, agentId)
     const files = await readdir(dir).catch(() => [] as string[])
     const logFiles = files.filter(f => f.startsWith("consolidation-") && f.endsWith(".jsonl")).sort().reverse()
-    if (logFiles.length === 0) return { lastConsolidatedAt: null, lastActions: null }
+    if (logFiles.length === 0) return empty
 
     const content = await readFile(join(dir, logFiles[0]), "utf-8")
     const lines = content.trim().split("\n").filter(Boolean)
@@ -653,6 +655,7 @@ async function readLastRunFromLog(agentId: string): Promise<{
     let lastSummary: Record<string, unknown> | null = null
     let lastDecay: Record<string, unknown> | null = null
     let lastTs: number | null = null
+    const recentChanges: Record<string, MemoryChange> = {}
 
     for (let i = lines.length - 1; i >= 0; i--) {
       try {
@@ -666,11 +669,49 @@ async function readLastRunFromLog(agentId: string): Promise<{
         if (!lastDecay && entry.type === "decay") {
           lastDecay = entry
         }
-        if (lastSummary && lastDecay && lastTs) break
+        if (entry.type === "action" && typeof entry.action === "string") {
+          const ts = typeof entry.ts === "string" ? new Date(entry.ts).getTime() : Date.now()
+          const targetId = entry.targetId as string | undefined
+          const action = entry.action as MemoryChange["action"]
+          if (action === "update" && targetId) {
+            recentChanges[targetId] = {
+              action: "update", ts,
+              oldContent: entry.oldContent as string | undefined,
+              oldImportance: entry.importance as number | undefined,
+              newImportance: entry.importance as number | undefined,
+            }
+          } else if (action === "merge") {
+            const sourceIds = entry.sourceIds as string[] | undefined
+            const sourceContents = entry.sourceContents as string[] | undefined
+            if (sourceIds) {
+              for (const srcId of sourceIds) {
+                recentChanges[srcId] = {
+                  action: "merge", ts,
+                  sourceContents: sourceContents ?? [],
+                  sourceIds,
+                  oldContent: sourceContents?.find((_, idx) => sourceIds[idx] === srcId),
+                }
+              }
+            }
+          } else if (action === "delete" && targetId) {
+            recentChanges[targetId] = {
+              action: "delete", ts,
+              oldContent: entry.oldContent as string | undefined,
+              reason: entry.reason as string | undefined,
+            }
+          } else if (action === "reinforce" && targetId) {
+            recentChanges[targetId] = {
+              action: "reinforce", ts,
+              reason: entry.reason as string | undefined,
+            }
+          }
+        }
       } catch { continue }
     }
 
-    if (!lastSummary && !lastDecay) return { lastConsolidatedAt: lastTs, lastActions: null }
+    if (!lastSummary && !lastDecay && Object.keys(recentChanges).length === 0) {
+      return { ...empty, lastConsolidatedAt: lastTs }
+    }
 
     const byAction = (lastSummary?.byAction as Record<string, number>) ?? {}
     const decayed = (lastDecay?.decayed as number) ?? 0
@@ -684,9 +725,10 @@ async function readLastRunFromLog(agentId: string): Promise<{
         skip: byAction.skip ?? 0,
         decayed,
       },
+      recentChanges,
     }
   } catch {
-    return { lastConsolidatedAt: null, lastActions: null }
+    return empty
   }
 }
 
@@ -709,12 +751,16 @@ export async function getConsolidationStats(agentId: string): Promise<Consolidat
   let lastConsolidatedAt = lastConsolidated.get(agentId) ?? null
   let lastActions = lastRunSummaries.get(agentId) ?? null
 
+  let recentChanges = lastRecentChanges.get(agentId) ?? null
+
   if (!lastConsolidatedAt) {
     const fromLog = await readLastRunFromLog(agentId)
     lastConsolidatedAt = fromLog.lastConsolidatedAt
     lastActions = fromLog.lastActions
+    recentChanges = Object.keys(fromLog.recentChanges).length > 0 ? fromLog.recentChanges : null
     if (lastConsolidatedAt) lastConsolidated.set(agentId, lastConsolidatedAt)
     if (lastActions) lastRunSummaries.set(agentId, lastActions)
+    if (recentChanges) lastRecentChanges.set(agentId, recentChanges)
   }
 
   return {
