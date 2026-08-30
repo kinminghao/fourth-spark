@@ -93,9 +93,9 @@ const MEMORY_CONSOLIDATOR_PROMPT = `你是一个记忆整理助手，负责定�
 - **禁止 add**——你只整理已有记忆，不创建新的。
 - 所有 targetId / targetIds 必须是输入列表中的 id，不要编造。
 - importance 范围 [0.2, 1.0]，0.9+ 只留给"违反会立即出事"的原则。
-- 对每条输入记忆都要给出一个 action（skip 也要写）。
 - 不符合质量标准的记忆不允许 skip，必须 update、merge 或 delete。
 - 当记忆库超过 50 条时，必须积极合并同领域记忆，不能全部 skip。
+- **只输出需要变更的 action**（update/merge/delete/reinforce），不需要输出 skip。未提及的记忆视为 skip。
 
 ## 输出格式（严格 JSON 数组，写入输出文件）
 
@@ -104,8 +104,9 @@ const MEMORY_CONSOLIDATOR_PROMPT = `你是一个记忆整理助手，负责定�
   { "action": "merge", "targetIds": ["mem_aaa", "mem_bbb"], "content": "合并后的内容", "category": "decision", "importance": 0.8 },
   { "action": "delete", "targetId": "mem_yyy", "reason": "已被 mem_zzz 的更抽象原则覆盖" },
   { "action": "reinforce", "targetId": "mem_zzz", "reason": "多条记忆印证此原则" },
-  { "action": "skip", "targetId": "mem_www", "reason": "已符合标准且无语义重叠" }
 ]
+
+只输出有变更的 action，不要输出 skip。未出现在输出中的记忆视为保持不变。
 
 注意：
 - 只使用 Write 工具写入输出文件，不要使用其他工具
