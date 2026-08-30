@@ -14,7 +14,7 @@ import { useDraftStore } from "../stores/draft-store"
 import { classifyPart, isQuestionPending } from "../lib/message-parts"
 import type { ModelInfo } from "../lib/api-client"
 import { getSettings, listModels } from "../lib/api-client"
-import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
+import { AttachButton, AttachmentStrip, shouldFoldText, useAttachments } from "./Attachments"
 import { VoiceButton } from "./VoiceButton"
 import { VoiceOverlay, VoiceStatusBar } from "./VoiceOverlay"
 import { useVoiceInput } from "../hooks/use-voice-input"
@@ -99,7 +99,7 @@ export function InputBar() {
 
   // Unknown model (default / unpinned) stays permissive; only a hard false blocks
   const imagesAllowed = pinnedModels.find((m) => m.id === selectedModel)?.supportsImage !== false
-  const { attachments, foldedTexts, promptFiles, error: attachError, addFiles, onPaste, remove, removeFoldedText, clear } = useAttachments(imagesAllowed)
+  const { attachments, foldedTexts, promptFiles, error: attachError, addFiles, onPaste: imageOnPaste, addFoldedText, expandFoldedTexts, remove, removeFoldedText, clear } = useAttachments(imagesAllowed)
 
   useEffect(() => {
     setValue(activeSessionId ? useDraftStore.getState().drafts[activeSessionId] ?? "" : "")
@@ -107,10 +107,44 @@ export function InputBar() {
     voice.stt.stop()
   }, [activeSessionId, clear, voice.stt.stop])
 
+  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files)
+    if (files.length > 0) {
+      imageOnPaste(event)
+      return
+    }
+
+    const text = event.clipboardData.getData("text/plain")
+    if (!text || !shouldFoldText(text)) return
+
+    event.preventDefault()
+    const fold = addFoldedText(text)
+
+    const textarea = event.currentTarget
+    const start = textarea.selectionStart ?? value.length
+    const end = textarea.selectionEnd ?? value.length
+    const newValue = value.slice(0, start) + fold.placeholder + value.slice(end)
+    setValue(newValue)
+    if (activeSessionId) setDraft(activeSessionId, newValue)
+
+    requestAnimationFrame(() => {
+      const pos = start + fold.placeholder.length
+      textarea.setSelectionRange(pos, pos)
+    })
+  }
+
+  const handleRemoveFoldedText = (id: string) => {
+    const fold = foldedTexts.find((f) => f._id === id)
+    if (fold) {
+      const newValue = value.replace(fold.placeholder, "")
+      setValue(newValue)
+      if (activeSessionId) setDraft(activeSessionId, newValue)
+    }
+    removeFoldedText(id)
+  }
+
   const submit = async () => {
-    const typed = value.trim()
-    const foldedContent = foldedTexts.map((f) => f.text).join("\n\n")
-    const content = [foldedContent, typed].filter(Boolean).join("\n\n")
+    const content = expandFoldedTexts(value.trim())
     if (disabled || (!content && attachments.length === 0)) {
       return
     }
@@ -164,7 +198,7 @@ export function InputBar() {
         foldedTexts={foldedTexts}
         error={attachError}
         onRemove={remove}
-        onRemoveFoldedText={removeFoldedText}
+        onRemoveFoldedText={handleRemoveFoldedText}
         className="mx-auto max-w-4xl"
       />
       <div
@@ -189,7 +223,7 @@ export function InputBar() {
             if (activeSessionId) setDraft(activeSessionId, v)
           }}
           onKeyDown={handleKeyDown}
-          onPaste={onPaste}
+          onPaste={handlePaste}
           placeholder={placeholder}
           className="flex-1 resize-none bg-transparent font-mono text-sm leading-6 text-fg placeholder:text-fg-6 focus:outline-none disabled:cursor-not-allowed"
         />
