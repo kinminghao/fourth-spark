@@ -1114,3 +1114,22 @@ export async function registerPushToken(token: string, platform = "ios"): Promis
     body: JSON.stringify({ token, platform }),
   })
 }
+
+// ---------------------------------------------------------------------------
+// Session File Preview API — /api/repos/:repoId/sessions/:id/files
+// ---------------------------------------------------------------------------
+
+export interface SessionFile {
+  path: string
+  ext: string
+}
+
+export async function getSessionFiles(repoId: string, sessionId: string): Promise<SessionFile[]> {
+  return apiFetch<SessionFile[]>(
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/files`,
+  )
+}
+
+export function getSessionFileUrl(repoId: string, sessionId: string, filePath: string): string {
+  return `${getApiBaseUrl()}${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/files/${filePath}`
+}

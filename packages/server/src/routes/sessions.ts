@@ -1,5 +1,7 @@
 import { Hono } from "hono"
 import { eq, and, asc, inArray, isNull, isNotNull, desc } from "drizzle-orm"
+import { resolve, relative, extname, isAbsolute } from "node:path"
+import { lstatSync } from "node:fs"
 import { runtimeManager } from "../lib/process-manager"
 import { sessionMonitor } from "../lib/session-monitor"
 import { workspaceManager } from "../lib/workspace-manager"
@@ -13,6 +15,16 @@ import { parseGitUrl } from "../lib/git-url"
 import { getHostInfo, getAuthenticatedLogin, createGitIssueClient } from "../lib/git-provider"
 import { logger } from "../middleware/logger"
 import type { SessionStatus, PromptFile } from "../core/runtime-types"
+
+// ---------------------------------------------------------------------------
+// Session file preview — previewable extension allowlist
+// ---------------------------------------------------------------------------
+
+const PREVIEWABLE_EXTENSIONS = new Set([
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
+  ".html", ".htm",
+  ".md", ".txt", ".log",
+])
 
 // ---------------------------------------------------------------------------
 // PromptFile server-side validation
@@ -610,4 +622,96 @@ sessions.get("/:id/status", async (c) => {
     }
   }
   return c.json({ type: "idle" } satisfies SessionStatus)
+})
+
+// ---------------------------------------------------------------------------
+// Session file preview
+// ---------------------------------------------------------------------------
+
+async function resolveSessionWorkspace(sessionId: string) {
+  const [session] = await db.select({ workspaceId: sessionsTable.workspaceId }).from(sessionsTable).where(eq(sessionsTable.id, sessionId))
+  if (!session?.workspaceId) return null
+  return workspaceManager.get(session.workspaceId)
+}
+
+sessions.get("/:id/files", async (c) => {
+  const sessionId = c.req.param("id")
+  const ws = await resolveSessionWorkspace(sessionId)
+  if (!ws) return c.json({ error: "Session has no workspace", status: 404 }, 404)
+
+  const changedFiles = await workspaceManager.getChangedFiles(ws.id)
+  const previewable = changedFiles
+    .filter((f) => PREVIEWABLE_EXTENSIONS.has(extname(f).toLowerCase()))
+    .map((f) => ({ path: f, ext: extname(f).toLowerCase() }))
+
+  return c.json(previewable)
+})
+
+const PREVIEW_MIME_MAP: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".html": "text/html; charset=utf-8",
+  ".htm": "text/html; charset=utf-8",
+  ".md": "text/markdown; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".log": "text/plain; charset=utf-8",
+}
+
+const HTML_EXTS = new Set([".html", ".htm"])
+
+sessions.get("/:id/files/*", async (c) => {
+  const sessionId = c.req.param("id")
+  const rawPath = c.req.param("*")
+  const filePath = decodeURIComponent(rawPath ?? "")
+  if (!filePath) return c.json({ error: "File path required" }, 400)
+
+  const ws = await resolveSessionWorkspace(sessionId)
+  if (!ws) return c.json({ error: "Session has no workspace" }, 404)
+
+  const ext = extname(filePath).toLowerCase()
+  if (!PREVIEWABLE_EXTENSIONS.has(ext)) {
+    return c.json({ error: "File type not allowed for preview" }, 403)
+  }
+
+  const absolutePath = resolve(ws.localPath, filePath)
+  const rel = relative(ws.localPath, absolutePath)
+  if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
+    return c.json({ error: "Path traversal not allowed" }, 403)
+  }
+
+  try {
+    if (lstatSync(absolutePath).isSymbolicLink()) {
+      return c.json({ error: "Symlinks not allowed" }, 403)
+    }
+  } catch {
+    return c.json({ error: "File not found" }, 404)
+  }
+
+  const changedFiles = await workspaceManager.getChangedFiles(ws.id)
+  if (!changedFiles.includes(rel)) {
+    return c.json({ error: "File not in session changeset" }, 403)
+  }
+
+  const file = Bun.file(absolutePath)
+  if (!await file.exists()) {
+    return c.json({ error: "File not found" }, 404)
+  }
+
+  const contentType = PREVIEW_MIME_MAP[ext] || "application/octet-stream"
+  const headers: Record<string, string> = {
+    "Content-Type": contentType,
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  }
+
+  if (HTML_EXTS.has(ext)) {
+    headers["Content-Security-Policy"] = "sandbox"
+    headers["Content-Disposition"] = `inline; filename="${rel.split("/").pop()}"`
+  }
+
+  return new Response(file, { headers })
 })
