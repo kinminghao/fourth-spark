@@ -2,7 +2,7 @@ import { eq, and, isNull, isNotNull, lt, gte, desc, sql } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
 import type { MemoryVersion } from "../db/schema"
-import { type ExtractionAction, parseExtractionResult, executeActions } from "./memory-extractor"
+import { type ExtractionAction, parseExtractionResult, executeActions, MAX_CONSOLIDATION_CONTENT_LENGTH } from "./memory-extractor"
 import { MEMORY_CONSOLIDATOR_ID, MEMORY_CONSOLIDATOR_PROMPT } from "./system-agents"
 import { resolveAgent } from "./agent-validator"
 import { DEFAULT_VARIANT } from "./config"
@@ -400,7 +400,10 @@ async function processConsolidationBatch(
       return { actions: [], changes: {} }
     }
 
-    const rawActions = parseExtractionResult(resultText)
+    const rawActions = parseExtractionResult(resultText, {
+      maxLength: MAX_CONSOLIDATION_CONTENT_LENGTH,
+      skipForbiddenPatterns: true,
+    })
     const activeIds = new Set(batch.map((m) => m.id))
     const finalActions = validateConsolidationActions(rawActions, activeIds)
 

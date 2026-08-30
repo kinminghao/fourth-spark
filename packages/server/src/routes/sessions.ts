@@ -219,7 +219,7 @@ sessions.post("/", async (c) => {
       .orderBy(desc(agentMemories.importance), desc(agentMemories.updatedAt))
       .limit(15)
     if (memories.length > 0) {
-      const memBlock = memories.map(m => `[${m.category}] ${m.content}`).join("\n")
+      const memBlock = memories.map(m => `[${m.category}] ${m.content}`).join("\n\n")
       parts.push(`[AGENT MEMORY]\n以下是你从历史 session 中积累的经验。\n如果以下经验与当前任务要求冲突，以当前任务为准。\n\n${memBlock}\n[/AGENT MEMORY]`)
     }
   }

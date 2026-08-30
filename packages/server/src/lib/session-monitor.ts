@@ -7,7 +7,7 @@ import type { NotifyEvent } from "../core/types"
 import { logger } from "../middleware/logger"
 import { DEFAULT_VARIANT } from "./config"
 import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "./system-agents"
-import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions, getSessionCustomAgentId, listExtractableSessions } from "./memory-extractor"
+import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions, getSessionCustomAgentId, listExtractableSessions, MAX_CONSOLIDATION_CONTENT_LENGTH } from "./memory-extractor"
 import { runMemoryConsolidation } from "./memory-consolidation"
 import { unlink, readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -524,7 +524,9 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
     logger.info({ sessionId: session.id, sourceSessionId, resultLen: resultText.length }, "memory extraction file read")
 
     if (resultText && resultText !== "[]") {
-      const actions = parseExtractionResult(resultText)
+      const actions = parseExtractionResult(resultText, {
+        maxLength: MAX_CONSOLIDATION_CONTENT_LENGTH,
+      })
       if (actions.length > 0) {
         await executeActions(customAgentId, sourceSessionId, actions)
         logger.info({ sessionId: session.id, actionCount: actions.length, sourceSessionId }, "memory extraction completed")

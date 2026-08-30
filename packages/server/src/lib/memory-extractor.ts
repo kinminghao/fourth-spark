@@ -17,16 +17,16 @@ const MAX_PROMPT_CHARS = 24_000
 const MAX_EXISTING_MEMORIES = 100
 const MAX_NEW_MEMORIES = 3
 const TOOL_SUMMARY_LIMIT = 200
-const MAX_MEMORY_CONTENT_LENGTH = 200
-const VALID_CATEGORIES = new Set(["general", "decision", "lesson", "preference", "pattern"])
+const MAX_EXTRACTION_CONTENT_LENGTH = 200
+export const MAX_CONSOLIDATION_CONTENT_LENGTH = 600
 const SENTINEL_PATTERNS = /\[\/?\s*AGENT\s*MEMORY\s*\]|<\|.*?\|>|^system\s*:/gim
 
 function newMemoryId(): string {
   return `mem_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`
 }
 
-function sanitizeMemoryContent(content: string): string {
-  return content.slice(0, MAX_MEMORY_CONTENT_LENGTH).replace(SENTINEL_PATTERNS, "")
+export function sanitizeMemoryContent(content: string, maxLength = MAX_EXTRACTION_CONTENT_LENGTH): string {
+  return content.slice(0, maxLength).replace(SENTINEL_PATTERNS, "")
 }
 
 export const FORBIDDEN_CONTENT_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
@@ -38,17 +38,23 @@ export const FORBIDDEN_CONTENT_PATTERNS: Array<{ pattern: RegExp; reason: string
   { pattern: /```/, reason: "contains code block" },
 ]
 
-function validateMemoryContent(content: string): { ok: true } | { ok: false; reason: string } {
-  if (content.length > MAX_MEMORY_CONTENT_LENGTH) return { ok: false, reason: `too long (${content.length} chars)` }
+export function validateMemoryContent(
+  content: string,
+  opts: { maxLength?: number; skipForbiddenPatterns?: boolean } = {},
+): { ok: true } | { ok: false; reason: string } {
+  const maxLength = opts.maxLength ?? MAX_EXTRACTION_CONTENT_LENGTH
+  if (content.length > maxLength) return { ok: false, reason: `too long (${content.length} chars)` }
   if (content.length < 5) return { ok: false, reason: "too short" }
-  for (const { pattern, reason } of FORBIDDEN_CONTENT_PATTERNS) {
-    if (pattern.test(content)) return { ok: false, reason }
+  if (!opts.skipForbiddenPatterns) {
+    for (const { pattern, reason } of FORBIDDEN_CONTENT_PATTERNS) {
+      if (pattern.test(content)) return { ok: false, reason }
+    }
   }
   return { ok: true }
 }
 
-function normalizeCategory(category: unknown): string {
-  if (typeof category === "string" && VALID_CATEGORIES.has(category)) return category
+export function normalizeCategory(category: unknown): string {
+  if (typeof category === "string" && category.trim().length > 0) return category.trim()
   return "general"
 }
 
@@ -122,17 +128,22 @@ export function buildFullExtractionPrompt(systemPrompt: string, outputPath: stri
   return `${systemPrompt}\n\n输出文件路径：${outputPath}\n请用 Write 工具将 JSON 结果写入上述文件，完全替换原内容。\n\n---\n\n${conversationPrompt}`
 }
 
-export function parseExtractionResult(text: string): ExtractionAction[] {
+export interface ParseOptions {
+  maxLength?: number
+  skipForbiddenPatterns?: boolean
+}
+
+export function parseExtractionResult(text: string, opts: ParseOptions = {}): ExtractionAction[] {
   try {
     const parsed = JSON.parse(text)
-    if (Array.isArray(parsed)) return validateActions(parsed)
+    if (Array.isArray(parsed)) return validateActions(parsed, opts)
   } catch { /* fallback */ }
 
   const match = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
   if (match?.[1]) {
     try {
       const parsed = JSON.parse(match[1])
-      if (Array.isArray(parsed)) return validateActions(parsed)
+      if (Array.isArray(parsed)) return validateActions(parsed, opts)
     } catch { /* ignore */ }
   }
 
@@ -140,7 +151,7 @@ export function parseExtractionResult(text: string): ExtractionAction[] {
   if (arrayMatch) {
     try {
       const parsed = JSON.parse(arrayMatch[0])
-      if (Array.isArray(parsed)) return validateActions(parsed)
+      if (Array.isArray(parsed)) return validateActions(parsed, opts)
     } catch { /* ignore */ }
   }
 
@@ -148,9 +159,11 @@ export function parseExtractionResult(text: string): ExtractionAction[] {
   return []
 }
 
-function validateActions(raw: unknown[]): ExtractionAction[] {
+function validateActions(raw: unknown[], opts: ParseOptions = {}): ExtractionAction[] {
   const actions: ExtractionAction[] = []
   let addCount = 0
+  const maxLen = opts.maxLength ?? MAX_EXTRACTION_CONTENT_LENGTH
+  const skipForbidden = opts.skipForbiddenPatterns ?? false
 
   for (const item of raw) {
     if (typeof item !== "object" || item === null) continue
@@ -161,8 +174,8 @@ function validateActions(raw: unknown[]): ExtractionAction[] {
       case "add": {
         if (addCount >= MAX_NEW_MEMORIES) continue
         if (typeof obj.content !== "string" || !obj.content) continue
-        const addContent = sanitizeMemoryContent(obj.content)
-        const addCheck = validateMemoryContent(addContent)
+        const addContent = sanitizeMemoryContent(obj.content, maxLen)
+        const addCheck = validateMemoryContent(addContent, { maxLength: maxLen, skipForbiddenPatterns: skipForbidden })
         if (!addCheck.ok) {
           logger.info({ reason: addCheck.reason, content: addContent.slice(0, 80) }, "memory rejected (add)")
           continue
@@ -179,8 +192,8 @@ function validateActions(raw: unknown[]): ExtractionAction[] {
 
       case "update": {
         if (typeof obj.targetId !== "string" || typeof obj.content !== "string") continue
-        const updateContent = sanitizeMemoryContent(obj.content)
-        const updateCheck = validateMemoryContent(updateContent)
+        const updateContent = sanitizeMemoryContent(obj.content, maxLen)
+        const updateCheck = validateMemoryContent(updateContent, { maxLength: maxLen, skipForbiddenPatterns: skipForbidden })
         if (!updateCheck.ok) {
           logger.info({ reason: updateCheck.reason, targetId: obj.targetId, content: updateContent.slice(0, 80) }, "memory rejected (update)")
           continue
@@ -196,8 +209,8 @@ function validateActions(raw: unknown[]): ExtractionAction[] {
 
       case "merge": {
         if (!Array.isArray(obj.targetIds) || typeof obj.content !== "string") continue
-        const mergeContent = sanitizeMemoryContent(obj.content)
-        const mergeCheck = validateMemoryContent(mergeContent)
+        const mergeContent = sanitizeMemoryContent(obj.content, maxLen)
+        const mergeCheck = validateMemoryContent(mergeContent, { maxLength: maxLen, skipForbiddenPatterns: skipForbidden })
         if (!mergeCheck.ok) {
           logger.info({ reason: mergeCheck.reason, targetIds: obj.targetIds, content: mergeContent.slice(0, 80) }, "memory rejected (merge)")
           continue

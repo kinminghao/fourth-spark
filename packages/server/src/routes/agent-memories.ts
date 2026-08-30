@@ -5,7 +5,7 @@ import { agentMemories, customAgents, sessions as sessionsTable } from "../db/sc
 import type { MemoryVersion } from "../db/schema"
 import { runtimeManager } from "../lib/process-manager"
 import { getConsolidationStats, triggerManualConsolidation } from "../lib/memory-consolidation"
-import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions } from "../lib/memory-extractor"
+import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions, MAX_CONSOLIDATION_CONTENT_LENGTH } from "../lib/memory-extractor"
 import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "../lib/system-agents"
 import { resolveAgent } from "../lib/agent-validator"
 import { syncMessagesList } from "../db/sync"
@@ -249,7 +249,9 @@ agentMemoryRoutes.post("/extract", async (c) => {
       const resultText = (await file.exists()) ? (await file.text()).trim() : ""
 
       if (resultText && resultText !== "[]") {
-        const actions = parseExtractionResult(resultText)
+        const actions = parseExtractionResult(resultText, {
+          maxLength: MAX_CONSOLIDATION_CONTENT_LENGTH,
+        })
         if (actions.length > 0) {
           await executeActions(agentId, session.id, actions)
           results.push({ sessionId: session.id, status: "ok", actions: actions.length })
