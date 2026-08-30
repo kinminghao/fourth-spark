@@ -555,7 +555,7 @@ export async function createGlobalCustomAgent(data: { name: string; baseAgent: s
   return apiFetch<CustomAgent>("/api/custom-agents", { method: "POST", body: JSON.stringify(data) })
 }
 
-export async function updateCustomAgent(id: string, data: { name?: string; baseAgent?: string; model?: string | null; variant?: string | null; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }): Promise<CustomAgent> {
+export async function updateCustomAgent(id: string, data: { name?: string; baseAgent?: string; model?: string | null; variant?: string | null; memoryModel?: string | null; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }): Promise<CustomAgent> {
   return apiFetch<CustomAgent>(`/api/custom-agents/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) })
 }
 

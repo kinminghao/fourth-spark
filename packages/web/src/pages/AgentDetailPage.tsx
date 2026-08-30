@@ -636,7 +636,7 @@ function SessionList({ agentId }: { agentId: string }) {
 function ConfigSection({ agent, fragments, onSave }: {
   agent: CustomAgent
   fragments: PromptFragment[]
-  onSave: (data: { name: string; description?: string; baseAgent: string; model?: string; variant?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => Promise<void>
+  onSave: (data: { name: string; description?: string; baseAgent: string; model?: string; variant?: string; memoryModel?: string | null; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => Promise<void>
 }) {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const [editing, setEditing] = useState(false)
@@ -645,6 +645,7 @@ function ConfigSection({ agent, fragments, onSave }: {
   const [baseAgent, setBaseAgent] = useState(agent.baseAgent)
   const [model, setModel] = useState(agent.model ?? "")
   const [variant, setVariant] = useState(agent.variant ?? "")
+  const [memoryModel, setMemoryModel] = useState(agent.memoryModel ?? "")
   const [systemPrompt, setSystemPrompt] = useState(agent.systemPrompt)
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -712,7 +713,7 @@ function ConfigSection({ agent, fragments, onSave }: {
     if (!name.trim() || !baseAgent) return
     setSaving(true)
     try {
-      await onSave({ name: name.trim(), description: description.trim() || undefined, baseAgent, model: model.trim() || undefined, variant: variant.trim() || undefined, systemPrompt, systemPromptPosition: spPosition, fragmentIds: selectedIds })
+      await onSave({ name: name.trim(), description: description.trim() || undefined, baseAgent, model: model.trim() || undefined, variant: variant.trim() || undefined, memoryModel: memoryModel.trim() || null, systemPrompt, systemPromptPosition: spPosition, fragmentIds: selectedIds })
       setEditing(false)
     } finally {
       setSaving(false)
@@ -743,6 +744,10 @@ function ConfigSection({ agent, fragments, onSave }: {
           <div className="flex items-center gap-2 text-xs">
             <span className="w-20 shrink-0 text-fg-5">Variant</span>
             <span className="font-mono text-fg">{agent.variant || "默认"}</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-20 shrink-0 text-fg-5">记忆模型</span>
+            <span className="font-mono text-fg">{agent.memoryModel || "跟随主模型"}</span>
           </div>
           {agent.fragments.length > 0 && (
             <div className="flex items-start gap-2 text-xs">
@@ -809,6 +814,14 @@ function ConfigSection({ agent, fragments, onSave }: {
             <option value="high">high</option>
           </select>
         </div>
+      </div>
+      <div>
+        <span className="text-xs font-medium text-fg-3">记忆提取/整理模型</span>
+        <select value={memoryModel} onChange={(e) => setMemoryModel(e.target.value)}
+          className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none">
+          <option value="">跟随主模型</option>
+          {pinnedModels.map((m) => <option key={m.id} value={m.id}>{m.name || m.id}</option>)}
+        </select>
       </div>
 
       {!isSystem && (
@@ -910,7 +923,7 @@ export function AgentDetailPage() {
     }
   }, [agents, agent, navigate, repoName])
 
-  const handleSave = async (data: { name: string; baseAgent: string; model?: string; variant?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
+  const handleSave = async (data: { name: string; baseAgent: string; model?: string; variant?: string; memoryModel?: string | null; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
     if (!agentId) return
     await api.updateCustomAgent(agentId, data)
     void useCustomAgentStore.getState().loadAgents()

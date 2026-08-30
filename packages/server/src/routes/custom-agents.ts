@@ -98,6 +98,7 @@ globalCustomAgents.put("/:id", async (c) => {
     baseAgent?: string
     model?: string | null
     variant?: string | null
+    memoryModel?: string | null
     systemPrompt?: string
     systemPromptPosition?: number
     sortOrder?: number
@@ -111,15 +112,16 @@ globalCustomAgents.put("/:id", async (c) => {
 
   const updates: Record<string, unknown> = { updatedAt: Date.now() }
   if (isSystem) {
-    // System agents: only model and variant are editable
     if (body.model !== undefined) updates.model = body.model?.trim() || null
     if (body.variant !== undefined) updates.variant = body.variant?.trim() || null
+    if (body.memoryModel !== undefined) updates.memoryModel = body.memoryModel?.trim() || null
     if (Object.keys(updates).length <= 1) return c.json({ error: "empty body" }, 400)
   } else {
     if (body.name !== undefined) updates.name = body.name.trim()
     if (body.baseAgent !== undefined) updates.baseAgent = body.baseAgent
     if (body.model !== undefined) updates.model = body.model?.trim() || null
     if (body.variant !== undefined) updates.variant = body.variant?.trim() || null
+    if (body.memoryModel !== undefined) updates.memoryModel = body.memoryModel?.trim() || null
     if (body.systemPrompt !== undefined) updates.systemPrompt = body.systemPrompt
     if (body.systemPromptPosition !== undefined) updates.systemPromptPosition = body.systemPromptPosition
     if (body.sortOrder !== undefined) updates.sortOrder = body.sortOrder
