@@ -30,12 +30,25 @@ function agentAvatar(name: string): { bg: string; text: string; initial: string 
   return { ...palette, initial: (trimmed.charAt(0) || "?").toUpperCase() }
 }
 
-const CATEGORY_STYLES: Record<string, { bg: string; text: string }> = {
-  decision: { bg: "bg-blue-500/10", text: "text-blue-400" },
-  lesson: { bg: "bg-amber-500/10", text: "text-amber-400" },
-  preference: { bg: "bg-green-500/10", text: "text-green-400" },
-  pattern: { bg: "bg-purple-500/10", text: "text-purple-400" },
-  general: { bg: "bg-elevated", text: "text-fg-4" },
+// Static class strings so Tailwind can pick them up.
+const CATEGORY_PALETTE = [
+  { bg: "bg-blue-500/10", text: "text-blue-400" },
+  { bg: "bg-amber-500/10", text: "text-amber-400" },
+  { bg: "bg-green-500/10", text: "text-green-400" },
+  { bg: "bg-purple-500/10", text: "text-purple-400" },
+  { bg: "bg-cyan-500/10", text: "text-cyan-400" },
+  { bg: "bg-rose-500/10", text: "text-rose-400" },
+  { bg: "bg-indigo-500/10", text: "text-indigo-400" },
+  { bg: "bg-orange-500/10", text: "text-orange-400" },
+] as const
+
+const CATEGORY_STYLE_GENERAL = { bg: "bg-elevated", text: "text-fg-4" } as const
+
+function getCategoryStyle(category: string): { bg: string; text: string } {
+  if (category === "general") return CATEGORY_STYLE_GENERAL
+  let hash = 0
+  for (let i = 0; i < category.length; i++) hash = ((hash << 5) - hash + category.charCodeAt(i)) | 0
+  return CATEGORY_PALETTE[Math.abs(hash) % CATEGORY_PALETTE.length]
 }
 
 function formatRelativeTime(ts: number): string {
@@ -120,8 +133,9 @@ function VersionHistoryModal({ memory, onClose }: {
 // MemoryItem
 // ---------------------------------------------------------------------------
 
-function MemoryItem({ memory, onUpdate, onDelete }: {
+function MemoryItem({ memory, categories, onUpdate, onDelete }: {
   memory: AgentMemory
+  categories: string[]
   onUpdate: (memId: string, data: { content?: string; category?: string; importance?: number }) => Promise<void>
   onDelete: (memId: string) => Promise<void>
 }) {
@@ -132,7 +146,7 @@ function MemoryItem({ memory, onUpdate, onDelete }: {
   const [deleting, setDeleting] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
 
-  const style = CATEGORY_STYLES[memory.category] ?? CATEGORY_STYLES.general
+  const style = getCategoryStyle(memory.category)
   const lastVersion = memory.history?.[memory.history.length - 1]
   const impChanged = lastVersion && Math.abs(lastVersion.importance - memory.importance) > 0.001
 
@@ -159,11 +173,7 @@ function MemoryItem({ memory, onUpdate, onDelete }: {
         <div className="flex items-center gap-3">
           <select value={category} onChange={(e) => setCategory(e.target.value)}
             className="rounded-md border border-line bg-surface px-2 py-1 text-xs text-fg focus:border-blue-500 focus:outline-none">
-            <option value="decision">decision</option>
-            <option value="lesson">lesson</option>
-            <option value="preference">preference</option>
-            <option value="pattern">pattern</option>
-            <option value="general">general</option>
+            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
           </select>
           <div className="flex-1" />
           <button type="button" onClick={() => { setEditing(false); setContent(memory.content); setCategory(memory.category) }}
@@ -423,7 +433,10 @@ function MemorySection({ agentId }: { agentId: string }) {
     setExtracting(false)
   }
 
-  const categories = ["decision", "lesson", "preference", "pattern"] as const
+  const categories = useMemo(() => {
+    const cats = new Set(active.map(m => m.category))
+    return [...cats].sort()
+  }, [active])
 
   return (
     <section className="rounded-xl border border-line bg-surface p-5 space-y-4">
@@ -448,7 +461,7 @@ function MemorySection({ agentId }: { agentId: string }) {
           全部
         </button>
         {categories.map(cat => {
-          const s = CATEGORY_STYLES[cat]
+          const s = getCategoryStyle(cat)
           return (
             <button key={cat} type="button" onClick={() => setFilter(filter === cat ? null : cat)}
               className={clsx("rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
@@ -473,6 +486,7 @@ function MemorySection({ agentId }: { agentId: string }) {
             <MemoryItem
               key={m.id}
               memory={m}
+              categories={categories}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
             />
@@ -490,6 +504,7 @@ function MemorySection({ agentId }: { agentId: string }) {
                     <MemoryItem
                       key={m.id}
                       memory={m}
+                      categories={categories}
                       onUpdate={handleUpdate}
                       onDelete={handleDelete}
                     />
