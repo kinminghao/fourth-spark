@@ -336,8 +336,6 @@ async function processConsolidationBatch(
   const batchStartTs = Date.now()
 
   try {
-    await Bun.write(outputPath, "[]")
-
     const agent = await resolveAgent(client, "Sisyphus - ultraworker")
     const session = await client.createSession({ agent, title: CONSOLIDATION_SESSION_TITLE })
     consolidationSessionId = session.id
@@ -420,7 +418,7 @@ async function processConsolidationBatch(
         "DRY_RUN: consolidation actions logged but not executed",
       )
     } else {
-      await executeActions(customAgentId, null as unknown as string, finalActions)
+      await executeActions(customAgentId, session.id, finalActions)
     }
 
     for (const action of finalActions) {
