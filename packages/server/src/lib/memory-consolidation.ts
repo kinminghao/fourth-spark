@@ -8,6 +8,7 @@ import { DEFAULT_VARIANT } from "./config"
 import { logger } from "../middleware/logger"
 import { unlink, mkdir, appendFile, readFile, readdir } from "node:fs/promises"
 import { join } from "node:path"
+import { DATA_DIR } from "../cli/paths"
 import type { RuntimeClient } from "../core/runtime-client"
 
 // ---------------------------------------------------------------------------
@@ -38,9 +39,9 @@ export interface ConsolidationStats {
 // ---------------------------------------------------------------------------
 
 const CONSOLIDATION_MIN_MEMORIES = 15
-const CONSOLIDATION_MAX_ACTIONS = 15
-const CONSOLIDATION_MAX_DELETES = 5
-const CONSOLIDATION_BATCH_SIZE = 40
+const CONSOLIDATION_MAX_ACTIONS = 50
+const CONSOLIDATION_MAX_DELETES = 20
+const CONSOLIDATION_BATCH_SIZE = 100
 const CONSOLIDATION_TIMEOUT_MS = 300_000
 const DECAY_STALE_DAYS = 7
 const DECAY_FACTOR = 0.962
@@ -48,7 +49,8 @@ const DECAY_FLOOR = 0.2
 const DRY_RUN = process.env.CONSOLIDATION_DRY_RUN === "true"
 
 const POLL_INTERVAL_MS = 2_000
-const MEMORY_LOG_ROOT = join("data", "memory-logs")
+const MEMORY_LOG_ROOT = join(DATA_DIR, "memory-logs")
+const PROMPT_OVERRIDE_DIR = join(DATA_DIR, "prompts")
 const CONSOLIDATION_SESSION_TITLE = "[internal] memory consolidation"
 
 // ---------------------------------------------------------------------------
@@ -57,6 +59,17 @@ const CONSOLIDATION_SESSION_TITLE = "[internal] memory consolidation"
 
 const lastConsolidated = new Map<string, number>()
 const consolidatingAgents = new Set<string>()
+
+async function resolvePrompt(filename: string, fallback: string): Promise<string> {
+  try {
+    const content = await readFile(join(PROMPT_OVERRIDE_DIR, filename), "utf-8")
+    if (content.trim()) {
+      logger.info({ filename }, "using prompt override from file")
+      return content.trim()
+    }
+  } catch { /* file not found or unreadable, use fallback */ }
+  return fallback
+}
 const lastRunSummaries = new Map<string, { update: number; merge: number; delete: number; skip: number; decayed: number }>()
 const lastRecentChanges = new Map<string, Record<string, MemoryChange>>()
 
@@ -320,8 +333,9 @@ async function processConsolidationBatch(
       content: m.content,
     }))
 
+    const prompt = await resolvePrompt("memory-consolidator.md", MEMORY_CONSOLIDATOR_PROMPT)
     const fullPrompt =
-      `${MEMORY_CONSOLIDATOR_PROMPT}\n\n输出文件路径：${outputPath}\n请用 Write 工具将 JSON 结果写入上述文件，完全替换原内容。\n\n---\n\n## 当前活跃记忆\n\n${JSON.stringify(payload, null, 2)}`
+      `${prompt}\n\n输出文件路径：${outputPath}\n请用 Write 工具将 JSON 结果写入上述文件，完全替换原内容。\n\n---\n\n## 当前活跃记忆\n\n${JSON.stringify(payload, null, 2)}`
 
     await client.prompt(session.id, fullPrompt, { agent, variant: DEFAULT_VARIANT })
     logger.info(
