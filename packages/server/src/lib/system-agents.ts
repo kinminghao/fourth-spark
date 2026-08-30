@@ -190,6 +190,7 @@ const SYSTEM_AGENTS: Array<{
   systemPrompt: string
   isSystem: number
   memoryEnabled: number
+  memoryModel: string | null
   sortOrder: number
 }> = [
   {
@@ -200,6 +201,7 @@ const SYSTEM_AGENTS: Array<{
     systemPrompt: "",
     isSystem: 1,
     memoryEnabled: 1,
+    memoryModel: "anthropic/claude-sonnet-4-20250514",
     sortOrder: -100,
   },
   {
@@ -210,6 +212,7 @@ const SYSTEM_AGENTS: Array<{
     systemPrompt: COMMENT_POLISHER_PROMPT,
     isSystem: 2,
     memoryEnabled: 0,
+    memoryModel: null,
     sortOrder: -1,
   },
   {
@@ -220,6 +223,7 @@ const SYSTEM_AGENTS: Array<{
     systemPrompt: ISSUE_POLISHER_PROMPT,
     isSystem: 2,
     memoryEnabled: 0,
+    memoryModel: null,
     sortOrder: -1,
   },
   {
@@ -230,6 +234,7 @@ const SYSTEM_AGENTS: Array<{
     systemPrompt: MEMORY_EXTRACTOR_PROMPT,
     isSystem: 3,
     memoryEnabled: 0,
+    memoryModel: null,
     sortOrder: -1,
   },
   {
@@ -240,6 +245,7 @@ const SYSTEM_AGENTS: Array<{
     systemPrompt: MEMORY_CONSOLIDATOR_PROMPT,
     isSystem: 3,
     memoryEnabled: 0,
+    memoryModel: null,
     sortOrder: -1,
   },
 ]
@@ -257,6 +263,7 @@ async function seedOnce(): Promise<void> {
         systemPrompt: agent.systemPrompt,
         isSystem: agent.isSystem,
         memoryEnabled: agent.memoryEnabled,
+        memoryModel: agent.memoryModel,
         sortOrder: agent.sortOrder,
         updatedAt: Date.now(),
       }).where(eq(customAgents.id, agent.id))
@@ -274,6 +281,7 @@ async function seedOnce(): Promise<void> {
       systemPromptPosition: -1,
       isSystem: agent.isSystem,
       memoryEnabled: agent.memoryEnabled,
+      memoryModel: agent.memoryModel,
       repoId: null,
       sortOrder: agent.sortOrder,
       createdAt: now,

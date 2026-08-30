@@ -14,8 +14,9 @@ import { join } from "node:path"
 import { DATA_DIR } from "../cli/paths"
 import { resolveAgent } from "./agent-validator"
 import { db } from "../db/index"
-import { sessions as sessionsTable } from "../db/schema"
+import { sessions as sessionsTable, customAgents } from "../db/schema"
 import { syncMessagesList } from "../db/sync"
+import { eq } from "drizzle-orm"
 
 function emitNotification(event: NotifyEvent): void {
   const { notifications } = getRegistry()
@@ -58,7 +59,7 @@ const STATUS_LABELS: Record<string, string> = { idle: "完成", busy: "运行中
 // ---------------------------------------------------------------------------
 // Memory extraction state
 // ---------------------------------------------------------------------------
-const EXTRACTION_TIMEOUT_MS = 300_000
+const EXTRACTION_TIMEOUT_MS = 600_000
 const PROMPT_OVERRIDE_DIR = join(DATA_DIR, "prompts")
 
 async function resolvePrompt(filename: string, fallback: string): Promise<string> {
@@ -497,9 +498,14 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
       set: { customAgentId: MEMORY_EXTRACTOR_ID, timeUpdated: Date.now() },
     })
 
+    const [agentConfig] = await db.select({ memoryModel: customAgents.memoryModel })
+      .from(customAgents)
+      .where(eq(customAgents.id, customAgentId))
+    const memoryModel = agentConfig?.memoryModel ?? null
+
     const extractorPrompt = await resolvePrompt("memory-extractor.md", MEMORY_EXTRACTOR_PROMPT)
     const fullPrompt = buildFullExtractionPrompt(extractorPrompt, outputPath, prompt)
-    await client.prompt(session.id, fullPrompt, { agent, variant: DEFAULT_VARIANT })
+    await client.prompt(session.id, fullPrompt, { agent, variant: DEFAULT_VARIANT, model: memoryModel ?? undefined })
     logger.info({ sessionId: session.id, sourceSessionId, outputPath }, "memory extraction started, waiting for result")
 
     const startedAt = Date.now()

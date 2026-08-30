@@ -43,7 +43,7 @@ const CONSOLIDATION_MIN_MEMORIES = 15
 const CONSOLIDATION_MAX_ACTIONS = 50
 const CONSOLIDATION_MAX_DELETES = 20
 const CONSOLIDATION_BATCH_SIZE = 100
-const CONSOLIDATION_TIMEOUT_MS = 300_000
+const CONSOLIDATION_TIMEOUT_MS = 600_000
 const DECAY_STALE_DAYS = 7
 const DECAY_FACTOR = 0.962
 const DECAY_FLOOR = 0.2
@@ -316,6 +316,7 @@ async function processConsolidationBatch(
   batch: MemoryRow[],
   batchIdx: number,
   totalBatches: number,
+  memoryModel?: string,
 ): Promise<{ actions: ExtractionAction[]; changes: Record<string, MemoryChange> }> {
   let consolidationSessionId: string | undefined
   const outputPath = `/tmp/memory-consolidate-${crypto.randomUUID()}.json`
@@ -351,7 +352,7 @@ async function processConsolidationBatch(
     const fullPrompt =
       `${prompt}\n\n输出文件路径：${outputPath}\n请用 Write 工具将 JSON 结果写入上述文件，完全替换原内容。\n\n---\n\n## 当前活跃记忆\n\n${JSON.stringify(payload, null, 2)}`
 
-    await client.prompt(session.id, fullPrompt, { agent, variant: DEFAULT_VARIANT })
+    await client.prompt(session.id, fullPrompt, { agent, variant: DEFAULT_VARIANT, model: memoryModel ?? undefined })
     logger.info(
       { sessionId: session.id, customAgentId, batchIdx, totalBatches, batchSize: batch.length, outputPath },
       "memory consolidation batch started, waiting for result",
@@ -403,7 +404,7 @@ async function processConsolidationBatch(
         "DRY_RUN: consolidation actions logged but not executed",
       )
     } else {
-      await executeActions(customAgentId, "consolidation", finalActions)
+      await executeActions(customAgentId, null as unknown as string, finalActions)
     }
 
     for (const action of finalActions) {
@@ -528,6 +529,11 @@ async function consolidateAgent(customAgentId: string, client: RuntimeClient): P
     return
   }
 
+  const [agentConfig] = await db.select({ memoryModel: customAgents.memoryModel })
+    .from(customAgents)
+    .where(eq(customAgents.id, customAgentId))
+  const memoryModel = agentConfig?.memoryModel ?? undefined
+
   const rows: MemoryRow[] = memories.map((m) => ({
     id: m.id,
     category: m.category,
@@ -548,7 +554,7 @@ async function consolidateAgent(customAgentId: string, client: RuntimeClient): P
   const accumulated = { update: 0, merge: 0, delete: 0, skip: 0 }
   const allChanges: Record<string, MemoryChange> = {}
   for (let i = 0; i < batches.length; i++) {
-    const result = await processConsolidationBatch(customAgentId, client, batches[i], i + 1, batches.length)
+    const result = await processConsolidationBatch(customAgentId, client, batches[i], i + 1, batches.length, memoryModel)
     for (const a of result.actions) {
       const key = a.action as keyof typeof accumulated
       if (key in accumulated) accumulated[key]++
