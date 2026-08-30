@@ -21,6 +21,12 @@ export interface FoldedText {
   text: string
   lineCount: number
   byteSize: number
+  placeholder: string
+}
+
+export function shouldFoldText(text: string): boolean {
+  const lineCount = text.split("\n").length
+  return lineCount > TEXT_FOLD_LINE_THRESHOLD || text.length > TEXT_FOLD_CHAR_THRESHOLD
 }
 
 function formatByteSize(bytes: number): string {
@@ -123,34 +129,31 @@ export function useAttachments(imagesAllowed = true) {
 
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(event.clipboardData.files)
-    if (files.length > 0) {
-      event.preventDefault()
-      if (!imagesAllowed) {
-        setError("当前模型不支持图片")
-        return
-      }
-      void addFiles(files)
-      return
-    }
-
-    const text = event.clipboardData.getData("text/plain")
-    if (!text) return
-
-    const lineCount = text.split("\n").length
-    if (lineCount <= TEXT_FOLD_LINE_THRESHOLD && text.length <= TEXT_FOLD_CHAR_THRESHOLD) {
-      return
-    }
-
+    if (files.length === 0) return
     event.preventDefault()
-    setFoldedTexts((prev) => [
-      ...prev,
-      {
-        _id: `fold-${++attachmentSeq}`,
-        text,
-        lineCount,
-        byteSize: new TextEncoder().encode(text).byteLength,
-      },
-    ])
+    if (!imagesAllowed) {
+      setError("当前模型不支持图片")
+      return
+    }
+    void addFiles(files)
+  }
+
+  const addFoldedText = (text: string): FoldedText => {
+    const seq = ++attachmentSeq
+    const lineCount = text.split("\n").length
+    const byteSize = new TextEncoder().encode(text).byteLength
+    const placeholder = `[粘贴文本 #${seq} · ${lineCount}行]`
+    const entry: FoldedText = { _id: `fold-${seq}`, text, lineCount, byteSize, placeholder }
+    setFoldedTexts((prev) => [...prev, entry])
+    return entry
+  }
+
+  const expandFoldedTexts = (content: string): string => {
+    let result = content
+    for (const fold of foldedTexts) {
+      result = result.replace(fold.placeholder, fold.text)
+    }
+    return result
   }
 
   const remove = (id: string) => setAttachments((prev) => prev.filter((a) => a._id !== id))
@@ -164,7 +167,7 @@ export function useAttachments(imagesAllowed = true) {
 
   const promptFiles: PromptFile[] = attachments.map(({ mime, url, filename }) => ({ mime, url, filename }))
 
-  return { attachments, foldedTexts, promptFiles, error, setError, addFiles, onPaste, remove, removeFoldedText, clear }
+  return { attachments, foldedTexts, promptFiles, error, setError, addFiles, onPaste, addFoldedText, expandFoldedTexts, remove, removeFoldedText, clear }
 }
 
 function TextPreviewLightbox({ text, label, onClose }: { text: string; label: string; onClose: () => void }) {

@@ -11,7 +11,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, Menu, PanelRight
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
-import { AttachButton, AttachmentStrip, useAttachments } from "./Attachments"
+import { AttachButton, AttachmentStrip, shouldFoldText, useAttachments } from "./Attachments"
 import { VoiceButton } from "./VoiceButton"
 import { VoiceOverlay, VoiceStatusBar } from "./VoiceOverlay"
 import { useVoiceInput } from "../hooks/use-voice-input"
@@ -199,7 +199,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   }, [activeRepoId])
 
   const imagesAllowed = models.length === 0 || models.some((m) => m.supportsImage !== false)
-  const { attachments, foldedTexts, promptFiles, error: attachError, addFiles, onPaste, remove, removeFoldedText, clear } = useAttachments(imagesAllowed)
+  const { attachments, foldedTexts, promptFiles, error: attachError, addFiles, onPaste: imageOnPaste, addFoldedText, expandFoldedTexts, remove, removeFoldedText, clear } = useAttachments(imagesAllowed)
 
   useEffect(() => {
     if (selectedIssueId) {
@@ -226,10 +226,35 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const selectedAgentDesc = visibleAgents.find((a) => a.id === customAgentId)?.description
   const hasContext = Boolean(issueId)
 
+  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files)
+    if (files.length > 0) {
+      imageOnPaste(event)
+      return
+    }
+    const text = event.clipboardData.getData("text/plain")
+    if (!text || !shouldFoldText(text)) return
+    event.preventDefault()
+    const fold = addFoldedText(text)
+    const textarea = event.currentTarget
+    const start = textarea.selectionStart ?? draft.length
+    const end = textarea.selectionEnd ?? draft.length
+    const newValue = draft.slice(0, start) + fold.placeholder + draft.slice(end)
+    setDraft(newValue)
+    requestAnimationFrame(() => {
+      const pos = start + fold.placeholder.length
+      textarea.setSelectionRange(pos, pos)
+    })
+  }
+
+  const handleRemoveFoldedText = (id: string) => {
+    const fold = foldedTexts.find((f) => f._id === id)
+    if (fold) setDraft(draft.replace(fold.placeholder, ""))
+    removeFoldedText(id)
+  }
+
   const submit = () => {
-    const typed = draft.trim()
-    const foldedContent = foldedTexts.map((f) => f.text).join("\n\n")
-    const text = [foldedContent, typed].filter(Boolean).join("\n\n")
+    const text = expandFoldedTexts(draft.trim())
     if (!activeRepoId || (!text && !hasContext && attachments.length === 0)) return
     setDraft("")
     clear()
@@ -281,7 +306,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
           </div>
         </div>
 
-        <AttachmentStrip attachments={attachments} foldedTexts={foldedTexts} error={attachError} onRemove={remove} onRemoveFoldedText={removeFoldedText} />
+        <AttachmentStrip attachments={attachments} foldedTexts={foldedTexts} error={attachError} onRemove={remove} onRemoveFoldedText={handleRemoveFoldedText} />
 
         <div className={clsx(
           "relative rounded-xl border bg-base/80 shadow-sm transition-colors",
@@ -353,7 +378,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
               disabled={!activeRepoId}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleKeyDown}
-              onPaste={onPaste}
+              onPaste={handlePaste}
               placeholder={!activeRepoId ? "请先选择一个仓库" : issueId ? "输入补充指令，或直接发送" : "让 Agent 做什么？"}
               className="flex-1 resize-none bg-transparent font-mono text-sm leading-6 text-fg placeholder:text-fg-6 focus:outline-none disabled:cursor-not-allowed"
             />
