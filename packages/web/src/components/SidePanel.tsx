@@ -1,13 +1,15 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import clsx from "clsx"
-import { Link2, Plus, X, Search } from "lucide-react"
-import type { Message, Todo, SessionLinks, Session } from "../lib/api-client"
+import { Link2, Plus, X, Search, ChevronDown, ChevronUp, FileText, Image, GripHorizontal } from "lucide-react"
+import type { Message, Todo, SessionLinks, Session, SessionFile } from "../lib/api-client"
+import { getSessionFiles, getSessionFileUrl } from "../lib/api-client"
 import { normalizeTodoStatus, type TodoStatus } from "../lib/message-parts"
 import { useIssueStore } from "../stores/issue-store"
 import { usePrStore } from "../stores/pr-store"
 import { useSessionStore } from "../stores/session-store"
+import { PreviewableImage } from "./Attachments"
 
 const MARK: Record<TodoStatus, { glyph: string; color: string; spin: boolean }> = {
   completed: { glyph: "✓", color: "text-emerald-400", spin: false },
@@ -515,6 +517,220 @@ function SubtasksTab() {
   )
 }
 
+const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"])
+const OPENABLE_EXTS = new Set([".html", ".htm", ".md", ".txt", ".log"])
+const FILES_PANEL_MIN_HEIGHT = 80
+const FILES_PANEL_DEFAULT_HEIGHT = 160
+const FILES_PANEL_MAX_RATIO = 0.4
+
+function basename(path: string): string {
+  const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
+  return idx >= 0 ? path.slice(idx + 1) : path
+}
+
+function FileItem({
+  file,
+  repoId,
+  sessionId,
+}: {
+  file: SessionFile
+  repoId: string
+  sessionId: string
+}) {
+  const name = basename(file.path)
+  const url = getSessionFileUrl(repoId, sessionId, file.path)
+  const ext = file.ext.toLowerCase()
+
+  if (IMAGE_EXTS.has(ext)) {
+    return (
+      <li
+        className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-elevated/60"
+        title={file.path}
+      >
+        <Image className="h-3 w-3 shrink-0 text-fg-5" aria-hidden />
+        <PreviewableImage
+          url={url}
+          label={name}
+          className="h-8 w-8 shrink-0 object-cover"
+        />
+        <span className="min-w-0 truncate text-xs text-fg-3">{name}</span>
+      </li>
+    )
+  }
+
+  if (OPENABLE_EXTS.has(ext)) {
+    return (
+      <li>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={file.path}
+          className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-elevated/60"
+        >
+          <FileText className="h-3.5 w-3.5 shrink-0 text-fg-4" />
+          <span className="min-w-0 truncate text-xs text-fg-3">{name}</span>
+        </a>
+      </li>
+    )
+  }
+
+  return (
+    <li
+      className="flex items-center gap-2 rounded-md px-2 py-1"
+      title={file.path}
+    >
+      <FileText className="h-3.5 w-3.5 shrink-0 text-fg-4" />
+      <span className="min-w-0 truncate text-xs text-fg-3">{name}</span>
+    </li>
+  )
+}
+
+function FilesPanel({
+  repoId,
+  sessionId,
+  containerRef,
+}: {
+  repoId: string
+  sessionId: string
+  containerRef: React.RefObject<HTMLDivElement | null>
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [panelHeight, setPanelHeight] = useState(FILES_PANEL_DEFAULT_HEIGHT)
+  const [files, setFiles] = useState<readonly SessionFile[]>([])
+  const [containerHeight, setContainerHeight] = useState(0)
+
+  const panelRef = useRef<HTMLDivElement>(null)
+  const dragStateRef = useRef<{ startY: number; startHeight: number; maxHeight: number } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    getSessionFiles(repoId, sessionId)
+      .then((res) => {
+        if (!cancelled) setFiles(res)
+      })
+      .catch(() => {
+        if (!cancelled) setFiles([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [repoId, sessionId])
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const update = () => setContainerHeight(el.clientHeight)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [containerRef])
+
+  const rawMax = containerHeight > 0 ? containerHeight * FILES_PANEL_MAX_RATIO : panelHeight
+  const maxHeight = Math.max(FILES_PANEL_MIN_HEIGHT, rawMax)
+  const effectiveHeight = Math.min(panelHeight, maxHeight)
+
+  const handleDragStart = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      const container = containerRef.current
+      const currentMax = Math.max(
+        FILES_PANEL_MIN_HEIGHT,
+        container ? container.clientHeight * FILES_PANEL_MAX_RATIO : maxHeight,
+      )
+      dragStateRef.current = {
+        startY: e.clientY,
+        startHeight: effectiveHeight,
+        maxHeight: currentMax,
+      }
+
+      const onMove = (ev: MouseEvent) => {
+        const state = dragStateRef.current
+        if (!state) return
+        const delta = state.startY - ev.clientY
+        const next = Math.max(
+          FILES_PANEL_MIN_HEIGHT,
+          Math.min(state.startHeight + delta, state.maxHeight),
+        )
+        if (panelRef.current) panelRef.current.style.height = `${next}px`
+      }
+
+      const onUp = () => {
+        const el = panelRef.current
+        if (el) {
+          const parsed = parseInt(el.style.height, 10)
+          if (!Number.isNaN(parsed)) setPanelHeight(parsed)
+        }
+        dragStateRef.current = null
+        window.removeEventListener("mousemove", onMove)
+        window.removeEventListener("mouseup", onUp)
+      }
+
+      window.addEventListener("mousemove", onMove)
+      window.addEventListener("mouseup", onUp)
+    },
+    [containerRef, effectiveHeight, maxHeight],
+  )
+
+  const count = files.length
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="flex w-full shrink-0 items-center gap-1.5 border-t border-line px-3 py-2 text-left transition-colors hover:bg-elevated/60"
+      >
+        <FileText className="h-3.5 w-3.5 shrink-0 text-fg-4" />
+        <span className="text-xs font-medium text-fg-3">变更文件</span>
+        <span className="font-mono text-[10px] text-fg-5">{count}</span>
+        <ChevronUp className="ml-auto h-3.5 w-3.5 text-fg-5" />
+      </button>
+    )
+  }
+
+  return (
+    <div
+      ref={panelRef}
+      className="flex shrink-0 flex-col border-t border-line bg-surface"
+      style={{ height: `${effectiveHeight}px` }}
+    >
+      <div
+        onMouseDown={handleDragStart}
+        role="separator"
+        aria-orientation="horizontal"
+        className="flex h-1 shrink-0 cursor-row-resize items-center justify-center bg-line transition-colors hover:bg-blue-500/60"
+      >
+        <GripHorizontal className="h-2 w-8 text-fg-6" aria-hidden />
+      </div>
+      <button
+        type="button"
+        onClick={() => setExpanded(false)}
+        className="flex shrink-0 items-center gap-1.5 border-b border-line px-3 py-2 text-left transition-colors hover:bg-elevated/60"
+      >
+        <FileText className="h-3.5 w-3.5 shrink-0 text-fg-4" />
+        <span className="text-xs font-medium text-fg-3">变更文件</span>
+        <span className="font-mono text-[10px] text-fg-5">{count}</span>
+        <ChevronDown className="ml-auto h-3.5 w-3.5 text-fg-5" />
+      </button>
+      <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1">
+        {count === 0 ? (
+          <p className="px-2 py-4 text-center font-mono text-xs text-fg-5">
+            暂无变更文件
+          </p>
+        ) : (
+          <ul className="space-y-0.5">
+            {files.map((f) => (
+              <FileItem key={f.path} file={f} repoId={repoId} sessionId={sessionId} />
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function SidePanel({
   todos,
   messages,
@@ -529,6 +745,8 @@ export function SidePanel({
   onScrollToMessage?: (messageId: string) => void
 }) {
   const [activeTab, setActiveTab] = useState<Tab>("todo")
+  const containerRef = useRef<HTMLDivElement>(null)
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
 
   const allSessions = useSessionStore((s) => s.sessions)
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
@@ -539,78 +757,91 @@ export function SidePanel({
   const subtaskCount = allSessions.filter((s) => s.parentID === subtaskParentId).length
 
   return (
-    <div className="flex h-full w-72 shrink-0 flex-col border-l border-line bg-surface">
-      <div className="flex items-center border-b border-line">
-        <button
-          type="button"
-          onClick={() => setActiveTab("todo")}
-          className={clsx(
-            "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
-            activeTab === "todo"
-              ? "border-blue-500 text-blue-500"
-              : "border-transparent text-fg-4 hover:text-fg-2",
-          )}
-        >
-          待办
-          {todos.length > 0 && (
-            <span className="font-mono text-[10px] text-fg-5">{todos.length}</span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("prompts")}
-          className={clsx(
-            "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
-            activeTab === "prompts"
-              ? "border-blue-500 text-blue-500"
-              : "border-transparent text-fg-4 hover:text-fg-2",
-          )}
-        >
-          输入
-          {userCount > 0 && (
-            <span className="font-mono text-[10px] text-fg-5">{userCount}</span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("links")}
-          className={clsx(
-            "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
-            activeTab === "links"
-              ? "border-blue-500 text-blue-500"
-              : "border-transparent text-fg-4 hover:text-fg-2",
-          )}
-        >
-          关联
-          {linkCount > 0 && (
-            <span className="font-mono text-[10px] text-fg-5">{linkCount}</span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("subtasks")}
-          className={clsx(
-            "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
-            activeTab === "subtasks"
-              ? "border-blue-500 text-blue-500"
-              : "border-transparent text-fg-4 hover:text-fg-2",
-          )}
-        >
-          子任务
-          {subtaskCount > 0 && (
-            <span className="font-mono text-[10px] text-fg-5">{subtaskCount}</span>
-          )}
-        </button>
+    <div
+      ref={containerRef}
+      className="flex h-full w-72 shrink-0 flex-col border-l border-line bg-surface"
+    >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex items-center border-b border-line">
+          <button
+            type="button"
+            onClick={() => setActiveTab("todo")}
+            className={clsx(
+              "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
+              activeTab === "todo"
+                ? "border-blue-500 text-blue-500"
+                : "border-transparent text-fg-4 hover:text-fg-2",
+            )}
+          >
+            待办
+            {todos.length > 0 && (
+              <span className="font-mono text-[10px] text-fg-5">{todos.length}</span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("prompts")}
+            className={clsx(
+              "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
+              activeTab === "prompts"
+                ? "border-blue-500 text-blue-500"
+                : "border-transparent text-fg-4 hover:text-fg-2",
+            )}
+          >
+            输入
+            {userCount > 0 && (
+              <span className="font-mono text-[10px] text-fg-5">{userCount}</span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("links")}
+            className={clsx(
+              "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
+              activeTab === "links"
+                ? "border-blue-500 text-blue-500"
+                : "border-transparent text-fg-4 hover:text-fg-2",
+            )}
+          >
+            关联
+            {linkCount > 0 && (
+              <span className="font-mono text-[10px] text-fg-5">{linkCount}</span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("subtasks")}
+            className={clsx(
+              "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
+              activeTab === "subtasks"
+                ? "border-blue-500 text-blue-500"
+                : "border-transparent text-fg-4 hover:text-fg-2",
+            )}
+          >
+            子任务
+            {subtaskCount > 0 && (
+              <span className="font-mono text-[10px] text-fg-5">{subtaskCount}</span>
+            )}
+          </button>
+        </div>
+
+        {activeTab === "todo" ? (
+          <TodoTab todos={todos} />
+        ) : activeTab === "prompts" ? (
+          <PromptsTab messages={messages} onScrollToMessage={onScrollToMessage} />
+        ) : activeTab === "links" ? (
+          <LinksTab links={sessionLinks} sessionId={sessionId} />
+        ) : (
+          <SubtasksTab />
+        )}
       </div>
 
-      {activeTab === "todo" ? (
-        <TodoTab todos={todos} />
-      ) : activeTab === "prompts" ? (
-        <PromptsTab messages={messages} onScrollToMessage={onScrollToMessage} />
-      ) : activeTab === "links" ? (
-        <LinksTab links={sessionLinks} sessionId={sessionId} />
-      ) : (
-        <SubtasksTab />
+      {sessionId && activeRepoId && (
+        <FilesPanel
+          repoId={activeRepoId}
+          sessionId={sessionId}
+          containerRef={containerRef}
+        />
       )}
     </div>
   )

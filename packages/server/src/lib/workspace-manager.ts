@@ -152,6 +152,23 @@ export const workspaceManager = {
     const result = runGit(["merge-base", "--is-ancestor", ws.branch, ws.baseBranch], repo.localPath)
     return result.ok
   },
+
+  async getChangedFiles(workspaceId: string): Promise<string[]> {
+    const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, workspaceId))
+    if (!ws) return []
+    if (!existsSync(ws.localPath)) return []
+
+    const result = runGit(["diff", "--diff-filter=ACMRT", "--name-only", `${ws.baseBranch}...HEAD`], ws.localPath)
+    if (!result.ok) {
+      const fallback = runGit(["diff", "--diff-filter=ACMRT", "--name-only", ws.baseBranch], ws.localPath)
+      if (!fallback.ok) {
+        logger.warn({ workspaceId, stderr: fallback.stderr }, "git diff --name-only failed")
+        return []
+      }
+      return fallback.stdout.split("\n").filter(Boolean)
+    }
+    return result.stdout.split("\n").filter(Boolean)
+  },
 }
 
 export { WORKTREE_DIR }
