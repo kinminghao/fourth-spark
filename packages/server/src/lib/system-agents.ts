@@ -219,7 +219,7 @@ const SYSTEM_AGENTS: Array<{
     systemPrompt: "",
     isSystem: 1,
     memoryEnabled: 1,
-    memoryModel: "anthropic/claude-sonnet-4-20250514",
+    memoryModel: "anthropic/claude-sonnet-4-6",
     sortOrder: -100,
   },
   {
