@@ -41,7 +41,7 @@ const CONSOLIDATION_MIN_MEMORIES = 15
 const CONSOLIDATION_MAX_ACTIONS = 15
 const CONSOLIDATION_MAX_DELETES = 5
 const CONSOLIDATION_BATCH_SIZE = 40
-const CONSOLIDATION_TIMEOUT_MS = 120_000
+const CONSOLIDATION_TIMEOUT_MS = 300_000
 const DECAY_STALE_DAYS = 7
 const DECAY_FACTOR = 0.962
 const DECAY_FLOOR = 0.2
@@ -470,7 +470,7 @@ async function processConsolidationBatch(
       { customAgentId, batchIdx, actionCount: finalActions.length, byAction: countByAction(finalActions), dryRun: DRY_RUN },
       "memory consolidation batch completed",
     )
-    return { actions: finalActions, changes, skippedFlagged }
+    return { actions: finalActions, changes }
   } catch (err) {
     logger.warn({ err, customAgentId, batchIdx }, "memory consolidation batch failed")
     return { actions: [], changes: {} }

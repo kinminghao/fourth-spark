@@ -56,7 +56,7 @@ const STATUS_LABELS: Record<string, string> = { idle: "完成", busy: "运行中
 // ---------------------------------------------------------------------------
 // Memory extraction state
 // ---------------------------------------------------------------------------
-const EXTRACTION_TIMEOUT_MS = 120_000
+const EXTRACTION_TIMEOUT_MS = 300_000
 const EXTRACTION_SCAN_INTERVAL_MS = 4 * 60 * 60 * 1_000
 let extractionScanTimer: ReturnType<typeof setInterval> | undefined
 const pendingExtractions = new Map<string, Array<{ sourceSessionId: string; customAgentId: string }>>()

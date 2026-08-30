@@ -409,13 +409,22 @@ function MemorySection({ agentId }: { agentId: string }) {
   const handleTriggerConsolidation = async () => {
     setConsolidationRunning(true)
     try {
-      const updated = await api.triggerConsolidation(agentId)
-      setConsolidationStats(updated)
-      await load()
+      await api.triggerConsolidation(agentId)
     } catch {
-      // best-effort
+      setConsolidationRunning(false)
+      return
     }
-    setConsolidationRunning(false)
+    const pollInterval = setInterval(() => {
+      api.getMemoryConsolidationStats(agentId).then((s) => {
+        setConsolidationStats(s)
+        if (s.lastConsolidatedAt && (!consolidationStats?.lastConsolidatedAt || s.lastConsolidatedAt > consolidationStats.lastConsolidatedAt)) {
+          clearInterval(pollInterval)
+          setConsolidationRunning(false)
+          void load()
+        }
+      }).catch(() => {})
+    }, 5_000)
+    setTimeout(() => { clearInterval(pollInterval); setConsolidationRunning(false) }, 300_000)
   }
 
   useEffect(() => {

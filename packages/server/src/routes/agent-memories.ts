@@ -78,9 +78,9 @@ agentMemoryRoutes.post("/consolidate", async (c) => {
   if (entries.length === 0) return c.json({ error: "No runtime clients available", status: 503 }, 503)
 
   try {
-    await triggerManualConsolidation(agentId, entries)
-    const stats = await getConsolidationStats(agentId)
-    return c.json(stats)
+    triggerManualConsolidation(agentId, entries).catch((err) =>
+      logger.warn({ err, agentId }, "manual consolidation failed in background"))
+    return c.json({ status: "started" })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return c.json({ error: msg, status: 409 }, 409)
