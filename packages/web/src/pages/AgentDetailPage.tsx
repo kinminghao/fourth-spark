@@ -163,47 +163,62 @@ function MemoryItem({ memory, onUpdate, onDelete }: {
 
 function ConsolidationStatsBar({ agentId }: { agentId: string }) {
   const [stats, setStats] = useState<ConsolidationStats | null>(null)
+  const [running, setRunning] = useState(false)
 
-  useEffect(() => {
+  const loadStats = useCallback(() => {
     api.getMemoryConsolidationStats(agentId)
       .then(setStats)
       .catch(() => setStats(null))
   }, [agentId])
 
+  useEffect(() => { loadStats() }, [loadStats])
+
+  const handleTrigger = async () => {
+    setRunning(true)
+    try {
+      const updated = await api.triggerConsolidation(agentId)
+      setStats(updated)
+    } catch {
+      // best-effort
+    }
+    setRunning(false)
+  }
+
   if (!stats) return null
 
-  const parts: string[] = []
-
-  if (stats.lastConsolidatedAt) {
-    parts.push(`上次整理：${formatRelativeTime(stats.lastConsolidatedAt)}`)
-  }
-
-  if (stats.lastActions) {
-    const a = stats.lastActions
-    const actionParts: string[] = []
-    if (a.update > 0) actionParts.push(`${a.update} 条更新`)
-    if (a.merge > 0) actionParts.push(`${a.merge} 条合并`)
-    if (a.delete > 0) actionParts.push(`${a.delete} 条清理`)
-    if (a.decayed > 0) actionParts.push(`${a.decayed} 条降权`)
-    if (actionParts.length > 0) parts.push(actionParts.join("  "))
-  }
-
-  if (stats.flagged > 0) {
-    const pct = Math.round((stats.flagged / stats.totalActive) * 100)
-    parts.push(`待整理: ${stats.flagged}/${stats.totalActive} (${pct}%)`)
-  }
-
-  if (stats.stale > 0) {
-    parts.push(`衰减中: ${stats.stale}`)
-  }
-
-  if (parts.length === 0) return null
+  const a = stats.lastActions
+  const flaggedPct = stats.totalActive > 0 ? Math.round((stats.flagged / stats.totalActive) * 100) : 0
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-elevated px-3 py-1.5 text-[11px] tabular-nums text-fg-5">
-      {parts.map((p, i) => (
-        <span key={i}>{i > 0 && <span className="mr-3 text-fg-6">·</span>}{p}</span>
-      ))}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-elevated px-3 py-2 text-[11px] tabular-nums text-fg-5">
+      <span>
+        {stats.lastConsolidatedAt
+          ? `上次整理：${formatRelativeTime(stats.lastConsolidatedAt)}`
+          : "尚未整理"}
+      </span>
+      {a && (
+        <>
+          <span className="text-fg-6">·</span>
+          <span>{a.update} 更新 {a.merge} 合并 {a.delete} 清理 {a.decayed} 降权</span>
+        </>
+      )}
+      <span className="text-fg-6">·</span>
+      <span>待整理: {stats.flagged}/{stats.totalActive} ({flaggedPct}%)</span>
+      {stats.stale > 0 && (
+        <>
+          <span className="text-fg-6">·</span>
+          <span>衰减中: {stats.stale}</span>
+        </>
+      )}
+      <div className="flex-1" />
+      <button
+        type="button"
+        onClick={() => void handleTrigger()}
+        disabled={running}
+        className="rounded px-2 py-0.5 text-[10px] font-medium text-fg-4 transition-colors hover:bg-surface hover:text-fg-3 disabled:opacity-40"
+      >
+        {running ? "整理中…" : "立即整理"}
+      </button>
     </div>
   )
 }

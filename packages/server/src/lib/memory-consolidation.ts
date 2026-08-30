@@ -6,7 +6,7 @@ import { MEMORY_CONSOLIDATOR_ID, MEMORY_CONSOLIDATOR_PROMPT } from "./system-age
 import { resolveAgent } from "./agent-validator"
 import { DEFAULT_VARIANT } from "./config"
 import { logger } from "../middleware/logger"
-import { unlink, mkdir, appendFile } from "node:fs/promises"
+import { unlink, mkdir, appendFile, readFile, readdir } from "node:fs/promises"
 import { join } from "node:path"
 import type { RuntimeClient } from "../core/runtime-client"
 
@@ -15,13 +15,12 @@ import type { RuntimeClient } from "../core/runtime-client"
 // ---------------------------------------------------------------------------
 
 const CONSOLIDATION_MIN_MEMORIES = 15
-const CONSOLIDATION_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000  // 24h
 const CONSOLIDATION_MAX_ACTIONS = 15
 const CONSOLIDATION_MAX_DELETES = 5
 const CONSOLIDATION_BATCH_SIZE = 40
 const CONSOLIDATION_TIMEOUT_MS = 120_000
 const DECAY_STALE_DAYS = 7
-const DECAY_FACTOR = 0.8
+const DECAY_FACTOR = 0.962
 const DECAY_FLOOR = 0.2
 const DRY_RUN = process.env.CONSOLIDATION_DRY_RUN === "true"
 
@@ -470,35 +469,20 @@ export async function runMemoryConsolidation(
   }
 
   const client = entries[0].client
-  const now = Date.now()
 
   for (const { id: agentId } of agents) {
-    if (consolidatingAgents.has(agentId)) {
-      logger.debug({ agentId }, "consolidation already in progress, skipping")
-      continue
+    if (!consolidatingAgents.has(agentId)) {
+      consolidatingAgents.add(agentId)
+      try {
+        await consolidateAgent(agentId, client)
+        lastConsolidated.set(agentId, Date.now())
+      } catch (err) {
+        logger.error({ err, agentId }, "memory consolidation failed for agent")
+      } finally {
+        consolidatingAgents.delete(agentId)
+      }
     }
 
-    const last = lastConsolidated.get(agentId) ?? 0
-    if (now - last < CONSOLIDATION_MIN_INTERVAL_MS) {
-      logger.debug(
-        { agentId, sinceLastMs: now - last, minIntervalMs: CONSOLIDATION_MIN_INTERVAL_MS },
-        "consolidation interval not met, skipping",
-      )
-      continue
-    }
-
-    consolidatingAgents.add(agentId)
-    try {
-      await consolidateAgent(agentId, client)
-      lastConsolidated.set(agentId, Date.now())
-    } catch (err) {
-      logger.error({ err, agentId }, "memory consolidation failed for agent")
-    } finally {
-      consolidatingAgents.delete(agentId)
-    }
-
-    // Decay runs unconditionally for every memory-enabled agent, regardless of
-    // whether consolidation was skipped (too few memories, mostly clean, etc.).
     try {
       const decayResult = await applyImportanceDecay(agentId)
       const prev = lastRunSummaries.get(agentId)
@@ -525,6 +509,59 @@ export interface ConsolidationStats {
   lastActions: { update: number; merge: number; delete: number; skip: number; decayed: number } | null
 }
 
+async function readLastRunFromLog(agentId: string): Promise<{
+  lastConsolidatedAt: number | null
+  lastActions: { update: number; merge: number; delete: number; skip: number; decayed: number } | null
+}> {
+  try {
+    const dir = join(MEMORY_LOG_ROOT, agentId)
+    const files = await readdir(dir).catch(() => [] as string[])
+    const logFiles = files.filter(f => f.startsWith("consolidation-") && f.endsWith(".jsonl")).sort().reverse()
+    if (logFiles.length === 0) return { lastConsolidatedAt: null, lastActions: null }
+
+    const content = await readFile(join(dir, logFiles[0]), "utf-8")
+    const lines = content.trim().split("\n").filter(Boolean)
+
+    let lastSummary: Record<string, unknown> | null = null
+    let lastDecay: Record<string, unknown> | null = null
+    let lastTs: number | null = null
+
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const entry = JSON.parse(lines[i]) as Record<string, unknown>
+        if (!lastTs && typeof entry.ts === "string") {
+          lastTs = new Date(entry.ts).getTime()
+        }
+        if (!lastSummary && entry.type === "consolidation_batch_summary") {
+          lastSummary = entry
+        }
+        if (!lastDecay && entry.type === "decay") {
+          lastDecay = entry
+        }
+        if (lastSummary && lastDecay && lastTs) break
+      } catch { continue }
+    }
+
+    if (!lastSummary && !lastDecay) return { lastConsolidatedAt: lastTs, lastActions: null }
+
+    const byAction = (lastSummary?.byAction as Record<string, number>) ?? {}
+    const decayed = (lastDecay?.decayed as number) ?? 0
+
+    return {
+      lastConsolidatedAt: lastTs,
+      lastActions: {
+        update: byAction.update ?? 0,
+        merge: byAction.merge ?? 0,
+        delete: byAction.delete ?? 0,
+        skip: byAction.skip ?? 0,
+        decayed,
+      },
+    }
+  } catch {
+    return { lastConsolidatedAt: null, lastActions: null }
+  }
+}
+
 export async function getConsolidationStats(agentId: string): Promise<ConsolidationStats> {
   const memories = await db.select({ content: agentMemories.content, updatedAt: agentMemories.updatedAt })
     .from(agentMemories)
@@ -541,11 +578,40 @@ export async function getConsolidationStats(agentId: string): Promise<Consolidat
     if (m.updatedAt < cutoff) stale++
   }
 
-  return {
-    totalActive: memories.length,
-    flagged,
-    stale,
-    lastConsolidatedAt: lastConsolidated.get(agentId) ?? null,
-    lastActions: lastRunSummaries.get(agentId) ?? null,
+  let lastConsolidatedAt = lastConsolidated.get(agentId) ?? null
+  let lastActions = lastRunSummaries.get(agentId) ?? null
+
+  if (!lastConsolidatedAt) {
+    const fromLog = await readLastRunFromLog(agentId)
+    lastConsolidatedAt = fromLog.lastConsolidatedAt
+    lastActions = fromLog.lastActions
+    if (lastConsolidatedAt) lastConsolidated.set(agentId, lastConsolidatedAt)
+    if (lastActions) lastRunSummaries.set(agentId, lastActions)
+  }
+
+  return { totalActive: memories.length, flagged, stale, lastConsolidatedAt, lastActions }
+}
+
+export async function triggerManualConsolidation(
+  agentId: string,
+  entries: Array<{ repoId: string; client: RuntimeClient }>,
+): Promise<void> {
+  if (entries.length === 0) throw new Error("No runtime clients available")
+  if (consolidatingAgents.has(agentId)) throw new Error("Consolidation already in progress")
+
+  const client = entries[0].client
+  consolidatingAgents.add(agentId)
+  try {
+    await consolidateAgent(agentId, client)
+    lastConsolidated.set(agentId, Date.now())
+    const decayResult = await applyImportanceDecay(agentId)
+    const prev = lastRunSummaries.get(agentId)
+    if (prev) {
+      prev.decayed = decayResult.decayed
+    } else {
+      lastRunSummaries.set(agentId, { update: 0, merge: 0, delete: 0, skip: 0, decayed: decayResult.decayed })
+    }
+  } finally {
+    consolidatingAgents.delete(agentId)
   }
 }

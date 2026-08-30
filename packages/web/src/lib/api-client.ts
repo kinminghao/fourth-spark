@@ -623,6 +623,10 @@ export async function getMemoryConsolidationStats(agentId: string): Promise<Cons
   return apiFetch<ConsolidationStats>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/stats`)
 }
 
+export async function triggerConsolidation(agentId: string): Promise<ConsolidationStats> {
+  return apiFetch<ConsolidationStats>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/consolidate`, { method: "POST" })
+}
+
 export interface AgentSession {
   id: string
   title: string
