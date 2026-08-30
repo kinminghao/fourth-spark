@@ -117,6 +117,7 @@ export function useSpeechToText(lang = "zh-CN") {
   const gotResultRef = useRef(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const webSpeechFailedRef = useRef(false)
+  const interimTextRef = useRef("")
 
   // Server-engine recording refs
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -269,6 +270,7 @@ export function useSpeechToText(lang = "zh-CN") {
     cancelledRef.current = false
     setTranscript("")
     setInterimTranscript("")
+    interimTextRef.current = ""
     setError(null)
     setPhase("idle")
     manualStopRef.current = false
@@ -308,6 +310,7 @@ export function useSpeechToText(lang = "zh-CN") {
       }
       if (finalChunk) setTranscript((prev) => prev + finalChunk)
       setInterimTranscript(interim)
+      interimTextRef.current = interim
     }
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -330,7 +333,13 @@ export function useSpeechToText(lang = "zh-CN") {
     }
 
     recognition.onend = () => {
+      // When manually stopped, promote remaining interim text to transcript
+      // so early button release doesn't discard what the user already saw
+      if (manualStopRef.current && interimTextRef.current) {
+        setTranscript((prev) => prev + interimTextRef.current)
+      }
       setInterimTranscript("")
+      interimTextRef.current = ""
       if (!manualStopRef.current) {
         try { recognition.start(); return } catch { /* fall through */ }
       }
@@ -497,6 +506,7 @@ export function useSpeechToText(lang = "zh-CN") {
     cancelledRef.current = true
     setTranscript("")
     setInterimTranscript("")
+    interimTextRef.current = ""
     setPhase("idle")
   }, [])
 
