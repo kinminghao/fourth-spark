@@ -48,6 +48,7 @@ const DECAY_STALE_DAYS = 7
 const DECAY_FACTOR = 0.962
 const DECAY_FLOOR = 0.2
 const DRY_RUN = process.env.CONSOLIDATION_DRY_RUN === "true"
+const DEBUG_KEEP_SESSIONS = process.env.MEMORY_DEBUG === "true"
 
 const POLL_INTERVAL_MS = 2_000
 const MEMORY_LOG_ROOT = join(DATA_DIR, "memory-logs")
@@ -502,10 +503,12 @@ async function processConsolidationBatch(
     logger.warn({ err, customAgentId, batchIdx }, "memory consolidation batch failed")
     return { actions: [], changes: {} }
   } finally {
-    if (consolidationSessionId) {
-      client.deleteSession(consolidationSessionId).catch(() => { /* best-effort cleanup */ })
+    if (consolidationSessionId && !DEBUG_KEEP_SESSIONS) {
+      client.deleteSession(consolidationSessionId).catch(() => {})
     }
-    try { await unlink(outputPath) } catch { /* cleanup */ }
+    if (!DEBUG_KEEP_SESSIONS) {
+      try { await unlink(outputPath) } catch {}
+    }
   }
 }
 

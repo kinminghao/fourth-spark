@@ -527,8 +527,9 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
   } catch (err) {
     logger.warn({ err, sourceSessionId }, "memory extraction failed")
   } finally {
-    if (extractionSessionId) client.deleteSession(extractionSessionId).catch(() => {})
-    try { await unlink(outputPath) } catch { /* cleanup */ }
+    const debugKeep = process.env.MEMORY_DEBUG === "true"
+    if (extractionSessionId && !debugKeep) client.deleteSession(extractionSessionId).catch(() => {})
+    if (!debugKeep) { try { await unlink(outputPath) } catch {} }
     processNextExtraction(repoId)
   }
 }
