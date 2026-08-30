@@ -63,6 +63,18 @@ const CONSOLIDATION_SESSION_TITLE = "[internal] memory consolidation"
 const lastConsolidated = new Map<string, number>()
 const consolidatingAgents = new Set<string>()
 
+function resolveClientForAgent(
+  agentRepoId: string | null,
+  entries: Array<{ repoId: string; client: RuntimeClient }>,
+): RuntimeClient | null {
+  if (agentRepoId) {
+    const match = entries.find(e => e.repoId === agentRepoId)
+    if (match) return match.client
+  }
+  const openCode = entries.find(e => e.client instanceof HttpRuntimeClient)
+  return openCode?.client ?? null
+}
+
 async function resolvePrompt(filename: string, fallback: string): Promise<string> {
   try {
     const content = await readFile(join(PROMPT_OVERRIDE_DIR, filename), "utf-8")
@@ -333,13 +345,13 @@ async function processConsolidationBatch(
     await db.insert(sessionsTable).values({
       id: session.id,
       title: CONSOLIDATION_SESSION_TITLE,
-      customAgentId: MEMORY_CONSOLIDATOR_ID,
+      customAgentId,
       agent: agent ?? null,
       timeCreated: Date.now(),
       timeUpdated: Date.now(),
     }).onConflictDoUpdate({
       target: sessionsTable.id,
-      set: { customAgentId: MEMORY_CONSOLIDATOR_ID, timeUpdated: Date.now() },
+      set: { customAgentId, timeUpdated: Date.now() },
     })
 
     const payload = batch.map((m) => ({
@@ -578,9 +590,9 @@ export async function runMemoryConsolidation(
     return
   }
 
-  let agents: Array<{ id: string }>
+  let agents: Array<{ id: string; repoId: string | null }>
   try {
-    agents = await db.select({ id: customAgents.id })
+    agents = await db.select({ id: customAgents.id, repoId: customAgents.repoId })
       .from(customAgents)
       .where(eq(customAgents.memoryEnabled, 1))
   } catch (err) {
@@ -588,14 +600,13 @@ export async function runMemoryConsolidation(
     return
   }
 
-  const openCodeEntry = entries.find(e => e.client instanceof HttpRuntimeClient)
-  if (!openCodeEntry) {
-    logger.warn("runMemoryConsolidation: no opencode runtime found, skipping")
-    return
-  }
-  const client = openCodeEntry.client
+  for (const { id: agentId, repoId } of agents) {
+    const client = resolveClientForAgent(repoId, entries)
+    if (!client) {
+      logger.debug({ agentId, repoId }, "no suitable runtime client for agent, skipping consolidation")
+      continue
+    }
 
-  for (const { id: agentId } of agents) {
     if (!consolidatingAgents.has(agentId)) {
       consolidatingAgents.add(agentId)
       try {
@@ -769,9 +780,10 @@ export async function triggerManualConsolidation(
   if (entries.length === 0) throw new Error("No runtime clients available")
   if (consolidatingAgents.has(agentId)) throw new Error("Consolidation already in progress")
 
-  const openCodeEntry = entries.find(e => e.client instanceof HttpRuntimeClient)
-  if (!openCodeEntry) throw new Error("No opencode runtime found")
-  const client = openCodeEntry.client
+  const [agentRow] = await db.select({ repoId: customAgents.repoId })
+    .from(customAgents).where(eq(customAgents.id, agentId))
+  const client = resolveClientForAgent(agentRow?.repoId ?? null, entries)
+  if (!client) throw new Error("No suitable runtime client found")
   consolidatingAgents.add(agentId)
   try {
     await consolidateAgent(agentId, client)
