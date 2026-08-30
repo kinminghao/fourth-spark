@@ -338,7 +338,6 @@ function MemorySection({ agentId }: { agentId: string }) {
     setLoading(true)
     try {
       const data = await api.listAgentMemories(agentId, {
-        category: filter ?? undefined,
         includeSuperseded: showSuperseded,
       })
       setMemories(data)
@@ -346,7 +345,7 @@ function MemorySection({ agentId }: { agentId: string }) {
       setMemories([])
     }
     setLoading(false)
-  }, [agentId, filter, showSuperseded])
+  }, [agentId, showSuperseded])
 
   const loadStats = useCallback(() => {
     api.getMemoryConsolidationStats(agentId)
@@ -389,7 +388,8 @@ function MemorySection({ agentId }: { agentId: string }) {
     return () => { cancelled = true }
   }, [agentId, showSessions])
 
-  const active = memories.filter(m => !m.supersededBy)
+  const allActive = memories.filter(m => !m.supersededBy)
+  const active = filter ? allActive.filter(m => m.category === filter) : allActive
   const superseded = memories.filter(m => m.supersededBy)
   const extractedSessionIds = useMemo(() => new Set(memories.map(m => m.sessionId).filter(Boolean)), [memories])
 
@@ -434,9 +434,9 @@ function MemorySection({ agentId }: { agentId: string }) {
   }
 
   const categories = useMemo(() => {
-    const cats = new Set(active.map(m => m.category))
+    const cats = new Set(allActive.map(m => m.category))
     return [...cats].sort()
-  }, [active])
+  }, [allActive])
 
   return (
     <section className="rounded-xl border border-line bg-surface p-5 space-y-4">
