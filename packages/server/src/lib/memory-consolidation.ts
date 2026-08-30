@@ -11,6 +11,7 @@ import { unlink, mkdir, appendFile, readFile, readdir } from "node:fs/promises"
 import { join } from "node:path"
 import { DATA_DIR } from "../cli/paths"
 import type { RuntimeClient } from "../core/runtime-client"
+import { HttpRuntimeClient } from "../runtimes/opencode/client"
 
 // ---------------------------------------------------------------------------
 // Public change/stats types
@@ -587,7 +588,12 @@ export async function runMemoryConsolidation(
     return
   }
 
-  const client = entries[0].client
+  const openCodeEntry = entries.find(e => e.client instanceof HttpRuntimeClient)
+  if (!openCodeEntry) {
+    logger.warn("runMemoryConsolidation: no opencode runtime found, skipping")
+    return
+  }
+  const client = openCodeEntry.client
 
   for (const { id: agentId } of agents) {
     if (!consolidatingAgents.has(agentId)) {
@@ -763,7 +769,9 @@ export async function triggerManualConsolidation(
   if (entries.length === 0) throw new Error("No runtime clients available")
   if (consolidatingAgents.has(agentId)) throw new Error("Consolidation already in progress")
 
-  const client = entries[0].client
+  const openCodeEntry = entries.find(e => e.client instanceof HttpRuntimeClient)
+  if (!openCodeEntry) throw new Error("No opencode runtime found")
+  const client = openCodeEntry.client
   consolidatingAgents.add(agentId)
   try {
     await consolidateAgent(agentId, client)
