@@ -605,16 +605,14 @@ function FilesPanel({
 
   useEffect(() => {
     let cancelled = false
-    getSessionFiles(repoId, sessionId)
-      .then((res) => {
-        if (!cancelled) setFiles(res)
-      })
-      .catch(() => {
-        if (!cancelled) setFiles([])
-      })
-    return () => {
-      cancelled = true
+    const fetch = () => {
+      getSessionFiles(repoId, sessionId)
+        .then((res) => { if (!cancelled) setFiles(res) })
+        .catch(() => { if (!cancelled) setFiles([]) })
     }
+    fetch()
+    const interval = setInterval(fetch, 10_000)
+    return () => { cancelled = true; clearInterval(interval) }
   }, [repoId, sessionId])
 
   useEffect(() => {
