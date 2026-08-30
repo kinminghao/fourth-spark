@@ -3,7 +3,7 @@ import { mkdirSync, existsSync } from "node:fs"
 import { execSync } from "node:child_process"
 import { homedir } from "node:os"
 
-const DATA_DIR = join(homedir(), ".fourth-spark")
+export const DATA_DIR = join(homedir(), ".fourth-spark")
 const LOG_DIR = join(DATA_DIR, "logs")
 
 export const PID_FILE = join(DATA_DIR, "fourth-spark.pid")

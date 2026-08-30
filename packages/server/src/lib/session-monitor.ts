@@ -9,7 +9,9 @@ import { DEFAULT_VARIANT } from "./config"
 import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "./system-agents"
 import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions, getSessionCustomAgentId, listExtractableSessions } from "./memory-extractor"
 import { runMemoryConsolidation } from "./memory-consolidation"
-import { unlink } from "node:fs/promises"
+import { unlink, readFile } from "node:fs/promises"
+import { join } from "node:path"
+import { DATA_DIR } from "../cli/paths"
 import { resolveAgent } from "./agent-validator"
 import { db } from "../db/index"
 import { sessions as sessionsTable } from "../db/schema"
@@ -57,6 +59,18 @@ const STATUS_LABELS: Record<string, string> = { idle: "完成", busy: "运行中
 // Memory extraction state
 // ---------------------------------------------------------------------------
 const EXTRACTION_TIMEOUT_MS = 300_000
+const PROMPT_OVERRIDE_DIR = join(DATA_DIR, "prompts")
+
+async function resolvePrompt(filename: string, fallback: string): Promise<string> {
+  try {
+    const content = await readFile(join(PROMPT_OVERRIDE_DIR, filename), "utf-8")
+    if (content.trim()) {
+      logger.info({ filename }, "using prompt override from file")
+      return content.trim()
+    }
+  } catch { /* file not found, use fallback */ }
+  return fallback
+}
 const EXTRACTION_SCAN_INTERVAL_MS = 4 * 60 * 60 * 1_000
 let extractionScanTimer: ReturnType<typeof setInterval> | undefined
 const pendingExtractions = new Map<string, Array<{ sourceSessionId: string; customAgentId: string }>>()
@@ -483,7 +497,8 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
       set: { customAgentId: MEMORY_EXTRACTOR_ID, timeUpdated: Date.now() },
     })
 
-    const fullPrompt = buildFullExtractionPrompt(MEMORY_EXTRACTOR_PROMPT, outputPath, prompt)
+    const extractorPrompt = await resolvePrompt("memory-extractor.md", MEMORY_EXTRACTOR_PROMPT)
+    const fullPrompt = buildFullExtractionPrompt(extractorPrompt, outputPath, prompt)
     await client.prompt(session.id, fullPrompt, { agent, variant: DEFAULT_VARIANT })
     logger.info({ sessionId: session.id, sourceSessionId, outputPath }, "memory extraction started, waiting for result")
 
