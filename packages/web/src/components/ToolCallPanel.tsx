@@ -12,8 +12,25 @@ import {
   type ToolStatus,
 } from "../lib/message-parts"
 import { useSessionStore } from "../stores/session-store"
+import { useRepoStore } from "../stores/repo-store"
 
 const OUTPUT_TRUNCATE_LIMIT = 2000
+
+const WORKTREE_RE = /^.*\/\.fourth-spark\/worktrees\/[^/]+\//
+
+function shortenFilePath(filePath: string, projectRoot: string | null): string {
+  const wtMatch = WORKTREE_RE.exec(filePath)
+  if (wtMatch) {
+    return `{worktree}/${filePath.slice(wtMatch[0].length)}`
+  }
+  if (projectRoot) {
+    const root = projectRoot.endsWith("/") ? projectRoot : `${projectRoot}/`
+    if (filePath.startsWith(root)) {
+      return filePath.slice(root.length)
+    }
+  }
+  return filePath
+}
 
 const TOOL_LABELS: Record<string, string> = {
   read: "Read",
@@ -409,11 +426,17 @@ export function ToolCallPanel({ part }: { part: MessagePart }) {
     }
   }, [active])
 
+  const projectRoot = useRepoStore((s) => {
+    const repo = s.repos.find((r) => r.id === s.activeRepoId)
+    return repo?.localPath ?? null
+  })
+
   const toolName = getToolName(part)
   const lower = toolName.toLowerCase()
   const isTask = lower === "task" || lower === "agent"
   const rawInput = getToolInput(part)
-  const { label, arg } = describeTool(toolName, rawInput)
+  const { label, arg: rawArg } = describeTool(toolName, rawInput)
+  const arg = rawArg ? shortenFilePath(rawArg, projectRoot) : rawArg
   const customInput = renderToolInput(toolName, rawInput)
   const fallbackInput = customInput ? null : formatToolPayload(rawInput)
   const rawOutput = getToolOutput(part)
