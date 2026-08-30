@@ -489,13 +489,13 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
     await db.insert(sessionsTable).values({
       id: session.id,
       title: `[internal] memory extraction`,
-      customAgentId: MEMORY_EXTRACTOR_ID,
+      customAgentId,
       agent: agent ?? null,
       timeCreated: Date.now(),
       timeUpdated: Date.now(),
     }).onConflictDoUpdate({
       target: sessionsTable.id,
-      set: { customAgentId: MEMORY_EXTRACTOR_ID, timeUpdated: Date.now() },
+      set: { customAgentId, timeUpdated: Date.now() },
     })
 
     const [agentConfig] = await db.select({ memoryModel: customAgents.memoryModel })
