@@ -3,7 +3,7 @@ import { eq, and, isNull, desc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
 import { runtimeManager } from "../lib/process-manager"
-import { getConsolidationStats } from "../lib/memory-consolidation"
+import { getConsolidationStats, triggerManualConsolidation } from "../lib/memory-consolidation"
 import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions } from "../lib/memory-extractor"
 import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "../lib/system-agents"
 import { resolveAgent } from "../lib/agent-validator"
@@ -58,6 +58,33 @@ agentMemoryRoutes.get("/stats", async (c) => {
 
   const stats = await getConsolidationStats(agentId)
   return c.json(stats)
+})
+
+agentMemoryRoutes.post("/consolidate", async (c) => {
+  const agentId = c.req.param("agentId")
+  if (!agentId) return c.json({ error: "Missing agentId", status: 400 }, 400)
+
+  const check = await requireMemoryEnabled(agentId)
+  if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
+
+  const { repos } = await import("../db/schema")
+  const allRepoRows = await db.select({ id: repos.id }).from(repos)
+  const entries: Array<{ repoId: string; client: RuntimeClient }> = []
+  for (const repo of allRepoRows) {
+    const client = runtimeManager.getClient(repo.id)
+    if (client) entries.push({ repoId: repo.id, client })
+  }
+
+  if (entries.length === 0) return c.json({ error: "No runtime clients available", status: 503 }, 503)
+
+  try {
+    await triggerManualConsolidation(agentId, entries)
+    const stats = await getConsolidationStats(agentId)
+    return c.json(stats)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return c.json({ error: msg, status: 409 }, 409)
+  }
 })
 
 agentMemoryRoutes.post("/", async (c) => {

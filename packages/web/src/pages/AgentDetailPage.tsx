@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { ArrowLeft, Brain, Check, Clipboard, Clock, Download, Edit3, Loader2, Trash2, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
-import type { AgentMemory, AgentSession, ConsolidationStats, CustomAgent, ModelInfo, PromptFragment } from "../lib/api-client"
+import type { AgentMemory, AgentSession, ConsolidationStats, CustomAgent, MemoryChange, ModelInfo, PromptFragment } from "../lib/api-client"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 
@@ -51,11 +51,129 @@ function formatRelativeTime(ts: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// ChangeDetailModal
+// ---------------------------------------------------------------------------
+
+const CHANGE_LABELS: Record<MemoryChange["action"], string> = {
+  update: "重写",
+  merge: "合并",
+  delete: "清理",
+  reinforce: "强化",
+  decay: "衰减",
+  add: "新增",
+}
+
+function ChangeDetailModal({ change, currentContent, onClose }: {
+  change: MemoryChange
+  currentContent: string
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div
+        className="mx-4 max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-surface p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-fg">变更详情 · {CHANGE_LABELS[change.action]}</h3>
+          <button type="button" onClick={onClose} className="rounded p-1 text-fg-4 hover:text-fg-3">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {change.oldImportance != null && change.newImportance != null && (
+          <div className="mb-3 text-xs text-fg-4">
+            权重：{change.oldImportance.toFixed(2)} → {change.newImportance.toFixed(2)}
+          </div>
+        )}
+
+        {change.action === "update" && (
+          <div className="space-y-3">
+            <div>
+              <div className="mb-1 text-[10px] font-medium text-fg-5">原文</div>
+              <div className="rounded-lg border border-line bg-base p-3 text-xs leading-relaxed text-fg-4">
+                {change.oldContent}
+              </div>
+            </div>
+            <div className="flex justify-center text-fg-6">↓</div>
+            <div>
+              <div className="mb-1 text-[10px] font-medium text-fg-5">现文</div>
+              <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-xs leading-relaxed text-fg">
+                {currentContent}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {change.action === "merge" && (
+          <div className="space-y-3">
+            {change.sourceContents?.map((src, i) => (
+              <div key={i}>
+                <div className="mb-1 text-[10px] font-medium text-fg-5">源记忆 {i + 1}</div>
+                <div className="rounded-lg border border-line bg-base p-3 text-xs leading-relaxed text-fg-4">{src}</div>
+              </div>
+            ))}
+            <div className="flex justify-center text-fg-6">↓</div>
+            <div>
+              <div className="mb-1 text-[10px] font-medium text-fg-5">合并后</div>
+              <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-3 text-xs leading-relaxed text-fg">
+                {currentContent}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {change.action === "delete" && (
+          <div className="space-y-2">
+            <div>
+              <div className="mb-1 text-[10px] font-medium text-fg-5">已清理内容</div>
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-xs leading-relaxed text-fg-4 line-through">
+                {change.oldContent}
+              </div>
+            </div>
+            {change.reason && <div className="text-xs text-fg-5">原因：{change.reason}</div>}
+          </div>
+        )}
+
+        {change.action === "reinforce" && (
+          <div className="space-y-2">
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs leading-relaxed text-fg">
+              {currentContent}
+            </div>
+            {change.reason && <div className="text-xs text-fg-5">强化原因：{change.reason}</div>}
+          </div>
+        )}
+
+        {change.action === "decay" && (
+          <div className="text-xs text-fg-4">
+            此记忆超过 7 天未被验证，权重自动衰减。被 session 中再次验证（reinforce）后会恢复。
+          </div>
+        )}
+
+        {change.action === "add" && (
+          <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3 text-xs leading-relaxed text-fg">
+            {currentContent}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // MemoryItem
 // ---------------------------------------------------------------------------
 
-function MemoryItem({ memory, onUpdate, onDelete }: {
+const CHANGE_BADGE_STYLES: Record<Exclude<MemoryChange["action"], "delete" | "decay">, { className: string; label: (change: MemoryChange) => string }> = {
+  update: { className: "bg-blue-500/10 text-blue-400", label: () => "🔄 已重写" },
+  merge: { className: "bg-purple-500/10 text-purple-400", label: (c) => `🔗 由 ${c.sourceIds?.length ?? 0} 条合并` },
+  add: { className: "bg-green-500/10 text-green-400", label: () => "✨ 新增" },
+  reinforce: { className: "bg-emerald-500/10 text-emerald-400", label: () => "💪 已强化" },
+}
+
+function MemoryItem({ memory, change, onUpdate, onDelete }: {
   memory: AgentMemory
+  change?: MemoryChange
   onUpdate: (memId: string, data: { content?: string; category?: string; importance?: number }) => Promise<void>
   onDelete: (memId: string) => Promise<void>
 }) {
@@ -64,8 +182,12 @@ function MemoryItem({ memory, onUpdate, onDelete }: {
   const [category, setCategory] = useState(memory.category)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showChange, setShowChange] = useState(false)
 
   const style = CATEGORY_STYLES[memory.category] ?? CATEGORY_STYLES.general
+  const badgeStyle = change && change.action !== "delete" && change.action !== "decay"
+    ? CHANGE_BADGE_STYLES[change.action]
+    : null
 
   const handleSave = async () => {
     setSaving(true)
@@ -118,7 +240,10 @@ function MemoryItem({ memory, onUpdate, onDelete }: {
       </div>
       <div className="mt-1.5 flex items-center gap-2 text-[11px] text-fg-5">
         <span className="flex items-center gap-0.5">
-          <Zap className="h-3 w-3" /> {memory.importance.toFixed(2)}
+          <Zap className="h-3 w-3" />
+          {change?.oldImportance != null
+            ? `${change.oldImportance.toFixed(2)}→${memory.importance.toFixed(2)}`
+            : memory.importance.toFixed(2)}
         </span>
         <span>·</span>
         <span>{formatRelativeTime(memory.updatedAt)}</span>
@@ -127,6 +252,27 @@ function MemoryItem({ memory, onUpdate, onDelete }: {
             <span>·</span>
             <span className="text-amber-400">{memory.supersededBy === "user-deleted" ? "已删除" : memory.supersededBy === "consolidated-out" ? "已整理" : "已合并"}</span>
           </>
+        )}
+        {badgeStyle && change && (
+          <button
+            type="button"
+            onClick={() => setShowChange(true)}
+            className={clsx("rounded px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-80", badgeStyle.className)}
+          >
+            {badgeStyle.label(change)}
+          </button>
+        )}
+        {change?.action === "decay" && (
+          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">📉 衰减中</span>
+        )}
+        {change?.action === "delete" && (
+          <button
+            type="button"
+            onClick={() => setShowChange(true)}
+            className="rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400 transition-opacity hover:opacity-80"
+          >
+            🗑 已清理
+          </button>
         )}
         <div className="flex-1" />
         {!memory.supersededBy && (
@@ -153,6 +299,9 @@ function MemoryItem({ memory, onUpdate, onDelete }: {
           </div>
         )}
       </div>
+      {showChange && change && (
+        <ChangeDetailModal change={change} currentContent={memory.content} onClose={() => setShowChange(false)} />
+      )}
     </div>
   )
 }
@@ -161,49 +310,68 @@ function MemoryItem({ memory, onUpdate, onDelete }: {
 // MemorySection
 // ---------------------------------------------------------------------------
 
-function ConsolidationStatsBar({ agentId }: { agentId: string }) {
-  const [stats, setStats] = useState<ConsolidationStats | null>(null)
+const CONSOLIDATION_INTERVAL_MS = 4 * 60 * 60 * 1_000
 
-  useEffect(() => {
-    api.getMemoryConsolidationStats(agentId)
-      .then(setStats)
-      .catch(() => setStats(null))
-  }, [agentId])
+function formatNextRun(lastConsolidatedAt: number | null): string {
+  if (!lastConsolidatedAt) return "下次：待定"
+  const nextRun = lastConsolidatedAt + CONSOLIDATION_INTERVAL_MS
+  const now = Date.now()
+  if (nextRun <= now) return "下次：即将运行"
+  const diff = nextRun - now
+  const mins = Math.floor(diff / 60_000)
+  if (mins < 60) return `下次：约 ${mins} 分钟后`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `下次：约 ${hours} 小时后`
+  return `下次：约 ${Math.floor(hours / 24)} 天后`
+}
 
+function ConsolidationStatsBar({ stats, running, onTrigger }: {
+  stats: ConsolidationStats | null
+  running: boolean
+  onTrigger: () => void
+}) {
   if (!stats) return null
 
-  const parts: string[] = []
-
-  if (stats.lastConsolidatedAt) {
-    parts.push(`上次整理：${formatRelativeTime(stats.lastConsolidatedAt)}`)
-  }
-
-  if (stats.lastActions) {
-    const a = stats.lastActions
-    const actionParts: string[] = []
-    if (a.update > 0) actionParts.push(`${a.update} 条更新`)
-    if (a.merge > 0) actionParts.push(`${a.merge} 条合并`)
-    if (a.delete > 0) actionParts.push(`${a.delete} 条清理`)
-    if (a.decayed > 0) actionParts.push(`${a.decayed} 条降权`)
-    if (actionParts.length > 0) parts.push(actionParts.join("  "))
-  }
-
-  if (stats.flagged > 0) {
-    const pct = Math.round((stats.flagged / stats.totalActive) * 100)
-    parts.push(`待整理: ${stats.flagged}/${stats.totalActive} (${pct}%)`)
-  }
-
-  if (stats.stale > 0) {
-    parts.push(`衰减中: ${stats.stale}`)
-  }
-
-  if (parts.length === 0) return null
+  const a = stats.lastActions
+  const flaggedPct = stats.totalActive > 0 ? Math.round((stats.flagged / stats.totalActive) * 100) : 0
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-elevated px-3 py-1.5 text-[11px] tabular-nums text-fg-5">
-      {parts.map((p, i) => (
-        <span key={i}>{i > 0 && <span className="mr-3 text-fg-6">·</span>}{p}</span>
-      ))}
+    <div className="rounded-lg bg-elevated px-3 py-2 text-[11px] tabular-nums text-fg-5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span>
+          {stats.lastConsolidatedAt
+            ? `上次整理：${formatRelativeTime(stats.lastConsolidatedAt)}`
+            : "尚未整理"}
+        </span>
+        <span className="text-fg-6">·</span>
+        <span>{formatNextRun(stats.lastConsolidatedAt)}</span>
+        <div className="flex-1" />
+        <button
+          type="button"
+          onClick={onTrigger}
+          disabled={running}
+          className="rounded px-2 py-0.5 text-[10px] font-medium text-fg-4 transition-colors hover:bg-surface hover:text-fg-3 disabled:opacity-40"
+        >
+          {running ? "整理中…" : "立即整理"}
+        </button>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+        {a && (
+          <>
+            <span>{a.update} 更新 {a.merge} 合并 {a.delete} 清理 {a.decayed} 降权</span>
+            <span className="text-fg-6">·</span>
+          </>
+        )}
+        <span>待整理 {stats.flagged}/{stats.totalActive} ({flaggedPct}%)</span>
+        {stats.skippedFlagged > 0 && (
+          <>
+            <span className="text-fg-6">·</span>
+            <span>其中 {stats.skippedFlagged} 条跳过</span>
+          </>
+        )}
+        <span className="text-fg-6">·</span>
+        <span>衰减中 {stats.stale}</span>
+      </div>
     </div>
   )
 }
@@ -219,6 +387,8 @@ function MemorySection({ agentId }: { agentId: string }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [extracting, setExtracting] = useState(false)
   const [extractResult, setExtractResult] = useState<string | null>(null)
+  const [consolidationStats, setConsolidationStats] = useState<ConsolidationStats | null>(null)
+  const [consolidationRunning, setConsolidationRunning] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -234,7 +404,26 @@ function MemorySection({ agentId }: { agentId: string }) {
     setLoading(false)
   }, [agentId, filter, showSuperseded])
 
+  const loadStats = useCallback(() => {
+    api.getMemoryConsolidationStats(agentId)
+      .then(setConsolidationStats)
+      .catch(() => setConsolidationStats(null))
+  }, [agentId])
+
   useEffect(() => { void load() }, [load])
+  useEffect(() => { loadStats() }, [loadStats])
+
+  const handleTriggerConsolidation = async () => {
+    setConsolidationRunning(true)
+    try {
+      const updated = await api.triggerConsolidation(agentId)
+      setConsolidationStats(updated)
+      await load()
+    } catch {
+      // best-effort
+    }
+    setConsolidationRunning(false)
+  }
 
   useEffect(() => {
     if (!showSessions) return
@@ -303,7 +492,11 @@ function MemorySection({ agentId }: { agentId: string }) {
         </div>
       </div>
 
-      <ConsolidationStatsBar agentId={agentId} />
+      <ConsolidationStatsBar
+        stats={consolidationStats}
+        running={consolidationRunning}
+        onTrigger={() => void handleTriggerConsolidation()}
+      />
 
       <div className="flex flex-wrap items-center gap-1.5">
         <button type="button" onClick={() => setFilter(null)}
@@ -334,7 +527,13 @@ function MemorySection({ agentId }: { agentId: string }) {
       ) : (
         <div className="space-y-1.5">
           {active.map(m => (
-            <MemoryItem key={m.id} memory={m} onUpdate={handleUpdate} onDelete={handleDelete} />
+            <MemoryItem
+              key={m.id}
+              memory={m}
+              change={consolidationStats?.recentChanges[m.id]}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+            />
           ))}
           {superseded.length > 0 && (
             <div className="pt-1">
@@ -346,7 +545,13 @@ function MemorySection({ agentId }: { agentId: string }) {
               {showSuperseded && (
                 <div className="mt-1.5 space-y-1.5 opacity-60">
                   {superseded.map(m => (
-                    <MemoryItem key={m.id} memory={m} onUpdate={handleUpdate} onDelete={handleDelete} />
+                    <MemoryItem
+                      key={m.id}
+                      memory={m}
+                      change={consolidationStats?.recentChanges[m.id]}
+                      onUpdate={handleUpdate}
+                      onDelete={handleDelete}
+                    />
                   ))}
                 </div>
               )}
