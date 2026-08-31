@@ -43,7 +43,7 @@ export interface ConsolidationStats {
 const CONSOLIDATION_MIN_MEMORIES = 15
 const CONSOLIDATION_MAX_ACTIONS = 50
 const CONSOLIDATION_MAX_DELETES = 20
-const CONSOLIDATION_BATCH_SIZE = 100
+const CONSOLIDATION_BATCH_SIZE = 30
 const CONSOLIDATION_TIMEOUT_MS = 600_000
 const DECAY_STALE_DAYS = 7
 const DECAY_FACTOR = 0.962
@@ -55,6 +55,7 @@ const POLL_INTERVAL_MS = 2_000
 const MEMORY_LOG_ROOT = join(DATA_DIR, "memory-logs")
 const PROMPT_OVERRIDE_DIR = join(DATA_DIR, "prompts")
 const CONSOLIDATION_SESSION_TITLE = "[internal] memory consolidation"
+const FORBIDDEN_CATEGORY_NAMES = new Set(["decision", "lesson", "preference", "pattern", "general"])
 
 // ---------------------------------------------------------------------------
 // Module-level scheduling state
@@ -115,6 +116,11 @@ function validateConsolidationActions(actions: ExtractionAction[], activeIds: Se
     const invalidId = refIds.find((id) => !activeIds.has(id))
     if (invalidId) {
       logger.warn({ action: action.action, invalidId }, "consolidation dropped action referencing unknown memory id")
+      continue
+    }
+
+    if ((action.action === "merge" || action.action === "update") && action.category && FORBIDDEN_CATEGORY_NAMES.has(action.category)) {
+      logger.warn({ action: action.action, category: action.category }, "consolidation dropped action with forbidden category name")
       continue
     }
 
@@ -381,14 +387,15 @@ async function processConsolidationBatch(
     }
 
     const file = Bun.file(outputPath)
-    const resultText = (await file.exists()) ? (await file.text()).trim() : ""
+    const fileExists = await file.exists()
+    const resultText = fileExists ? (await file.text()).trim() : ""
     logger.info(
-      { sessionId: session.id, customAgentId, batchIdx, resultLen: resultText.length },
+      { sessionId: session.id, customAgentId, batchIdx, resultLen: resultText.length, fileExists },
       "memory consolidation batch file read",
     )
 
     if (!resultText || resultText === "[]") {
-      logger.info({ customAgentId, batchIdx, totalBatches }, "consolidation batch returned empty result")
+      logger.info({ customAgentId, batchIdx, totalBatches, fileExists }, "consolidation batch returned empty result")
       await writeMemoryLog(customAgentId, {
         type: "consolidation_batch_empty",
         batchIdx,
