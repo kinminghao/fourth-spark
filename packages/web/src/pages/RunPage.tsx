@@ -577,7 +577,7 @@ function FilePreviewOverlay({ file, onClose }: { file: PreviewFileInfo; onClose:
     content = (
       <iframe
         src={file.url}
-        sandbox="allow-same-origin"
+        sandbox=""
         title={file.name}
         className="h-full w-full border-0 bg-white"
       />
@@ -624,6 +624,7 @@ export function RunPage() {
 
   const isXl = useIsXl()
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
+  useEffect(() => { setPreviewFile(null) }, [activeSessionId])
   const sessionPanelCollapsed = useLayoutStore((s) => s.sessionPanelCollapsed)
   const toggleSessionPanel = useLayoutStore((s) => s.toggleSessionPanel)
   const todos = useSessionStore((s) => {
