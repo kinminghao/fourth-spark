@@ -663,10 +663,9 @@ const PREVIEW_MIME_MAP: Record<string, string> = {
 
 const HTML_EXTS = new Set([".html", ".htm"])
 
-sessions.get("/:id/files/*", async (c) => {
+sessions.get("/:id/files/:path{.+}", async (c) => {
   const sessionId = c.req.param("id")
-  const rawPath = c.req.param("*")
-  const filePath = decodeURIComponent(rawPath ?? "")
+  const filePath = c.req.param("path")
   if (!filePath) return c.json({ error: "File path required" }, 400)
 
   const ws = await resolveSessionWorkspace(sessionId)
