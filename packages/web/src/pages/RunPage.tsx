@@ -550,21 +550,14 @@ function scrollToMessage(messageId: string) {
 const HTML_PREVIEW_EXTS = new Set([".html", ".htm"])
 const MD_PREVIEW_EXT = ".md"
 
-function FilePreviewOverlay({ file, onClose }: { file: PreviewFileInfo; onClose: () => void }) {
+function FilePreviewContent({ file }: { file: PreviewFileInfo }) {
   const [textContent, setTextContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); onClose() }
-    }
-    window.addEventListener("keydown", onKey, true)
-    return () => window.removeEventListener("keydown", onKey, true)
-  }, [onClose])
-
-  useEffect(() => {
     if (HTML_PREVIEW_EXTS.has(file.ext)) return
     setLoading(true)
+    setTextContent(null)
     fetch(file.url)
       .then((r) => r.text())
       .then((t) => setTextContent(t))
@@ -572,59 +565,71 @@ function FilePreviewOverlay({ file, onClose }: { file: PreviewFileInfo; onClose:
       .finally(() => setLoading(false))
   }, [file.url, file.ext])
 
-  let content: React.ReactNode
   if (HTML_PREVIEW_EXTS.has(file.ext)) {
-    content = (
-      <iframe
-        src={file.url}
-        sandbox=""
-        title={file.name}
-        className="h-full w-full border-0 bg-white"
-      />
-    )
-  } else if (loading) {
-    content = <p className="p-8 text-center font-mono text-sm text-fg-5">加载中…</p>
-  } else if (file.ext === MD_PREVIEW_EXT) {
-    content = (
-      <div className="prose prose-invert max-w-none overflow-y-auto p-6">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{textContent ?? ""}</ReactMarkdown>
+    return <iframe src={file.url} sandbox="" title={file.name} className="h-full w-full border-0 bg-white" />
+  }
+  if (loading) {
+    return <p className="p-8 text-center font-mono text-sm text-fg-5">加载中…</p>
+  }
+  if (file.ext === MD_PREVIEW_EXT) {
+    return (
+      <div className="h-full overflow-y-auto">
+        <div className="prose prose-invert max-w-none p-6">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{textContent ?? ""}</ReactMarkdown>
+        </div>
       </div>
-    )
-  } else {
-    content = (
-      <pre className="h-full overflow-auto whitespace-pre-wrap p-6 font-mono text-xs leading-relaxed text-fg-2">
-        {textContent}
-      </pre>
     )
   }
-
   return (
-    <div className="absolute inset-0 z-30 flex flex-col bg-base/95 backdrop-blur-sm">
-      <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2">
-        <span className="min-w-0 truncate font-mono text-sm text-fg-2">{file.name}</span>
-        <span className="rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">{file.ext}</span>
-        <button
-          type="button"
-          onClick={onClose}
-          className="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="min-h-0 flex-1">{content}</div>
-    </div>
+    <pre className="h-full overflow-auto whitespace-pre-wrap p-6 font-mono text-xs leading-relaxed text-fg-2">
+      {textContent}
+    </pre>
   )
+}
+
+function usePreviewTabs(activeSessionId: string | null) {
+  const [tabs, setTabs] = useState<PreviewFileInfo[]>([])
+  const [activeIdx, setActiveIdx] = useState<number | null>(null)
+
+  useEffect(() => { setTabs([]); setActiveIdx(null) }, [activeSessionId])
+
+  const open = (info: PreviewFileInfo) => {
+    setTabs((prev) => {
+      const existing = prev.findIndex((t) => t.url === info.url)
+      if (existing >= 0) {
+        setActiveIdx(existing)
+        return prev
+      }
+      setActiveIdx(prev.length)
+      return [...prev, info]
+    })
+  }
+
+  const close = (idx: number) => {
+    setTabs((prev) => {
+      const next = prev.filter((_, i) => i !== idx)
+      setActiveIdx((cur) => {
+        if (cur === idx) return null
+        if (cur !== null && cur > idx) return cur - 1
+        return cur
+      })
+      return next
+    })
+  }
+
+  const activate = (idx: number | null) => setActiveIdx(idx)
+
+  return { tabs, activeIdx, open, close, activate }
 }
 
 export function RunPage() {
   const [leftOpen, setLeftOpen] = useState(false)
   const [rightOpen, setRightOpen] = useState(false)
   const [sidePanelOpen, setSidePanelOpen] = useState(false)
-  const [previewFile, setPreviewFile] = useState<PreviewFileInfo | null>(null)
 
   const isXl = useIsXl()
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
-  useEffect(() => { setPreviewFile(null) }, [activeSessionId])
+  const preview = usePreviewTabs(activeSessionId)
   const sessionPanelCollapsed = useLayoutStore((s) => s.sessionPanelCollapsed)
   const toggleSessionPanel = useLayoutStore((s) => s.toggleSessionPanel)
   const todos = useSessionStore((s) => {
@@ -714,14 +719,61 @@ export function RunPage() {
       </SwipeDrawer>
 
       {/* Main content */}
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        <RunView
-          onToggleSidebar={() => setLeftOpen((v) => !v)}
-          onToggleRightPanel={toggleRightPanel}
-          rightPanelOpen={desktopSidePanelVisible}
-        />
-        {previewFile && (
-          <FilePreviewOverlay file={previewFile} onClose={() => setPreviewFile(null)} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        {preview.tabs.length > 0 && (
+          <div className="flex shrink-0 items-end gap-0 border-b border-line bg-surface">
+            <button
+              type="button"
+              onClick={() => preview.activate(null)}
+              className={clsx(
+                "flex items-center gap-1.5 border-r border-line px-3 py-1.5 text-xs font-medium transition-colors",
+                preview.activeIdx === null
+                  ? "border-b-2 border-b-blue-500 bg-base text-fg-2"
+                  : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
+              )}
+            >
+              对话
+            </button>
+            {preview.tabs.map((tab, i) => (
+              <div
+                key={tab.url}
+                className={clsx(
+                  "group flex items-center gap-1 border-r border-line px-2 py-1.5 text-xs transition-colors",
+                  preview.activeIdx === i
+                    ? "border-b-2 border-b-blue-500 bg-base text-fg-2"
+                    : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => preview.activate(i)}
+                  className="min-w-0 max-w-[120px] truncate font-mono"
+                  title={tab.name}
+                >
+                  {tab.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); preview.close(i) }}
+                  className="shrink-0 rounded p-0.5 text-fg-5 opacity-0 transition-opacity hover:bg-elevated hover:text-fg-2 group-hover:opacity-100"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className={clsx("min-h-0 flex-1 flex flex-col", preview.activeIdx !== null && "hidden")}>
+          <RunView
+            onToggleSidebar={() => setLeftOpen((v) => !v)}
+            onToggleRightPanel={toggleRightPanel}
+            rightPanelOpen={desktopSidePanelVisible}
+          />
+        </div>
+        {preview.activeIdx !== null && preview.tabs[preview.activeIdx] && (
+          <div className="min-h-0 flex-1 bg-base">
+            <FilePreviewContent file={preview.tabs[preview.activeIdx]} />
+          </div>
         )}
       </div>
 
@@ -734,7 +786,7 @@ export function RunPage() {
             sessionLinks={sessionLinks}
             sessionId={activeSessionId}
             onScrollToMessage={scrollToMessage}
-            onPreviewFile={setPreviewFile}
+            onPreviewFile={preview.open}
           />
         </div>
       )}
