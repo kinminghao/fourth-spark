@@ -53,20 +53,23 @@ const MEMORY_CONSOLIDATOR_PROMPT = `你是一个记忆整理助手，负责将 A
 你会收到一个 agent 的**全部活跃记忆列表**（JSON 数组），每条记忆包含 id、category、importance 和 content。
 输入可能是原子条目（≤120 字符）、已有的主题段落（≤600 字符），或两者混合。
 
-你的核心目标：将所有记忆按**领域/主题**聚类，合并为 **≤15 个主题段落**。
+你的核心目标：**将所有记忆合并为 10-15 个主题段落**。每个主题段落汇聚一个领域的所有原则。
 
 ## 工作流程
 
-1. **识别主题**：扫描全部记忆，识别属于同一领域的记忆群
-2. **已有主题优先复用**：如果输入中已有主题段落（category 不是 decision/lesson/preference/pattern/general），优先保留其 category 名称，将新的原子记忆归入匹配的已有主题
-3. **创建新主题**：只有当没有任何已有主题适合时才创建新 topic
-4. **每个主题一个段落**：同主题的多条记忆合并为一段话，用分号分隔各原则
+1. **规划主题**：先通读全部记忆，规划 10-15 个主题分组（如"UX 原则"、"调试策略"、"状态管理"…）
+2. **批量归并**：每个主题用一个 merge 操作，将该领域的所有相关记忆（3-10 条）一次性合并为一个段落
+3. **已有主题段落**：如果输入中已有主题段落（content 较长、用分号分隔多条原则），优先保留其 category 名称，将新的原子记忆归入
+4. **不要逐对合并**：一个主题下有 6 条相关记忆，应该一次 merge 6 条，而非先合并 2 条再合并 2 条
 
-## 主题命名
+## 主题命名（必须遵守）
 
-category 字段填写中文主题名，例如：
+category 字段**必须使用中文主题名**。**禁止使用** decision、lesson、preference、pattern、general 这些旧类型名。
+
+正确示例：
 - "UX 原则"、"调试策略"、"工程纪律"、"状态管理"、"架构决策"
 - "错误处理"、"代码清理"、"数据管理"、"性能优化"、"协作规范"
+- "验证策略"、"组件设计"、"记忆系统"、"反馈机制"
 
 命名要求：2-6 个字，名词性短语，能让 LLM 一眼判断相关性。
 
@@ -93,8 +96,8 @@ category 字段填写中文主题名，例如：
 
 使用现有的 action 体系：
 
-- **merge** — 主要操作。将同主题的多条记忆（原子或段落）合并为一个主题段落。category 填主题名。
-- **update** — 更新已有的主题段落：追加新原则、删除过时内容、优化表述。category 不变。
+- **merge** — 主要操作。将同主题的所有记忆（3-10 条）合并为一个主题段落。category 必须填中文主题名。
+- **update** — 更新已有的主题段落：追加新原则、删除过时内容、优化表述。
 - **delete** — 记忆已被某个主题段落完全覆盖，删除冗余条目。
 - **reinforce** — 主题段落内容完整且经多次验证，提升重要性。
 
@@ -103,16 +106,16 @@ category 字段填写中文主题名，例如：
 - **禁止 add**——你只整理已有记忆，不创建新的。
 - 所有 targetId / targetIds 必须是输入列表中的 id，不要编造。
 - importance 范围 [0.2, 1.0]，0.9+ 只留给"违反会立即出事"的原则。
-- 最终目标 ≤15 个主题段落。当记忆条数远超 15 时，必须积极合并。
+- **当前记忆条数超过 15 时，必须通过 merge 将总数压缩到 10-15 条**。不能全部 skip。
+- **category 禁止使用 decision/lesson/preference/pattern/general**，必须是中文主题名。
 - **只输出需要变更的 action**（update/merge/delete/reinforce），不需要输出 skip。未提及的记忆视为保持不变。
 
 ## 输出格式（严格 JSON 数组，写入输出文件）
 
 [
-  { "action": "merge", "targetIds": ["mem_aaa", "mem_bbb", "mem_ccc"], "content": "主界面只留高频操作，低频入溢出菜单；隐藏交互须提供发现入口；导航拥挤保文字去图标", "category": "UX 原则", "importance": 0.8 },
-  { "action": "update", "targetId": "mem_xxx", "content": "更新后的主题段落内容", "importance": 0.7 },
+  { "action": "merge", "targetIds": ["mem_aaa", "mem_bbb", "mem_ccc", "mem_ddd", "mem_eee"], "content": "主界面只留高频操作，低频入溢出菜单；隐藏交互须提供发现入口；导航拥挤保文字去图标；按钮文案误导时改文案加提示", "category": "UX 原则", "importance": 0.8 },
+  { "action": "merge", "targetIds": ["mem_fff", "mem_ggg", "mem_hhh"], "content": "管道类bug审查整条链路读写两端一次性修完；死代码追踪完整调用链确认无引用后直接移除", "category": "调试策略", "importance": 0.85 },
   { "action": "delete", "targetId": "mem_yyy", "reason": "已被 UX 原则段落覆盖" },
-  { "action": "reinforce", "targetId": "mem_zzz", "reason": "多条记忆印证此主题段落" },
 ]
 
 注意：
@@ -219,7 +222,7 @@ const SYSTEM_AGENTS: Array<{
     systemPrompt: "",
     isSystem: 1,
     memoryEnabled: 1,
-    memoryModel: "anthropic/claude-sonnet-4-20250514",
+    memoryModel: "anthropic/claude-sonnet-4-6",
     sortOrder: -100,
   },
   {
