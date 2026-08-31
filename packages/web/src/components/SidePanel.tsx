@@ -528,14 +528,22 @@ function basename(path: string): string {
   return idx >= 0 ? path.slice(idx + 1) : path
 }
 
+export interface PreviewFileInfo {
+  url: string
+  name: string
+  ext: string
+}
+
 function FileItem({
   file,
   repoId,
   sessionId,
+  onPreviewFile,
 }: {
   file: SessionFile
   repoId: string
   sessionId: string
+  onPreviewFile?: (info: PreviewFileInfo) => void
 }) {
   const name = basename(file.path)
   const url = getSessionFileUrl(repoId, sessionId, file.path)
@@ -561,16 +569,15 @@ function FileItem({
   if (OPENABLE_EXTS.has(ext)) {
     return (
       <li>
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          type="button"
           title={file.path}
-          className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-elevated/60"
+          onClick={() => onPreviewFile?.({ url, name, ext })}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-elevated/60"
         >
           <FileText className="h-3.5 w-3.5 shrink-0 text-fg-4" />
           <span className="min-w-0 truncate text-xs text-fg-3">{name}</span>
-        </a>
+        </button>
       </li>
     )
   }
@@ -590,10 +597,12 @@ function FilesPanel({
   repoId,
   sessionId,
   containerRef,
+  onPreviewFile,
 }: {
   repoId: string
   sessionId: string
   containerRef: React.RefObject<HTMLDivElement | null>
+  onPreviewFile?: (info: PreviewFileInfo) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [panelHeight, setPanelHeight] = useState(FILES_PANEL_DEFAULT_HEIGHT)
@@ -720,7 +729,7 @@ function FilesPanel({
         ) : (
           <ul className="space-y-0.5">
             {files.map((f) => (
-              <FileItem key={f.path} file={f} repoId={repoId} sessionId={sessionId} />
+              <FileItem key={f.path} file={f} repoId={repoId} sessionId={sessionId} onPreviewFile={onPreviewFile} />
             ))}
           </ul>
         )}
@@ -735,12 +744,14 @@ export function SidePanel({
   sessionLinks,
   sessionId,
   onScrollToMessage,
+  onPreviewFile,
 }: {
   todos: readonly Todo[]
   messages: readonly Message[]
   sessionLinks?: SessionLinks
   sessionId: string | null
   onScrollToMessage?: (messageId: string) => void
+  onPreviewFile?: (info: PreviewFileInfo) => void
 }) {
   const [activeTab, setActiveTab] = useState<Tab>("todo")
   const containerRef = useRef<HTMLDivElement>(null)
@@ -839,6 +850,7 @@ export function SidePanel({
           repoId={activeRepoId}
           sessionId={sessionId}
           containerRef={containerRef}
+          onPreviewFile={onPreviewFile}
         />
       )}
     </div>

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Pencil, Plus, Trash2, X } from "lucide-react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import clsx from "clsx"
 import type { Session, Todo } from "../lib/api-client"
 import { useSessionStore, EMPTY_TODOS, EMPTY_MESSAGES } from "../stores/session-store"
@@ -9,7 +11,7 @@ import { useIssueStore } from "../stores/issue-store"
 import { useDraftStore } from "../stores/draft-store"
 import { useLayoutStore } from "../stores/layout-store"
 import { RunView } from "../components/RunView"
-import { SidePanel } from "../components/SidePanel"
+import { SidePanel, type PreviewFileInfo } from "../components/SidePanel"
 import { useSwipeDrawer } from "../hooks/use-swipe-drawer"
 import { SwipeDrawer } from "../components/SwipeDrawer"
 
@@ -545,10 +547,80 @@ function scrollToMessage(messageId: string) {
   setTimeout(() => el.classList.remove("fs-highlight"), 2000)
 }
 
+const HTML_PREVIEW_EXTS = new Set([".html", ".htm"])
+const MD_PREVIEW_EXT = ".md"
+
+function FilePreviewOverlay({ file, onClose }: { file: PreviewFileInfo; onClose: () => void }) {
+  const [textContent, setTextContent] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); onClose() }
+    }
+    window.addEventListener("keydown", onKey, true)
+    return () => window.removeEventListener("keydown", onKey, true)
+  }, [onClose])
+
+  useEffect(() => {
+    if (HTML_PREVIEW_EXTS.has(file.ext)) return
+    setLoading(true)
+    fetch(file.url)
+      .then((r) => r.text())
+      .then((t) => setTextContent(t))
+      .catch(() => setTextContent("加载失败"))
+      .finally(() => setLoading(false))
+  }, [file.url, file.ext])
+
+  let content: React.ReactNode
+  if (HTML_PREVIEW_EXTS.has(file.ext)) {
+    content = (
+      <iframe
+        src={file.url}
+        sandbox="allow-same-origin"
+        title={file.name}
+        className="h-full w-full border-0 bg-white"
+      />
+    )
+  } else if (loading) {
+    content = <p className="p-8 text-center font-mono text-sm text-fg-5">加载中…</p>
+  } else if (file.ext === MD_PREVIEW_EXT) {
+    content = (
+      <div className="prose prose-invert max-w-none overflow-y-auto p-6">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{textContent ?? ""}</ReactMarkdown>
+      </div>
+    )
+  } else {
+    content = (
+      <pre className="h-full overflow-auto whitespace-pre-wrap p-6 font-mono text-xs leading-relaxed text-fg-2">
+        {textContent}
+      </pre>
+    )
+  }
+
+  return (
+    <div className="absolute inset-0 z-30 flex flex-col bg-base/95 backdrop-blur-sm">
+      <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2">
+        <span className="min-w-0 truncate font-mono text-sm text-fg-2">{file.name}</span>
+        <span className="rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">{file.ext}</span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1">{content}</div>
+    </div>
+  )
+}
+
 export function RunPage() {
   const [leftOpen, setLeftOpen] = useState(false)
   const [rightOpen, setRightOpen] = useState(false)
   const [sidePanelOpen, setSidePanelOpen] = useState(false)
+  const [previewFile, setPreviewFile] = useState<PreviewFileInfo | null>(null)
 
   const isXl = useIsXl()
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
@@ -641,12 +713,15 @@ export function RunPage() {
       </SwipeDrawer>
 
       {/* Main content */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-w-0 flex-1 flex-col">
         <RunView
           onToggleSidebar={() => setLeftOpen((v) => !v)}
           onToggleRightPanel={toggleRightPanel}
           rightPanelOpen={desktopSidePanelVisible}
         />
+        {previewFile && (
+          <FilePreviewOverlay file={previewFile} onClose={() => setPreviewFile(null)} />
+        )}
       </div>
 
       {/* Desktop right sidebar — SidePanel (Todo + Prompts) */}
@@ -658,6 +733,7 @@ export function RunPage() {
             sessionLinks={sessionLinks}
             sessionId={activeSessionId}
             onScrollToMessage={scrollToMessage}
+            onPreviewFile={setPreviewFile}
           />
         </div>
       )}
