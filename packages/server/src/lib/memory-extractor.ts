@@ -1,4 +1,4 @@
-import { eq, and, isNull, isNotNull, desc, inArray } from "drizzle-orm"
+import { eq, and, isNull, isNotNull, desc, inArray, not, like } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, sessions as sessionsTable, customAgents } from "../db/schema"
 import type { MemoryVersion } from "../db/schema"
@@ -484,6 +484,7 @@ export async function listExtractableSessions(): Promise<Array<{ id: string; cus
     .where(and(
       isNotNull(sessionsTable.customAgentId),
       eq(customAgents.memoryEnabled, 1),
+      not(like(sessionsTable.title, "[internal]%")),
     ))
 
   const result: Array<{ id: string; customAgentId: string }> = []

@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { eq, and, asc, inArray, isNull, isNotNull, desc } from "drizzle-orm"
+import { eq, and, asc, inArray, isNull, isNotNull, desc, not, like, notInArray } from "drizzle-orm"
 import { resolve, relative, extname, isAbsolute } from "node:path"
 import { lstatSync } from "node:fs"
 import { runtimeManager } from "../lib/process-manager"
@@ -291,17 +291,24 @@ sessions.post("/", async (c) => {
 
 sessions.get("/", async (c) => {
   const repoId = c.req.param("repoId")
+  const directory = await getRepoDirectory(repoId!)
+  if (!directory) return c.json([])
+
   const client = runtimeManager.getClient(repoId)
+  let liveIds: Set<string> | undefined
+  let liveResult: Array<Record<string, unknown>> | undefined
+
   if (client) {
     try {
       const list = await client.listSessions()
       syncSessionsList(list)
       const ids = list.map((s) => s.id)
+      liveIds = new Set(ids)
       const dbRows = ids.length > 0
         ? await db.select({ id: sessionsTable.id, issueId: sessionsTable.issueId, title: sessionsTable.title, parentId: sessionsTable.parentId, completedAt: sessionsTable.completedAt }).from(sessionsTable).where(inArray(sessionsTable.id, ids))
         : []
       const dbMap = new Map(dbRows.map((r) => [r.id, r]))
-      const result = list
+      liveResult = list
         .filter((s) => {
           const row = dbMap.get(s.id)
           return !(row?.title?.startsWith("[internal]") || s.title?.startsWith("[internal]"))
@@ -316,14 +323,23 @@ sessions.get("/", async (c) => {
             ...(row?.completedAt ? { completedAt: row.completedAt } : {}),
           }
         })
-      return c.json(result)
     } catch (err) {
       logger.warn({ err, repoId }, "opencode unavailable for listSessions, falling back to DB")
     }
   }
-  const directory = await getRepoDirectory(repoId!)
-  if (!directory) return c.json([])
-  return c.json(await listSessionsFromDB(directory))
+
+  const dbSessions = await listSessionsFromDB(directory)
+  const dbOnly = liveIds
+    ? dbSessions.filter((s) => !liveIds!.has(s.id) && !s.title?.startsWith("[internal]"))
+    : dbSessions.filter((s) => !s.title?.startsWith("[internal]"))
+
+  const merged = [...(liveResult ?? []), ...dbOnly]
+  merged.sort((a, b) => {
+    const ta = (a.time as { updated?: number })?.updated ?? 0
+    const tb = (b.time as { updated?: number })?.updated ?? 0
+    return tb - ta
+  })
+  return c.json(merged)
 })
 
 // Bulk status — returns all session statuses in one call.
