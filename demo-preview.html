@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fourth Spark · 文件预览演示</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#09090b;color:#e4e4e7;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem}
+.container{max-width:560px;width:100%}
+h1{font-size:1.5rem;font-weight:600;margin-bottom:.25rem}
+.sub{font-size:.8125rem;color:#71717a;margin-bottom:1.5rem}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1.5rem}
+.stat{padding:1rem;border-radius:8px;border:1px solid #27272a;background:#18181b}
+.stat-value{font-size:1.5rem;font-weight:700;font-variant-numeric:tabular-nums}
+.stat-label{font-size:.75rem;color:#71717a;margin-top:.25rem}
+.blue{color:#60a5fa} .green{color:#34d399} .amber{color:#fbbf24} .rose{color:#fb7185}
+.timeline{border-left:2px solid #27272a;padding-left:1rem;display:flex;flex-direction:column;gap:1rem}
+.event{position:relative}
+.event::before{content:"";position:absolute;left:-1.35rem;top:.35rem;width:8px;height:8px;border-radius:50%;background:#3b82f6}
+.event-time{font-size:.6875rem;color:#52525b;font-family:monospace}
+.event-text{font-size:.8125rem;color:#a1a1aa;margin-top:.125rem}
+.footer{margin-top:1.5rem;text-align:center;font-size:.6875rem;color:#3f3f46}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>文件预览演示</h1>
+  <p class="sub">此页面通过 sandbox iframe 在对话区内渲染，验证页内预览功能。</p>
+
+  <div class="grid">
+    <div class="stat">
+      <div class="stat-value blue">4</div>
+      <div class="stat-label">变更文件</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value green">3</div>
+      <div class="stat-label">安全层</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value amber">10s</div>
+      <div class="stat-label">轮询间隔</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value rose">40%</div>
+      <div class="stat-label">面板最大高度</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="event">
+      <div class="event-time">Step 1</div>
+      <div class="event-text">Agent 在 worktree 中修改文件并提交</div>
+    </div>
+    <div class="event">
+      <div class="event-time">Step 2</div>
+      <div class="event-text">git diff --name-only 检测变更，扩展名白名单过滤</div>
+    </div>
+    <div class="event">
+      <div class="event-time">Step 3</div>
+      <div class="event-text">SidePanel 底部「变更文件」面板展示可预览文件</div>
+    </div>
+    <div class="event">
+      <div class="event-time">Step 4</div>
+      <div class="event-text">点击文件 → 对话区覆盖层渲染预览内容</div>
+    </div>
+  </div>
+
+  <div class="footer">Fourth Spark · demo-preview.html · sandbox iframe</div>
+</div>
+</body>
+</html>
