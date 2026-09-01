@@ -260,6 +260,7 @@ sessions.post("/", async (c) => {
   await db.insert(sessionsTable).values({
     id: session.id,
     title: session.title ?? body.title ?? "",
+    repoId,
     workspaceId,
     issueId: body.issueId ?? null,
     customAgentId,
@@ -268,7 +269,7 @@ sessions.post("/", async (c) => {
     timeUpdated: now,
   }).onConflictDoUpdate({
     target: sessionsTable.id,
-    set: { workspaceId, issueId: body.issueId ?? null, customAgentId, timeUpdated: now },
+    set: { repoId, workspaceId, issueId: body.issueId ?? null, customAgentId, timeUpdated: now },
   })
   try {
     await client.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT, files })

@@ -27,6 +27,7 @@ import { getLocalIPs, isLocalClient, ensureTlsCert, getTlsPaths } from "./lib/tl
 import { runtimeManager } from "./lib/process-manager"
 import { initRegistry } from "./core/registry"
 import { cloudRoutes } from "./routes/cloud"
+import { analyticsRoutes } from "./routes/analytics"
 import { seedSystemAgents } from "./lib/system-agents"
 import { startSyncScheduler, stopSyncScheduler } from "./lib/sync-scheduler"
 import { ensureSenseVoice } from "./lib/sensevoice-manager"
@@ -52,6 +53,7 @@ app.route("/api/git-hosts", gitHostRoutes)
 app.route("/api/health", health)
 app.route("/api/usage", usageRoutes)
 app.route("/api/cloud", cloudRoutes)
+app.route("/api/analytics", analyticsRoutes)
 app.route("/api/push", pushRoutes)
 app.route("/api/transcribe", transcribeRoute)
 app.route("/api/agents-md", globalAgentsMd)

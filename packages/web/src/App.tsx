@@ -7,6 +7,7 @@ import { DevPage } from "./pages/DevPage"
 import { AgentsPage } from "./pages/AgentsPage"
 import { AgentDetailPage } from "./pages/AgentDetailPage"
 import { SettingsPage } from "./pages/SettingsPage"
+import { AnalyticsPage } from "./pages/AnalyticsPage"
 import { useRepoStore, selectActiveRepoName } from "./stores/repo-store"
 import { useSessionStore } from "./stores/session-store"
 import { useCustomAgentStore } from "./stores/custom-agent-store"
@@ -86,6 +87,7 @@ function AppInner() {
         <Route element={<Layout />}>
           <Route path="/repos" element={<ReposPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/:repoId/run" element={<RunPage />} />
           <Route path="/:repoId/agents" element={<AgentsPage />} />
           <Route path="/:repoId/agents/:agentId" element={<AgentDetailPage />} />

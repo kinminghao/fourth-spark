@@ -100,18 +100,7 @@ function getContextLimit(modelID?: string): number {
   return DEFAULT_CONTEXT_LIMIT
 }
 
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
-  return String(n)
-}
-
-function formatCost(cost: number): string {
-  if (cost >= 1) return `$${cost.toFixed(2)}`
-  if (cost >= 0.01) return `$${cost.toFixed(3)}`
-  if (cost > 0) return `$${cost.toFixed(4)}`
-  return "$0"
-}
+import { formatTokens, formatCost } from "../lib/format"
 
 function getLastAssistantTokens(messages: readonly ApiMessage[]) {
   for (let i = messages.length - 1; i >= 0; i--) {
