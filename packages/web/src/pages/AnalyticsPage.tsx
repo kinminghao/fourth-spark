@@ -1,11 +1,37 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { BarChart3, Loader2 } from "lucide-react"
 import { useAnalyticsStore } from "../stores/analytics-store"
+import { useRepoStore } from "../stores/repo-store"
+import { repoEventsUrl } from "../lib/api-client"
+import { parseEventData } from "../lib/sse-events"
 import { TimeRangeSelector } from "../components/analytics/TimeRangeSelector"
 import { SummaryCards } from "../components/analytics/SummaryCards"
 import { CostTrendChart } from "../components/analytics/CostTrendChart"
 import { CostByRepoChart } from "../components/analytics/CostByRepoChart"
 import { CostByAgentChart } from "../components/analytics/CostByAgentChart"
+
+function useAnalyticsSse() {
+  const repos = useRepoStore((s) => s.repos)
+  const sourcesRef = useRef<EventSource[]>([])
+
+  useEffect(() => {
+    const sources: EventSource[] = []
+    for (const repo of repos) {
+      const source = new EventSource(repoEventsUrl(repo.id))
+      source.addEventListener("session.updated", (event) => {
+        const data = parseEventData((event as MessageEvent).data)
+        if (!data || typeof data !== "object") return
+        const props = (data as Record<string, unknown>).properties ?? data
+        if (typeof (props as Record<string, unknown>).cost === "number" && (props as Record<string, unknown>).cost as number > 0) {
+          useAnalyticsStore.getState().scheduleRefresh()
+        }
+      })
+      sources.push(source)
+    }
+    sourcesRef.current = sources
+    return () => sources.forEach((s) => s.close())
+  }, [repos])
+}
 
 export function AnalyticsPage() {
   const loading = useAnalyticsStore((s) => s.loading)
@@ -17,6 +43,8 @@ export function AnalyticsPage() {
     void useAnalyticsStore.getState().loadAll()
   }, [])
 
+  useAnalyticsSse()
+
   const hasLoaded = repoData !== null && dayData !== null && agentData !== null
   const isEmpty =
     hasLoaded &&
@@ -26,7 +54,7 @@ export function AnalyticsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-bold text-fg">统计</h1>
         <TimeRangeSelector />
       </div>
