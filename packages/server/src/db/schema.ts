@@ -115,6 +115,7 @@ export const customAgentFragments = pgTable("custom_agent_fragments", {
 export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   parentId: text("parent_id"),
+  repoId: text("repo_id").references(() => repos.id, { onDelete: "set null" }),
   workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
   issueId: text("issue_id").references(() => issues.id, { onDelete: "set null" }),
   customAgentId: text("custom_agent_id").references(() => customAgents.id, { onDelete: "set null" }),
@@ -135,6 +136,7 @@ export const sessions = pgTable("sessions", {
 }, (t) => [
   index("sessions_user_idx").on(t.userId),
   index("sessions_time_created_idx").on(t.timeCreated),
+  index("sessions_repo_idx").on(t.repoId),
   index("sessions_workspace_idx").on(t.workspaceId),
   index("sessions_issue_idx").on(t.issueId),
   index("sessions_custom_agent_idx").on(t.customAgentId),

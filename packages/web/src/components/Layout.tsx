@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
-import { Bot, Box, Check, ChevronDown, ChevronsLeft, ChevronsRight, Code2, GitBranch, Loader2, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
+import { BarChart3, Bot, Box, Check, ChevronDown, ChevronsLeft, ChevronsRight, Code2, GitBranch, Loader2, Monitor, Moon, Play, Settings, Sun, Zap } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import clsx from "clsx"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -324,6 +324,14 @@ function Header() {
               )}
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => navigate("/analytics")}
+            aria-label="统计"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+          >
+            <BarChart3 className="h-4 w-4" />
+          </button>
           <button
             type="button"
             onClick={() => navigate("/settings")}

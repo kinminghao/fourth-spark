@@ -1133,3 +1133,44 @@ export async function getSessionFiles(repoId: string, sessionId: string): Promis
 export function getSessionFileUrl(repoId: string, sessionId: string, filePath: string): string {
   return `${getApiBaseUrl()}${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/files/${filePath}`
 }
+
+// ---------------------------------------------------------------------------
+// Analytics API — /api/analytics/summary
+// ---------------------------------------------------------------------------
+
+export interface AnalyticsSummary {
+  cost: number
+  tokensInput: number
+  tokensOutput: number
+  tokensReasoning: number
+  tokensCacheRead: number
+  tokensCacheWrite: number
+  sessionCount: number
+}
+
+export interface AnalyticsGroup extends AnalyticsSummary {
+  key: string
+  label: string
+  repoId?: string
+  date?: string
+  agent?: string
+  modelId?: string
+  customAgentId?: string | null
+  isSystem: boolean
+}
+
+export interface AnalyticsResponse {
+  groups: AnalyticsGroup[]
+  total: AnalyticsSummary
+}
+
+export async function fetchAnalyticsSummary(
+  from: number,
+  to: number,
+  groupBy: "repo" | "day" | "agent",
+  repoId?: string,
+): Promise<AnalyticsResponse> {
+  const params = new URLSearchParams({ from: String(from), to: String(to), groupBy })
+  if (repoId) params.set("repoId", repoId)
+  return apiFetch<AnalyticsResponse>(`/api/analytics/summary?${params}`)
+}
