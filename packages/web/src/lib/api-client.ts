@@ -1104,6 +1104,31 @@ export async function switchUsageAccount(accountId: string): Promise<UsageResult
   })
 }
 
+export interface AuthorizeAccountResult {
+  url: string
+  pendingId: string
+  expiresAt: number
+}
+
+export async function authorizeAccount(): Promise<AuthorizeAccountResult> {
+  return apiFetch<AuthorizeAccountResult>("/api/usage/authorize", { method: "POST" })
+}
+
+export type ExchangeAccountResult =
+  | { ok: true; id: string; label: string; existing: boolean }
+  | { ok: false; reason: string; detail?: string; attemptsLeft?: number; retryAfterMs?: number }
+
+export async function exchangeAccount(pendingId: string, code: string): Promise<ExchangeAccountResult> {
+  return apiFetch<ExchangeAccountResult>("/api/usage/exchange", {
+    method: "POST",
+    body: JSON.stringify({ pendingId, code }),
+  })
+}
+
+export async function deleteUsageAccount(accountId: string): Promise<void> {
+  await apiFetch<void>(`/api/usage/accounts/${encodeURIComponent(accountId)}`, { method: "DELETE" })
+}
+
 // ---------------------------------------------------------------------------
 // Push Notification API — /api/push
 // ---------------------------------------------------------------------------
