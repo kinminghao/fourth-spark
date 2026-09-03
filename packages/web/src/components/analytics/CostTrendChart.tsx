@@ -1,4 +1,4 @@
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { useMemo } from "react"
 import { useAnalyticsStore } from "../../stores/analytics-store"
 import { formatCost } from "../../lib/format"
@@ -81,26 +81,14 @@ export function CostTrendChart() {
       </div>
       <div className="mt-3 h-[200px] md:h-[240px]">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="var(--t-line)" strokeDasharray="3 3" />
+          <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke="var(--t-line)" strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="var(--t-fg-4)" />
-            <YAxis tick={{ fontSize: 11 }} stroke="var(--t-fg-4)" />
-            <Tooltip content={<TrendTooltip />} />
-            <Area
-              type="monotone"
-              dataKey="userCost"
-              stackId="cost"
-              stroke="#3b82f6"
-              fill="rgba(59,130,246,0.1)"
-            />
-            <Area
-              type="monotone"
-              dataKey="systemCost"
-              stackId="cost"
-              stroke="#f59e0b"
-              fill="rgba(245,158,11,0.1)"
-            />
-          </AreaChart>
+            <YAxis tick={{ fontSize: 11 }} stroke="var(--t-fg-4)" tickFormatter={(v: number) => formatCost(v)} />
+            <Tooltip content={<TrendTooltip />} cursor={{ fill: "var(--t-elevated)", opacity: 0.5 }} />
+            <Bar dataKey="userCost" stackId="cost" fill="#3b82f6" radius={[0, 0, 0, 0]} />
+            <Bar dataKey="systemCost" stackId="cost" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+          </BarChart>
         </ResponsiveContainer>
       </div>
     </div>
