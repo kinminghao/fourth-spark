@@ -43,6 +43,7 @@ function AppInner() {
   const location = useLocation()
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const repos = useRepoStore((s) => s.repos)
+  const repoLoading = useRepoStore((s) => s.loading)
   const setActiveRepo = useRepoStore((s) => s.setActiveRepo)
   const loadSessions = useSessionStore((s) => s.loadSessions)
   const clearSessions = useSessionStore((s) => s.clearSessions)
@@ -80,6 +81,23 @@ function AppInner() {
     }
     return () => orchestrator.stop()
   }, [activeRepoId, loadSessions, clearSessions])
+
+  if (repoLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-base">
+        <span className="h-6 w-6 animate-spin rounded-full border-2 border-fg-5 border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (repos.length === 0 && location.pathname !== "/repos") {
+    return (
+      <>
+        <Navigate to="/repos" replace />
+        <ToastContainer />
+      </>
+    )
+  }
 
   return (
     <>

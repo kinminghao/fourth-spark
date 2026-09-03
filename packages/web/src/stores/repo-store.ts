@@ -20,7 +20,7 @@ interface RepoState {
 export const useRepoStore = create<RepoState>((set, get) => ({
   repos: [],
   activeRepoId: localStorage.getItem(STORAGE_KEY),
-  loading: false,
+  loading: true,
   loadError: null,
 
   loadRepos: async () => {
