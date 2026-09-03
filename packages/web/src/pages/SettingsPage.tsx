@@ -167,6 +167,193 @@ function AccountCard({ account, onSwitch, switching }: { account: AccountUsage; 
   )
 }
 
+type LoginStep = "idle" | "loading" | "waiting" | "exchanging" | "done" | "error"
+
+function ClaudeLoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [step, setStep] = useState<LoginStep>("idle")
+  const [url, setUrl] = useState("")
+  const [pendingId, setPendingId] = useState("")
+  const [code, setCode] = useState("")
+  const [error, setError] = useState("")
+  const [resultLabel, setResultLabel] = useState("")
+  const [existing, setExisting] = useState(false)
+
+  const startAuth = async () => {
+    setStep("loading")
+    setError("")
+    try {
+      const result = await api.authorizeAccount()
+      setUrl(result.url)
+      setPendingId(result.pendingId)
+      setStep("waiting")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setStep("error")
+    }
+  }
+
+  const submitCode = async () => {
+    if (!code.trim() || !pendingId) return
+    setStep("exchanging")
+    setError("")
+    try {
+      const result = await api.exchangeAccount(pendingId, code.trim())
+      if (result.ok) {
+        setResultLabel(result.label)
+        setExisting(result.existing)
+        setStep("done")
+      } else {
+        const detail = result.detail || result.reason
+        if (result.attemptsLeft !== undefined && result.attemptsLeft > 0) {
+          setError(`${detail}（还可重试 ${result.attemptsLeft} 次）`)
+          setStep("waiting")
+        } else if (result.reason === "throttled") {
+          setError(`请求过快，请稍后再试`)
+          setStep("waiting")
+        } else {
+          setError(detail)
+          setStep("error")
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setStep("error")
+    }
+  }
+
+  useEffect(() => {
+    startAuth()
+  }, [])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center" onClick={onClose}>
+      <div
+        className="flex w-full max-w-lg flex-col rounded-t-2xl border border-line bg-surface p-5 shadow-2xl sm:rounded-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-fg">登录 Claude 账号</h2>
+          <button type="button" onClick={onClose} className="rounded-md p-1 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {step === "loading" && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-5 w-5 fs-spin text-fg-4" />
+          </div>
+        )}
+
+        {step === "waiting" && (
+          <div className="mt-4 space-y-4">
+            <div className="space-y-2">
+              <p className="text-xs text-fg-3">
+                <span className="font-medium text-fg">第 1 步：</span>点击下方链接，在浏览器中登录你的 Claude 账号。
+              </p>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/5 px-3 py-2.5 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-500/10"
+              >
+                <Zap className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">打开 Claude 登录页面</span>
+              </a>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs text-fg-3">
+                <span className="font-medium text-fg">第 2 步：</span>登录成功后，页面会显示一个授权码，复制粘贴到下方。
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") void submitCode() }}
+                  placeholder="粘贴授权码…"
+                  className="min-w-0 flex-1 rounded-md border border-line bg-base px-3 py-2 font-mono text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => void submitCode()}
+                  disabled={!code.trim()}
+                  className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
+                >
+                  确认
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div className="flex items-start gap-1.5 rounded-md border border-red-400/30 bg-red-400/5 px-3 py-2">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
+                <span className="text-xs text-red-400">{error}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === "exchanging" && (
+          <div className="flex flex-col items-center gap-2 py-12">
+            <Loader2 className="h-5 w-5 fs-spin text-blue-500" />
+            <p className="text-xs text-fg-4">正在验证授权码…</p>
+          </div>
+        )}
+
+        {step === "done" && (
+          <div className="mt-4 space-y-4">
+            <div className="flex flex-col items-center gap-2 py-6">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10">
+                <Check className="h-5 w-5 text-green-500" />
+              </div>
+              <p className="text-sm font-medium text-fg">
+                {existing ? "账号已更新" : "账号添加成功"}
+              </p>
+              <p className="text-xs text-fg-4">{resultLabel}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onSuccess}
+              className="w-full rounded-md bg-blue-600 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-500"
+            >
+              完成
+            </button>
+          </div>
+        )}
+
+        {step === "error" && (
+          <div className="mt-4 space-y-4">
+            <div className="flex flex-col items-center gap-2 py-6">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10">
+                <AlertTriangle className="h-5 w-5 text-red-400" />
+              </div>
+              <p className="max-w-xs text-center text-xs text-red-400">{error}</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setCode(""); void startAuth() }}
+                className="flex-1 rounded-md border border-line py-2 text-xs font-medium text-fg-3 transition-colors hover:bg-elevated"
+              >
+                重试
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 rounded-md bg-blue-600 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-500"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function UsageSection() {
   const [data, setData] = useState<UsageResult | null>(usageCache?.data ?? null)
   const [loading, setLoading] = useState(!usageCache)
@@ -174,6 +361,7 @@ function UsageSection() {
   const [switchingId, setSwitchingId] = useState<string | null>(null)
   const [cachedAt, setCachedAt] = useState<number | null>(usageCache?.fetchedAt ?? null)
   const [, setTick] = useState(0)
+  const [showLogin, setShowLogin] = useState(false)
 
   const applyResult = useCallback((r: UsageResult) => {
     const now = Date.now()
@@ -259,7 +447,7 @@ function UsageSection() {
               <Users className="h-5 w-5" />
             </div>
             <p className="max-w-xs text-center text-xs leading-relaxed">
-              未找到账号。请在 OpenCode TUI 中通过 claude-accounts-usage 插件登录。
+              暂无账号，点击下方按钮登录 Claude 账号。
             </p>
           </div>
         ) : data ? (
@@ -267,7 +455,22 @@ function UsageSection() {
             <AccountCard key={a.id} account={a} onSwitch={handleSwitch} switching={switchingId === a.id} />
           ))
         ) : null}
+
+        <button
+          type="button"
+          onClick={() => setShowLogin(true)}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3"
+        >
+          <Plus className="h-3.5 w-3.5" /> 添加 Claude 账号
+        </button>
       </div>
+
+      {showLogin && (
+        <ClaudeLoginModal
+          onClose={() => setShowLogin(false)}
+          onSuccess={() => { setShowLogin(false); load() }}
+        />
+      )}
     </section>
   )
 }
