@@ -3,7 +3,7 @@ import { fetchAnalyticsSummary, type AnalyticsResponse } from "../lib/api-client
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const DEFAULT_RANGE_DAYS = 7
-const REFRESH_DEBOUNCE_MS = 3_000
+const POLL_INTERVAL_MS = 30_000
 
 function defaultRange(): { from: number; to: number } {
   const to = Date.now()
@@ -19,10 +19,8 @@ interface AnalyticsState {
   loading: boolean
   loadAll: () => Promise<void>
   setTimeRange: (from: number, to: number) => Promise<void>
-  scheduleRefresh: () => void
+  startPolling: () => () => void
 }
-
-let refreshTimer: ReturnType<typeof setTimeout> | null = null
 
 export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
   timeRange: defaultRange(),
@@ -51,11 +49,8 @@ export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
     await get().loadAll()
   },
 
-  scheduleRefresh: () => {
-    if (refreshTimer) clearTimeout(refreshTimer)
-    refreshTimer = setTimeout(() => {
-      refreshTimer = null
-      void get().loadAll()
-    }, REFRESH_DEBOUNCE_MS)
+  startPolling: () => {
+    const id = setInterval(() => void get().loadAll(), POLL_INTERVAL_MS)
+    return () => clearInterval(id)
   },
 }))
