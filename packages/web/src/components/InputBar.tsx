@@ -255,11 +255,11 @@ export function InputBar() {
             <span className="font-mono text-[10px] text-red-400">{voice.stt.error}</span>
           )}
           <span className="font-mono text-[10px] text-fg-6">⏎ to run · shift+⏎ for newline</span>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex min-w-0 shrink items-center gap-1.5">
             <select
               value={selectedVariant}
               onChange={(e) => setSelectedVariant(e.target.value)}
-              className="w-[80px] rounded border border-line bg-surface px-2 py-0.5 font-mono text-[11px] text-fg-4 focus:border-fg-5 focus:outline-none"
+              className="w-16 min-w-0 rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[11px] text-fg-4 focus:border-fg-5 focus:outline-none"
             >
               <option value="">默认</option>
               <option value="max">max</option>
@@ -269,7 +269,7 @@ export function InputBar() {
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                className="w-[140px] rounded border border-line bg-surface px-2 py-0.5 font-mono text-[11px] text-fg-4 focus:border-fg-5 focus:outline-none"
+                className="w-24 min-w-0 rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[11px] text-fg-4 focus:border-fg-5 focus:outline-none"
               >
                 <option value="">默认模型</option>
                 {pinnedModels.map((m) => (
