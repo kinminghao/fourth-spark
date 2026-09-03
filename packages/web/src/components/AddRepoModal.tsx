@@ -1,15 +1,19 @@
 import { useState, useEffect, useRef } from "react"
-import { X } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { AlertTriangle, X } from "lucide-react"
 import { useRepoStore } from "../stores/repo-store"
-import { resolveRepo } from "../lib/api-client"
+import { resolveRepo, listGitHosts } from "../lib/api-client"
+import { extractHostFromGitUrl } from "../lib/git-url"
 
 export function AddRepoModal({ onClose }: { onClose: () => void }) {
+  const navigate = useNavigate()
   const [localPath, setLocalPath] = useState("")
   const [name, setName] = useState("")
   const [gitUrl, setGitUrl] = useState("")
   const [runtimeType, setRuntimeType] = useState("opencode")
   const [resolving, setResolving] = useState(false)
   const [error, setError] = useState("")
+  const [hostWarning, setHostWarning] = useState<string | null>(null)
   const addRepo = useRepoStore((s) => s.addRepo)
 
   const canSubmit = name.trim() !== "" && gitUrl.trim() !== "" && localPath.trim() !== "" && !resolving
@@ -46,6 +50,25 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
     }, 500)
     return () => clearTimeout(timer)
   }, [localPath])
+
+  useEffect(() => {
+    const trimmed = gitUrl.trim()
+    if (!trimmed) { setHostWarning(null); return }
+    const host = extractHostFromGitUrl(trimmed)
+    if (!host) { setHostWarning(null); return }
+
+    let cancelled = false
+    const timer = setTimeout(() => {
+      listGitHosts()
+        .then((hosts) => {
+          if (cancelled) return
+          const found = hosts.some((h) => h.host.toLowerCase() === host.toLowerCase())
+          setHostWarning(found ? null : host)
+        })
+        .catch(() => { if (!cancelled) setHostWarning(null) })
+    }, 300)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [gitUrl])
 
   const handleSubmit = async () => {
     if (!canSubmit) return
@@ -104,6 +127,21 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
               placeholder="https://github.com/org/repo.git"
               className="w-full rounded-lg border border-line bg-base px-3 py-2 font-mono text-xs text-fg placeholder:text-fg-5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
+            {hostWarning && (
+              <div className="flex items-start gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  源站 <strong>{hostWarning}</strong> 尚未配置访问凭证，Issue/PR 同步将不可用。
+                  <button
+                    type="button"
+                    onClick={() => { onClose(); navigate("/settings") }}
+                    className="ml-1 font-medium underline hover:text-amber-700"
+                  >
+                    去配置
+                  </button>
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5">

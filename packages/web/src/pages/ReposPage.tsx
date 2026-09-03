@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import {
+  AlertTriangle,
   ArrowDownToLine,
   Check,
   ChevronDown,
@@ -23,6 +25,7 @@ import { useRepoStore } from "../stores/repo-store"
 import { useToastStore } from "../stores/toast-store"
 import { AddRepoModal } from "../components/AddRepoModal"
 import { AgentsMdModal } from "../components/AgentsMdModal"
+import { extractHostFromGitUrl } from "../lib/git-url"
 
 const BYTES_PER_KB = 1024
 const BYTES_PER_MB = BYTES_PER_KB * 1024
@@ -219,6 +222,7 @@ function WorkspacesSection({ repoId }: { repoId: string }) {
 }
 
 export function RepoListContent() {
+  const navigate = useNavigate()
   const repos = useRepoStore((s) => s.repos)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const setActiveRepo = useRepoStore((s) => s.setActiveRepo)
@@ -232,6 +236,23 @@ export function RepoListContent() {
   const [agentsMdRepo, setAgentsMdRepo] = useState<{ id: string; name: string } | null>(null)
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const [knownHosts, setKnownHosts] = useState<Set<string> | null>(null)
+
+  useEffect(() => {
+    api.listGitHosts()
+      .then((hosts) => setKnownHosts(new Set(hosts.map((h) => h.host.toLowerCase()))))
+      .catch(() => {})
+  }, [])
+
+  const repoHostWarnings = useMemo(() => {
+    if (!knownHosts) return new Set<string>()
+    const missing = new Set<string>()
+    for (const repo of repos) {
+      const host = extractHostFromGitUrl(repo.gitUrl)
+      if (host && !knownHosts.has(host.toLowerCase())) missing.add(repo.id)
+    }
+    return missing
+  }, [repos, knownHosts])
 
   useEffect(() => {
     if (!menuOpenId) return
@@ -391,6 +412,17 @@ export function RepoListContent() {
                     </div>
                   )}
                 </dl>
+
+                {repoHostWarnings.has(repo.id) && (
+                  <button
+                    type="button"
+                    onClick={() => navigate("/settings")}
+                    className="mt-2 flex w-full items-center gap-1.5 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-left text-xs text-amber-600 transition-colors hover:bg-amber-500/15"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    <span>缺少 Git 源站凭证，Issue/PR 同步不可用</span>
+                  </button>
+                )}
 
                 <div className="mt-3 flex items-center gap-2">
                   <button
