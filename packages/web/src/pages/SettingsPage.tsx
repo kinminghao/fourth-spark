@@ -310,6 +310,39 @@ function GitHostRow({ host, onDelete }: { host: GitHost; onDelete: () => void })
   )
 }
 
+const TOKEN_GUIDANCE: Record<string, { scope: string; linkFn: (host: string) => string | null }> = {
+  github: {
+    scope: "repo",
+    linkFn: () => "https://github.com/settings/tokens/new?scopes=repo",
+  },
+  gitlab: {
+    scope: "api",
+    linkFn: (h) => h ? `https://${h}/-/user_settings/personal_access_tokens` : null,
+  },
+  gitea: {
+    scope: "issue 和 pull request 读写",
+    linkFn: (h) => h ? `https://${h}/user/settings/applications` : null,
+  },
+}
+
+function TokenGuidance({ platform, host }: { platform: string; host: string }) {
+  const guide = TOKEN_GUIDANCE[platform]
+  if (!guide) return null
+  const link = guide.linkFn(host)
+  return (
+    <p className="text-[11px] leading-relaxed text-fg-5">
+      需要 <span className="font-medium text-fg-4">{guide.scope}</span> 权限。
+      {link ? (
+        <a href={link} target="_blank" rel="noopener noreferrer" className="ml-1 text-blue-500 hover:underline">
+          去创建 Token →
+        </a>
+      ) : (
+        <span className="ml-1 text-fg-6">（填写 Host 后可跳转创建页）</span>
+      )}
+    </p>
+  )
+}
+
 function AddHostForm({ onAdded }: { onAdded: () => void }) {
   const [open, setOpen] = useState(false)
   const [host, setHost] = useState("")
@@ -400,6 +433,7 @@ function AddHostForm({ onAdded }: { onAdded: () => void }) {
           </button>
         </div>
       </label>
+      <TokenGuidance platform={platform} host={host.trim()} />
       <div className="flex justify-end gap-2 pt-1">
         <button type="button" onClick={reset} className="rounded-md px-3 py-1.5 text-xs text-fg-4 hover:bg-elevated">
           取消
