@@ -191,25 +191,17 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   const { attachments, foldedTexts, promptFiles, error: attachError, addFiles, onPaste: imageOnPaste, addFoldedText, expandFoldedTexts, remove, removeFoldedText, clear } = useAttachments(imagesAllowed)
 
   useEffect(() => {
-    const paramIssueId = searchParams.get("issueId")
-    if (paramIssueId) {
-      setIssueId(paramIssueId)
-      const next = new URLSearchParams(searchParams)
-      next.delete("issueId")
-      setSearchParams(next, { replace: true })
-    } else if (selectedIssueId) {
+    if (selectedIssueId) {
       setIssueId(selectedIssueId)
       useIssueStore.getState().setSelectedIssue(null)
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedIssueId])
 
   useEffect(() => {
     const paramDraft = searchParams.get("draft")
     if (paramDraft) {
       setDraft(paramDraft)
-      const next = new URLSearchParams(searchParams)
-      next.delete("draft")
-      setSearchParams(next, { replace: true })
+      setSearchParams({}, { replace: true })
     }
   }, [searchParams, setSearchParams])
 
