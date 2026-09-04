@@ -1130,17 +1130,6 @@ export async function deleteUsageAccount(accountId: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Push Notification API — /api/push
-// ---------------------------------------------------------------------------
-
-export async function registerPushToken(token: string, platform = "ios"): Promise<void> {
-  await apiFetch<void>("/api/push/register", {
-    method: "POST",
-    body: JSON.stringify({ token, platform }),
-  })
-}
-
-// ---------------------------------------------------------------------------
 // Session File Preview API — /api/repos/:repoId/sessions/:id/files
 // ---------------------------------------------------------------------------
 

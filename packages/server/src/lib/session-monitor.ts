@@ -3,7 +3,6 @@ import type { RuntimeClient } from "../core/runtime-client"
 import type { SessionStatus, Message, Todo } from "../core/runtime-types"
 import { isValidAgent } from "./agent-validator"
 import { getRegistry } from "../core/registry"
-import type { NotifyEvent } from "../core/types"
 import { logger } from "../middleware/logger"
 import { DEFAULT_VARIANT } from "./config"
 import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "./system-agents"
@@ -18,13 +17,6 @@ import { sessions as sessionsTable, customAgents } from "../db/schema"
 import { syncMessagesList } from "../db/sync"
 import { eq } from "drizzle-orm"
 
-function emitNotification(event: NotifyEvent): void {
-  const { notifications } = getRegistry()
-  for (const ch of notifications) {
-    ch.send(event).catch((err) => logger.debug({ err, channel: ch.id }, "notification send failed"))
-  }
-}
-
 const POLL_INTERVAL_MS = 3_000
 const RECENT_SWITCH_GUARD_MS = 5_000
 const REPROMPT_SETTLE_MS = 1_500
@@ -33,7 +25,7 @@ const MAX_EMPTY_RETRIES = 2
 const MAX_IDLE_RESPONSES = 2
 const MAX_STAGNATION = 3
 const DEDUP_COOLDOWN_MS = 30_000
-const NOTIFY_COOLDOWN_MS = 30_000
+
 
 type ManagedEntry = {
   repoId: string
@@ -54,7 +46,7 @@ let lastSwitchAt = 0
 let timer: ReturnType<typeof setInterval> | undefined
 const entries: ManagedEntry[] = []
 
-const STATUS_LABELS: Record<string, string> = { idle: "完成", busy: "运行中", retry: "重试中" }
+
 
 // ---------------------------------------------------------------------------
 // Memory extraction state
@@ -77,38 +69,7 @@ let extractionScanTimer: ReturnType<typeof setInterval> | undefined
 const pendingExtractions = new Map<string, Array<{ sourceSessionId: string; customAgentId: string }>>()
 const extractingRepos = new Set<string>()
 
-function emitTransition(sessionId: string, from: string, to: string): void {
-  const notifyKey = `notify:${sessionId}`
-  const lastNotify = handled.get(notifyKey)
-  if (lastNotify && Date.now() - lastNotify < NOTIFY_COOLDOWN_MS) return
-  handled.set(notifyKey, Date.now())
 
-  const fromLabel = STATUS_LABELS[from] ?? from
-  const toLabel = STATUS_LABELS[to] ?? to
-  const sid = sessionId.slice(-8)
-  if (from === "idle" && to === "busy") {
-    emitNotification({
-      type: "session_start",
-      title: "Session 开始",
-      body: `[${sid}] 开始运行`,
-      sessionId,
-    })
-  } else if (to === "idle" && from !== "idle") {
-    emitNotification({
-      type: "session_complete",
-      title: "Session 完成",
-      body: `[${sid}] ${fromLabel} → ${toLabel}`,
-      sessionId,
-    })
-  } else if (to === "retry") {
-    emitNotification({
-      type: "session_error",
-      title: "Session 重试",
-      body: `[${sid}] ${fromLabel} → ${toLabel}`,
-      sessionId,
-    })
-  }
-}
 
 function dedup(key: string): boolean {
   const ts = handled.get(key)
@@ -213,26 +174,13 @@ async function handleEmptyResponse(client: RuntimeClient, sessionId: string): Pr
       lastSwitchAt = Date.now()
       emptyRetryCounts.delete(sessionId)
       logger.info({ from: activeId, to: result.accountId, sessionId }, "account switched after empty-response retries exhausted")
-      emitNotification({
-        type: "account_switched",
-        title: "账号切换",
-        body: "空响应重试耗尽，已切换账号并重试",
-        sessionId,
-      })
       await repromptSession(client, sessionId)
       return true
     }
     logger.warn({ reason: result.reason, sessionId }, "account switch failed after empty-response retries")
   }
 
-  const sid = sessionId.slice(-8)
-  logger.warn({ sessionId, retryCount }, "empty-response retry limit exhausted, notifying user")
-  emitNotification({
-    type: "session_error",
-    title: "空响应",
-    body: `[${sid}] Agent 返回空响应，已达重试上限`,
-    sessionId,
-  })
+  logger.warn({ sessionId, retryCount }, "empty-response retry limit exhausted")
   return false
 }
 
@@ -586,7 +534,6 @@ async function pollOnce(): Promise<void> {
       for (const [sessionId, prev] of prevStatuses) {
         if (!currentIds.has(sessionId) && prev !== "idle") {
           prevStatuses.set(sessionId, "idle")
-          emitTransition(sessionId, prev, "idle")
           {
             const pool = getRegistry().accountPool
             if (pool?.release) {
@@ -638,11 +585,8 @@ async function pollOnce(): Promise<void> {
             }
           }
 
-          if (prev && prev !== status.type) emitTransition(sessionId, prev, status.type)
           continue
         }
-
-        if (prev && prev !== status.type) emitTransition(sessionId, prev, status.type)
 
         if (status.type !== "retry") continue
 
@@ -676,21 +620,9 @@ async function pollOnce(): Promise<void> {
         if (result.ok) {
           lastSwitchAt = Date.now()
           logger.info({ from: activeId, to: result.accountId, sessionId }, "account switched successfully")
-          emitNotification({
-            type: "account_switched",
-            title: "账号切换",
-            body: "已切换到新账号并自动重试",
-            sessionId,
-          })
           await repromptSession(client, sessionId)
         } else {
           logger.warn({ reason: result.reason, sessionId }, "account switch failed, session remains in retry")
-          emitNotification({
-            type: "account_switch_failed",
-            title: "账号切换失败",
-            body: `所有账号不可用: ${result.reason}`,
-            sessionId,
-          })
         }
       }
     }

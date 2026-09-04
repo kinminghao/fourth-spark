@@ -31,17 +31,6 @@ export const EXTRA_ORIGINS: string[] = (process.env.EXTRA_ORIGINS ?? "")
 export const DEFAULT_VARIANT = process.env.DEFAULT_VARIANT ?? "max"
 
 // ---------------------------------------------------------------------------
-// APNs (Apple Push Notification service)
-// ---------------------------------------------------------------------------
-// Required for iOS push notifications. All values come from Apple Developer portal.
-// Leave unset to silently skip push — the server still runs without them.
-export const APNS_KEY_ID = process.env.APNS_KEY_ID ?? ""
-export const APNS_TEAM_ID = process.env.APNS_TEAM_ID ?? ""
-export const APNS_KEY_PATH = process.env.APNS_KEY_PATH ?? ""
-export const APNS_BUNDLE_ID = process.env.APNS_BUNDLE_ID ?? "com.fourthspark.app"
-export const APNS_PRODUCTION = process.env.APNS_PRODUCTION === "true"
-
-// ---------------------------------------------------------------------------
 // Cloud Worker mode (optional — connects to a claude-accounts-pool master)
 // ---------------------------------------------------------------------------
 // Priority: DB settings > env vars > not configured (local mode).
