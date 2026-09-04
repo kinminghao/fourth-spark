@@ -48,7 +48,6 @@
 |----|------|---------|
 | `settings` | 键值配置 | key, value |
 | `git_hosts` | Git 平台凭证 | host, platform, name, token |
-| `device_tokens` | iOS 推送设备令牌 | token, platform |
 | `session_links` | Session ↔ Issue/PR 关联 | session_id, type, target_id |
 
 ## 同步机制
@@ -96,4 +95,4 @@ Issue / PR / Milestone 通过前端触发同步：
 - `pull_requests`: `(repo_id, number)` 唯一索引，`(repo_id, state)` 复合索引
 - `tags`: `(repo_id, name)` 唯一索引
 - `git_hosts`: `host` 唯一索引
-- `device_tokens`: `token` 唯一索引
+

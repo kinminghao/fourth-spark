@@ -350,7 +350,7 @@ deviceTokens          (iOS 推送 Token，无 FK)
 - `tags_repo_name_idx` — 标签唯一性
 - `tags_repo_idx` — 按仓库查标签
 - `git_hosts_host_idx` — 按主机名唯一查找
-- `device_tokens_token_idx` — 设备 Token 去重
+
 
 ## 设计说明
 
