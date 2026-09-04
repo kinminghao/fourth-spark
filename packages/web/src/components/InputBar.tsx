@@ -95,6 +95,8 @@ export function InputBar() {
         const raw = s.quick_inputs
         if (raw) {
           try { setQuickInputs(JSON.parse(raw)) } catch { /* ignore bad JSON */ }
+        } else {
+          setQuickInputs([{ label: "继续", text: "继续", autoSend: true }])
         }
       } catch { /* ignore */ }
     })()
