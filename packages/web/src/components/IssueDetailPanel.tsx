@@ -53,9 +53,8 @@ export function IssueDetailPanel({
   }, [activeRepoId, issue.number])
 
   const handleStart = () => {
-    useIssueStore.getState().setSelectedIssue(issue.id)
     useSessionStore.setState({ activeSessionId: null })
-    navigate(`/${encodeURIComponent(repoName!)}/run`)
+    navigate(`/${encodeURIComponent(repoName!)}/run?issueId=${encodeURIComponent(issue.id)}`)
   }
 
   return (
