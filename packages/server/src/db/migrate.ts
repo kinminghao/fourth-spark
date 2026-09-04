@@ -38,10 +38,29 @@ function makeIdempotent(sql: string): string {
     (_, unique) => `CREATE ${unique ?? ""}INDEX IF NOT EXISTS `,
   )
 
+  // DROP TABLE → DROP TABLE IF EXISTS
+  s = s.replace(
+    /^DROP\s+TABLE\s+(?!IF\s+EXISTS\b)/i,
+    "DROP TABLE IF EXISTS ",
+  )
+
+  // DROP INDEX → DROP INDEX IF EXISTS
+  s = s.replace(
+    /^DROP\s+INDEX\s+(?!IF\s+EXISTS\b|CONCURRENTLY\b)/i,
+    "DROP INDEX IF EXISTS ",
+  )
+
   // ALTER TABLE ... ADD CONSTRAINT → wrap in DO block to swallow duplicate_object
   if (/^ALTER\s+TABLE\b.*\bADD\s+CONSTRAINT\b/i.test(s)) {
     const escaped = s.replace(/'/g, "''")
     s = `DO $$ BEGIN EXECUTE '${escaped}'; EXCEPTION WHEN duplicate_object THEN NULL; END $$`
+  }
+
+  // ALTER TABLE ... DISABLE/ENABLE ROW LEVEL SECURITY on possibly-dropped tables
+  // → swallow undefined_table (42P01)
+  if (/^ALTER\s+TABLE\b.*\b(DISABLE|ENABLE)\s+ROW\s+LEVEL\s+SECURITY\b/i.test(s)) {
+    const escaped = s.replace(/'/g, "''")
+    s = `DO $$ BEGIN EXECUTE '${escaped}'; EXCEPTION WHEN undefined_table THEN NULL; END $$`
   }
 
   return s
