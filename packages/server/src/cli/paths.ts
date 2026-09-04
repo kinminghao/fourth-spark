@@ -1,7 +1,9 @@
 import { join, resolve, dirname } from "node:path"
-import { mkdirSync, existsSync } from "node:fs"
+import { mkdirSync, existsSync, readFileSync } from "node:fs"
 import { execSync } from "node:child_process"
 import { homedir } from "node:os"
+
+const MIN_OPENCODE_VERSION = "1.4.0"
 
 export const DATA_DIR = join(homedir(), ".fourth-spark")
 const LOG_DIR = join(DATA_DIR, "logs")
@@ -89,6 +91,27 @@ export function ensureDependencies(): void {
     }
   }
 
+  try {
+    const raw = execSync("opencode --version", { stdio: "pipe" }).toString().trim()
+    const parts = raw.split(".").map(Number)
+    const min = MIN_OPENCODE_VERSION.split(".").map(Number)
+    const tooOld =
+      parts[0] < min[0] ||
+      (parts[0] === min[0] && parts[1] < min[1]) ||
+      (parts[0] === min[0] && parts[1] === min[1] && (parts[2] ?? 0) < (min[2] ?? 0))
+    if (tooOld) {
+      errors.push(
+        `OpenCode CLI version ${raw} is too old (requires >= ${MIN_OPENCODE_VERSION})\n` +
+        "  Upgrade: https://opencode.ai/docs",
+      )
+    }
+  } catch {
+    errors.push(
+      "OpenCode CLI is not installed (required for agent runtime)\n" +
+      "  Install: https://opencode.ai/docs",
+    )
+  }
+
   if (errors.length > 0) {
     console.error("Cannot start: missing required dependencies\n")
     for (const msg of errors) {
@@ -96,5 +119,22 @@ export function ensureDependencies(): void {
     }
     console.error()
     process.exit(1)
+  }
+
+  try {
+    const configPath = join(homedir(), ".config", "opencode", "opencode.json")
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, "utf-8"))
+      const plugins: string[] = Array.isArray(config.plugin) ? config.plugin : []
+      const hasOmo = plugins.some((p) => p.startsWith("oh-my-openagent") || p.startsWith("oh-my-opencode"))
+      if (!hasOmo) {
+        console.info(
+          "\n  💡 Recommended: install oh-my-openagent for enhanced Agent capabilities\n" +
+          "     https://github.com/code-yeongyu/oh-my-openagent\n" +
+          "     Install: bunx oh-my-openagent install\n",
+        )
+      }
+    }
+  } catch {
   }
 }
