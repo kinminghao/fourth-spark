@@ -1,5 +1,4 @@
 import type {
-  NotificationChannel,
   McpToolProvider,
   GitPlatformFactory,
   AccountPool,
@@ -7,8 +6,6 @@ import type {
 } from "./types"
 import type { RuntimeProvider } from "./runtime-provider"
 import type { CredentialWriter } from "./runtime-types"
-import { desktopNotificationChannel } from "../lib/notify"
-import { apnsNotificationChannel } from "../lib/apns"
 import { gitToolProvider } from "../mcp/git-tools"
 import {
   githubPlatformFactory,
@@ -21,7 +18,6 @@ import { openCodeCredentialWriter } from "../runtimes/opencode/credential"
 export interface PluginRegistry {
   runtime?: AgentRuntime
   accountPool?: AccountPool
-  notifications: NotificationChannel[]
   mcpTools: McpToolProvider[]
   gitPlatforms: Map<string, GitPlatformFactory>
   providers: Map<string, RuntimeProvider>
@@ -33,7 +29,6 @@ let instance: PluginRegistry | undefined
 export function createDefaultRegistry(): PluginRegistry {
   return {
     accountPool: localAccountPool,
-    notifications: [desktopNotificationChannel, apnsNotificationChannel],
     mcpTools: [gitToolProvider],
     gitPlatforms: new Map([
       ["github", githubPlatformFactory],

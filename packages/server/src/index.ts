@@ -20,7 +20,6 @@ import { mcpRoute } from "./routes/mcp"
 import { tagRoutes } from "./routes/tags"
 import { milestoneRoutes } from "./routes/milestones"
 import { pullRoutes } from "./routes/pulls"
-import { pushRoutes } from "./routes/push"
 import { workspaceRoutes } from "./routes/workspaces"
 import { PORT, HTTPS_PORT, initWorkerConfig } from "./lib/config"
 import { getLocalIPs, isLocalClient, ensureTlsCert, getTlsPaths } from "./lib/tls-manager"
@@ -54,7 +53,6 @@ app.route("/api/health", health)
 app.route("/api/usage", usageRoutes)
 app.route("/api/cloud", cloudRoutes)
 app.route("/api/analytics", analyticsRoutes)
-app.route("/api/push", pushRoutes)
 app.route("/api/transcribe", transcribeRoute)
 app.route("/api/agents-md", globalAgentsMd)
 app.route("/api/custom-agents", globalCustomAgents)

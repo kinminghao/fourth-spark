@@ -287,16 +287,6 @@ export const prIssueLinks = pgTable("pr_issue_links", {
   index("pr_issue_links_issue_idx").on(t.issueId),
 ])
 
-export const deviceTokens = pgTable("device_tokens", {
-  id: text("id").primaryKey(),
-  token: text("token").notNull(),
-  platform: text("platform").notNull().default("ios"),
-  createdAt: bigint("created_at", { mode: "number" }).notNull(),
-  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
-}, (t) => [
-  uniqueIndex("device_tokens_token_idx").on(t.token),
-])
-
 export const sessionLinks = pgTable("session_links", {
   sessionId: text("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
   type: text("type").notNull(), // "issue" | "pr"

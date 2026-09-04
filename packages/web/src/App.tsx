@@ -16,7 +16,7 @@ import { usePrStore } from "./stores/pr-store"
 import { useThemeStore } from "./stores/theme-store"
 import { ToastContainer } from "./components/ToastContainer"
 import { orchestrator } from "./lib/session-orchestrator"
-import { initPushNotifications } from "./lib/push-notifications"
+
 
 function extractRepoSlugFromUrl(pathname: string): string | null {
   const match = pathname.match(/^\/([^/]+)\/(run|agents|issues|pulls|dev)/)
@@ -50,7 +50,6 @@ function AppInner() {
 
   useEffect(() => {
     void useRepoStore.getState().loadRepos()
-    void initPushNotifications(navigate)
     return useThemeStore.getState().init()
   }, [navigate])
 

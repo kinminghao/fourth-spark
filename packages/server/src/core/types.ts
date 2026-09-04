@@ -2,8 +2,7 @@
 // Plugin interfaces — the extension points of Fourth Spark.
 //
 // Each interface is implemented incrementally:
-//   Phase 1: NotificationChannel
-//   Phase 2: McpToolProvider, GitPlatformFactory
+//   Phase 1: McpToolProvider, GitPlatformFactory
 //   Phase 3: AccountPool
 //   Phase 4: AgentRuntime, AgentClient
 //
@@ -11,22 +10,6 @@
 // ---------------------------------------------------------------------------
 
 import type { GitIssueClient, Platform } from "../lib/git-provider"
-
-// --- Notification (Phase 1) ------------------------------------------------
-
-export interface NotifyEvent {
-  type: string
-  title: string
-  body: string
-  sessionId?: string
-  data?: Record<string, string>
-}
-
-export interface NotificationChannel {
-  readonly id: string
-  send(event: NotifyEvent): Promise<void>
-  dispose?(): void
-}
 
 // --- MCP Tools (Phase 2) ---------------------------------------------------
 
