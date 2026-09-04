@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom"
 import { Layout } from "./components/Layout"
 import { ReposPage } from "./pages/ReposPage"
 import { RunPage } from "./pages/RunPage"
@@ -39,7 +39,6 @@ function LegacyDevRedirect({ segment }: { segment: "issues" | "pulls" }) {
 }
 
 function AppInner() {
-  const navigate = useNavigate()
   const location = useLocation()
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const repos = useRepoStore((s) => s.repos)
@@ -52,10 +51,6 @@ function AppInner() {
     void useRepoStore.getState().loadRepos()
     return useThemeStore.getState().init()
   }, [])
-
-  useEffect(() => {
-    void initPushNotifications(navigate)
-  }, [navigate])
 
   useEffect(() => {
     if (repos.length === 0) return
