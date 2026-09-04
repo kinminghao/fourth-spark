@@ -42,6 +42,7 @@ export function InputBar() {
   const [selectedModel, setSelectedModel] = useState("")
   const [selectedVariant, setSelectedVariant] = useState("")
   const [pinnedModels, setPinnedModels] = useState<ModelInfo[]>([])
+  const [quickInputs, setQuickInputs] = useState<Array<{ label: string; text: string; autoSend?: boolean }>>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
@@ -84,6 +85,23 @@ export function InputBar() {
     })()
     return () => { cancelled = true }
   }, [activeRepoId])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const s = await getSettings()
+        if (cancelled) return
+        const raw = s.quick_inputs
+        if (raw) {
+          try { setQuickInputs(JSON.parse(raw)) } catch { /* ignore bad JSON */ }
+        } else {
+          setQuickInputs([{ label: "继续", text: "继续", autoSend: true }])
+        }
+      } catch { /* ignore */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   const busy = status === "busy" && !hasPendingQuestion
   const disabled = !activeSessionId
@@ -201,6 +219,29 @@ export function InputBar() {
         onRemoveFoldedText={handleRemoveFoldedText}
         className="mx-auto max-w-4xl"
       />
+      {quickInputs.length > 0 && (
+        <div className="mx-auto mb-2 flex max-w-4xl gap-1.5 overflow-x-auto scrollbar-none">
+          {quickInputs.map((qi, i) => (
+            <button
+              key={i}
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                if (qi.autoSend) {
+                  void sendMessage(qi.text, selectedModel || undefined, selectedVariant || undefined)
+                } else {
+                  setValue(qi.text)
+                  if (activeSessionId) setDraft(activeSessionId, qi.text)
+                  textareaRef.current?.focus()
+                }
+              }}
+              className="shrink-0 rounded-full border border-line bg-surface px-3 py-1 text-xs text-fg-3 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"
+            >
+              {qi.label}
+            </button>
+          ))}
+        </div>
+      )}
       <div
         className={clsx(
           "mx-auto flex max-w-4xl items-start gap-2 rounded-lg border px-3 py-2 transition-colors duration-150",
