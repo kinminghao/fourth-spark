@@ -51,6 +51,10 @@ function AppInner() {
   useEffect(() => {
     void useRepoStore.getState().loadRepos()
     return useThemeStore.getState().init()
+  }, [])
+
+  useEffect(() => {
+    void initPushNotifications(navigate)
   }, [navigate])
 
   useEffect(() => {
