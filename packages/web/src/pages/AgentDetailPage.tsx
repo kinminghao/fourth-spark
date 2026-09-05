@@ -675,7 +675,8 @@ function ConfigSection({ agent, fragments, onSave }: {
         if (cancelled) return
         const raw = settings[PINNED_MODELS_KEY]
         const pinnedIds: string[] = raw ? JSON.parse(raw) : []
-        setPinnedModels(pinnedIds.length > 0 ? models.filter((m) => pinnedIds.includes(m.id)) : [])
+        const filtered = pinnedIds.length > 0 ? models.filter((m) => pinnedIds.includes(m.id)) : models
+        setPinnedModels(filtered.length > 0 ? filtered : models)
       } catch {
         if (!cancelled) setPinnedModels([])
       }
