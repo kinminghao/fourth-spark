@@ -10,6 +10,7 @@ import { settingsRoutes } from "./routes/settings"
 import { gitHostRoutes } from "./routes/git-hosts"
 import { health, repoHealth } from "./routes/health"
 import { repoRoutes } from "./routes/repos"
+import { fsRoutes } from "./routes/fs"
 import { usageRoutes } from "./routes/usage"
 import { globalAgentsMd, repoAgentsMd } from "./routes/agents-md"
 import { globalCustomAgents, repoCustomAgents } from "./routes/custom-agents"
@@ -47,6 +48,7 @@ app.onError(onError)
 // Global routes
 // ---------------------------------------------------------------------------
 app.route("/api/repos", repoRoutes)
+app.route("/api/fs", fsRoutes)
 app.route("/api/settings", settingsRoutes)
 app.route("/api/git-hosts", gitHostRoutes)
 app.route("/api/health", health)

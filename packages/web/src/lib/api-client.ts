@@ -272,6 +272,31 @@ export async function resolveRepo(localPath: string): Promise<RepoResolveResult>
   })
 }
 
+export interface DirEntry {
+  name: string
+  isGitRepo: boolean
+}
+
+export interface BrowseResult {
+  path: string
+  parent: string | null
+  entries: DirEntry[]
+}
+
+export async function browseDir(path?: string, showHidden?: boolean): Promise<BrowseResult> {
+  return apiFetch<BrowseResult>("/api/fs/browse", {
+    method: "POST",
+    body: JSON.stringify({ path, showHidden }),
+  })
+}
+
+export async function cloneRepo(gitUrl: string, targetDir?: string): Promise<RepoResolveResult> {
+  return apiFetch<RepoResolveResult>("/api/repos/clone", {
+    method: "POST",
+    body: JSON.stringify({ gitUrl, targetDir }),
+  })
+}
+
 export async function deleteRepo(id: string): Promise<void> {
   await apiFetch<void>(`/api/repos/${encodeURIComponent(id)}`, { method: "DELETE" })
 }
