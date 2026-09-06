@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import { AlertTriangle, X, FolderSearch, GitBranch, Loader2 } from "lucide-react"
+import { AlertTriangle, X, FolderSearch, GitBranch, Loader2, ChevronDown } from "lucide-react"
 import { useRepoStore } from "../stores/repo-store"
 import { resolveRepo, cloneRepo, listGitHosts } from "../lib/api-client"
 import { extractHostFromGitUrl } from "../lib/git-url"
@@ -14,6 +14,8 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
   const [localPath, setLocalPath] = useState("")
   const [name, setName] = useState("")
   const [gitUrl, setGitUrl] = useState("")
+  const [cloneTargetDir, setCloneTargetDir] = useState("")
+  const [showCloneDirPicker, setShowCloneDirPicker] = useState(false)
   const [runtimeType, setRuntimeType] = useState("opencode")
   const [resolving, setResolving] = useState(false)
   const [cloning, setCloning] = useState(false)
@@ -87,6 +89,11 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
     void handleResolvePath(path)
   }
 
+  const handleCloneTargetSelect = (path: string) => {
+    setCloneTargetDir(path)
+    setShowCloneDirPicker(false)
+  }
+
   const handleClone = async () => {
     const trimmedUrl = gitUrl.trim()
     if (!trimmedUrl) {
@@ -96,7 +103,8 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
     setCloning(true)
     setError("")
     try {
-      const result = await cloneRepo(trimmedUrl)
+      const target = cloneTargetDir.trim() || undefined
+      const result = await cloneRepo(trimmedUrl, target)
       setLocalPath(result.localPath)
       if (result.name) setName(result.name)
       if (result.gitUrl) setGitUrl(result.gitUrl)
@@ -118,6 +126,8 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
     setLocalPath("")
     setName("")
     setGitUrl("")
+    setCloneTargetDir("")
+    setShowCloneDirPicker(false)
     setError("")
     setHostWarning(null)
   }
@@ -185,35 +195,61 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
             <>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="m-clone-url" className="text-xs font-medium text-fg-3">Git 仓库地址</label>
-                <div className="flex gap-2">
+                <input
+                  id="m-clone-url"
+                  value={gitUrl}
+                  onChange={(e) => setGitUrl(e.target.value)}
+                  placeholder="https://github.com/org/repo.git"
+                  autoFocus
+                  className="w-full rounded-lg border border-line bg-base px-3 py-2 font-mono text-xs text-fg placeholder:text-fg-5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-fg-3">目标目录</label>
+                <div className="flex items-center gap-2">
                   <input
-                    id="m-clone-url"
-                    value={gitUrl}
-                    onChange={(e) => setGitUrl(e.target.value)}
-                    placeholder="https://github.com/org/repo.git"
-                    autoFocus
+                    value={cloneTargetDir}
+                    onChange={(e) => setCloneTargetDir(e.target.value)}
+                    placeholder="默认: ~/.fourth-spark/repos/"
                     className="min-w-0 flex-1 rounded-lg border border-line bg-base px-3 py-2 font-mono text-xs text-fg placeholder:text-fg-5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   />
                   <button
                     type="button"
-                    onClick={handleClone}
-                    disabled={cloning || !gitUrl.trim()}
-                    className="shrink-0 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6 disabled:text-fg-4"
+                    onClick={() => setShowCloneDirPicker((v) => !v)}
+                    className={`shrink-0 rounded-lg border px-2.5 py-2 text-sm transition-colors ${
+                      showCloneDirPicker
+                        ? "border-blue-500 bg-blue-500/10 text-blue-600"
+                        : "border-line bg-base text-fg-4 hover:bg-elevated hover:text-fg-2"
+                    }`}
                   >
-                    {cloning ? (
-                      <span className="flex items-center gap-1.5">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        克隆中…
-                      </span>
-                    ) : (
-                      "克隆"
-                    )}
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showCloneDirPicker ? "rotate-180" : ""}`} />
                   </button>
                 </div>
+                {showCloneDirPicker && (
+                  <DirectoryBrowser onSelect={handleCloneTargetSelect} />
+                )}
                 <span className="text-[11px] text-fg-5">
-                  {cloning ? "正在克隆仓库，请稍候…" : `将克隆到 ~/.fourth-spark/repos/`}
+                  留空则克隆到默认目录，选择目录后仓库将克隆到该目录下
                 </span>
               </div>
+
+              <button
+                type="button"
+                onClick={handleClone}
+                disabled={cloning || !gitUrl.trim()}
+                className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6 disabled:text-fg-4"
+              >
+                {cloning ? (
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    正在克隆仓库…
+                  </span>
+                ) : (
+                  "克隆"
+                )}
+              </button>
+
               {localPath && (
                 <div className="rounded-md bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600">
                   克隆完成: <span className="font-mono">{localPath}</span>
