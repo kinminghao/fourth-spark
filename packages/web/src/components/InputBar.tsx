@@ -220,7 +220,8 @@ export function InputBar() {
         className="mx-auto max-w-4xl"
       />
       {quickInputs.length > 0 && (
-        <div className="mx-auto mb-2 flex max-w-4xl gap-1.5 overflow-x-auto scrollbar-none">
+        <div className="mx-auto mb-2 flex max-w-4xl items-center gap-1.5 overflow-x-auto scrollbar-none">
+          <span className="shrink-0 text-[10px] text-fg-5">快捷</span>
           {quickInputs.map((qi, i) => (
             <button
               key={i}
