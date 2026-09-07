@@ -331,7 +331,7 @@ export function RepoListContent() {
       ) : (
         <>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {repos.map((repo) => {
+          {repos.map((repo, repoIdx) => {
             const isActive = repo.id === activeRepoId
             return (
               <div
@@ -459,13 +459,14 @@ export function RepoListContent() {
                   <div className="relative" ref={menuOpenId === repo.id ? menuRef : undefined}>
                     <button
                       type="button"
+                      data-guide={repoIdx === 0 ? "repo-overflow-btn" : undefined}
                       onClick={() => setMenuOpenId(menuOpenId === repo.id ? null : repo.id)}
                       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
                     >
                       <Ellipsis className="h-4 w-4" />
                     </button>
                     {menuOpenId === repo.id && (
-                      <div className="absolute right-0 top-full z-20 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-line bg-elevated shadow-lg">
+                      <div data-guide={repoIdx === 0 ? "repo-overflow-dropdown" : undefined} className="absolute right-0 top-full z-20 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-line bg-elevated shadow-lg">
                         <button
                           type="button"
                           className={clsx(
