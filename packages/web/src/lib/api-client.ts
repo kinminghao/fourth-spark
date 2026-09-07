@@ -1213,3 +1213,23 @@ export async function fetchAnalyticsSummary(
   if (repoId) params.set("repoId", repoId)
   return apiFetch<AnalyticsResponse>(`/api/analytics/summary?${params}`)
 }
+
+export interface DiagnosticReport {
+  id: string
+  userAgent: string
+  url: string
+  freezeDurationMs: number
+  metrics: {
+    timeline: Array<{ ts: number; sse: number; delta: number; storeSets: number }>
+    workerCount: number
+    messageCount: number
+    sessionCount: number
+    heapUsedMB?: number
+    heapTotalMB?: number
+  }
+  createdAt: number
+}
+
+export async function getDiagnostics(limit = 50): Promise<DiagnosticReport[]> {
+  return apiFetch<DiagnosticReport[]>(`/api/diagnostics?limit=${limit}`)
+}

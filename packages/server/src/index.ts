@@ -32,6 +32,7 @@ import { seedSystemAgents } from "./lib/system-agents"
 import { startSyncScheduler, stopSyncScheduler } from "./lib/sync-scheduler"
 import { ensureSenseVoice } from "./lib/sensevoice-manager"
 import { transcribeRoute } from "./routes/transcribe"
+import { diagnosticsRoutes } from "./routes/diagnostics"
 import { runMigrations } from "./db/migrate"
 import { resolve, join, dirname } from "node:path"
 import { existsSync, realpathSync, unlinkSync } from "node:fs"
@@ -56,6 +57,7 @@ app.route("/api/usage", usageRoutes)
 app.route("/api/cloud", cloudRoutes)
 app.route("/api/analytics", analyticsRoutes)
 app.route("/api/transcribe", transcribeRoute)
+app.route("/api/diagnostics", diagnosticsRoutes)
 app.route("/api/agents-md", globalAgentsMd)
 app.route("/api/custom-agents", globalCustomAgents)
 app.route("/api/custom-agents/:agentId/memories", agentMemoryRoutes)

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, Ban, Box, Check, ChevronDown, ChevronUp, Clock, Cloud, Cpu, Eye, EyeOff, FileText, Gauge, GitBranch, Keyboard, Loader2, Plus, RefreshCw, Save, Search, Trash2, User, Users, Wifi, X, Zap } from "lucide-react"
+import { Activity, AlertTriangle, Ban, Box, Check, ChevronDown, ChevronUp, Clock, Cloud, Cpu, Eye, EyeOff, FileText, Gauge, GitBranch, Keyboard, Loader2, Plus, RefreshCw, Save, Search, Trash2, User, Users, Wifi, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
 import type { AccountUsage, GitHost, ModelInfo, UsageResult, UsageWindow } from "../lib/api-client"
@@ -18,7 +18,7 @@ function formatElapsed(ts: number): string {
   return `${Math.floor(m / 60)} 小时前`
 }
 
-type Tab = "repos" | "usage" | "git" | "models" | "agents" | "general" | "server"
+type Tab = "repos" | "usage" | "git" | "models" | "agents" | "general" | "server" | "diagnostics"
 
 const BASE_TABS: { id: Tab; label: string; icon: typeof Zap }[] = [
   { id: "repos", label: "仓库", icon: Box },
@@ -27,6 +27,7 @@ const BASE_TABS: { id: Tab; label: string; icon: typeof Zap }[] = [
   { id: "models", label: "模型", icon: Cpu },
   { id: "agents", label: "AGENTS.md", icon: FileText },
   { id: "general", label: "通用", icon: Keyboard },
+  { id: "diagnostics", label: "诊断", icon: Activity },
 ]
 
 const SERVER_TAB: { id: Tab; label: string; icon: typeof Zap } = {
@@ -1586,6 +1587,118 @@ function QuickInputSection() {
   )
 }
 
+function DiagnosticsSection() {
+  const [reports, setReports] = useState<api.DiagnosticReport[]>([])
+  const [loading, setLoading] = useState(true)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.getDiagnostics(20)
+      .then(setReports)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return (
+      <section className="rounded-lg border border-line bg-surface p-4">
+        <div className="flex items-center gap-2 text-fg-4">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm">加载诊断报告…</span>
+        </div>
+      </section>
+    )
+  }
+
+  if (reports.length === 0) {
+    return (
+      <section className="rounded-lg border border-line bg-surface p-4">
+        <p className="text-sm text-fg-4">暂无卡顿报告。当前端检测到主线程阻塞 &gt;3s 时会自动上报。</p>
+      </section>
+    )
+  }
+
+  return (
+    <section className="space-y-3">
+      <p className="text-xs text-fg-5">
+        共 {reports.length} 条卡顿报告（最近 20 条）。点击展开查看事件频率时间线。
+      </p>
+      {reports.map((r) => {
+        const expanded = expandedId === r.id
+        const date = new Date(r.createdAt)
+        const peakSse = Math.max(...r.metrics.timeline.map((t) => t.sse), 0)
+        const peakDelta = Math.max(...r.metrics.timeline.map((t) => t.delta), 0)
+        return (
+          <div key={r.id} className="rounded-lg border border-line bg-surface">
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 px-4 py-3 text-left"
+              onClick={() => setExpandedId(expanded ? null : r.id)}
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-sm font-medium text-fg">
+                    卡顿 {(r.freezeDurationMs / 1000).toFixed(1)}s
+                  </span>
+                  <span className="text-xs text-fg-5">
+                    {date.toLocaleDateString()} {date.toLocaleTimeString()}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex gap-3 text-[11px] text-fg-5">
+                  <span>SSE峰值: {peakSse}/s</span>
+                  <span>Delta峰值: {peakDelta}/s</span>
+                  <span>Workers: {r.metrics.workerCount}</span>
+                  <span>消息数: {r.metrics.messageCount}</span>
+                  {r.metrics.heapUsedMB != null && (
+                    <span>内存: {r.metrics.heapUsedMB}MB</span>
+                  )}
+                </div>
+              </div>
+              {expanded ? (
+                <ChevronUp className="h-4 w-4 shrink-0 text-fg-5" />
+              ) : (
+                <ChevronDown className="h-4 w-4 shrink-0 text-fg-5" />
+              )}
+            </button>
+
+            {expanded && (
+              <div className="border-t border-line px-4 py-3 text-xs">
+                <div className="mb-2 text-fg-5">{r.userAgent}</div>
+                <div className="mb-2 text-fg-5 truncate">{r.url}</div>
+                <table className="w-full text-left tabular-nums">
+                  <thead>
+                    <tr className="text-fg-5">
+                      <th className="pb-1 pr-3 font-medium">时间</th>
+                      <th className="pb-1 pr-3 font-medium">SSE/s</th>
+                      <th className="pb-1 pr-3 font-medium">Delta/s</th>
+                      <th className="pb-1 font-medium">Store/s</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {r.metrics.timeline.slice(-20).map((t, i) => {
+                      const ts = new Date(t.ts)
+                      const hot = t.sse > 20 || t.delta > 20
+                      return (
+                        <tr key={i} className={hot ? "text-amber-400" : "text-fg-4"}>
+                          <td className="pr-3 py-0.5">{ts.toLocaleTimeString()}</td>
+                          <td className="pr-3 py-0.5">{t.sse}</td>
+                          <td className="pr-3 py-0.5">{t.delta}</td>
+                          <td className="py-0.5">{t.storeSets}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
 export function SettingsPage() {
   const [tab, setTab] = useState<Tab>("usage")
   const tabs = useMemo(() => (isNativePlatform() || getServerUrl()) ? [...BASE_TABS, SERVER_TAB] : BASE_TABS, [])
@@ -1623,6 +1736,7 @@ export function SettingsPage() {
           {tab === "agents" && <AgentsMdSection />}
           {tab === "general" && <QuickInputSection />}
           {tab === "server" && <ServerSection />}
+          {tab === "diagnostics" && <DiagnosticsSection />}
         </div>
       </div>
     </div>

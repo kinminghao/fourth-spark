@@ -298,6 +298,31 @@ export const sessionLinks = pgTable("session_links", {
   index("session_links_target_idx").on(t.type, t.targetId),
 ])
 
+export interface FreezeMetrics {
+  timeline: Array<{
+    ts: number
+    sse: number
+    delta: number
+    storeSets: number
+  }>
+  workerCount: number
+  messageCount: number
+  sessionCount: number
+  heapUsedMB?: number
+  heapTotalMB?: number
+}
+
+export const diagnostics = pgTable("diagnostics", {
+  id: text("id").primaryKey(),
+  userAgent: text("user_agent").notNull(),
+  url: text("url").notNull(),
+  freezeDurationMs: integer("freeze_duration_ms").notNull(),
+  metrics: jsonb("metrics").$type<FreezeMetrics>().notNull(),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+}, (t) => [
+  index("diagnostics_created_idx").on(t.createdAt),
+])
+
 export const todos = pgTable("todos", {
   sessionId: text("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
   position: integer("position").notNull(),
