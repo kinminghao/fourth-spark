@@ -8,8 +8,8 @@ export interface GitRemote {
 // https://git.btsai.work/CloudSystem/backend.git → same
 // ssh://git@git.btsai.work/CloudSystem/backend.git → same
 const SSH_RE = /^[\w.-]+@([\w.-]+):([\w.-]+)\/([\w.-]+?)(?:\.git)?$/
-const HTTPS_RE = /^https?:\/\/([\w.-]+)\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/)?$/
-const SSH_PROTO_RE = /^ssh:\/\/[\w.-]+@([\w.-]+)\/([\w.-]+)\/([\w.-]+?)(?:\.git)?$/
+const HTTPS_RE = /^https?:\/\/([\w.-]+)(?::\d+)?\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/)?$/
+const SSH_PROTO_RE = /^ssh:\/\/[\w.-]+@([\w.-]+)(?::\d+)?\/([\w.-]+)\/([\w.-]+?)(?:\.git)?$/
 
 export function parseGitUrl(url: string): GitRemote | null {
   for (const re of [SSH_RE, HTTPS_RE, SSH_PROTO_RE]) {

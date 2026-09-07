@@ -7,7 +7,7 @@ import { runtimeManager } from "../lib/process-manager"
 import { existsSync, mkdirSync } from "node:fs"
 import { homedir } from "node:os"
 import { runGit, runGitWithRetry, withRepoLock, cleanupStaleLock, pruneRemoteRefs, classifyGitError } from "../lib/git-runner"
-import { parseGitUrl, normalizeGitUrl } from "../lib/git-url"
+import { parseGitUrl } from "../lib/git-url"
 
 export const repoRoutes = new Hono()
 
@@ -37,7 +37,7 @@ repoRoutes.post("/resolve", async (c) => {
 
   let gitUrl = ""
   const result = runGit(["config", "--get", "remote.origin.url"], localPath, { timeout: 5_000 })
-  if (result.ok) gitUrl = normalizeGitUrl(result.stdout)
+  if (result.ok) gitUrl = result.stdout
 
   return c.json({ name, gitUrl, localPath })
 })
@@ -85,9 +85,9 @@ repoRoutes.post("/clone", async (c) => {
     return c.json({ error: errorInfo.message, code: errorInfo.code, status: 500 }, 500)
   }
 
-  let clonedGitUrl = normalizeGitUrl(gitUrl)
+  let clonedGitUrl = gitUrl
   const remoteResult = runGit(["config", "--get", "remote.origin.url"], targetDir, { timeout: 5_000 })
-  if (remoteResult.ok && remoteResult.stdout) clonedGitUrl = normalizeGitUrl(remoteResult.stdout)
+  if (remoteResult.ok && remoteResult.stdout) clonedGitUrl = remoteResult.stdout
 
   return c.json({ localPath: targetDir, name: repoName, gitUrl: clonedGitUrl })
 })
