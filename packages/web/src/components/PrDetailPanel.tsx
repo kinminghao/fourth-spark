@@ -171,7 +171,7 @@ export function PrDetailPanel({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div data-guide="pr-actions" className="flex shrink-0 flex-wrap items-center gap-2">
           {pr.htmlUrl && (
             <a
               href={pr.htmlUrl}
