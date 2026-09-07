@@ -21,6 +21,7 @@ export function onError(err: Error, _c: Context): Response {
     return jsonError(err.message, status)
   }
 
-  logger.error({ error: err.message, stack: err.stack }, "Unhandled error")
+  const cause = err.cause instanceof Error ? err.cause.message : undefined
+  logger.error({ error: err.message, cause, stack: err.stack }, "Unhandled error")
   return jsonError(err.message || "Internal Server Error", 500)
 }
