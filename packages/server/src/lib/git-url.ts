@@ -19,4 +19,10 @@ export function parseGitUrl(url: string): GitRemote | null {
   return null
 }
 
+export function normalizeGitUrl(url: string): string {
+  const parsed = parseGitUrl(url)
+  if (!parsed) return url
+  return `https://${parsed.host}/${parsed.owner}/${parsed.repo}.git`
+}
+
 
