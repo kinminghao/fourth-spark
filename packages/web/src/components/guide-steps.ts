@@ -89,4 +89,43 @@ export const GUIDE_STEPS: GuideStep[] = [
     mockScope: "dev",
     setupFn: "selectMockPr",
   },
+  // ---- AgentsPage: header + fragments ----
+  {
+    target: '[data-guide="agents-header"]',
+    title: "创建与导入 Agent",
+    description: "点击「创建」基于 base agent + 模型 + 提示词片段组合一个自定义 Agent。点击「导入」可从 JSON 文件恢复其他实例导出的 Agent。",
+    position: "bottom-right",
+    padding: 6,
+    route: "agents",
+    mockScope: "agent",
+  },
+  // ---- AgentsPage: fragments section ----
+  {
+    target: '[data-guide="agents-fragments"]',
+    title: "提示词片段",
+    description: "可复用的提示词模块，可在多个 Agent 间共享。创建 Agent 时选择片段并排序拼接顺序，构建最终的 System Prompt。",
+    position: "bottom",
+    padding: 6,
+    mockScope: "agent",
+    triggerClick: '[data-guide="agents-fragments"]',
+  },
+  // ---- AgentDetailPage: export actions ----
+  {
+    target: '[data-guide="agent-detail-actions"]',
+    title: "Agent 导出与共享",
+    description: "下载或复制 Agent 的 JSON 配置，可在不同 Fourth Spark 实例间导入共享。包含提示词片段和所有配置。",
+    position: "bottom-right",
+    padding: 4,
+    route: "agents/__MOCK_AGENT__",
+    mockScope: "agent",
+  },
+  // ---- AgentDetailPage: memory section ----
+  {
+    target: '[data-guide="agent-memory-section"]',
+    title: "Agent 记忆",
+    description: "Agent 在每次对话结束后自动提取经验记忆。每条记忆有分类标签和重要度评分（⚡）。系统定期自动整理：合并重复内容、衰减不活跃的记忆、强化反复验证的经验。点击版本标签可查看完整演化历史（首次提取 → 重写 → 合并 → 强化/衰减）。",
+    position: "bottom",
+    padding: 6,
+    mockScope: "agent",
+  },
 ]

@@ -5,7 +5,7 @@ import { X } from "lucide-react"
 import { useLayoutStore } from "../stores/layout-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { GUIDE_STEPS, type TooltipPosition } from "./guide-steps"
-import { injectMockData, restoreMockData, selectMockIssue, selectMockPr } from "./guide-mock-data"
+import { injectMockData, restoreMockData, selectMockIssue, selectMockPr, getMockAgentId } from "./guide-mock-data"
 
 const HIGHLIGHT_PAD = 6
 const TOOLTIP_GAP = 12
@@ -96,10 +96,12 @@ export function GuideTour() {
     setRect(getTargetRect(current.target, pad))
   }, [open, current])
 
-  /** Resolve per-repo route: "dev/issues" → "/:repoName/dev/issues" */
+  /** Resolve per-repo route: "dev/issues" → "/:repoName/dev/issues"
+   *  Also replaces __MOCK_AGENT__ placeholder with the actual mock agent ID */
   const resolveRoute = useCallback((route: string) => {
-    if (route.startsWith("/")) return route
-    return repoName ? `/${encodeURIComponent(repoName)}/${route}` : `/${route}`
+    const resolved = route.replace("__MOCK_AGENT__", getMockAgentId())
+    if (resolved.startsWith("/")) return resolved
+    return repoName ? `/${encodeURIComponent(repoName)}/${resolved}` : `/${resolved}`
   }, [repoName])
 
   // Reset step when tour opens
@@ -121,11 +123,11 @@ export function GuideTour() {
       clickSelector(prevDef.triggerClick)
     }
 
-    // 2. Mock data lifecycle
+    // 2. Mock data lifecycle — scope-aware
     const prevScope = prevDef?.mockScope ?? null
     const curScope = current.mockScope ?? null
     if (curScope && curScope !== prevScope) {
-      injectMockData()
+      injectMockData(curScope)
       activeMockRef.current = curScope
     } else if (!curScope && activeMockRef.current) {
       restoreMockData()
