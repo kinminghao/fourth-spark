@@ -128,7 +128,7 @@ export function IssueDetailPanel({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div data-guide="issue-actions" className="flex shrink-0 flex-wrap items-center gap-2">
           {issue.htmlUrl && (
             <a
               href={issue.htmlUrl}

@@ -3,7 +3,9 @@ import { createPortal } from "react-dom"
 import { useNavigate, useLocation } from "react-router-dom"
 import { X } from "lucide-react"
 import { useLayoutStore } from "../stores/layout-store"
+import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { GUIDE_STEPS, type TooltipPosition } from "./guide-steps"
+import { injectMockData, restoreMockData, selectMockIssue, selectMockPr } from "./guide-mock-data"
 
 const HIGHLIGHT_PAD = 6
 const TOOLTIP_GAP = 12
@@ -66,15 +68,22 @@ function clickSelector(selector: string) {
   if (el) el.click()
 }
 
+const SETUP_FNS: Record<string, () => void> = {
+  selectMockIssue,
+  selectMockPr,
+}
+
 export function GuideTour() {
   const navigate = useNavigate()
   const location = useLocation()
   const open = useLayoutStore((s) => s.guideTourOpen)
   const stop = useLayoutStore((s) => s.stopGuideTour)
+  const repoName = useRepoStore(selectActiveRepoName)
   const [step, setStep] = useState(0)
   const [rect, setRect] = useState<Rect | null>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
   const prevStepRef = useRef(-1)
+  const activeMockRef = useRef<string | null>(null)
 
   const current = GUIDE_STEPS[step]
   const total = GUIDE_STEPS.length
@@ -87,6 +96,12 @@ export function GuideTour() {
     setRect(getTargetRect(current.target, pad))
   }, [open, current])
 
+  /** Resolve per-repo route: "dev/issues" → "/:repoName/dev/issues" */
+  const resolveRoute = useCallback((route: string) => {
+    if (route.startsWith("/")) return route
+    return repoName ? `/${encodeURIComponent(repoName)}/${route}` : `/${route}`
+  }, [repoName])
+
   // Reset step when tour opens
   useEffect(() => {
     if (open) {
@@ -96,8 +111,6 @@ export function GuideTour() {
   }, [open])
 
   // --- Core step transition logic ---
-  // Handles cleanup of previous step and setup of current step generically
-  // based on triggerClick / route fields in the step config.
   useEffect(() => {
     if (!open || !current) return
     const prev = prevStepRef.current
@@ -108,23 +121,42 @@ export function GuideTour() {
       clickSelector(prevDef.triggerClick)
     }
 
-    // 2. Navigate if the current step requires a different route
-    const needsNav = current.route && !location.pathname.startsWith(current.route)
-    if (needsNav) navigate(current.route!)
+    // 2. Mock data lifecycle
+    const prevScope = prevDef?.mockScope ?? null
+    const curScope = current.mockScope ?? null
+    if (curScope && curScope !== prevScope) {
+      injectMockData()
+      activeMockRef.current = curScope
+    } else if (!curScope && activeMockRef.current) {
+      restoreMockData()
+      activeMockRef.current = null
+    }
 
-    // 3. After navigation settles, open dropdown if needed, then measure
-    const delay = needsNav ? ROUTE_SETTLE_MS : 0
+    // 3. Navigate if the current step requires a different route
+    const fullRoute = current.route ? resolveRoute(current.route) : null
+    const needsNav = fullRoute && !location.pathname.startsWith(fullRoute)
+    if (needsNav) navigate(fullRoute)
+
+    // 4. After navigation settles, run setup, open dropdown, then measure
+    const delay = needsNav ? ROUTE_SETTLE_MS : curScope && curScope !== prevScope ? TRIGGER_SETTLE_MS : 0
     const t1 = setTimeout(() => {
-      if (current.triggerClick && !document.querySelector(current.target)) {
-        clickSelector(current.triggerClick)
+      // Run setup function (e.g. select a mock issue to show detail panel)
+      if (current.setupFn && SETUP_FNS[current.setupFn]) {
+        SETUP_FNS[current.setupFn]()
       }
-      const t2 = setTimeout(measure, TRIGGER_SETTLE_MS)
-      return () => clearTimeout(t2)
+
+      // Wait for setup-triggered renders, then trigger click + measure
+      setTimeout(() => {
+        if (current.triggerClick && !document.querySelector(current.target)) {
+          clickSelector(current.triggerClick)
+        }
+        setTimeout(measure, TRIGGER_SETTLE_MS)
+      }, current.setupFn ? ROUTE_SETTLE_MS : 0)
     }, delay)
 
     prevStepRef.current = step
     return () => clearTimeout(t1)
-  }, [open, step, current, navigate, location.pathname, measure])
+  }, [open, step, current, navigate, location.pathname, measure, resolveRoute])
 
   // Measure on mount and on resize/scroll
   useLayoutEffect(() => { measure() }, [measure])
@@ -139,7 +171,7 @@ export function GuideTour() {
     }
   }, [open, measure])
 
-  // Close the tour: cleanup current step's dropdown then stop
+  // Close the tour: cleanup current step's dropdown + restore mock data, then stop
   const stepRef = useRef(step)
   stepRef.current = step
 
@@ -147,6 +179,10 @@ export function GuideTour() {
     const def = GUIDE_STEPS[stepRef.current]
     if (def?.triggerClick && document.querySelector(def.target)) {
       clickSelector(def.triggerClick)
+    }
+    if (activeMockRef.current) {
+      restoreMockData()
+      activeMockRef.current = null
     }
     stop()
   }, [stop])

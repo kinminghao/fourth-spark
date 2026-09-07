@@ -80,7 +80,7 @@ export function IssueFilters({
         <span className="shrink-0 text-sm font-semibold text-fg md:order-1">Issues</span>
         {/* Sync/Create: right-aligned on mobile, end of row on desktop */}
         {activeRepoId && (
-          <div className="ml-auto flex shrink-0 items-center gap-1 md:order-last md:ml-0">
+          <div data-guide="issue-sync-create" className="ml-auto flex shrink-0 items-center gap-1 md:order-last md:ml-0">
             <button
               type="button"
               onClick={() => void syncIssues()}
@@ -173,6 +173,7 @@ export function IssueFilters({
           </button>
           <button
             type="button"
+            data-guide="issue-tag-filter"
             onClick={() => setExpandedFilter(expandedFilter === "tag" ? null : "tag")}
             className={clsx(
               "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
