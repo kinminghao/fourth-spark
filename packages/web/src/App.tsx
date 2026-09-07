@@ -16,6 +16,7 @@ import { usePrStore } from "./stores/pr-store"
 import { useThemeStore } from "./stores/theme-store"
 import { ToastContainer } from "./components/ToastContainer"
 import { orchestrator } from "./lib/session-orchestrator"
+import { freezeMonitor } from "./lib/freeze-monitor"
 
 
 function extractRepoSlugFromUrl(pathname: string): string | null {
@@ -48,8 +49,13 @@ function AppInner() {
   const clearSessions = useSessionStore((s) => s.clearSessions)
 
   useEffect(() => {
+    freezeMonitor.start()
     void useRepoStore.getState().loadRepos()
-    return useThemeStore.getState().init()
+    const cleanupTheme = useThemeStore.getState().init()
+    return () => {
+      freezeMonitor.stop()
+      cleanupTheme()
+    }
   }, [])
 
   useEffect(() => {

@@ -2,6 +2,7 @@ import { SessionWorker, type WorkerPoolCallbacks } from "./session-worker"
 import { GlobalEventDispatcher } from "./global-event-dispatcher"
 import { SessionSupervisor } from "./session-supervisor"
 import { useSessionStore } from "../stores/session-store"
+import { freezeMonitor } from "./freeze-monitor"
 
 class SessionOrchestrator {
   private workers = new Map<string, SessionWorker>()
@@ -82,6 +83,7 @@ class SessionOrchestrator {
     if (!worker) {
       worker = new SessionWorker(sessionId, callbacks)
       this.workers.set(sessionId, worker)
+      freezeMonitor.setGauge("workers", this.workers.size)
     }
     return worker
   }
@@ -93,6 +95,7 @@ class SessionOrchestrator {
     if (worker) {
       worker.stop()
       this.workers.delete(sessionId)
+      freezeMonitor.setGauge("workers", this.workers.size)
     }
   }
 }
