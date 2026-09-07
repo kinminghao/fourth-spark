@@ -11,6 +11,10 @@ export interface GuideStep {
   position: TooltipPosition
   /** Padding around the highlighted element (px) */
   padding?: number
+  /** Navigate to this route before showing the step */
+  route?: string
+  /** Click this selector before measuring target (to open menus/dropdowns) */
+  triggerClick?: string
 }
 
 export const GUIDE_STEPS: GuideStep[] = [
@@ -27,5 +31,15 @@ export const GUIDE_STEPS: GuideStep[] = [
     description: "在仓库下拉菜单底部，点击「管理仓库」可以注册新仓库、启停 Agent 进程、配置运行时类型。",
     position: "bottom-right",
     padding: 4,
+    triggerClick: '[data-guide="repo-switcher"]',
+  },
+  {
+    target: '[data-guide="repo-overflow-dropdown"]',
+    title: "仓库高级操作",
+    description: "每个仓库卡片的 ⋯ 菜单包含重要功能：切换运行时（OpenCode ↔ Claude Code）、开关 Worktree 任务隔离、编辑 AGENTS.md 配置。",
+    position: "bottom-right",
+    padding: 4,
+    route: "/repos",
+    triggerClick: '[data-guide="repo-overflow-btn"]',
   },
 ]

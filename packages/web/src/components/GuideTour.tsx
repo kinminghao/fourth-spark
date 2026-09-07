@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { useNavigate, useLocation } from "react-router-dom"
 import { X } from "lucide-react"
 import { useLayoutStore } from "../stores/layout-store"
 import { GUIDE_STEPS, type TooltipPosition } from "./guide-steps"
 
 const HIGHLIGHT_PAD = 6
 const TOOLTIP_GAP = 12
+/** Extra delay when a step requires route navigation (page needs to render) */
+const ROUTE_SETTLE_MS = 200
+/** Delay for trigger click + dropdown animation */
+const TRIGGER_SETTLE_MS = 80
 
 interface Rect {
   top: number
@@ -30,7 +35,6 @@ function clipPathWithHole(rect: Rect): string {
   const { top, left, width, height } = rect
   const r = left + width
   const b = top + height
-  // Outer rectangle (full viewport) with an inner rectangular hole
   return `polygon(
     0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%,
     ${left}px ${top}px, ${left}px ${b}px, ${r}px ${b}px, ${r}px ${top}px, ${left}px ${top}px
@@ -56,12 +60,21 @@ function tooltipStyle(
   return style
 }
 
+/** Click an element by selector if it exists in the DOM */
+function clickSelector(selector: string) {
+  const el = document.querySelector(selector) as HTMLElement | null
+  if (el) el.click()
+}
+
 export function GuideTour() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const open = useLayoutStore((s) => s.guideTourOpen)
   const stop = useLayoutStore((s) => s.stopGuideTour)
   const [step, setStep] = useState(0)
   const [rect, setRect] = useState<Rect | null>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
+  const prevStepRef = useRef(-1)
 
   const current = GUIDE_STEPS[step]
   const total = GUIDE_STEPS.length
@@ -76,13 +89,45 @@ export function GuideTour() {
 
   // Reset step when tour opens
   useEffect(() => {
-    if (open) setStep(0)
+    if (open) {
+      setStep(0)
+      prevStepRef.current = -1
+    }
   }, [open])
 
-  // Measure on step change and on resize/scroll
-  useLayoutEffect(() => {
-    measure()
-  }, [measure])
+  // --- Core step transition logic ---
+  // Handles cleanup of previous step and setup of current step generically
+  // based on triggerClick / route fields in the step config.
+  useEffect(() => {
+    if (!open || !current) return
+    const prev = prevStepRef.current
+    const prevDef = prev >= 0 ? GUIDE_STEPS[prev] : null
+
+    // 1. Cleanup: close any dropdown the previous step opened
+    if (prevDef?.triggerClick && document.querySelector(prevDef.target)) {
+      clickSelector(prevDef.triggerClick)
+    }
+
+    // 2. Navigate if the current step requires a different route
+    const needsNav = current.route && !location.pathname.startsWith(current.route)
+    if (needsNav) navigate(current.route!)
+
+    // 3. After navigation settles, open dropdown if needed, then measure
+    const delay = needsNav ? ROUTE_SETTLE_MS : 0
+    const t1 = setTimeout(() => {
+      if (current.triggerClick && !document.querySelector(current.target)) {
+        clickSelector(current.triggerClick)
+      }
+      const t2 = setTimeout(measure, TRIGGER_SETTLE_MS)
+      return () => clearTimeout(t2)
+    }, delay)
+
+    prevStepRef.current = step
+    return () => clearTimeout(t1)
+  }, [open, step, current, navigate, location.pathname, measure])
+
+  // Measure on mount and on resize/scroll
+  useLayoutEffect(() => { measure() }, [measure])
 
   useEffect(() => {
     if (!open) return
@@ -94,65 +139,30 @@ export function GuideTour() {
     }
   }, [open, measure])
 
+  // Close the tour: cleanup current step's dropdown then stop
+  const stepRef = useRef(step)
+  stepRef.current = step
+
+  const closeTour = useCallback(() => {
+    const def = GUIDE_STEPS[stepRef.current]
+    if (def?.triggerClick && document.querySelector(def.target)) {
+      clickSelector(def.triggerClick)
+    }
+    stop()
+  }, [stop])
+
   // Escape to close
   useEffect(() => {
     if (!open) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") stop()
-    }
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") closeTour() }
     document.addEventListener("keydown", handler)
     return () => document.removeEventListener("keydown", handler)
-  }, [open, stop])
-
-  // Step 2 needs the RepoSwitcher dropdown to be open so "管理仓库" is visible.
-  // Open it when entering step 1 (0-indexed), close on leave.
-  useEffect(() => {
-    if (!open) return
-    if (step === 1) {
-      // Click the repo switcher to open the dropdown
-      const trigger = document.querySelector('[data-guide="repo-switcher"]') as HTMLElement | null
-      if (trigger) {
-        // Only click if dropdown is not already open
-        const dropdown = document.querySelector('[data-guide="manage-repos"]')
-        if (!dropdown) trigger.click()
-      }
-    }
-    // Re-measure after dropdown animation
-    const timer = setTimeout(measure, 100)
-    return () => clearTimeout(timer)
-  }, [open, step, measure])
+  }, [open, closeTour])
 
   if (!open || !current || !rect) return null
 
-  const prev = () => {
-    if (!isFirst) {
-      // If leaving step 1, close the dropdown
-      if (step === 1) {
-        const trigger = document.querySelector('[data-guide="repo-switcher"]') as HTMLElement | null
-        const dropdown = document.querySelector('[data-guide="manage-repos"]')
-        if (trigger && dropdown) trigger.click()
-      }
-      setStep((s) => s - 1)
-    }
-  }
-
-  const next = () => {
-    if (isLast) {
-      stop()
-    } else {
-      setStep((s) => s + 1)
-    }
-  }
-
-  const close = () => {
-    // Close dropdown if open
-    if (step === 1) {
-      const trigger = document.querySelector('[data-guide="repo-switcher"]') as HTMLElement | null
-      const dropdown = document.querySelector('[data-guide="manage-repos"]')
-      if (trigger && dropdown) trigger.click()
-    }
-    stop()
-  }
+  const prev = () => { if (!isFirst) setStep((s) => s - 1) }
+  const next = () => { if (isLast) closeTour(); else setStep((s) => s + 1) }
 
   return createPortal(
     <div className="fixed inset-0 z-[9999]">
@@ -160,7 +170,7 @@ export function GuideTour() {
       <div
         className="absolute inset-0 bg-black/60 transition-[clip-path] duration-200"
         style={{ clipPath: clipPathWithHole(rect) }}
-        onClick={close}
+        onClick={closeTour}
       />
 
       {/* Highlight border */}
@@ -180,21 +190,18 @@ export function GuideTour() {
         className="fixed z-[10000] w-72 rounded-xl border border-line bg-surface p-4 shadow-2xl"
         style={tooltipStyle(rect, current.position)}
       >
-        {/* Close button */}
         <button
           type="button"
-          onClick={close}
+          onClick={closeTour}
           className="absolute right-2 top-2 rounded-md p-1 text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3"
           aria-label="关闭引导"
         >
           <X className="h-3.5 w-3.5" />
         </button>
 
-        {/* Content */}
         <h3 className="pr-6 text-sm font-semibold text-fg">{current.title}</h3>
         <p className="mt-1.5 text-xs leading-relaxed text-fg-3">{current.description}</p>
 
-        {/* Footer: step counter + nav */}
         <div className="mt-4 flex items-center justify-between">
           <span className="font-mono text-[11px] tabular-nums text-fg-5">
             {step + 1} / {total}
