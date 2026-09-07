@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, Ban, Box, Check, ChevronDown, ChevronUp, Clock, Cloud, Cpu, Eye, EyeOff, FileText, Gauge, GitBranch, Keyboard, Loader2, Plus, RefreshCw, Save, Search, Trash2, User, Users, Wifi, X, Zap } from "lucide-react"
+import { Activity, AlertTriangle, Ban, Box, Check, ChevronDown, ChevronUp, Clock, Cloud, Cpu, Eye, EyeOff, FileText, Gauge, GitBranch, Keyboard, Loader2, Plus, RefreshCw, Save, Search, Trash2, User, Users, Wifi, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
 import type { AccountUsage, GitHost, ModelInfo, UsageResult, UsageWindow } from "../lib/api-client"
 import { useRepoStore } from "../stores/repo-store"
 import { isNativePlatform, getServerUrl, setServerUrl } from "../lib/config"
+import { freezeMonitor } from "../lib/freeze-monitor"
 import { RepoListContent } from "./ReposPage"
 
 
@@ -18,7 +19,7 @@ function formatElapsed(ts: number): string {
   return `${Math.floor(m / 60)} 小时前`
 }
 
-type Tab = "repos" | "usage" | "git" | "models" | "agents" | "general" | "server"
+type Tab = "repos" | "usage" | "git" | "models" | "agents" | "general" | "server" | "diagnostics"
 
 const BASE_TABS: { id: Tab; label: string; icon: typeof Zap }[] = [
   { id: "repos", label: "仓库", icon: Box },
@@ -27,6 +28,7 @@ const BASE_TABS: { id: Tab; label: string; icon: typeof Zap }[] = [
   { id: "models", label: "模型", icon: Cpu },
   { id: "agents", label: "AGENTS.md", icon: FileText },
   { id: "general", label: "通用", icon: Keyboard },
+  { id: "diagnostics", label: "诊断", icon: Activity },
 ]
 
 const SERVER_TAB: { id: Tab; label: string; icon: typeof Zap } = {
@@ -1586,6 +1588,38 @@ function QuickInputSection() {
   )
 }
 
+function DiagnosticsSection() {
+  const handleDownload = useCallback(() => {
+    const data = freezeMonitor.exportData()
+    const blob = new Blob([data], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `diagnostics-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [])
+
+  return (
+    <section className="space-y-4">
+      <div className="rounded-lg border border-line bg-surface p-4">
+        <p className="text-sm text-fg-3">
+          页面运行期间持续记录性能指标（SSE 频率、消息更新频率、内存占用等）。
+          遇到卡顿时点击下方按钮下载诊断文件，发给开发者排查。
+        </p>
+        <button
+          type="button"
+          onClick={handleDownload}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500"
+        >
+          <Activity className="h-3.5 w-3.5" />
+          下载诊断数据
+        </button>
+      </div>
+    </section>
+  )
+}
+
 export function SettingsPage() {
   const [tab, setTab] = useState<Tab>("usage")
   const tabs = useMemo(() => (isNativePlatform() || getServerUrl()) ? [...BASE_TABS, SERVER_TAB] : BASE_TABS, [])
@@ -1623,6 +1657,7 @@ export function SettingsPage() {
           {tab === "agents" && <AgentsMdSection />}
           {tab === "general" && <QuickInputSection />}
           {tab === "server" && <ServerSection />}
+          {tab === "diagnostics" && <DiagnosticsSection />}
         </div>
       </div>
     </div>

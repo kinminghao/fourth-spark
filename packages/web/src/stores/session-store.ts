@@ -8,12 +8,12 @@
 import { create } from "zustand"
 import * as api from "../lib/api-client"
 import type { Message, MessagePart, PromptFile, Session, Todo, SessionLinks, SessionLinkSummary } from "../lib/api-client"
+import { freezeMonitor } from "../lib/freeze-monitor"
 
 type SessionFilter = "active" | "all"
 import { isQuestionTool, isQuestionPending, getPartText } from "../lib/message-parts"
 import { useRepoStore } from "./repo-store"
 import { useAgentStore } from "./agent-store"
-import { useToastStore } from "./toast-store"
 import { useToastStore } from "./toast-store"
 
 function questionToastId(sessionId: string): string {
@@ -551,6 +551,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   appendMessagePartDelta: (sessionId, messageId, partId, delta) => {
+    freezeMonitor.tick("delta")
+    freezeMonitor.tick("store")
     set((state) => {
       const list = state.messages[sessionId] ?? []
       const idx = list.findIndex((m) => m.id === messageId)

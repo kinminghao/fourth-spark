@@ -1,5 +1,6 @@
 import { repoEventsUrl } from "./api-client"
 import { parseEventData } from "./sse-events"
+import { freezeMonitor } from "./freeze-monitor"
 
 type EventHandler = (sessionId: string, eventName: string, data: unknown) => void
 
@@ -72,6 +73,7 @@ export class GlobalEventDispatcher {
 
   private handleRaw(eventName: string, event: Event): void {
     if (!(event instanceof MessageEvent)) return
+    freezeMonitor.tick("sse")
     const data = parseEventData(event.data)
     if (data === undefined) return
 
