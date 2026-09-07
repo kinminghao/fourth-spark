@@ -52,7 +52,7 @@ repoRoutes.post("/clone", async (c) => {
   const gitUrl = body.gitUrl.trim()
 
   const parsed = parseGitUrl(gitUrl)
-  const repoName = parsed?.repo ?? basename(gitUrl).replace(/\.git$/, "") || "repo"
+  const repoName = parsed?.repo ?? (basename(gitUrl).replace(/\.git$/, "") || "repo")
 
   const defaultBase = join(homedir(), ".fourth-spark", "repos")
   const targetDir = body.targetDir?.trim()
