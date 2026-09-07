@@ -2,8 +2,8 @@
 // Only extracts the host; full owner/repo parsing not needed on the frontend.
 
 const SSH_RE = /^[\w.-]+@([\w.-]+):([\w.-]+)\/([\w.-]+?)(?:\.git)?$/
-const HTTPS_RE = /^https?:\/\/([\w.-]+)\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/)?$/
-const SSH_PROTO_RE = /^ssh:\/\/[\w.-]+@([\w.-]+)\/([\w.-]+)\/([\w.-]+?)(?:\.git)?$/
+const HTTPS_RE = /^https?:\/\/([\w.-]+)(?::\d+)?\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/)?$/
+const SSH_PROTO_RE = /^ssh:\/\/[\w.-]+@([\w.-]+)(?::\d+)?\/([\w.-]+)\/([\w.-]+?)(?:\.git)?$/
 
 export function extractHostFromGitUrl(url: string): string | null {
   for (const re of [SSH_RE, HTTPS_RE, SSH_PROTO_RE]) {
