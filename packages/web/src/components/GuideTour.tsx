@@ -43,20 +43,29 @@ function clipPathWithHole(rect: Rect): string {
   )`
 }
 
+const TOOLTIP_WIDTH = 288 // w-72 = 18rem
+const VIEWPORT_MARGIN = 8
+
 function tooltipStyle(
   targetRect: Rect,
   position: TooltipPosition,
 ): React.CSSProperties {
   const style: React.CSSProperties = { position: "fixed" }
+  const vw = window.innerWidth
+  const vh = window.innerHeight
   const below = targetRect.top + targetRect.height + TOOLTIP_GAP
+  const above = targetRect.top - TOOLTIP_GAP
 
-  if (position === "bottom") {
+  let left = position === "bottom-right"
+    ? targetRect.left + targetRect.width - TOOLTIP_WIDTH
+    : targetRect.left
+  left = Math.max(VIEWPORT_MARGIN, Math.min(left, vw - TOOLTIP_WIDTH - VIEWPORT_MARGIN))
+  style.left = left
+
+  if (below + 160 < vh) {
     style.top = below
-    style.left = targetRect.left
-  } else if (position === "bottom-right") {
-    style.top = below
-    style.left = targetRect.left + targetRect.width
-    style.transform = "translateX(-100%)"
+  } else {
+    style.bottom = vh - above
   }
 
   return style
