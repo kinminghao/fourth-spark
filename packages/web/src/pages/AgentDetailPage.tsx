@@ -6,6 +6,7 @@ import * as api from "../lib/api-client"
 import type { AgentMemory, AgentSession, ConsolidationStats, CustomAgent, ModelInfo, PromptFragment } from "../lib/api-client"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
+import { GUIDE_AGENT_PREFIX, MOCK_MEMORIES } from "../components/guide-mock-data"
 
 const BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atlas - Plan Executor"]
 const PINNED_MODELS_KEY = "pinned_models"
@@ -321,8 +322,9 @@ function ConsolidationStatsBar({ stats, running, onTrigger }: {
 }
 
 function MemorySection({ agentId }: { agentId: string }) {
-  const [memories, setMemories] = useState<AgentMemory[]>([])
-  const [loading, setLoading] = useState(true)
+  const isMockAgent = agentId.startsWith(GUIDE_AGENT_PREFIX)
+  const [memories, setMemories] = useState<AgentMemory[]>(isMockAgent ? MOCK_MEMORIES : [])
+  const [loading, setLoading] = useState(!isMockAgent)
   const [filter, setFilter] = useState<string | null>(null)
   const [showSuperseded, setShowSuperseded] = useState(false)
   const [sessions, setSessions] = useState<AgentSession[]>([])
@@ -335,6 +337,7 @@ function MemorySection({ agentId }: { agentId: string }) {
   const [consolidationRunning, setConsolidationRunning] = useState(false)
 
   const load = useCallback(async () => {
+    if (isMockAgent) { setMemories(MOCK_MEMORIES); setLoading(false); return }
     setLoading(true)
     try {
       const data = await api.listAgentMemories(agentId, {
@@ -345,9 +348,10 @@ function MemorySection({ agentId }: { agentId: string }) {
       setMemories([])
     }
     setLoading(false)
-  }, [agentId, showSuperseded])
+  }, [agentId, showSuperseded, isMockAgent])
 
   const loadStats = useCallback(() => {
+    if (isMockAgent) return
     api.getMemoryConsolidationStats(agentId)
       .then(setConsolidationStats)
       .catch(() => setConsolidationStats(null))
@@ -439,7 +443,7 @@ function MemorySection({ agentId }: { agentId: string }) {
   }, [allActive])
 
   return (
-    <section className="rounded-xl border border-line bg-surface p-5 space-y-4">
+    <section data-guide="agent-memory-section" className="rounded-xl border border-line bg-surface p-5 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Brain className="h-4 w-4 text-purple-400" />
@@ -1020,7 +1024,7 @@ export function AgentDetailPage() {
               <p className="mt-1 text-xs text-fg-4">{agent.description}</p>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div data-guide="agent-detail-actions" className="flex shrink-0 items-center gap-1.5">
             <button type="button" onClick={() => void handleExportDownload()} title="导出 JSON"
               className="rounded-md border border-line p-1.5 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3">
               <Download className="h-4 w-4" />

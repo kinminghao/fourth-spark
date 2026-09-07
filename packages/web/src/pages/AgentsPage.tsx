@@ -587,7 +587,7 @@ export function AgentsPage() {
             <h1 className="text-lg font-bold text-fg">Agents</h1>
             <p className="mt-0.5 text-xs text-fg-4">组合 base agent + 模型 + 提示词片段，创建 Session 时选择。</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div data-guide="agents-header" className="flex items-center gap-2">
             <button type="button" onClick={() => { setShowImport(true); setShowAgentForm(false) }}
               className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-fg-3 transition-colors hover:bg-elevated">
               <Upload className="h-3.5 w-3.5" /> 导入
@@ -636,7 +636,7 @@ export function AgentsPage() {
         )}
 
         {/* Prompt Fragments (collapsible) */}
-        <section className="rounded-xl border border-line bg-surface">
+        <section data-guide="agents-fragments" className="rounded-xl border border-line bg-surface">
           <button
             type="button"
             onClick={() => setFragsOpen(!fragsOpen)}
