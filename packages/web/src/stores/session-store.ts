@@ -8,10 +8,9 @@
 import { create } from "zustand"
 import * as api from "../lib/api-client"
 import type { Message, MessagePart, PromptFile, Session, Todo, SessionLinks, SessionLinkSummary } from "../lib/api-client"
-import { freezeMonitor } from "../lib/freeze-monitor"
 
 type SessionFilter = "active" | "all"
-import { isQuestionTool, isQuestionPending, getPartText } from "../lib/message-parts"
+import { isQuestionTool, isQuestionPending } from "../lib/message-parts"
 import { useRepoStore } from "./repo-store"
 import { useAgentStore } from "./agent-store"
 import { useToastStore } from "./toast-store"
@@ -363,6 +362,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const { [id]: _removedQueued, ...queuedMessageIds } = state.queuedMessageIds
       const { [id]: _removedLinks, ...sessionLinks } = state.sessionLinks
       const { [id]: _removedAllLinks, ...allSessionLinks } = state.allSessionLinks
+
       return {
         sessions: state.sessions.filter((s) => s.id !== id),
         messages,
@@ -533,6 +533,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const key = partKey(part)
       const existingIdx =
         key != null ? parts.findIndex((p) => partKey(p) === key) : -1
+
       if (existingIdx >= 0) {
         parts[existingIdx] = { ...parts[existingIdx], ...part }
       } else {
@@ -543,6 +544,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (idx >= 0) {
         next[idx] = updated
       }
+
       return { messages: { ...state.messages, [sessionId]: next } }
     })
     if (isQuestionTool(part) && isQuestionPending(part)) {
@@ -551,8 +553,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   appendMessagePartDelta: (sessionId, messageId, partId, delta) => {
-    freezeMonitor.tick("delta")
-    freezeMonitor.tick("store")
     set((state) => {
       const list = state.messages[sessionId] ?? []
       const idx = list.findIndex((m) => m.id === messageId)
@@ -562,7 +562,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const partIdx = parts.findIndex((p) => p.id === partId)
       if (partIdx >= 0) {
         const existing = parts[partIdx]
-        const nextText = getPartText(existing) + delta
+        const nextText = (existing.content ?? existing.text ?? "") + delta
         parts[partIdx] =
           existing.content != null
             ? { ...existing, content: nextText }

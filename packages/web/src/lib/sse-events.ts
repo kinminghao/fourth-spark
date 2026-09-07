@@ -101,7 +101,7 @@ function extractPart(
   return { messageId, part: candidate as unknown as MessagePart }
 }
 
-function extractPartDelta(
+export function extractPartDelta(
   data: unknown,
 ): { messageId: string; partId: string; delta: string } | null {
   const props = asRecord(getProps(data))
