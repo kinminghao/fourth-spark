@@ -6,6 +6,7 @@ import clsx from "clsx"
 import { AlertTriangle, Brain, ChevronDown, ChevronRight, Paperclip } from "lucide-react"
 import type { Message, MessagePart } from "../lib/api-client"
 import { classifyPart, getPartText, isQuestionTool } from "../lib/message-parts"
+import { useSessionStore } from "../stores/session-store"
 import { PreviewableImage } from "./Attachments"
 import { MarkdownTable } from "./MarkdownTable"
 import { QuestionPanel } from "./QuestionPanel"
@@ -78,10 +79,11 @@ function AttachmentView({ part, className }: { part: MessagePart; className?: st
 }
 
 function PartView({ part, isStreaming }: { part: MessagePart; isStreaming?: boolean }) {
+  const streamedText = useSessionStore((s) => part.id ? s.streamingText[part.id] : undefined)
   const kind = classifyPart(part)
   switch (kind) {
     case "text": {
-      const text = getPartText(part)
+      const text = streamedText ?? getPartText(part)
       if (!text.trim()) {
         return null
       }
@@ -92,7 +94,7 @@ function PartView({ part, isStreaming }: { part: MessagePart; isStreaming?: bool
       )
     }
     case "thinking": {
-      const text = getPartText(part)
+      const text = streamedText ?? getPartText(part)
       if (!text.trim()) {
         return isStreaming ? <ThinkingIndicator /> : null
       }
