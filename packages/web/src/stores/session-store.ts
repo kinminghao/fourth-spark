@@ -8,10 +8,9 @@
 import { create } from "zustand"
 import * as api from "../lib/api-client"
 import type { Message, MessagePart, PromptFile, Session, Todo, SessionLinks, SessionLinkSummary } from "../lib/api-client"
-import { freezeMonitor } from "../lib/freeze-monitor"
 
 type SessionFilter = "active" | "all"
-import { isQuestionTool, isQuestionPending, getPartText } from "../lib/message-parts"
+import { isQuestionTool, isQuestionPending } from "../lib/message-parts"
 import { useRepoStore } from "./repo-store"
 import { useAgentStore } from "./agent-store"
 import { useToastStore } from "./toast-store"
@@ -89,6 +88,7 @@ interface SessionState {
   queuedMessageIds: Record<string, string[]>
   sessionLinks: Record<string, SessionLinks>
   allSessionLinks: Record<string, SessionLinkSummary>
+  streamingText: Record<string, string>
   sessionFilter: SessionFilter
   loadingSessions: boolean
   loadError: string | null
@@ -140,6 +140,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   queuedMessageIds: {},
   sessionLinks: {},
   allSessionLinks: {},
+  streamingText: {},
   sessionFilter: "active",
   loadingSessions: false,
   loadError: null,
@@ -363,6 +364,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const { [id]: _removedQueued, ...queuedMessageIds } = state.queuedMessageIds
       const { [id]: _removedLinks, ...sessionLinks } = state.sessionLinks
       const { [id]: _removedAllLinks, ...allSessionLinks } = state.allSessionLinks
+
+      const removedMsgs = state.messages[id] ?? []
+      const partIds = new Set(removedMsgs.flatMap(m => (m.parts ?? []).map(p => p.id).filter(Boolean)))
+      const streamingText = partIds.size > 0
+        ? Object.fromEntries(Object.entries(state.streamingText).filter(([k]) => !partIds.has(k)))
+        : state.streamingText
+
       return {
         sessions: state.sessions.filter((s) => s.id !== id),
         messages,
@@ -373,6 +381,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         queuedMessageIds,
         sessionLinks,
         allSessionLinks,
+        streamingText,
         activeSessionId:
           state.activeSessionId === id ? null : state.activeSessionId,
       }
@@ -468,6 +477,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       queuedMessageIds: {},
       sessionLinks: {},
       allSessionLinks: {},
+      streamingText: {},
       loadError: null,
       sendError: null,
     })
@@ -533,6 +543,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const key = partKey(part)
       const existingIdx =
         key != null ? parts.findIndex((p) => partKey(p) === key) : -1
+
       if (existingIdx >= 0) {
         parts[existingIdx] = { ...parts[existingIdx], ...part }
       } else {
@@ -543,7 +554,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (idx >= 0) {
         next[idx] = updated
       }
-      return { messages: { ...state.messages, [sessionId]: next } }
+
+      let streamingText = state.streamingText
+      if (key != null && key in streamingText) {
+        const { [key]: _, ...rest } = streamingText
+        streamingText = rest
+      }
+
+      return { messages: { ...state.messages, [sessionId]: next }, streamingText }
     })
     if (isQuestionTool(part) && isQuestionPending(part)) {
       fireQuestionToast(sessionId, get().sessions)
@@ -551,31 +569,28 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   appendMessagePartDelta: (sessionId, messageId, partId, delta) => {
-    freezeMonitor.tick("delta")
-    freezeMonitor.tick("store")
-    set((state) => {
-      const list = state.messages[sessionId] ?? []
+    set((s) => {
+      const prevText = s.streamingText[partId]
+      const streamingText = { ...s.streamingText, [partId]: (prevText ?? "") + delta }
+
+      if (prevText !== undefined) {
+        return { streamingText }
+      }
+
+      const list = s.messages[sessionId] ?? []
       const idx = list.findIndex((m) => m.id === messageId)
-      const base: Message =
-        idx >= 0 ? list[idx] : { id: messageId, role: "assistant" }
+      const base: Message = idx >= 0 ? list[idx] : { id: messageId, role: "assistant" }
       const parts = base.parts ? [...base.parts] : []
-      const partIdx = parts.findIndex((p) => p.id === partId)
-      if (partIdx >= 0) {
-        const existing = parts[partIdx]
-        const nextText = getPartText(existing) + delta
-        parts[partIdx] =
-          existing.content != null
-            ? { ...existing, content: nextText }
-            : { ...existing, text: nextText }
-      } else {
-        parts.push({ id: partId, type: "text", text: delta })
+      if (!parts.some((p) => p.id === partId)) {
+        parts.push({ id: partId, type: "text", text: "" })
       }
       const updated: Message = { ...base, parts }
       const next = idx >= 0 ? [...list] : [...list, updated]
-      if (idx >= 0) {
-        next[idx] = updated
+      if (idx >= 0) next[idx] = updated
+      return {
+        messages: { ...s.messages, [sessionId]: next },
+        streamingText,
       }
-      return { messages: { ...state.messages, [sessionId]: next } }
     })
   },
 

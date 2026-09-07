@@ -15,21 +15,14 @@ class SessionOrchestrator {
 
     const poolCallbacks: WorkerPoolCallbacks = {
       onWorkerIdle: (sessionId) => this.removeWorker(sessionId),
+      onSessionIdle: (sessionId) => {
+        this.workers.get(sessionId)?.refreshOnIdle()
+      },
     }
 
     this.dispatcher = new GlobalEventDispatcher(repoId, (sessionId, eventName, data) => {
       const worker = this.ensureWorker(sessionId, poolCallbacks)
-
-      if (eventName === "session.idle" || eventName === "session.status") {
-        const prev = useSessionStore.getState().sessionStatuses[sessionId]
-        worker.dispatch(eventName, data)
-        const curr = useSessionStore.getState().sessionStatuses[sessionId]
-        if (prev && prev !== "idle" && curr === "idle") {
-          worker.refreshOnIdle()
-        }
-      } else {
-        worker.dispatch(eventName, data)
-      }
+      worker.dispatch(eventName, data)
     })
     this.dispatcher.start()
 
@@ -68,6 +61,7 @@ class SessionOrchestrator {
     if (!sessionId) return
     const poolCallbacks: WorkerPoolCallbacks = {
       onWorkerIdle: (sid) => this.removeWorker(sid),
+      onSessionIdle: (sid) => this.workers.get(sid)?.refreshOnIdle(),
     }
     const worker = this.ensureWorker(sessionId, poolCallbacks)
     worker.activate()
