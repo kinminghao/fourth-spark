@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
-import { BarChart3, Bot, Box, Check, ChevronDown, ChevronsLeft, ChevronsRight, Code2, GitBranch, Loader2, Monitor, Moon, MoreVertical, Play, Settings, Sun, Zap } from "lucide-react"
+import { BarChart3, Bot, Box, Check, ChevronDown, ChevronsLeft, ChevronsRight, Code2, GitBranch, HelpCircle, Loader2, Monitor, Moon, MoreVertical, Play, Settings, Sun, Zap } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import clsx from "clsx"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -7,6 +7,7 @@ import { useThemeStore } from "../stores/theme-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { useLayoutStore } from "../stores/layout-store"
 import { listBranches, checkoutBranch, type BranchList } from "../lib/api-client"
+import { GuideTour } from "./GuideTour"
 
 interface NavItem {
   segment: string
@@ -72,6 +73,7 @@ function RepoSwitcher({
     <div ref={ref} className="relative">
       <button
         type="button"
+        data-guide="repo-switcher"
         onClick={() => setOpen((v) => !v)}
         className="flex max-w-[140px] items-center gap-1 rounded-md border border-line bg-base px-2 py-1 text-xs text-fg-2 transition-colors hover:border-blue-500 sm:max-w-[200px]"
       >
@@ -110,6 +112,7 @@ function RepoSwitcher({
           <div className="border-t border-line">
             <button
               type="button"
+              data-guide="manage-repos"
               onClick={() => { navigate("/repos"); close() }}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-elevated hover:text-fg"
             >
@@ -344,6 +347,14 @@ function HeaderOverflowMenu({
             </svg>
             GitHub
           </a>
+          <button
+            type="button"
+            onClick={() => { useLayoutStore.getState().startGuideTour(); setOpen(false) }}
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-fg-2 transition-colors hover:bg-elevated"
+          >
+            <HelpCircle className="h-3.5 w-3.5 text-fg-4" />
+            功能引导
+          </button>
         </div>
       )}
     </div>
@@ -436,6 +447,14 @@ function Header() {
               className="flex h-8 w-8 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
             >
               <ThemeIcon className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => useLayoutStore.getState().startGuideTour()}
+              aria-label="功能引导"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+            >
+              <HelpCircle className="h-4 w-4" />
             </button>
           </div>
           <HeaderOverflowMenu
@@ -582,6 +601,7 @@ export function Layout() {
         </main>
       </div>
       <BottomBar />
+      <GuideTour />
     </div>
   )
 }
