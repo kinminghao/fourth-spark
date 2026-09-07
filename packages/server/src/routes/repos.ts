@@ -1,11 +1,13 @@
 import { Hono } from "hono"
 import { eq } from "drizzle-orm"
-import { basename } from "node:path"
+import { basename, resolve, join } from "node:path"
 import { db } from "../db/index"
 import { repos } from "../db/schema"
 import { runtimeManager } from "../lib/process-manager"
-import { existsSync } from "node:fs"
+import { existsSync, mkdirSync } from "node:fs"
+import { homedir } from "node:os"
 import { runGit, runGitWithRetry, withRepoLock, cleanupStaleLock, pruneRemoteRefs, classifyGitError } from "../lib/git-runner"
+import { parseGitUrl } from "../lib/git-url"
 
 export const repoRoutes = new Hono()
 
@@ -38,6 +40,56 @@ repoRoutes.post("/resolve", async (c) => {
   if (result.ok) gitUrl = result.stdout
 
   return c.json({ name, gitUrl, localPath })
+})
+
+// POST /api/repos/clone — clone a git repo to a local directory.
+repoRoutes.post("/clone", async (c) => {
+  const body = await c.req.json<{ gitUrl?: string; targetDir?: string }>().catch(() => null)
+  if (!body?.gitUrl) {
+    return c.json({ error: "gitUrl is required", status: 400 }, 400)
+  }
+
+  const gitUrl = body.gitUrl.trim()
+
+  const parsed = parseGitUrl(gitUrl)
+  const repoName = parsed?.repo ?? basename(gitUrl).replace(/\.git$/, "") || "repo"
+
+  const defaultBase = join(homedir(), ".fourth-spark", "repos")
+  const targetDir = body.targetDir?.trim()
+    ? resolve(body.targetDir.trim())
+    : join(defaultBase, repoName)
+
+  if (body.targetDir?.includes("..")) {
+    return c.json({ error: "目标路径不允许包含 '..'", status: 400 }, 400)
+  }
+
+  if (existsSync(targetDir)) {
+    return c.json({ error: `目标目录已存在: ${targetDir}`, status: 409 }, 409)
+  }
+
+  const parentDir = resolve(targetDir, "..")
+  try {
+    mkdirSync(parentDir, { recursive: true })
+  } catch {
+    return c.json({ error: `无法创建父目录: ${parentDir}`, status: 500 }, 500)
+  }
+
+  const result = await runGitWithRetry(
+    ["clone", "--", gitUrl, targetDir],
+    parentDir,
+    { timeout: 300_000 },
+  )
+
+  if (!result.ok) {
+    const errorInfo = classifyGitError(result.stdout, result.stderr)
+    return c.json({ error: errorInfo.message, code: errorInfo.code, status: 500 }, 500)
+  }
+
+  let clonedGitUrl = gitUrl
+  const remoteResult = runGit(["config", "--get", "remote.origin.url"], targetDir, { timeout: 5_000 })
+  if (remoteResult.ok && remoteResult.stdout) clonedGitUrl = remoteResult.stdout
+
+  return c.json({ localPath: targetDir, name: repoName, gitUrl: clonedGitUrl })
 })
 
 // POST /api/repos — register a new repo and start its runtime.
