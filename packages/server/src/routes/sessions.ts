@@ -441,8 +441,18 @@ sessions.get("/:id", async (c) => {
 })
 
 sessions.delete("/:id", async (c) => {
+  const sessionId = c.req.param("id")
   const client = runtimeManager.requireClient(c.req.param("repoId"))
-  await client.deleteSession(c.req.param("id"))
+  // Best-effort: OpenCode doesn't support DELETE /session/:id
+  await client.deleteSession(sessionId).catch((err) => {
+    logger.warn({ err, sessionId }, "runtime deleteSession failed, continuing with DB cleanup")
+  })
+  await db.delete(sessionLinks).where(eq(sessionLinks.sessionId, sessionId)).catch((err) => {
+    logger.warn({ err, sessionId }, "failed to delete session links from DB")
+  })
+  await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionId)).catch((err) => {
+    logger.warn({ err, sessionId }, "failed to delete session from DB")
+  })
   return c.json({ ok: true })
 })
 
