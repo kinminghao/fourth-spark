@@ -297,7 +297,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
 
         <AttachmentStrip attachments={attachments} foldedTexts={foldedTexts} error={attachError} onRemove={remove} onRemoveFoldedText={handleRemoveFoldedText} />
 
-        <div className={clsx(
+        <div data-guide="run-new-input" className={clsx(
           "relative rounded-xl border bg-base/80 shadow-sm transition-colors",
           "border-line focus-within:border-fg-5",
         )}>

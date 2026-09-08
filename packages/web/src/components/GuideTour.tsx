@@ -5,7 +5,7 @@ import { X } from "lucide-react"
 import { useLayoutStore } from "../stores/layout-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { GUIDE_STEPS, type TooltipPosition } from "./guide-steps"
-import { injectMockData, restoreMockData, selectMockIssue, selectMockPr, getMockAgentId } from "./guide-mock-data"
+import { injectMockData, restoreMockData, selectMockIssue, selectMockPr, selectMockSession, clearActiveSession, getMockAgentId } from "./guide-mock-data"
 
 const HIGHLIGHT_PAD = 6
 const TOOLTIP_GAP = 12
@@ -80,6 +80,8 @@ function clickSelector(selector: string) {
 const SETUP_FNS: Record<string, () => void> = {
   selectMockIssue,
   selectMockPr,
+  selectMockSession,
+  clearActiveSession,
 }
 
 export function GuideTour() {

@@ -686,6 +686,7 @@ export function RunPage() {
         {/* Edge toggle handle — vertical tab on the panel/content boundary */}
         <button
           type="button"
+          data-guide="run-panel-handle"
           onClick={toggleSessionPanel}
           title={sessionPanelCollapsed ? "展开运行记录" : "收起运行记录"}
           className={clsx(
