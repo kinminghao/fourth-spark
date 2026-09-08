@@ -252,15 +252,35 @@ export function restoreMockData() {
   usePrStore.setState({ pulls: saved.pulls, loaded: saved.prLoaded, viewingPrId: null })
   useCustomAgentStore.setState({ agents: saved.agents })
   useSessionStore.setState({ sessions: saved.sessions, activeSessionId: saved.activeSessionId })
+  clearUrlParam("id")
   saved = null
 }
 
+function setUrlParam(key: string, value: string) {
+  const url = new URL(window.location.href)
+  url.searchParams.set(key, value)
+  window.history.replaceState(null, "", url.toString())
+  window.dispatchEvent(new PopStateEvent("popstate"))
+}
+
+function clearUrlParam(key: string) {
+  const url = new URL(window.location.href)
+  if (!url.searchParams.has(key)) return
+  url.searchParams.delete(key)
+  window.history.replaceState(null, "", url.toString())
+  window.dispatchEvent(new PopStateEvent("popstate"))
+}
+
 export function selectMockIssue() {
-  useIssueStore.setState({ viewingIssueId: MOCK_ISSUES[0].id })
+  const id = MOCK_ISSUES[0].id
+  useIssueStore.setState({ viewingIssueId: id })
+  setUrlParam("id", id)
 }
 
 export function selectMockPr() {
-  usePrStore.setState({ viewingPrId: MOCK_PRS[0].id })
+  const id = MOCK_PRS[0].id
+  usePrStore.setState({ viewingPrId: id })
+  setUrlParam("id", id)
 }
 
 export function selectMockSession() {
