@@ -1,11 +1,8 @@
-import type { Issue, PersistentPullRequest, Tag, CustomAgent, AgentMemory } from "../lib/api-client"
+import type { Issue, PersistentPullRequest, Tag, CustomAgent, AgentMemory, Session } from "../lib/api-client"
 import { useIssueStore } from "../stores/issue-store"
 import { usePrStore } from "../stores/pr-store"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+import { useSessionStore } from "../stores/session-store"
 
 const REPO_ID = "__guide__"
 const NOW = Date.now()
@@ -13,6 +10,21 @@ const DAY = 86_400_000
 
 export const GUIDE_AGENT_PREFIX = "guide-agent-"
 const MOCK_AGENT_ID = `${GUIDE_AGENT_PREFIX}1`
+const MOCK_SESSION_ID = "guide-session-run-1"
+
+// ---------------------------------------------------------------------------
+// Run mock data — Session
+// ---------------------------------------------------------------------------
+
+const MOCK_SESSION: Session = {
+  id: MOCK_SESSION_ID,
+  title: "示例对话：添加用户认证",
+  agent: "Sisyphus",
+  createdAt: new Date(NOW - 3_600_000).toISOString(),
+  time: { created: NOW - 3_600_000, updated: NOW - 600_000 },
+  cost: 0.12,
+  tokens: { input: 4200, output: 1800, reasoning: 320, cache: { read: 800, write: 200 } },
+}
 
 // ---------------------------------------------------------------------------
 // Dev mock data — Issues / PRs / Tags
@@ -117,7 +129,6 @@ const MOCK_AGENT: CustomAgent = {
   updatedAt: NOW - DAY,
 }
 
-/** Exported for MemorySection to detect and use when agentId is a mock */
 export const MOCK_MEMORIES: AgentMemory[] = [
   {
     id: "guide-mem-1",
@@ -181,16 +192,32 @@ interface Snapshot {
   pulls: PersistentPullRequest[]
   prLoaded: boolean
   agents: CustomAgent[]
+  sessions: Session[]
+  activeSessionId: string | null
 }
 
 let saved: Snapshot | null = null
 
+function resetNonTargetStores(scope: string) {
+  if (!saved) return
+  if (scope !== "dev") {
+    useIssueStore.setState({ issues: saved.issues, tags: saved.tags, loaded: saved.issueLoaded, viewingIssueId: null, viewingTreeRootId: null })
+    usePrStore.setState({ pulls: saved.pulls, loaded: saved.prLoaded, viewingPrId: null })
+  }
+  if (scope !== "agent") {
+    useCustomAgentStore.setState({ agents: saved.agents })
+  }
+  if (scope !== "run") {
+    useSessionStore.setState({ sessions: saved.sessions, activeSessionId: saved.activeSessionId })
+  }
+}
+
 export function injectMockData(scope: string) {
   if (!saved) {
-    // First time: snapshot all stores
     const issueState = useIssueStore.getState()
     const prState = usePrStore.getState()
     const agentState = useCustomAgentStore.getState()
+    const sessionState = useSessionStore.getState()
     saved = {
       issues: issueState.issues,
       tags: issueState.tags,
@@ -198,19 +225,22 @@ export function injectMockData(scope: string) {
       pulls: prState.pulls,
       prLoaded: prState.loaded,
       agents: agentState.agents,
+      sessions: sessionState.sessions,
+      activeSessionId: sessionState.activeSessionId,
     }
   }
 
-  if (scope === "dev") {
+  resetNonTargetStores(scope)
+
+  if (scope === "run") {
+    const hasMock = saved.sessions.some((s) => s.id === MOCK_SESSION_ID)
+    useSessionStore.setState({
+      sessions: hasMock ? saved.sessions : [...saved.sessions, MOCK_SESSION],
+    })
+  } else if (scope === "dev") {
     useIssueStore.setState({ issues: MOCK_ISSUES, tags: MOCK_TAGS, loaded: true })
     usePrStore.setState({ pulls: MOCK_PRS, loaded: true })
-    // Restore agent store if it was mocked
-    useCustomAgentStore.setState({ agents: saved.agents })
   } else if (scope === "agent") {
-    // Restore issue/pr stores if they were mocked
-    useIssueStore.setState({ issues: saved.issues, tags: saved.tags, loaded: saved.issueLoaded, viewingIssueId: null, viewingTreeRootId: null })
-    usePrStore.setState({ pulls: saved.pulls, loaded: saved.prLoaded, viewingPrId: null })
-    // Inject mock agent (append to real agents)
     const hasGuide = saved.agents.some((a) => a.id === MOCK_AGENT_ID)
     useCustomAgentStore.setState({ agents: hasGuide ? saved.agents : [...saved.agents, MOCK_AGENT] })
   }
@@ -221,20 +251,26 @@ export function restoreMockData() {
   useIssueStore.setState({ issues: saved.issues, tags: saved.tags, loaded: saved.issueLoaded, viewingIssueId: null, viewingTreeRootId: null })
   usePrStore.setState({ pulls: saved.pulls, loaded: saved.prLoaded, viewingPrId: null })
   useCustomAgentStore.setState({ agents: saved.agents })
+  useSessionStore.setState({ sessions: saved.sessions, activeSessionId: saved.activeSessionId })
   saved = null
 }
 
-/** Select a mock issue so the detail panel renders */
 export function selectMockIssue() {
   useIssueStore.setState({ viewingIssueId: MOCK_ISSUES[0].id })
 }
 
-/** Select a mock PR so the detail panel renders */
 export function selectMockPr() {
   usePrStore.setState({ viewingPrId: MOCK_PRS[0].id })
 }
 
-/** Navigate to mock agent detail page (returns the agent ID for route building) */
+export function selectMockSession() {
+  useSessionStore.setState({ activeSessionId: MOCK_SESSION_ID })
+}
+
+export function clearActiveSession() {
+  useSessionStore.setState({ activeSessionId: null })
+}
+
 export function getMockAgentId(): string {
   return MOCK_AGENT_ID
 }

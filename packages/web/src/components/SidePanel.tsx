@@ -771,7 +771,7 @@ export function SidePanel({
       className="flex h-full w-72 shrink-0 flex-col border-l border-line bg-surface"
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex items-center border-b border-line">
+        <div data-guide="run-side-tabs" className="flex items-center border-b border-line">
           <button
             type="button"
             onClick={() => setActiveTab("todo")}

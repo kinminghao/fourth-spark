@@ -48,6 +48,46 @@ export const GUIDE_STEPS: GuideStep[] = [
     route: "/repos",
     triggerClick: '[data-guide="repo-overflow-btn"]',
   },
+  // ---- RunPage: new session input ----
+  {
+    target: '[data-guide="run-new-input"]',
+    title: "新建对话",
+    description: "选择 Agent 后输入指令开始任务。按 Tab 键可快速切换 Agent，底部可选择 Variant（默认 / max / high）控制推理强度。",
+    position: "bottom",
+    padding: 8,
+    route: "run",
+    mockScope: "run",
+    setupFn: "clearActiveSession",
+  },
+  // ---- RunPage: session panel handle ----
+  {
+    target: '[data-guide="run-panel-handle"]',
+    title: "运行记录面板",
+    description: "拖动此手柄可收起/展开左侧运行记录列表。移动端可左右滑动打开。面板内可按「进行中 / 全部」筛选。",
+    position: "bottom",
+    padding: 6,
+    mockScope: "run",
+    setupFn: "clearActiveSession",
+  },
+  // ---- RunPage: quick inputs + input bar (needs active session) ----
+  {
+    target: '[data-guide="run-input-bar"]',
+    title: "快捷短语与追加输入",
+    description: "对话进行中可在此追加指令。上方的快捷短语按钮（如「继续」）支持一键发送，可在设置 → 通用中自定义。底部可切换模型和 Variant。",
+    position: "bottom",
+    padding: 8,
+    mockScope: "run",
+    setupFn: "selectMockSession",
+  },
+  // ---- RunPage: side panel tabs (needs active session) ----
+  {
+    target: '[data-guide="run-side-tabs"]',
+    title: "右侧面板",
+    description: "待办：Agent 的任务进度清单。输入：本次对话中你发送的所有消息。关联：Session 关联的 Issue 和 PR。子任务：Agent 派生的子 Session。",
+    position: "bottom-right",
+    padding: 6,
+    mockScope: "run",
+  },
   // ---- DevPage (Issues): sync + create ----
   {
     target: '[data-guide="issue-sync-create"]',

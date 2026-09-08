@@ -200,7 +200,7 @@ export function InputBar() {
         : "text-emerald-400"
 
   return (
-    <div className="relative border-t border-line bg-term px-4 py-4">
+    <div data-guide="run-input-bar" className="relative border-t border-line bg-term px-4 py-4">
       <VoiceOverlay
         phase={voice.stt.phase}
         transcript={voice.stt.transcript}
