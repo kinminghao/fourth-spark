@@ -551,3 +551,21 @@ body {
     transform: scale(1);
   }
 }
+
+@keyframes fs-swipe-left-anim {
+  0%, 100% { transform: translateX(0); opacity: 0.4; }
+  50% { transform: translateX(-28px); opacity: 1; }
+}
+
+@keyframes fs-swipe-right-anim {
+  0%, 100% { transform: translateX(0); opacity: 0.4; }
+  50% { transform: translateX(28px); opacity: 1; }
+}
+
+.fs-swipe-left {
+  animation: fs-swipe-left-anim 1.4s ease-in-out infinite;
+}
+
+.fs-swipe-right {
+  animation: fs-swipe-right-anim 1.4s ease-in-out infinite;
+}

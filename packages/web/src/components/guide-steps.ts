@@ -19,6 +19,8 @@ export interface GuideStep {
   mockScope?: string
   /** Called after route navigation + mock injection to set up UI state (e.g. select an issue) */
   setupFn?: string
+  /** On mobile, show a swipe gesture hint instead of highlighting a desktop-only element */
+  mobileSwipeHint?: "left" | "right"
 }
 
 export const GUIDE_STEPS: GuideStep[] = [
@@ -68,6 +70,7 @@ export const GUIDE_STEPS: GuideStep[] = [
     padding: 6,
     mockScope: "run",
     setupFn: "clearActiveSession",
+    mobileSwipeHint: "right",
   },
   // ---- RunPage: quick inputs + input bar (needs active session) ----
   {
@@ -87,6 +90,7 @@ export const GUIDE_STEPS: GuideStep[] = [
     position: "bottom-right",
     padding: 6,
     mockScope: "run",
+    mobileSwipeHint: "left",
   },
   // ---- DevPage (Issues): sync + create ----
   {
