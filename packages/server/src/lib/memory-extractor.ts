@@ -58,12 +58,18 @@ export function normalizeCategory(category: unknown): string {
   return "general"
 }
 
-export async function buildExtractionPrompt(sessionId: string, customAgentId: string): Promise<string> {
-  const messages = await getMessagesFromDB(sessionId)
-  if (messages.length === 0) return ""
+export interface ExtractionInputData {
+  messages: Array<{ role: string; content: string }>
+  todos: Array<{ status: string; content: string }>
+  memories: Array<{ id: string; category: string; content: string; importance: number }>
+}
 
-  const lines: string[] = []
-  for (const msg of messages) {
+export async function buildExtractionData(sessionId: string, customAgentId: string): Promise<ExtractionInputData | null> {
+  const dbMessages = await getMessagesFromDB(sessionId)
+  if (dbMessages.length === 0) return null
+
+  const lines: Array<{ role: string; content: string }> = []
+  for (const msg of dbMessages) {
     const role = msg.role === "user" ? "用户" : "助手"
     for (const part of msg.parts ?? []) {
       if (part.type === "thinking") continue
@@ -71,41 +77,40 @@ export async function buildExtractionPrompt(sessionId: string, customAgentId: st
       if (part.type === "text") {
         const p = part as Record<string, unknown>
         const text = (p.content as string) ?? (p.text as string) ?? ""
-        if (text.trim()) lines.push(`[${role}] ${text}`)
+        if (text.trim()) lines.push({ role, content: text })
       } else if (part.type === "tool-call" || part.type === "tool-result") {
         const toolName = (part as Record<string, unknown>).toolName as string ?? (part as Record<string, unknown>).tool as string ?? "tool"
         const input = JSON.stringify((part as Record<string, unknown>).input ?? "").slice(0, TOOL_SUMMARY_LIMIT)
         const output = JSON.stringify((part as Record<string, unknown>).output ?? "").slice(0, TOOL_SUMMARY_LIMIT)
         if (part.type === "tool-call") {
-          lines.push(`[工具调用] ${toolName}(${input})`)
+          lines.push({ role: "工具调用", content: `${toolName}(${input})` })
         } else {
-          lines.push(`[工具结果] ${toolName} → ${output}`)
+          lines.push({ role: "工具结果", content: `${toolName} → ${output}` })
         }
       }
     }
   }
 
-  let conversation = lines.join("\n")
-  if (conversation.length > MAX_PROMPT_CHARS) {
-    const head = lines.slice(0, 4).join("\n").slice(0, MAX_PROMPT_CHARS / 2)
-    const remaining = Math.max(0, MAX_PROMPT_CHARS - head.length - 200)
-    const tail: string[] = []
+  // Truncate: keep head + tail within MAX_PROMPT_CHARS
+  let messages = lines
+  const totalLen = lines.reduce((s, l) => s + l.role.length + l.content.length + 4, 0)
+  if (totalLen > MAX_PROMPT_CHARS) {
+    const head = lines.slice(0, 4)
+    const headLen = head.reduce((s, l) => s + l.role.length + l.content.length + 4, 0)
+    const remaining = Math.max(0, MAX_PROMPT_CHARS - headLen - 200)
+    const tail: typeof lines = []
     let tailLen = 0
     for (let i = lines.length - 1; i >= 4; i--) {
-      if (tailLen + lines[i].length > remaining) break
+      const entryLen = lines[i].role.length + lines[i].content.length + 4
+      if (tailLen + entryLen > remaining) break
       tail.unshift(lines[i])
-      tailLen += lines[i].length + 1
+      tailLen += entryLen
     }
     const skipped = lines.length - 4 - tail.length
-    conversation = `${head}\n\n[... 省略 ${skipped} 条中间对话 ...]\n\n${tail.join("\n")}`
+    messages = [...head, { role: "系统", content: `[... 省略 ${skipped} 条中间对话 ...]` }, ...tail]
   }
 
-  const todos = await getTodosFromDB(sessionId)
-  let todoSummary = ""
-  if (todos.length > 0) {
-    const todoLines = todos.map(t => `- [${t.status}] ${t.content}`)
-    todoSummary = `\n\n## Todo 最终状态\n${todoLines.join("\n")}`
-  }
+  const todos = (await getTodosFromDB(sessionId)).map(t => ({ status: t.status, content: t.content }))
 
   const existing = await db.select().from(agentMemories)
     .where(and(
@@ -115,17 +120,13 @@ export async function buildExtractionPrompt(sessionId: string, customAgentId: st
     .orderBy(desc(agentMemories.importance))
     .limit(MAX_EXISTING_MEMORIES)
 
-  let existingBlock = ""
-  if (existing.length > 0) {
-    const memLines = existing.map(m => `[${m.id}] [${m.category}] ${m.content} (importance: ${m.importance})`)
-    existingBlock = `\n\n## 已有记忆\n${memLines.join("\n")}`
-  }
+  const memories = existing.map(m => ({ id: m.id, category: m.category, content: m.content, importance: m.importance }))
 
-  return `## 对话历史\n${conversation}${todoSummary}${existingBlock}`
+  return { messages, todos, memories }
 }
 
-export function buildFullExtractionPrompt(systemPrompt: string, outputPath: string, conversationPrompt: string): string {
-  return `${systemPrompt}\n\n输出文件路径：${outputPath}\n请用 Write 工具将 JSON 结果写入上述文件，完全替换原内容。\n\n---\n\n${conversationPrompt}`
+export function buildFullExtractionPrompt(systemPrompt: string, inputPath: string, outputPath: string): string {
+  return `${systemPrompt}\n\n输入文件路径：${inputPath}\n输出文件路径：${outputPath}\n\n请先用 Read 工具读取输入文件，分析其中的对话数据，然后用 Write 工具将 JSON 结果写入输出文件。`
 }
 
 export interface ParseOptions {

@@ -6,7 +6,7 @@ import { getRegistry } from "../core/registry"
 import { logger } from "../middleware/logger"
 import { DEFAULT_VARIANT } from "./config"
 import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "./system-agents"
-import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions, getSessionCustomAgentId, listExtractableSessions, MAX_CONSOLIDATION_CONTENT_LENGTH } from "./memory-extractor"
+import { buildExtractionData, buildFullExtractionPrompt, parseExtractionResult, executeActions, getSessionCustomAgentId, listExtractableSessions, MAX_CONSOLIDATION_CONTENT_LENGTH } from "./memory-extractor"
 import { runMemoryConsolidation } from "./memory-consolidation"
 import { unlink, readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -415,19 +415,22 @@ async function triggerMemoryExtraction(repoId: string, client: RuntimeClient, so
 
 async function startExtraction(repoId: string, client: RuntimeClient, sourceSessionId: string, customAgentId: string): Promise<void> {
   let extractionSessionId: string | undefined
-  const outputPath = `/tmp/memory-extract-${crypto.randomUUID()}.json`
+  const uuid = crypto.randomUUID()
+  const inputPath = `/tmp/memory-extract-${uuid}-input.json`
+  const outputPath = `/tmp/memory-extract-${uuid}-output.json`
   try {
     try {
       const msgs = await client.getMessages(sourceSessionId)
       syncMessagesList(sourceSessionId, msgs)
     } catch { /* best-effort sync */ }
 
-    const prompt = await buildExtractionPrompt(sourceSessionId, customAgentId)
-    if (!prompt) {
+    const data = await buildExtractionData(sourceSessionId, customAgentId)
+    if (!data) {
       processNextExtraction(repoId)
       return
     }
 
+    await Bun.write(inputPath, JSON.stringify(data))
     await Bun.write(outputPath, "[]")
 
     const agent = await resolveAgent(client, "Sisyphus - ultraworker")
@@ -452,9 +455,9 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
     const memoryModel = agentConfig?.memoryModel ?? null
 
     const extractorPrompt = await resolvePrompt("memory-extractor.md", MEMORY_EXTRACTOR_PROMPT)
-    const fullPrompt = buildFullExtractionPrompt(extractorPrompt, outputPath, prompt)
+    const fullPrompt = buildFullExtractionPrompt(extractorPrompt, inputPath, outputPath)
     await client.prompt(session.id, fullPrompt, { agent, variant: DEFAULT_VARIANT, model: memoryModel ?? undefined })
-    logger.info({ sessionId: session.id, sourceSessionId, outputPath }, "memory extraction started, waiting for result")
+    logger.info({ sessionId: session.id, sourceSessionId, inputPath, outputPath }, "memory extraction started, waiting for result")
 
     const startedAt = Date.now()
     while (Date.now() - startedAt < EXTRACTION_TIMEOUT_MS) {
@@ -485,7 +488,10 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
   } finally {
     const debugKeep = process.env.MEMORY_DEBUG === "true"
     if (extractionSessionId && !debugKeep) client.deleteSession(extractionSessionId).catch(() => {})
-    if (!debugKeep) { try { await unlink(outputPath) } catch {} }
+    if (!debugKeep) {
+      try { await unlink(inputPath) } catch {}
+      try { await unlink(outputPath) } catch {}
+    }
     processNextExtraction(repoId)
   }
 }
