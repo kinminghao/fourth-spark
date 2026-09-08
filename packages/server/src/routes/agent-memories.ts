@@ -5,7 +5,7 @@ import { agentMemories, customAgents, sessions as sessionsTable } from "../db/sc
 import type { MemoryVersion } from "../db/schema"
 import { runtimeManager } from "../lib/process-manager"
 import { getConsolidationStats, triggerManualConsolidation } from "../lib/memory-consolidation"
-import { buildExtractionPrompt, buildFullExtractionPrompt, parseExtractionResult, executeActions, MAX_CONSOLIDATION_CONTENT_LENGTH } from "../lib/memory-extractor"
+import { buildExtractionData, buildFullExtractionPrompt, parseExtractionResult, executeActions, MAX_CONSOLIDATION_CONTENT_LENGTH } from "../lib/memory-extractor"
 import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "../lib/system-agents"
 import { resolveAgent } from "../lib/agent-validator"
 import { syncMessagesList } from "../db/sync"
@@ -201,7 +201,9 @@ agentMemoryRoutes.post("/extract", async (c) => {
   const results: Array<{ sessionId: string; status: string; actions?: number; error?: string }> = []
 
   for (const session of validSessions) {
-    const outputPath = `/tmp/memory-extract-${crypto.randomUUID()}.json`
+    const uuid = crypto.randomUUID()
+    const inputPath = `/tmp/memory-extract-${uuid}-input.json`
+    const outputPath = `/tmp/memory-extract-${uuid}-output.json`
     let extractionSessionId: string | undefined
     let client: RuntimeClient | null = null
     try {
@@ -215,9 +217,10 @@ agentMemoryRoutes.post("/extract", async (c) => {
         await new Promise(r => setTimeout(r, 500))
       } catch { /* best-effort */ }
 
-      const prompt = await buildExtractionPrompt(session.id, agentId)
-      if (!prompt) { results.push({ sessionId: session.id, status: "skipped", error: "no content to extract" }); continue }
+      const data = await buildExtractionData(session.id, agentId)
+      if (!data) { results.push({ sessionId: session.id, status: "skipped", error: "no content to extract" }); continue }
 
+      await Bun.write(inputPath, JSON.stringify(data))
       await Bun.write(outputPath, "[]")
 
       const agent = await resolveAgent(client, "Sisyphus - ultraworker")
@@ -230,7 +233,7 @@ agentMemoryRoutes.post("/extract", async (c) => {
         timeCreated: Date.now(), timeUpdated: Date.now(),
       }).onConflictDoUpdate({ target: sessionsTable.id, set: { customAgentId: MEMORY_EXTRACTOR_ID, timeUpdated: Date.now() } })
 
-      const fullPrompt = buildFullExtractionPrompt(MEMORY_EXTRACTOR_PROMPT, outputPath, prompt)
+      const fullPrompt = buildFullExtractionPrompt(MEMORY_EXTRACTOR_PROMPT, inputPath, outputPath)
       await client.prompt(extractionSession.id, fullPrompt, { agent, variant: DEFAULT_VARIANT })
 
       const startedAt = Date.now()
@@ -265,7 +268,8 @@ agentMemoryRoutes.post("/extract", async (c) => {
       results.push({ sessionId: session.id, status: "error", error: String(err) })
     } finally {
       if (extractionSessionId && client) client.deleteSession(extractionSessionId).catch(() => {})
-      try { await unlink(outputPath) } catch { /* cleanup */ }
+      try { await unlink(inputPath) } catch {}
+      try { await unlink(outputPath) } catch {}
     }
   }
 
