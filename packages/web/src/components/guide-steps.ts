@@ -90,6 +90,7 @@ export const GUIDE_STEPS: GuideStep[] = [
     position: "bottom-right",
     padding: 6,
     mockScope: "run",
+    setupFn: "selectMockSession",
     mobileSwipeHint: "left",
   },
   // ---- DevPage (Issues): sync + create ----
