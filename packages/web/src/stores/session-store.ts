@@ -89,12 +89,15 @@ interface SessionState {
   sessionLinks: Record<string, SessionLinks>
   allSessionLinks: Record<string, SessionLinkSummary>
   sessionFilter: SessionFilter
+  sessionSearch: string
   loadingSessions: boolean
   loadError: string | null
   sendError: string | null
 
   setSessionFilter: (filter: SessionFilter) => void
+  setSessionSearch: (search: string) => void
   toggleSessionComplete: (id: string) => Promise<void>
+  toggleSessionPin: (id: string) => Promise<void>
   loadSessions: () => Promise<void>
   createSession: (message: string, agent?: string, model?: string, variant?: string, issueId?: string, customAgentId?: string, files?: PromptFile[]) => Promise<Session | null>
   setActiveSession: (id: string) => Promise<void>
@@ -140,11 +143,31 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   sessionLinks: {},
   allSessionLinks: {},
   sessionFilter: "active",
+  sessionSearch: "",
   loadingSessions: false,
   loadError: null,
   sendError: null,
 
   setSessionFilter: (filter) => set({ sessionFilter: filter }),
+  setSessionSearch: (search) => set({ sessionSearch: search }),
+
+  toggleSessionPin: async (id) => {
+    const repoId = getRepoId()
+    if (!repoId) return
+    const session = get().sessions.find((s) => s.id === id)
+    if (!session) return
+    const pinnedAt = session.pinnedAt ? null : Date.now()
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === id ? { ...s, pinnedAt: pinnedAt ?? undefined } : s,
+      ),
+    }))
+    try {
+      await api.updateSessionPinned(repoId, id, pinnedAt)
+    } catch {
+      await get().loadSessions()
+    }
+  },
 
   toggleSessionComplete: async (id) => {
     const repoId = getRepoId()
@@ -468,6 +491,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       queuedMessageIds: {},
       sessionLinks: {},
       allSessionLinks: {},
+      sessionSearch: "",
       loadError: null,
       sendError: null,
     })

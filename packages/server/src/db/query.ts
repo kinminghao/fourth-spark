@@ -188,6 +188,7 @@ function sessionRowToApi(row: SessionRow) {
       cache: { read: row.tokensCacheRead, write: row.tokensCacheWrite },
     },
     completedAt: row.completedAt ?? undefined,
+    pinnedAt: row.pinnedAt ?? undefined,
     time: { created: row.timeCreated, updated: row.timeUpdated },
   }
 }

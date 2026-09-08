@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Pencil, Plus, Trash2, X } from "lucide-react"
+import { Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Pencil, Pin, Plus, Search, Trash2, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
@@ -67,12 +67,12 @@ const SWIPE_HINT_KEY = "fs:swipe-hint-shown"
 
 function SessionItem({
   session, isActive, isConfirming, peekHint,
-  onSelect, onDelete, onConfirm, onCancelConfirm, onRename, onToggleComplete,
+  onSelect, onDelete, onConfirm, onCancelConfirm, onRename, onToggleComplete, onTogglePin,
   status, issue, linkedItems, todos,
 }: {
   session: Session; isActive: boolean; isConfirming: boolean; peekHint?: boolean
   onSelect: () => void; onDelete: () => void; onConfirm: () => void; onCancelConfirm: () => void
-  onRename: (title: string) => void; onToggleComplete: () => void
+  onRename: (title: string) => void; onToggleComplete: () => void; onTogglePin: () => void
   status: string | undefined
   issue?: { number: number; title: string; state: string }
   linkedItems?: Array<{ number: number; state: string; type: "issue" | "pr"; mergedAt?: number | null }>
@@ -80,6 +80,7 @@ function SessionItem({
 }) {
   const draft = useDraftStore((s) => s.drafts[session.id])
   const isCompleted = !!session.completedAt
+  const isPinned = !!session.pinnedAt
   const when = formatWhen(session)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState("")
@@ -109,7 +110,7 @@ function SessionItem({
   }
 
   /* ---- iOS-style swipe-to-reveal (mobile) ---- */
-  const REVEAL_W = 144
+  const REVEAL_W = 192
   const contentRef = useRef<HTMLDivElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
   const currentX = useRef(0)
@@ -213,6 +214,14 @@ function SessionItem({
           <>
             <button
               type="button"
+              onClick={() => { onTogglePin(); closeSwipe() }}
+              className={clsx("flex w-12 flex-col items-center justify-center gap-0.5 text-white", isPinned ? "bg-amber-500 active:bg-amber-600" : "bg-blue-500 active:bg-blue-600")}
+            >
+              <Pin className="h-3.5 w-3.5" />
+              <span className="text-[9px] leading-none">{isPinned ? "取消" : "置顶"}</span>
+            </button>
+            <button
+              type="button"
               onClick={() => { onToggleComplete(); closeSwipe() }}
               className={clsx("flex w-12 flex-col items-center justify-center gap-0.5 text-white", isCompleted ? "bg-neutral-500 active:bg-neutral-600" : "bg-emerald-500 active:bg-emerald-600")}
             >
@@ -257,6 +266,7 @@ function SessionItem({
           <div className="flex items-center gap-2">
             <span className={clsx("h-1.5 w-1.5 shrink-0 rounded-full", statusDotClass(status))} />
             <span className="min-w-0 truncate font-mono text-xs text-fg-3">{session.agent?.trim() || "默认"}</span>
+            {isPinned && <Pin className="h-3 w-3 shrink-0 text-amber-400" />}
             {isCompleted && <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-400" />}
             {when && <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-fg-5">{when}</span>}
           </div>
@@ -353,6 +363,14 @@ function SessionItem({
           <span className="absolute right-1.5 top-1.5 hidden items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 md:flex">
             <button
               type="button"
+              onClick={onTogglePin}
+              title={isPinned ? "取消置顶" : "置顶"}
+              className={clsx("rounded p-1", isPinned ? "text-amber-400 hover:text-amber-300" : "text-fg-5 hover:text-amber-400")}
+            >
+              <Pin className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
               onClick={onToggleComplete}
               title={isCompleted ? "取消完成" : "标记完成"}
               className={clsx("rounded p-1", isCompleted ? "text-emerald-400 hover:text-emerald-300" : "text-fg-5 hover:text-emerald-400")}
@@ -432,14 +450,31 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
   const issues = useIssueStore((s) => s.issues)
   const allSessionLinks = useSessionStore((s) => s.allSessionLinks)
   const allTodos = useSessionStore((s) => s.todos)
+  const sessionSearch = useSessionStore((s) => s.sessionSearch)
+  const setSessionSearch = useSessionStore((s) => s.setSessionSearch)
+  const toggleSessionPin = useSessionStore((s) => s.toggleSessionPin)
 
+  const searchTerm = sessionSearch.toLowerCase()
   const topLevel = [...sessions]
     .filter((s) => {
       if (s.parentID) return false
       if (sessionFilter === "active") return !s.completedAt
       return true
     })
-    .sort((a, b) => sessionTime(b) - sessionTime(a))
+    .filter((s) => {
+      if (!searchTerm) return true
+      const title = (s.title ?? "").toLowerCase()
+      const agent = (s.agent ?? "").toLowerCase()
+      return title.includes(searchTerm) || agent.includes(searchTerm)
+    })
+    .sort((a, b) => {
+      const pa = a.pinnedAt
+      const pb = b.pinnedAt
+      if (pa && !pb) return -1
+      if (!pa && pb) return 1
+      if (pa && pb) return pb - pa
+      return sessionTime(b) - sessionTime(a)
+    })
 
   const issueMap = new Map(issues.map((i) => [i.id, i]))
   const renderSessionList = (list: Session[]) => (
@@ -468,6 +503,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
             onCancelConfirm={() => setConfirmingId(null)}
             onRename={(title) => void renameSession(session.id, title)}
             onToggleComplete={() => void toggleSessionComplete(session.id)}
+            onTogglePin={() => void toggleSessionPin(session.id)}
             todos={allTodos[session.id] ?? EMPTY_TODOS}
           />
         )
@@ -491,6 +527,29 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
             </button>
           )}
         </div>
+        {activeRepoId && (
+          <div className="hidden border-b border-line px-3 py-1.5 md:block">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-5" />
+              <input
+                type="text"
+                value={sessionSearch}
+                onChange={(e) => setSessionSearch(e.target.value)}
+                placeholder="搜索运行记录..."
+                className="w-full rounded-md border border-line bg-base py-1 pl-7 pr-7 text-xs text-fg-2 placeholder:text-fg-5 outline-none focus:border-blue-500"
+              />
+              {sessionSearch && (
+                <button
+                  type="button"
+                  onClick={() => setSessionSearch("")}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-fg-5 hover:text-fg-3"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {activeRepoId && (
           <div className="flex gap-1 border-b border-line px-3 py-1.5">
             {([["active", "进行中"], ["all", "全部"]] as const).map(([key, label]) => (

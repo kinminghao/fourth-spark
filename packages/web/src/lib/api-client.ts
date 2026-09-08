@@ -45,6 +45,7 @@ export interface Session {
   tokens?: SessionTokens
   model?: { providerID?: string; modelID?: string; variant?: string }
   completedAt?: number
+  pinnedAt?: number
   revert?: { messageID: string }
 }
 
@@ -962,6 +963,13 @@ export async function updateSessionCompleted(repoId: string, sessionId: string, 
   await apiFetch<void>(
     `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`,
     { method: "PATCH", body: JSON.stringify({ completedAt }) },
+  )
+}
+
+export async function updateSessionPinned(repoId: string, sessionId: string, pinnedAt: number | null): Promise<void> {
+  await apiFetch<void>(
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "PATCH", body: JSON.stringify({ pinnedAt }) },
   )
 }
 
