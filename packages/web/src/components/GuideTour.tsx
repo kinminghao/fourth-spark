@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useNavigate, useLocation } from "react-router-dom"
-import { X } from "lucide-react"
+import { ChevronLeft, ChevronRight, X } from "lucide-react"
 import { useLayoutStore } from "../stores/layout-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
-import { GUIDE_STEPS, type TooltipPosition } from "./guide-steps"
+import { GUIDE_STEPS, type GuideStep, type TooltipPosition } from "./guide-steps"
 import { injectMockData, restoreMockData, selectMockIssue, selectMockPr, selectMockSession, clearActiveSession, getMockAgentId } from "./guide-mock-data"
 
 const HIGHLIGHT_PAD = 6
 const TOOLTIP_GAP = 12
-/** Extra delay when a step requires route navigation (page needs to render) */
 const ROUTE_SETTLE_MS = 200
-/** Delay for trigger click + dropdown animation */
 const TRIGGER_SETTLE_MS = 80
+const TOOLTIP_WIDTH = 288 // w-72 = 18rem
+const VIEWPORT_MARGIN = 8
+const MD_BREAKPOINT = 768
 
 interface Rect {
   top: number
@@ -43,9 +44,6 @@ function clipPathWithHole(rect: Rect): string {
   )`
 }
 
-const TOOLTIP_WIDTH = 288 // w-72 = 18rem
-const VIEWPORT_MARGIN = 8
-
 function tooltipStyle(
   targetRect: Rect,
   position: TooltipPosition,
@@ -71,7 +69,6 @@ function tooltipStyle(
   return style
 }
 
-/** Click an element by selector if it exists in the DOM */
 function clickSelector(selector: string) {
   const el = document.querySelector(selector) as HTMLElement | null
   if (el) el.click()
@@ -82,6 +79,79 @@ const SETUP_FNS: Record<string, () => void> = {
   selectMockPr,
   selectMockSession,
   clearActiveSession,
+}
+
+function isMobile(): boolean {
+  return window.innerWidth < MD_BREAKPOINT
+}
+
+function SwipeHintArrow({ direction }: { direction: "left" | "right" }) {
+  const Icon = direction === "left" ? ChevronLeft : ChevronRight
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[9999] flex items-center justify-center">
+      <div
+        className={`flex items-center gap-1 rounded-full bg-blue-500/20 px-6 py-4 ${
+          direction === "left" ? "fs-swipe-left" : "fs-swipe-right"
+        }`}
+      >
+        <Icon className="h-8 w-8 text-blue-400" strokeWidth={2.5} />
+        <Icon className="h-8 w-8 text-blue-400/60" strokeWidth={2.5} />
+        <Icon className="h-8 w-8 text-blue-400/30" strokeWidth={2.5} />
+      </div>
+    </div>
+  )
+}
+
+function SwipeTooltip({
+  step: currentStep,
+  stepIdx,
+  total,
+  isFirst,
+  isLast,
+  onPrev,
+  onNext,
+  onClose,
+}: {
+  step: GuideStep
+  stepIdx: number
+  total: number
+  isFirst: boolean
+  isLast: boolean
+  onPrev: () => void
+  onNext: () => void
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-x-0 bottom-24 z-[10000] flex justify-center px-4">
+      <div className="w-72 rounded-xl border border-line bg-surface p-4 shadow-2xl">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-2 top-2 rounded-md p-1 text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3"
+          aria-label="关闭引导"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+        <h3 className="pr-6 text-sm font-semibold text-fg">{currentStep.title}</h3>
+        <p className="mt-1.5 text-xs leading-relaxed text-fg-3">{currentStep.description}</p>
+        <div className="mt-4 flex items-center justify-between">
+          <span className="font-mono text-[11px] tabular-nums text-fg-5">
+            {stepIdx + 1} / {total}
+          </span>
+          <div className="flex items-center gap-2">
+            {!isFirst && (
+              <button type="button" onClick={onPrev} className="rounded-md px-3 py-1 text-xs text-fg-3 transition-colors hover:bg-elevated hover:text-fg">
+                上一步
+              </button>
+            )}
+            <button type="button" onClick={onNext} className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-500">
+              {isLast ? "完成" : "下一步"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function GuideTour() {
@@ -107,15 +177,12 @@ export function GuideTour() {
     setRect(getTargetRect(current.target, pad))
   }, [open, current])
 
-  /** Resolve per-repo route: "dev/issues" → "/:repoName/dev/issues"
-   *  Also replaces __MOCK_AGENT__ placeholder with the actual mock agent ID */
   const resolveRoute = useCallback((route: string) => {
     const resolved = route.replace("__MOCK_AGENT__", getMockAgentId())
     if (resolved.startsWith("/")) return resolved
     return repoName ? `/${encodeURIComponent(repoName)}/${resolved}` : `/${resolved}`
   }, [repoName])
 
-  // Reset step when tour opens
   useEffect(() => {
     if (open) {
       setStep(0)
@@ -123,18 +190,15 @@ export function GuideTour() {
     }
   }, [open])
 
-  // --- Core step transition logic ---
   useEffect(() => {
     if (!open || !current) return
     const prev = prevStepRef.current
     const prevDef = prev >= 0 ? GUIDE_STEPS[prev] : null
 
-    // 1. Cleanup: close any dropdown the previous step opened
     if (prevDef?.triggerClick && document.querySelector(prevDef.target)) {
       clickSelector(prevDef.triggerClick)
     }
 
-    // 2. Mock data lifecycle — scope-aware
     const prevScope = prevDef?.mockScope ?? null
     const curScope = current.mockScope ?? null
     if (curScope && curScope !== prevScope) {
@@ -145,20 +209,16 @@ export function GuideTour() {
       activeMockRef.current = null
     }
 
-    // 3. Navigate if the current step requires a different route
     const fullRoute = current.route ? resolveRoute(current.route) : null
     const needsNav = fullRoute && !location.pathname.startsWith(fullRoute)
     if (needsNav) navigate(fullRoute)
 
-    // 4. After navigation settles, run setup, open dropdown, then measure
     const delay = needsNav ? ROUTE_SETTLE_MS : curScope && curScope !== prevScope ? TRIGGER_SETTLE_MS : 0
     const t1 = setTimeout(() => {
-      // Run setup function (e.g. select a mock issue to show detail panel)
       if (current.setupFn && SETUP_FNS[current.setupFn]) {
         SETUP_FNS[current.setupFn]()
       }
 
-      // Wait for setup-triggered renders, then trigger click + measure
       setTimeout(() => {
         if (current.triggerClick && !document.querySelector(current.target)) {
           clickSelector(current.triggerClick)
@@ -171,7 +231,6 @@ export function GuideTour() {
     return () => clearTimeout(t1)
   }, [open, step, current, navigate, location.pathname, measure, resolveRoute])
 
-  // Measure on mount and on resize/scroll
   useLayoutEffect(() => { measure() }, [measure])
 
   useEffect(() => {
@@ -184,7 +243,6 @@ export function GuideTour() {
     }
   }, [open, measure])
 
-  // Close the tour: cleanup current step's dropdown + restore mock data, then stop
   const stepRef = useRef(step)
   stepRef.current = step
 
@@ -200,7 +258,6 @@ export function GuideTour() {
     stop()
   }, [stop])
 
-  // Escape to close
   useEffect(() => {
     if (!open) return
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") closeTour() }
@@ -208,36 +265,56 @@ export function GuideTour() {
     return () => document.removeEventListener("keydown", handler)
   }, [open, closeTour])
 
-  if (!open || !current || !rect) return null
+  if (!open || !current) return null
+
+  const showSwipeHint = isMobile() && current.mobileSwipeHint && !rect
+  if (!rect && !showSwipeHint) return null
 
   const prev = () => { if (!isFirst) setStep((s) => s - 1) }
   const next = () => { if (isLast) closeTour(); else setStep((s) => s + 1) }
 
+  if (showSwipeHint) {
+    return createPortal(
+      <>
+        <div className="fixed inset-0 z-[9998] bg-black/60" onClick={closeTour} />
+        <SwipeHintArrow direction={current.mobileSwipeHint!} />
+        <SwipeTooltip
+          step={current}
+          stepIdx={step}
+          total={total}
+          isFirst={isFirst}
+          isLast={isLast}
+          onPrev={prev}
+          onNext={next}
+          onClose={closeTour}
+        />
+      </>,
+      document.body,
+    )
+  }
+
   return createPortal(
     <div className="fixed inset-0 z-[9999]">
-      {/* Dark overlay with hole */}
       <div
         className="absolute inset-0 bg-black/60 transition-[clip-path] duration-200"
-        style={{ clipPath: clipPathWithHole(rect) }}
+        style={{ clipPath: clipPathWithHole(rect!) }}
         onClick={closeTour}
       />
 
-      {/* Highlight border */}
       <div
         className="pointer-events-none absolute rounded-lg ring-2 ring-blue-500 ring-offset-2 ring-offset-transparent transition-all duration-200"
         style={{
-          top: rect.top,
-          left: rect.left,
-          width: rect.width,
-          height: rect.height,
+          top: rect!.top,
+          left: rect!.left,
+          width: rect!.width,
+          height: rect!.height,
         }}
       />
 
-      {/* Tooltip */}
       <div
         ref={tooltipRef}
         className="fixed z-[10000] w-72 rounded-xl border border-line bg-surface p-4 shadow-2xl"
-        style={tooltipStyle(rect, current.position)}
+        style={tooltipStyle(rect!, current.position)}
       >
         <button
           type="button"
