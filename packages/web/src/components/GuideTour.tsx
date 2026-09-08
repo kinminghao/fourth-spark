@@ -27,6 +27,7 @@ function getTargetRect(selector: string, padding: number): Rect | null {
   if (!el) return null
   const r = el.getBoundingClientRect()
   if (r.width === 0 && r.height === 0) return null
+  if (r.right < 0 || r.bottom < 0 || r.left > window.innerWidth || r.top > window.innerHeight) return null
   return {
     top: r.top - padding,
     left: r.left - padding,
