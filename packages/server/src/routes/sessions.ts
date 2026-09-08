@@ -306,7 +306,7 @@ sessions.get("/", async (c) => {
       const ids = list.map((s) => s.id)
       liveIds = new Set(ids)
       const dbRows = ids.length > 0
-        ? await db.select({ id: sessionsTable.id, issueId: sessionsTable.issueId, title: sessionsTable.title, parentId: sessionsTable.parentId, completedAt: sessionsTable.completedAt }).from(sessionsTable).where(inArray(sessionsTable.id, ids))
+        ? await db.select({ id: sessionsTable.id, issueId: sessionsTable.issueId, title: sessionsTable.title, parentId: sessionsTable.parentId, completedAt: sessionsTable.completedAt, pinnedAt: sessionsTable.pinnedAt }).from(sessionsTable).where(inArray(sessionsTable.id, ids))
         : []
       const dbMap = new Map(dbRows.map((r) => [r.id, r]))
       liveResult = list
@@ -322,6 +322,7 @@ sessions.get("/", async (c) => {
             ...(row?.title ? { title: row.title } : {}),
             ...(row?.parentId && !s.parentID ? { parentID: row.parentId } : {}),
             ...(row?.completedAt ? { completedAt: row.completedAt } : {}),
+            ...(row?.pinnedAt ? { pinnedAt: row.pinnedAt } : {}),
           }
         })
     } catch (err) {
@@ -336,6 +337,11 @@ sessions.get("/", async (c) => {
 
   const merged = [...(liveResult ?? []), ...dbOnly]
   merged.sort((a, b) => {
+    const pa = (a as Record<string, unknown>).pinnedAt as number | undefined
+    const pb = (b as Record<string, unknown>).pinnedAt as number | undefined
+    if (pa && !pb) return -1
+    if (!pa && pb) return 1
+    if (pa && pb) return pb - pa
     const ta = (a.time as { updated?: number })?.updated ?? 0
     const tb = (b.time as { updated?: number })?.updated ?? 0
     return tb - ta
@@ -569,12 +575,13 @@ sessions.get("/:id/todos", async (c) => {
 
 sessions.patch("/:id", async (c) => {
   const sessionId = c.req.param("id")
-  const body = await c.req.json<{ issueId?: string | null; title?: string; completedAt?: number | null }>().catch(() => null)
+  const body = await c.req.json<{ issueId?: string | null; title?: string; completedAt?: number | null; pinnedAt?: number | null }>().catch(() => null)
   if (!body) return c.json({ error: "empty body" }, 400)
   const updates: Record<string, unknown> = {}
   if ("issueId" in body) updates.issueId = body.issueId ?? null
   if ("title" in body && typeof body.title === "string") updates.title = body.title
   if ("completedAt" in body) updates.completedAt = body.completedAt ?? null
+  if ("pinnedAt" in body) updates.pinnedAt = body.pinnedAt ?? null
   if (Object.keys(updates).length > 0) {
     await db.update(sessionsTable).set(updates).where(eq(sessionsTable.id, sessionId))
   }
