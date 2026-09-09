@@ -199,10 +199,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         api.listSessions(repoId),
         api.getAllSessionLinks(repoId).catch(() => null),
       ])
+      // Discard stale response if active repo changed while loading
+      if (getRepoId() !== repoId) return
       const next: Partial<SessionState> = { sessions, loadingSessions: false }
       if (allLinks) next.allSessionLinks = allLinks
       set(next)
     } catch (error) {
+      if (getRepoId() !== repoId) return // stale
       set({
         loadingSessions: false,
         loadError:
@@ -257,6 +260,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       api.getSessionSnapshot(repoId, id),
       api.getMessages(repoId, id, msgsOpts),
     ])
+
+    // Discard stale response if active repo changed while loading
+    if (getRepoId() !== repoId) return
 
     const snap = snapResult.status === "fulfilled" ? snapResult.value : null
     const revertMessageID = snap?.session?.revert?.messageID
