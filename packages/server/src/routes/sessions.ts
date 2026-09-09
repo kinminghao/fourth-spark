@@ -302,7 +302,7 @@ sessions.get("/", async (c) => {
   if (client) {
     try {
       const list = await client.listSessions()
-      syncSessionsList(list)
+      syncSessionsList(list).catch(() => {})
       const ids = list.map((s) => s.id)
       liveIds = new Set(ids)
       const dbRows = ids.length > 0
@@ -542,7 +542,7 @@ sessions.get("/:id/messages", async (c) => {
   if (client) {
     try {
       const allMsgs = await client.getMessages(id)
-      syncMessagesList(id, allMsgs)
+      syncMessagesList(id, allMsgs).catch(() => {})
 
       if (limit > 0) {
         let slice = allMsgs
