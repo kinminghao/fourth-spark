@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useNavigate, useLocation } from "react-router-dom"
 import { ChevronLeft, ChevronRight, X } from "lucide-react"
@@ -168,10 +168,9 @@ export function GuideTour() {
   const tooltipRef = useRef<HTMLDivElement>(null)
   const prevStepRef = useRef(-1)
   const activeMockRef = useRef<string | null>(null)
-  const stepsRef = useRef<GuideStep[]>(GUIDE_STEPS)
 
-  const steps = stepsRef.current
-  const current = steps[step]
+  const steps = useMemo(() => open ? stepsForSection(section) : GUIDE_STEPS, [open, section])
+  const current = step < steps.length ? steps[step] : undefined
   const total = steps.length
   const isFirst = step === 0
   const isLast = step === total - 1
@@ -190,7 +189,6 @@ export function GuideTour() {
 
   useEffect(() => {
     if (open) {
-      stepsRef.current = stepsForSection(section)
       setStep(0)
       prevStepRef.current = -1
     }
@@ -251,9 +249,11 @@ export function GuideTour() {
 
   const stepRef = useRef(step)
   stepRef.current = step
+  const stepsSnapshotRef = useRef(steps)
+  stepsSnapshotRef.current = steps
 
   const closeTour = useCallback(() => {
-    const def = stepsRef.current[stepRef.current]
+    const def = stepsSnapshotRef.current[stepRef.current]
     if (def?.triggerClick && document.querySelector(def.target)) {
       clickSelector(def.triggerClick)
     }
