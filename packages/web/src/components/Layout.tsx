@@ -8,6 +8,7 @@ import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { useLayoutStore } from "../stores/layout-store"
 import { listBranches, checkoutBranch, type BranchList } from "../lib/api-client"
 import { GuideTour } from "./GuideTour"
+import { sectionFromPath } from "./guide-steps"
 
 interface NavItem {
   segment: string
@@ -349,7 +350,7 @@ function HeaderOverflowMenu({
           </a>
           <button
             type="button"
-            onClick={() => { useLayoutStore.getState().startGuideTour(); setOpen(false) }}
+            onClick={() => { useLayoutStore.getState().startGuideTour(sectionFromPath(window.location.pathname)); setOpen(false) }}
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-fg-2 transition-colors hover:bg-elevated"
           >
             <HelpCircle className="h-3.5 w-3.5 text-fg-4" />
@@ -450,7 +451,7 @@ function Header() {
             </button>
             <button
               type="button"
-              onClick={() => useLayoutStore.getState().startGuideTour()}
+              onClick={() => useLayoutStore.getState().startGuideTour(sectionFromPath(location.pathname))}
               aria-label="功能引导"
               className="flex h-8 w-8 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
             >
