@@ -104,6 +104,22 @@ export function isRetryableGitError(stdout: string, stderr: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Branch name validation (reject user input that could break git commands)
+// ---------------------------------------------------------------------------
+
+const BRANCH_NAME_RE = /^[a-zA-Z0-9._\/-]+$/
+
+/** Validates per git-check-ref-format rules; also rejects leading `-` (CLI injection). */
+export function isValidGitBranchName(name: string): boolean {
+  if (!name || name.length > 250) return false
+  if (!BRANCH_NAME_RE.test(name)) return false
+  if (name.startsWith("-") || name.startsWith("/")) return false
+  if (name.endsWith("/") || name.endsWith(".") || name.endsWith(".lock")) return false
+  if (name.includes("..") || name.includes("//") || name.includes("@{")) return false
+  return true
+}
+
+// ---------------------------------------------------------------------------
 // Core: runGit with timeout
 // ---------------------------------------------------------------------------
 
