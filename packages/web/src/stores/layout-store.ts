@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import type { GuideSection } from "../components/guide-steps"
 
 const NAV_KEY = "fs-nav-collapsed"
 const SESSION_PANEL_KEY = "fs-session-panel-collapsed"
@@ -7,9 +8,10 @@ interface LayoutState {
   navCollapsed: boolean
   sessionPanelCollapsed: boolean
   guideTourOpen: boolean
+  guideTourSection: GuideSection | null
   toggleNav: () => void
   toggleSessionPanel: () => void
-  startGuideTour: () => void
+  startGuideTour: (section?: GuideSection | null) => void
   stopGuideTour: () => void
 }
 
@@ -17,13 +19,14 @@ export const useLayoutStore = create<LayoutState>((set) => ({
   navCollapsed: localStorage.getItem(NAV_KEY) === "true",
   sessionPanelCollapsed: localStorage.getItem(SESSION_PANEL_KEY) === "true",
   guideTourOpen: false,
+  guideTourSection: null,
 
-  startGuideTour() {
-    set({ guideTourOpen: true })
+  startGuideTour(section) {
+    set({ guideTourOpen: true, guideTourSection: section ?? null })
   },
 
   stopGuideTour() {
-    set({ guideTourOpen: false })
+    set({ guideTourOpen: false, guideTourSection: null })
   },
 
   toggleNav() {

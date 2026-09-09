@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom"
 import { ChevronLeft, ChevronRight, X } from "lucide-react"
 import { useLayoutStore } from "../stores/layout-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
-import { GUIDE_STEPS, type GuideStep, type TooltipPosition } from "./guide-steps"
+import { GUIDE_STEPS, stepsForSection, type GuideStep, type TooltipPosition } from "./guide-steps"
 import { injectMockData, restoreMockData, selectMockIssue, selectMockPr, selectMockSession, clearActiveSession, getMockAgentId } from "./guide-mock-data"
 
 const HIGHLIGHT_PAD = 6
@@ -160,6 +160,7 @@ export function GuideTour() {
   const navigate = useNavigate()
   const location = useLocation()
   const open = useLayoutStore((s) => s.guideTourOpen)
+  const section = useLayoutStore((s) => s.guideTourSection)
   const stop = useLayoutStore((s) => s.stopGuideTour)
   const repoName = useRepoStore(selectActiveRepoName)
   const [step, setStep] = useState(0)
@@ -167,9 +168,11 @@ export function GuideTour() {
   const tooltipRef = useRef<HTMLDivElement>(null)
   const prevStepRef = useRef(-1)
   const activeMockRef = useRef<string | null>(null)
+  const stepsRef = useRef<GuideStep[]>(GUIDE_STEPS)
 
-  const current = GUIDE_STEPS[step]
-  const total = GUIDE_STEPS.length
+  const steps = stepsRef.current
+  const current = steps[step]
+  const total = steps.length
   const isFirst = step === 0
   const isLast = step === total - 1
 
@@ -187,15 +190,16 @@ export function GuideTour() {
 
   useEffect(() => {
     if (open) {
+      stepsRef.current = stepsForSection(section)
       setStep(0)
       prevStepRef.current = -1
     }
-  }, [open])
+  }, [open, section])
 
   useEffect(() => {
     if (!open || !current) return
     const prev = prevStepRef.current
-    const prevDef = prev >= 0 ? GUIDE_STEPS[prev] : null
+    const prevDef = prev >= 0 ? steps[prev] : null
 
     if (prevDef?.triggerClick && document.querySelector(prevDef.target)) {
       clickSelector(prevDef.triggerClick)
@@ -249,7 +253,7 @@ export function GuideTour() {
   stepRef.current = step
 
   const closeTour = useCallback(() => {
-    const def = GUIDE_STEPS[stepRef.current]
+    const def = stepsRef.current[stepRef.current]
     if (def?.triggerClick && document.querySelector(def.target)) {
       clickSelector(def.triggerClick)
     }
