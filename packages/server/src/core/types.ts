@@ -15,6 +15,7 @@ import type { GitIssueClient, Platform } from "../lib/git-provider"
 
 export interface ToolContext {
   repoId: string
+  sessionId?: string
 }
 
 export interface McpToolProvider {

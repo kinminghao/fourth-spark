@@ -22,7 +22,7 @@ export interface RuntimeProvider {
   isReady(repoId: string): boolean
   getClient(repoId: string): RuntimeClient | null
   healthCheck(repoId: string): Promise<RuntimeHealth>
-  injectMcp(localPath: string, repoId: string, serverPort: number): void
+  injectMcp(localPath: string, repoId: string, serverPort: number, sessionId?: string): void
   removeMcp(localPath: string): void
   killAllSync(): void
 }

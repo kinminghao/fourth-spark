@@ -363,8 +363,8 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
       }
     },
 
-    injectMcp(localPath: string, repoId: string, port: number): void {
-      injectMcpConfig(localPath, repoId, port)
+    injectMcp(localPath: string, repoId: string, port: number, sessionId?: string): void {
+      injectMcpConfig(localPath, repoId, port, sessionId)
     },
 
     removeMcp(localPath: string): void {
