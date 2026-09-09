@@ -15,6 +15,7 @@ import { useIssueStore } from "./stores/issue-store"
 import { usePrStore } from "./stores/pr-store"
 import { useThemeStore } from "./stores/theme-store"
 import { ToastContainer } from "./components/ToastContainer"
+import { ErrorBoundary, AppCrashFallback, guarded } from "./components/ErrorBoundary"
 import { orchestrator } from "./lib/session-orchestrator"
 import { freezeMonitor } from "./lib/freeze-monitor"
 
@@ -107,15 +108,15 @@ function AppInner() {
     <>
       <Routes>
         <Route element={<Layout />}>
-          <Route path="/repos" element={<ReposPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/:repoId/run" element={<RunPage />} />
-          <Route path="/:repoId/agents" element={<AgentsPage />} />
-          <Route path="/:repoId/agents/:agentId" element={<AgentDetailPage />} />
+          <Route path="/repos" element={guarded(ReposPage)} />
+          <Route path="/settings" element={guarded(SettingsPage)} />
+          <Route path="/analytics" element={guarded(AnalyticsPage)} />
+          <Route path="/:repoId/run" element={guarded(RunPage)} />
+          <Route path="/:repoId/agents" element={guarded(AgentsPage)} />
+          <Route path="/:repoId/agents/:agentId" element={guarded(AgentDetailPage)} />
           <Route path="/:repoId/dev" element={<Navigate to="issues" replace />} />
-          <Route path="/:repoId/dev/issues" element={<DevPage />} />
-          <Route path="/:repoId/dev/pulls" element={<DevPage />} />
+          <Route path="/:repoId/dev/issues" element={guarded(DevPage)} />
+          <Route path="/:repoId/dev/pulls" element={guarded(DevPage)} />
           <Route path="/:repoId/issues" element={<LegacyDevRedirect segment="issues" />} />
           <Route path="/:repoId/pulls" element={<LegacyDevRedirect segment="pulls" />} />
           <Route path="/:repoId" element={<Navigate to="run" replace />} />
@@ -130,7 +131,9 @@ function AppInner() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppInner />
+      <ErrorBoundary fallback={(error, reset) => <AppCrashFallback error={error} reset={reset} />}>
+        <AppInner />
+      </ErrorBoundary>
     </BrowserRouter>
   )
 }
