@@ -167,8 +167,10 @@ async function syncRepo(repoId: string, gitUrl: string): Promise<void> {
     }
     const tagIds = row.labels.map((l) => seenTags.get(l.name)!).filter(Boolean)
     if (tagIds.length > 0) {
-      await db.delete(issueTags).where(eq(issueTags.issueId, row.id))
-      await db.insert(issueTags).values(tagIds.map((tid) => ({ issueId: row.id, tagId: tid }))).onConflictDoNothing()
+      await db.transaction(async (tx) => {
+        await tx.delete(issueTags).where(eq(issueTags.issueId, row.id))
+        await tx.insert(issueTags).values(tagIds.map((tid) => ({ issueId: row.id, tagId: tid }))).onConflictDoNothing()
+      })
     }
   }
 
