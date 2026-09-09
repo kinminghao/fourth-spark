@@ -255,7 +255,10 @@ startup()
 async function gracefulShutdown(signal: string) {
   logger.info({ signal }, "shutting down — stopping all opencode processes")
   stopSyncScheduler()
-  await runtimeManager.stopAll()
+  await Promise.race([
+    runtimeManager.stopAll(),
+    new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
+  ])
   process.exit(0)
 }
 
