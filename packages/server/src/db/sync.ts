@@ -119,7 +119,6 @@ async function upsertPart(sessionId: string, messageId: string, props: R): Promi
 async function upsertTodos(sessionId: string, items: unknown[]): Promise<void> {
   if (!sessionId || items.length === 0) return
   const now = Date.now()
-  await db.delete(todos).where(eq(todos.sessionId, sessionId))
   const values = items.map((item, i) => {
     const r = asRecord(item)
     return {
@@ -132,7 +131,10 @@ async function upsertTodos(sessionId: string, items: unknown[]): Promise<void> {
       timeUpdated: now,
     }
   })
-  await db.insert(todos).values(values)
+  await db.transaction(async (tx) => {
+    await tx.delete(todos).where(eq(todos.sessionId, sessionId))
+    await tx.insert(todos).values(values)
+  })
 }
 
 async function ensureSession(sessionId: string): Promise<void> {
