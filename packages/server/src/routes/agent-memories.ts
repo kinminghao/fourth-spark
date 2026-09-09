@@ -213,7 +213,7 @@ agentMemoryRoutes.post("/extract", async (c) => {
 
       try {
         const msgs = await client.getMessages(session.id)
-        syncMessagesList(session.id, msgs)
+        syncMessagesList(session.id, msgs).catch(() => {})
         await new Promise(r => setTimeout(r, 500))
       } catch { /* best-effort */ }
 

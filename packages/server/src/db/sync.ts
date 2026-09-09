@@ -159,25 +159,29 @@ async function ensureMessage(sessionId: string, messageId: string): Promise<void
 }
 
 // ---------------------------------------------------------------------------
-// Fire-and-forget with retry — wraps an async fn, retries up to `maxRetries`
-// times on failure with a 1 s delay between attempts.
+// Async retry with exponential backoff — retries up to `maxRetries` times,
+// doubling the delay each attempt (1 s, 2 s, 4 s …). Re-throws on final
+// failure so callers can await and handle errors if needed.
 // ---------------------------------------------------------------------------
 
-function fireWithRetry(fn: () => Promise<void>, ctx: Record<string, unknown>, maxRetries = 2): void {
-  const attempt = (remaining: number): void => {
-    fn().catch((err) => {
-      if (remaining > 0) {
-        setTimeout(() => attempt(remaining - 1), 1_000)
-      } else {
-        logger.error({ err, ...ctx }, "sync failed after retries")
+async function fireWithRetry(fn: () => Promise<void>, ctx: Record<string, unknown>, maxRetries = 2): Promise<void> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await fn()
+      return
+    } catch (err) {
+      if (attempt >= maxRetries) {
+        logger.error({ err, ...ctx, attempts: attempt + 1 }, "sync failed after retries")
+        throw err
       }
-    })
+      const delay = 1_000 * 2 ** attempt
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
   }
-  attempt(maxRetries)
 }
 
-export function syncSessionsList(items: unknown[]): void {
-  fireWithRetry(async () => {
+export function syncSessionsList(items: unknown[]): Promise<void> {
+  return fireWithRetry(async () => {
     for (const item of items) {
       const r = asRecord(item)
       if (r && typeof r.id === "string") await upsertSession(r)
@@ -207,27 +211,27 @@ async function syncMessagesCore(sessionId: string, items: unknown[]): Promise<vo
   }
 }
 
-export function syncMessagesList(sessionId: string, items: unknown[]): void {
-  fireWithRetry(() => syncMessagesCore(sessionId, items), { op: "syncMessagesList", sessionId })
+export function syncMessagesList(sessionId: string, items: unknown[]): Promise<void> {
+  return fireWithRetry(() => syncMessagesCore(sessionId, items), { op: "syncMessagesList", sessionId })
 }
 
 export async function syncMessagesListSync(sessionId: string, items: unknown[]): Promise<void> {
   await syncMessagesCore(sessionId, items)
 }
 
-export function syncSseEvent(sessionId: string, eventName: string, raw: string): void {
+export function syncSseEvent(sessionId: string, eventName: string, raw: string): Promise<void> {
   let data: R
   try {
     data = JSON.parse(raw)
   } catch {
-    return
+    return Promise.resolve()
   }
 
   const type = resolveType(eventName, data)
   const props = getProps(data)
-  if (!props) return
+  if (!props) return Promise.resolve()
 
-  fireWithRetry(async () => {
+  return fireWithRetry(async () => {
     switch (type) {
       case "session.updated": {
         await upsertSession(props)

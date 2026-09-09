@@ -64,7 +64,7 @@ async function forwardBlock(block: string, sessionId: string, childIds: Set<stri
   learnChildSession(parsed, sessionId, childIds)
   if (shouldForward(parsed, sessionId, childIds)) {
     const syncId = parsed.properties?.sessionID ?? sessionId
-    syncSseEvent(syncId, parsed.type ?? "", dataStr)
+    syncSseEvent(syncId, parsed.type ?? "", dataStr).catch(() => {})
     await stream.writeSSE({ data: dataStr, event: parsed.type })
   }
 }
@@ -74,7 +74,7 @@ async function forwardBlockGlobal(block: string, stream: SSEStreamingApi): Promi
   if (!result) return
   const { dataStr, parsed } = result
   const sessionId = parsed.properties?.sessionID
-  if (sessionId) syncSseEvent(sessionId, parsed.type ?? "", dataStr)
+  if (sessionId) syncSseEvent(sessionId, parsed.type ?? "", dataStr).catch(() => {})
   await stream.writeSSE({ data: dataStr, event: parsed.type })
 }
 

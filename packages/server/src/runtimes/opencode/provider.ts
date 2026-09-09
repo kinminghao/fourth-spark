@@ -226,11 +226,11 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
   async function initialSync(client: RuntimeClient, repoId: string): Promise<void> {
     logger.info({ repoId }, "starting initial session sync")
     const sessionList = await client.listSessions()
-    syncSessionsList(sessionList)
+    syncSessionsList(sessionList).catch(() => {})
     for (const session of sessionList) {
       try {
         const msgs = await client.getMessages(session.id)
-        syncMessagesList(session.id, msgs)
+        syncMessagesList(session.id, msgs).catch(() => {})
       } catch (err) {
         logger.warn({ err, repoId, sessionId: session.id }, "skipping message sync for session")
       }

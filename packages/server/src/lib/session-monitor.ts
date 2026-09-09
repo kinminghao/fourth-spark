@@ -421,7 +421,7 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
   try {
     try {
       const msgs = await client.getMessages(sourceSessionId)
-      syncMessagesList(sourceSessionId, msgs)
+      syncMessagesList(sourceSessionId, msgs).catch(() => {})
     } catch { /* best-effort sync */ }
 
     const data = await buildExtractionData(sourceSessionId, customAgentId)
