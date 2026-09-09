@@ -216,6 +216,7 @@ function MemoryItem({ memory, categories, onUpdate, onDelete }: {
           const versionStyle = VERSION_ACTION_LABELS[latest.action]
           return (
             <button type="button" onClick={() => setShowHistory(true)}
+              data-guide={memory.id === "guide-mem-1" ? "agent-memory-version" : undefined}
               className={clsx("rounded px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-80",
                 latest.action === "update" ? "bg-blue-500/10 text-blue-400" :
                 latest.action === "merge" ? "bg-purple-500/10 text-purple-400" :

@@ -164,10 +164,19 @@ export const GUIDE_STEPS: GuideStep[] = [
   {
     target: '[data-guide="agent-memory-section"]',
     title: "Agent 记忆",
-    description: "Agent 在每次对话结束后自动提取经验记忆。每条记忆有分类标签和重要度评分（⚡）。系统定期自动整理：合并重复内容、衰减不活跃的记忆、强化反复验证的经验。点击版本标签可查看完整演化历史（首次提取 → 重写 → 合并 → 强化/衰减）。",
+    description: "Agent 在每次对话结束后自动提取经验记忆。每条记忆有分类标签和重要度评分（⚡）。系统定期自动整理：合并重复内容、衰减不活跃的记忆、强化反复验证的经验。",
     position: "bottom",
     section: "agents",
     padding: 6,
+    mockScope: "agent",
+  },
+  {
+    target: '[data-guide="agent-memory-version"]',
+    title: "记忆版本历史",
+    description: "点击版本标签可查看这条记忆的完整演化轨迹：首次提取 → 内容重写 → 多条合并 → 反复验证后强化 → 长期未用后衰减。每个版本记录了当时的内容、重要度评分和触发动作。",
+    position: "bottom",
+    section: "agents",
+    padding: 4,
     mockScope: "agent",
   },
 ]
