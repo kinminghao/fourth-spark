@@ -14,6 +14,8 @@
 
 import type { RuntimeClient } from "../../core/runtime-client"
 import type { RuntimeHealth, RuntimeProvider } from "../../core/runtime-provider"
+import { syncSseEvent } from "../../db/sync"
+import { listSessionsFromDB, getMessagesFromDB, getTodosFromDB } from "../../db/query"
 import { logger } from "../../middleware/logger"
 
 import { StdioRuntimeClient } from "./client"
@@ -60,7 +62,29 @@ export function createClaudeCodeProvider(serverPort: number): RuntimeProvider {
       if (existing) return
 
       injectMcpConfig(localPath, repoId, serverPort)
-      const client = new StdioRuntimeClient(localPath)
+      const client = new StdioRuntimeClient(localPath, {
+        onSseBlock: (sessionId, eventType, raw) => {
+          syncSseEvent(sessionId, eventType, raw).catch((err) => {
+            logger.warn({ err, sessionId, eventType }, "claude-code db sync failed")
+          })
+        },
+        loadMessages: (sessionId) => getMessagesFromDB(sessionId),
+        loadTodos: async (sessionId) => {
+          const rows = await getTodosFromDB(sessionId)
+          return rows.map((r, i) => ({ id: `todo-${i}`, ...r }))
+        },
+      })
+
+      try {
+        const dbSessions = await listSessionsFromDB(localPath)
+        if (dbSessions.length > 0) {
+          client.hydrateFromDb(dbSessions)
+          logger.info({ repoId, count: dbSessions.length }, "hydrated claude sessions from DB")
+        }
+      } catch (err) {
+        logger.warn({ err, repoId }, "failed to hydrate claude sessions from DB")
+      }
+
       repos.set(repoId, { repoId, localPath, client })
       logger.info({ repoId, localPath }, "claude-code provider initialized for repo")
     },

@@ -98,6 +98,22 @@ function asString(value: unknown): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// DB sync callbacks — injected by the provider so the client stays decoupled
+// from the database layer. The SSE blocks we produce already match the format
+// that syncSseEvent() expects, so we just forward them.
+// ---------------------------------------------------------------------------
+
+export type SseBlockSink = (sessionId: string, eventType: string, raw: string) => void
+export type MessageLoader = (sessionId: string) => Promise<Message[]>
+export type TodoLoader = (sessionId: string) => Promise<Todo[]>
+
+export interface DbSyncCallbacks {
+  onSseBlock?: SseBlockSink
+  loadMessages?: MessageLoader
+  loadTodos?: TodoLoader
+}
+
+// ---------------------------------------------------------------------------
 // StdioRuntimeClient
 // ---------------------------------------------------------------------------
 
@@ -108,13 +124,15 @@ export class StdioRuntimeClient implements RuntimeClient {
   private readonly spawnedOnce = new Set<string>()
   private readonly clientListeners = new Set<(block: string) => void>()
   private readonly persistentMessages = new Map<string, { messages: Message[]; messageIndex: Map<string, number>; todos: Todo[]; userCounter: number; lastMessageCounter: number; lastPartCounter: number }>()
+  private readonly dbSync: DbSyncCallbacks
 
-  constructor(directory: string) {
+  constructor(directory: string, dbSync?: DbSyncCallbacks) {
     this.directory = directory
+    this.dbSync = dbSync ?? {}
   }
 
   withDirectory(directory: string): RuntimeClient {
-    return new StdioRuntimeClient(directory)
+    return new StdioRuntimeClient(directory, this.dbSync)
   }
 
   // -------------------------------------------------------------------------
@@ -134,7 +152,26 @@ export class StdioRuntimeClient implements RuntimeClient {
     const createdAt = new Date().toISOString()
     const info: SessionInfo = { id, title: opts.title, createdAt, agent: opts.agent }
     this.sessionInfo.set(id, info)
+
+    this.syncSessionToDb(id, info)
+
     return { id, title: info.title, createdAt }
+  }
+
+  private syncSessionToDb(id: string, info: SessionInfo): void {
+    if (!this.dbSync.onSseBlock) return
+    const now = Date.now()
+    const data = {
+      type: "session.updated",
+      properties: {
+        id,
+        title: info.title ?? "",
+        agent: info.agent,
+        directory: this.directory,
+        time: { created: new Date(info.createdAt).getTime() || now, updated: now },
+      },
+    }
+    this.dbSync.onSseBlock(id, "session.updated", JSON.stringify(data))
   }
 
   async getSession(sessionId: string): Promise<Session> {
@@ -161,12 +198,16 @@ export class StdioRuntimeClient implements RuntimeClient {
 
   async getMessages(sessionId: string): Promise<Message[]> {
     const p = this.persistentMessages.get(sessionId)
-    return p ? p.messages.slice() : []
+    if (p && p.messages.length > 0) return p.messages.slice()
+    if (this.dbSync.loadMessages) return this.dbSync.loadMessages(sessionId)
+    return []
   }
 
   async getTodos(sessionId: string): Promise<Todo[]> {
     const p = this.persistentMessages.get(sessionId)
-    return p ? p.todos.slice() : []
+    if (p && p.todos.length > 0) return p.todos.slice()
+    if (this.dbSync.loadTodos) return this.dbSync.loadTodos(sessionId)
+    return []
   }
 
   async getSessionStatus(): Promise<Record<string, SessionStatus>> {
@@ -225,13 +266,17 @@ export class StdioRuntimeClient implements RuntimeClient {
     m.messages = p.messages
     m.messageIndex = p.messageIndex
 
-    this.emitClientBlock(this.buildSseBlock("message.updated", {
+    const userMsgBlock = this.buildSseBlock("message.updated", {
       sessionID: sessionId,
       id: userMsgId,
       role: "user",
       parts: userParts,
-    }))
+    })
+    this.emitClientBlock(userMsgBlock)
+    this.syncBlockToDb(sessionId, userMsgBlock)
     this.emitClientBlock(this.buildSseBlock("session.status", { sessionID: sessionId, type: "busy" }))
+
+    if (info) this.syncSessionToDb(sessionId, info)
   }
 
   async abort(sessionId: string): Promise<void> {
@@ -440,6 +485,9 @@ export class StdioRuntimeClient implements RuntimeClient {
         this.emitClientBlock(this.buildSseBlock("session.status", { sessionID: sessionId, type: "idle" }))
         logger.info({ sessionId, code }, "claude subprocess exited normally")
       }
+
+      const exitInfo = this.sessionInfo.get(sessionId)
+      if (exitInfo) this.syncSessionToDb(sessionId, exitInfo)
     }).catch(() => {})
 
     return managed
@@ -505,10 +553,20 @@ export class StdioRuntimeClient implements RuntimeClient {
     for (const block of blocks) {
       this.pushBlock(m, block)
       this.emitClientBlock(block)
+      this.syncBlockToDb(sessionId, block)
     }
 
     this.syncFromState(sessionId, m)
     this.updateStatusFromLine(sessionId, m, trimmed)
+  }
+
+  private syncBlockToDb(sessionId: string, block: string): void {
+    if (!this.dbSync.onSseBlock) return
+    const eventMatch = block.match(/^event: (.+)\n/)
+    const dataMatch = block.match(/\ndata: (.+)\n/)
+    if (eventMatch && dataMatch) {
+      this.dbSync.onSseBlock(sessionId, eventMatch[1], dataMatch[1])
+    }
   }
 
   private syncFromState(sessionId: string, m: ManagedSession): void {
@@ -592,6 +650,21 @@ export class StdioRuntimeClient implements RuntimeClient {
   // Internal — used by ClaudeCodeProvider for teardown so it doesn't need to
   // reach into private fields.
   // -------------------------------------------------------------------------
+
+  hydrateFromDb(sessions: Array<{ id: string; title?: string; agent?: string; time?: { created?: number; updated?: number } }>): void {
+    for (const s of sessions) {
+      if (this.sessionInfo.has(s.id)) continue
+      this.sessionInfo.set(s.id, {
+        id: s.id,
+        title: s.title,
+        createdAt: s.time?.created
+          ? new Date(s.time.created).toISOString()
+          : new Date().toISOString(),
+        agent: s.agent,
+      })
+      this.spawnedOnce.add(s.id)
+    }
+  }
 
   killAll(): void {
     for (const [id, m] of this.managed) {
