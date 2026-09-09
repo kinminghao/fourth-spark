@@ -11,7 +11,7 @@ import { logger } from "../../middleware/logger"
 const MCP_FILE = ".mcp.json"
 const MCP_SERVER_KEY = "fourth-spark-git"
 
-export function injectMcpConfig(localPath: string, repoId: string, serverPort: number): void {
+export function injectMcpConfig(localPath: string, repoId: string, serverPort: number, sessionId?: string): void {
   const filePath = join(localPath, MCP_FILE)
   let config: Record<string, unknown> = {}
   try {
@@ -22,14 +22,18 @@ export function injectMcpConfig(localPath: string, repoId: string, serverPort: n
     // corrupt or missing — start fresh
   }
 
+  const mcpPath = sessionId
+    ? `/api/repos/${repoId}/mcp/s/${sessionId}`
+    : `/api/repos/${repoId}/mcp`
+
   const mcpServers = (config.mcpServers ?? {}) as Record<string, unknown>
   mcpServers[MCP_SERVER_KEY] = {
     type: "http",
-    url: `http://127.0.0.1:${serverPort}/api/repos/${repoId}/mcp`,
+    url: `http://127.0.0.1:${serverPort}${mcpPath}`,
   }
   config.mcpServers = mcpServers
   writeFileSync(filePath, JSON.stringify(config, null, 2) + "\n")
-  logger.info({ repoId, filePath }, "injected MCP config into .mcp.json for Claude Code")
+  logger.info({ repoId, sessionId, filePath }, "injected MCP config into .mcp.json for Claude Code")
 }
 
 export function removeMcpConfig(localPath: string): void {

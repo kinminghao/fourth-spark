@@ -95,22 +95,36 @@ function prToDb(repoId: string, pr: GitPullRequest) {
   }
 }
 
-async function findBusySessionId(repoId: string): Promise<string | null> {
+/**
+ * Resolve the session that initiated the MCP call. When `knownSessionId` is
+ * provided (session-specific MCP endpoint), return it directly. Otherwise fall
+ * back to runtime heuristic: return the session only when exactly ONE is busy.
+ * Multiple busy sessions → return null to avoid mis-association (#539).
+ */
+async function resolveSessionId(repoId: string, knownSessionId?: string): Promise<string | null> {
+  if (knownSessionId) return knownSessionId
+
   try {
     const client = runtimeManager.getClient(repoId)
     if (!client) return null
     const statuses = await client.getSessionStatus()
-    for (const [sessionId, status] of Object.entries(statuses)) {
-      if (status.type === "busy") return sessionId
+    const busySessions = Object.entries(statuses)
+      .filter(([_, status]) => status.type === "busy")
+
+    if (busySessions.length === 1) return busySessions[0][0]
+
+    if (busySessions.length > 1) {
+      logger.warn({ repoId, count: busySessions.length },
+        "multiple busy sessions — skipping auto-link to avoid mis-association")
     }
   } catch (err) {
-    logger.warn({ err, repoId }, "failed to find busy session for auto-link")
+    logger.warn({ err, repoId }, "failed to resolve session for auto-link")
   }
   return null
 }
 
-async function renameWorkspaceBranch(repoId: string, head: string): Promise<void> {
-  const sessionId = await findBusySessionId(repoId)
+async function renameWorkspaceBranch(repoId: string, head: string, knownSessionId?: string): Promise<void> {
+  const sessionId = await resolveSessionId(repoId, knownSessionId)
   if (!sessionId) return
 
   const [session] = await db.select({ workspaceId: sessionsTable.workspaceId })
@@ -140,8 +154,8 @@ async function renameWorkspaceBranch(repoId: string, head: string): Promise<void
   logger.info({ repoId, from: workspace.branch, to: head }, "MCP: renamed workspace branch for PR")
 }
 
-async function linkSessionTarget(repoId: string, type: "issue" | "pr", targetId: string): Promise<void> {
-  const sessionId = await findBusySessionId(repoId)
+async function linkSessionTarget(repoId: string, type: "issue" | "pr", targetId: string, knownSessionId?: string): Promise<void> {
+  const sessionId = await resolveSessionId(repoId, knownSessionId)
   if (!sessionId) return
   try {
     await db.insert(sessionLinks).values({
@@ -160,7 +174,7 @@ async function linkSessionTarget(repoId: string, type: "issue" | "pr", targetId:
 // MCP Server Factory — called per-request by createMcpHandler
 // ---------------------------------------------------------------------------
 
-function registerGitTools(server: McpServer, repoId: string): void {
+function registerGitTools(server: McpServer, repoId: string, sessionId?: string): void {
   // ── get_repo_info ────────────────────────────────────────────────────────
   server.registerTool(
     "get_repo_info",
@@ -245,7 +259,7 @@ function registerGitTools(server: McpServer, repoId: string): void {
         const values = issueToDb(repoId, issue)
         await db.insert(issues).values(values).onConflictDoNothing()
         logger.info({ repoId, issueNumber: issue.number }, "MCP: created issue")
-        await linkSessionTarget(repoId, "issue", values.id)
+        await linkSessionTarget(repoId, "issue", values.id, sessionId)
         return textResult(issue)
       } catch (err) {
         return errorResult(String(err))
@@ -383,7 +397,7 @@ function registerGitTools(server: McpServer, repoId: string): void {
       try {
         const { client } = await getClientForRepo(repoId)
 
-        await renameWorkspaceBranch(repoId, head)
+        await renameWorkspaceBranch(repoId, head, sessionId)
 
         let prBody = body ?? ""
         if (issue_number) {
@@ -398,7 +412,7 @@ function registerGitTools(server: McpServer, repoId: string): void {
         const { id: _prId, createdAt: _prCreatedAt, ...prUpdateSet } = prValues
         await db.insert(pullRequests).values(prValues).onConflictDoUpdate({ target: pullRequests.id, set: prUpdateSet })
 
-        await linkSessionTarget(repoId, "pr", prValues.id)
+        await linkSessionTarget(repoId, "pr", prValues.id, sessionId)
 
         if (issue_number) {
           try {
@@ -488,15 +502,15 @@ function registerGitTools(server: McpServer, repoId: string): void {
 export const gitToolProvider: McpToolProvider = {
   id: "fourth-spark-git",
   register(server, context: ToolContext) {
-    registerGitTools(server as McpServer, context.repoId)
+    registerGitTools(server as McpServer, context.repoId, context.sessionId)
   },
 }
 
-export function buildGitMcpServer(repoId: string): McpServer {
+export function buildGitMcpServer(repoId: string, sessionId?: string): McpServer {
   const server = new McpServer({
     name: "fourth-spark-git",
     version: "1.0.0",
   })
-  gitToolProvider.register(server, { repoId })
+  gitToolProvider.register(server, { repoId, sessionId })
   return server
 }
