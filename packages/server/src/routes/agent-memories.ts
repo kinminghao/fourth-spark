@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { z } from "zod"
 import { eq, and, isNull, desc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
@@ -13,6 +14,7 @@ import { DEFAULT_VARIANT } from "../lib/config"
 import { logger } from "../middleware/logger"
 import { unlink } from "node:fs/promises"
 import type { RuntimeClient } from "../core/runtime-client"
+import { parseBody } from "../lib/validation"
 
 async function requireMemoryEnabled(agentId: string): Promise<{ error?: string; status?: number }> {
   const [agent] = await db.select({ id: customAgents.id, memoryEnabled: customAgents.memoryEnabled })
@@ -22,6 +24,22 @@ async function requireMemoryEnabled(agentId: string): Promise<{ error?: string; 
   if (agent.memoryEnabled !== 1) return { error: "Memory is not enabled for this agent", status: 403 }
   return {}
 }
+
+const CreateMemoryBody = z.object({
+  content: z.string().min(1),
+  category: z.string().optional(),
+  importance: z.number().min(0).max(1).optional(),
+})
+
+const UpdateMemoryBody = z.object({
+  content: z.string().optional(),
+  category: z.string().optional(),
+  importance: z.number().min(0).max(1).optional(),
+})
+
+const ExtractMemoriesBody = z.object({
+  sessionIds: z.array(z.string()).min(1),
+})
 
 export const agentMemoryRoutes = new Hono()
 
@@ -95,8 +113,8 @@ agentMemoryRoutes.post("/", async (c) => {
   const check = await requireMemoryEnabled(agentId)
   if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
 
-  const body = await c.req.json<{ content: string; category?: string; importance?: number }>()
-  if (!body.content) return c.json({ error: "content is required", status: 400 }, 400)
+  const [body, err] = await parseBody(c, CreateMemoryBody)
+  if (err) return err
 
   const now = Date.now()
   const id = `mem_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`
@@ -123,7 +141,8 @@ agentMemoryRoutes.put("/:memId", async (c) => {
   const check = await requireMemoryEnabled(agentId)
   if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
 
-  const body = await c.req.json<{ content?: string; category?: string; importance?: number }>()
+  const [body, err] = await parseBody(c, UpdateMemoryBody)
+  if (err) return err
 
   const [existing] = await db.select().from(agentMemories)
     .where(and(eq(agentMemories.id, memId), eq(agentMemories.customAgentId, agentId)))
@@ -186,8 +205,8 @@ agentMemoryRoutes.post("/extract", async (c) => {
   const check = await requireMemoryEnabled(agentId)
   if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
 
-  const body = await c.req.json<{ sessionIds: string[] }>()
-  if (!body.sessionIds?.length) return c.json({ error: "sessionIds is required", status: 400 }, 400)
+  const [body, err] = await parseBody(c, ExtractMemoriesBody)
+  if (err) return err
 
   const validSessions = await db.select({ id: sessionsTable.id })
     .from(sessionsTable)

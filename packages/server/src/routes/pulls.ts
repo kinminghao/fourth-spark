@@ -1,10 +1,24 @@
 import { Hono } from "hono"
+import { z } from "zod"
 import { eq, and, desc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { pullRequests, prIssueLinks, issues, repos } from "../db/schema"
 import { parseGitUrl } from "../lib/git-url"
 import { createGitIssueClient, getHostInfo, GitApiError, type GitPullRequest } from "../lib/git-provider"
 import { logger } from "../middleware/logger"
+import { parseBody, parseOptionalBody } from "../lib/validation"
+
+// ---------------------------------------------------------------------------
+// Request body schemas
+// ---------------------------------------------------------------------------
+
+const SyncPullsBody = z.object({
+  state: z.enum(["open", "closed", "all"]).optional(),
+})
+
+const LinkIssueBody = z.object({
+  issueNumber: z.number().int().positive(),
+})
 
 export const pullRoutes = new Hono()
 
@@ -109,8 +123,9 @@ pullRoutes.post("/sync", async (c) => {
 
   const client = createGitIssueClient(remote.host, remote.owner, remote.repo, info.token, info.platform)
 
-  const body = await c.req.json<{ state?: "open" | "closed" | "all" }>().catch(() => null)
-  const state = body?.state ?? "all"
+  const [body, err] = await parseOptionalBody(c, SyncPullsBody)
+  if (err) return err
+  const state = body.state ?? "all"
 
   let page = 1
   let total = 0
@@ -351,8 +366,8 @@ pullRoutes.post("/:number/issues", async (c) => {
   const number = Number(c.req.param("number"))
   if (!Number.isFinite(number)) return c.json({ error: "invalid PR number" }, 400)
 
-  const body = await c.req.json<{ issueNumber: number }>().catch(() => null)
-  if (!body?.issueNumber) return c.json({ error: "issueNumber is required" }, 400)
+  const [body, err] = await parseBody(c, LinkIssueBody)
+  if (err) return err
 
   const pid = prId(repoId, number)
   const iid = `${repoId}_${body.issueNumber}`

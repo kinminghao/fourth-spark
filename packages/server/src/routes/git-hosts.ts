@@ -1,7 +1,23 @@
 import { Hono } from "hono"
+import { z } from "zod"
 import { eq } from "drizzle-orm"
 import { db } from "../db/index"
 import { gitHosts } from "../db/schema"
+import { parseBody } from "../lib/validation"
+
+const CreateGitHostBody = z.object({
+  host: z.string().min(1),
+  platform: z.string().optional(),
+  name: z.string().min(1),
+  token: z.string().min(1),
+})
+
+const UpdateGitHostBody = z.object({
+  host: z.string().optional(),
+  platform: z.string().optional(),
+  name: z.string().optional(),
+  token: z.string().optional(),
+})
 
 export const gitHostRoutes = new Hono()
 
@@ -11,10 +27,8 @@ gitHostRoutes.get("/", async (c) => {
 })
 
 gitHostRoutes.post("/", async (c) => {
-  const body = await c.req.json<{ host?: string; platform?: string; name?: string; token?: string }>().catch(() => null)
-  if (!body?.host || !body?.token || !body?.name) {
-    return c.json({ error: "host, name, and token are required" }, 400)
-  }
+  const [body, err] = await parseBody(c, CreateGitHostBody)
+  if (err) return err
   const now = Date.now()
   const id = crypto.randomUUID()
   const values = {
@@ -32,8 +46,8 @@ gitHostRoutes.post("/", async (c) => {
 
 gitHostRoutes.put("/:id", async (c) => {
   const id = c.req.param("id")
-  const body = await c.req.json<{ host?: string; platform?: string; name?: string; token?: string }>().catch(() => null)
-  if (!body) return c.json({ error: "empty body" }, 400)
+  const [body, err] = await parseBody(c, UpdateGitHostBody)
+  if (err) return err
 
   const updates: Record<string, unknown> = { updatedAt: Date.now() }
   if (body.host) updates.host = body.host.toLowerCase().trim()

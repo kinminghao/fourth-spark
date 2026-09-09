@@ -1,8 +1,14 @@
 import { Hono } from "hono"
+import { z } from "zod"
 import { getWorkerConfig, getDefaultWorkerId } from "../lib/config"
 import { CLOUD_ROUTES, NETWORK_TIMEOUT_MS } from "../lib/lease-constants"
 import { runtimeManager } from "../lib/process-manager"
+import { parseBody } from "../lib/validation"
 import { logger } from "../middleware/logger"
+
+const CloudTestBody = z.object({
+  url: z.string().min(1),
+})
 
 export const cloudRoutes = new Hono()
 
@@ -70,8 +76,8 @@ cloudRoutes.post("/reload", async (c) => {
 })
 
 cloudRoutes.post("/test", async (c) => {
-  const body = await c.req.json<{ url?: string }>().catch(() => null)
-  if (!body?.url || typeof body.url !== "string") return c.json({ error: "url is required" }, 400)
+  const [body, err] = await parseBody(c, CloudTestBody)
+  if (err) return err
   const connected = await probeMaster(body.url)
   return c.json({ connected })
 })

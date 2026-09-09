@@ -1,13 +1,31 @@
 import { Hono } from "hono"
+import { z } from "zod"
 import { eq, and, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { tags, issueTags, issues } from "../db/schema"
+import { parseBody } from "../lib/validation"
 
 export const tagRoutes = new Hono()
 
 function tagId(repoId: string, name: string): string {
   return `${repoId}_tag_${name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`
 }
+
+const CreateTagBody = z.object({
+  name: z.string().min(1),
+  color: z.string().optional(),
+  description: z.string().optional(),
+})
+
+const UpdateTagBody = z.object({
+  name: z.string().optional(),
+  color: z.string().optional(),
+  description: z.string().optional(),
+})
+
+const SetIssueTagsBody = z.object({
+  tagIds: z.array(z.string()),
+})
 
 // GET /tags — list all tags for this repo
 tagRoutes.get("/", async (c) => {
@@ -19,8 +37,8 @@ tagRoutes.get("/", async (c) => {
 // POST /tags — create a new tag
 tagRoutes.post("/", async (c) => {
   const repoId = c.req.param("repoId")!
-  const body = await c.req.json<{ name: string; color?: string; description?: string }>().catch(() => null)
-  if (!body?.name?.trim()) return c.json({ error: "name is required" }, 400)
+  const [body, err] = await parseBody(c, CreateTagBody)
+  if (err) return err
 
   const name = body.name.trim()
   const id = tagId(repoId, name)
@@ -43,8 +61,8 @@ tagRoutes.post("/", async (c) => {
 // PATCH /tags/:id — update a tag
 tagRoutes.patch("/:id", async (c) => {
   const id = c.req.param("id")!
-  const body = await c.req.json<{ name?: string; color?: string; description?: string }>().catch(() => null)
-  if (!body) return c.json({ error: "empty body" }, 400)
+  const [body, err] = await parseBody(c, UpdateTagBody)
+  if (err) return err
 
   const updates: Record<string, unknown> = {}
   if (body.name !== undefined) updates.name = body.name.trim()
@@ -74,8 +92,8 @@ tagRoutes.put("/issues/:number/tags", async (c) => {
   const number = Number(c.req.param("number"))
   if (!Number.isFinite(number)) return c.json({ error: "invalid issue number" }, 400)
 
-  const body = await c.req.json<{ tagIds: string[] }>().catch(() => null)
-  if (!body || !Array.isArray(body.tagIds)) return c.json({ error: "tagIds array is required" }, 400)
+  const [body, err] = await parseBody(c, SetIssueTagsBody)
+  if (err) return err
 
   const issueIdVal = `${repoId}_${number}`
 

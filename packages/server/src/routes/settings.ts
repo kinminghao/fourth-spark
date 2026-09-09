@@ -1,7 +1,13 @@
 import { Hono } from "hono"
 import { eq } from "drizzle-orm"
+import { z } from "zod"
 import { db } from "../db/index"
 import { settings } from "../db/schema"
+import { parseBody } from "../lib/validation"
+
+const UpdateSettingBody = z.object({
+  value: z.string(),
+})
 
 export const settingsRoutes = new Hono()
 
@@ -14,10 +20,8 @@ settingsRoutes.get("/", async (c) => {
 
 settingsRoutes.put("/:key", async (c) => {
   const key = c.req.param("key")
-  const body = await c.req.json<{ value?: string }>().catch(() => null)
-  if (!body || typeof body.value !== "string") {
-    return c.json({ error: "body must include a string 'value'" }, 400)
-  }
+  const [body, err] = await parseBody(c, UpdateSettingBody)
+  if (err) return err
   const now = Date.now()
   await db.insert(settings).values({ key, value: body.value, updatedAt: now })
     .onConflictDoUpdate({ target: settings.key, set: { value: body.value, updatedAt: now } })

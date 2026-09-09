@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { eq } from "drizzle-orm"
 import { basename, resolve, join } from "node:path"
+import { z } from "zod"
 import { db } from "../db/index"
 import { repos } from "../db/schema"
 import { runtimeManager } from "../lib/process-manager"
@@ -8,6 +9,30 @@ import { existsSync, mkdirSync } from "node:fs"
 import { homedir } from "node:os"
 import { runGit, runGitWithRetry, withRepoLock, cleanupStaleLock, pruneRemoteRefs, classifyGitError } from "../lib/git-runner"
 import { parseGitUrl, normalizeGitUrl } from "../lib/git-url"
+import { parseBody } from "../lib/validation"
+
+const ResolveRepoBody = z.object({
+  localPath: z.string().min(1),
+})
+const CloneRepoBody = z.object({
+  gitUrl: z.string().min(1),
+  targetDir: z.string().optional(),
+})
+const CreateRepoBody = z.object({
+  name: z.string().min(1),
+  gitUrl: z.string().min(1),
+  localPath: z.string().min(1),
+  runtimeType: z.string().optional(),
+})
+const CheckoutBody = z.object({
+  branch: z.string().min(1),
+})
+const UpdateRuntimeBody = z.object({
+  runtimeType: z.string().min(1),
+})
+const UpdateWorktreeBody = z.object({
+  enabled: z.boolean(),
+})
 
 export const repoRoutes = new Hono()
 
@@ -18,10 +43,8 @@ function getBranch(localPath: string): string | null {
 
 // POST /api/repos/resolve — read .git directory to extract repo name and remote URL.
 repoRoutes.post("/resolve", async (c) => {
-  const body = await c.req.json<{ localPath?: string }>().catch(() => null)
-  if (!body?.localPath) {
-    return c.json({ error: "localPath is required", status: 400 }, 400)
-  }
+  const [body, err] = await parseBody(c, ResolveRepoBody)
+  if (err) return err
 
   const localPath = body.localPath.replace(/\/+$/, "")
 
@@ -44,10 +67,8 @@ repoRoutes.post("/resolve", async (c) => {
 
 // POST /api/repos/clone — clone a git repo to a local directory.
 repoRoutes.post("/clone", async (c) => {
-  const body = await c.req.json<{ gitUrl?: string; targetDir?: string }>().catch(() => null)
-  if (!body?.gitUrl) {
-    return c.json({ error: "gitUrl is required", status: 400 }, 400)
-  }
+  const [body, err] = await parseBody(c, CloneRepoBody)
+  if (err) return err
 
   const gitUrl = body.gitUrl.trim()
 
@@ -94,10 +115,8 @@ repoRoutes.post("/clone", async (c) => {
 
 // POST /api/repos — register a new repo and start its runtime.
 repoRoutes.post("/", async (c) => {
-  const body = await c.req.json<{ name?: string; gitUrl?: string; localPath?: string; runtimeType?: string }>().catch(() => null)
-  if (!body || !body.name || !body.gitUrl || !body.localPath) {
-    return c.json({ error: "Body must include name, gitUrl, and localPath", status: 400 }, 400)
-  }
+  const [body, err] = await parseBody(c, CreateRepoBody)
+  if (err) return err
 
   if (!existsSync(body.localPath)) {
     return c.json({ error: `Local path does not exist: ${body.localPath}`, status: 400 }, 400)
@@ -212,10 +231,8 @@ repoRoutes.post("/:id/checkout", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
 
-  const body = await c.req.json<{ branch?: string }>().catch(() => null)
-  if (!body?.branch) {
-    return c.json({ error: "branch is required", status: 400 }, 400)
-  }
+  const [body, err] = await parseBody(c, CheckoutBody)
+  if (err) return err
   const targetBranch = body.branch
 
   return await withRepoLock(repo.localPath, () => {
@@ -289,10 +306,8 @@ repoRoutes.post("/:id/pull", async (c) => {
 
 repoRoutes.patch("/:id/runtime", async (c) => {
   const id = c.req.param("id")
-  const body = await c.req.json<{ runtimeType: string }>().catch(() => null)
-  if (!body?.runtimeType || typeof body.runtimeType !== "string") {
-    return c.json({ error: "'runtimeType' string is required" }, 400)
-  }
+  const [body, err] = await parseBody(c, UpdateRuntimeBody)
+  if (err) return err
   const [repo] = await db.select().from(repos).where(eq(repos.id, id))
   if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
 
@@ -311,10 +326,8 @@ repoRoutes.patch("/:id/runtime", async (c) => {
 
 repoRoutes.patch("/:id/worktree", async (c) => {
   const id = c.req.param("id")
-  const body = await c.req.json<{ enabled: boolean }>().catch(() => null)
-  if (!body || typeof body.enabled !== "boolean") {
-    return c.json({ error: "'enabled' boolean is required" }, 400)
-  }
+  const [body, err] = await parseBody(c, UpdateWorktreeBody)
+  if (err) return err
   await db.update(repos).set({ worktreeEnabled: body.enabled ? 1 : 0, updatedAt: Date.now() }).where(eq(repos.id, id))
   return c.json({ ok: true, worktreeEnabled: body.enabled })
 })
