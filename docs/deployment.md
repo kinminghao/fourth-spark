@@ -262,18 +262,6 @@ fourth-spark/
 | `STATIC_DIR` | `{二进制目录}/public` | 前端静态文件目录 |
 | `APP_VERSION` | git commit hash | 版本号（构建时注入） |
 
-### APNs 推送（可选）
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `APNS_KEY_ID` | (空) | Apple Push Key ID |
-| `APNS_TEAM_ID` | (空) | Apple Team ID |
-| `APNS_KEY_PATH` | (空) | `.p8` 密钥文件路径 |
-| `APNS_BUNDLE_ID` | `com.fourthspark.app` | App Bundle ID |
-| `APNS_PRODUCTION` | `false` | 是否使用 APNs 生产环境 |
-
-> 未配置 APNs 变量时，推送功能静默跳过，不影响 Server 运行。
-
 ### 数据库
 
 PostgreSQL 连接参数通过 Docker Compose 配置：
@@ -297,7 +285,6 @@ POSTGRES_DB: fourth_spark
 - [ ] 端口 5432 可用（PostgreSQL）
 - [ ] 端口 8081–8199 范围可用（OpenCode 子进程）
 - [ ] （可选）Claude Code CLI 已安装
-- [ ] （可选）配置 APNs 环境变量以启用 iOS 推送
 - [ ] （可选）配置 `EXTRA_ORIGINS` 以允许额外的前端来源
 
 ```bash

@@ -102,16 +102,6 @@ out of usage | out of quota | 5-hour | weekly limit | exceed
 - 仅在 macOS 平台生效
 - 通知内容：Session 开始 / 完成 / 重试 / 账号切换 / 切换失败
 
-### iOS APNs 推送
-
-- JWT 鉴权（ES256 签名，50 分钟缓存）
-- 配置项：`APNS_KEY_ID` / `APNS_TEAM_ID` / `APNS_KEY_PATH` / `APNS_BUNDLE_ID`
-- 支持 Sandbox 和 Production 环境（`APNS_PRODUCTION` 开关）
-- 推送 payload 包含 `sessionId`，用于 iOS App 点击跳转
-- 设备 token 通过 `POST /api/push/register` 注册
-- 收到 APNs 410 响应时自动清理失效的设备 token
-- 所有已注册设备并行推送
-
 ### 通知去重
 
 - 同一 Session 的通知 30 秒冷却期

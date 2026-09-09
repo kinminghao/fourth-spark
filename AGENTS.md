@@ -21,6 +21,8 @@ Server (Bun+Hono :3000, HTTPS :3443)
     │   ├── ClaudeCodeProvider → claude -p (stdio, 一个子进程/session)
     │   └── ... (可插拔 RuntimeProvider)
     │
+    ├── SessionMonitor ── 状态轮询 / 截断续写 / 空响应重试 / 停滞检测
+    ├── AccountPool ───── 本地多账号轮换 或 Cloud 账号池 (lease)
     ├── SyncScheduler ── 每小时自动同步 Issue/PR/Milestone/Comment/Tag
     ├── SenseVoice ───── 本地语音转文字
     ├── TLS Manager ──── 自签证书 LAN HTTPS

@@ -8,7 +8,7 @@
 - **ORM**：Drizzle ORM，schema 定义在 `packages/server/src/db/schema.ts`
 - **迁移**：开发环境用 `drizzle-kit push` 直接推送 schema；生产环境用 `drizzle-kit generate` + SQL 迁移文件
 
-## Schema（19 张表）
+## Schema（20 张表）
 
 ### 核心业务表
 
@@ -49,6 +49,7 @@
 | `settings` | 键值配置 | key, value |
 | `git_hosts` | Git 平台凭证 | host, platform, name, token |
 | `session_links` | Session ↔ Issue/PR 关联 | session_id, type, target_id |
+| `todos` | 会话 Todo 列表 | session_id, position, content, status, priority |
 
 ## 同步机制
 

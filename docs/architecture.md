@@ -8,7 +8,9 @@
 │  React 19 + Vite + Zustand                              │
 │                                                         │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐ │
-│  │ ReposPage│ │ RunPage  │ │IssuesPage│ │SettingsPage│ │
+│  │ ReposPage│ │ RunPage  │ │ DevPage  │ │SettingsPage│ │
+│  ├──────────┤ ├──────────┤ │(Issues+PR│ ├────────────┤ │
+│  │  Agents  │ │Analytics │ │ tabs)    │ │AgentDetail │ │
 │  └──────────┘ └──────────┘ └──────────┘ └────────────┘ │
 │        │           │             │             │        │
 │        └───────────┴──────┬──────┴─────────────┘        │
@@ -20,10 +22,11 @@
 │  Server (Bun + Hono :3000 / HTTPS :3443)                   │
 │                                                            │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │  Routes (22 模块)                                    │   │
+│  │  Routes (23 模块)                                    │   │
 │  │  repos · sessions · events · agents · issues · pulls │   │
 │  │  tags · milestones · models · settings · health      │   │
-│  │  workspaces · transcribe · cloud · agent-memories .. │   │
+│  │  workspaces · transcribe · cloud · agent-memories    │   │
+│  │  analytics · fs · custom-agents · prompt-fragments ..│   │
 │  └──────────────────────┬──────────────────────────────┘   │
 │                         │                                  │
 │  ┌──────────────────────┴──────────────────────────────┐   │
@@ -44,14 +47,15 @@
 │  │  SenseVoice ─────── 本地语音转文字 (离线 STT)         │   │
 │  │  TLS Manager ────── 自签证书、LAN HTTPS               │   │
 │  │  MemoryExtractor ── Agent 记忆提取与管理               │   │
+│  │  MemoryConsolid. ── 记忆合并与归并                     │   │
 │  │  GitProvider ────── GitHub/Gitea/GitLab 统一抽象       │   │
 │  │  MCP Server ─────── 给 Agent 暴露 Git 平台工具 (13个) │   │
-│  │  APNs / Notify ──── iOS 推送 + macOS 桌面通知          │   │
+│  │  LogRotate ──────── 运行时进程日志轮转                 │   │
 │  └──────────────────────┬──────────────────────────────┘   │
 │                         │                                  │
 │  ┌──────────────────────┴──────────────────────────────┐   │
 │  │  Drizzle ORM → PostgreSQL (Docker :5432)             │   │
-│  │  21 tables: repos, sessions, messages, parts, todos, │   │
+│  │  20 tables: repos, sessions, messages, parts, todos, │   │
 │  │  issues, pulls, tags, milestones, agentMemories ...  │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                            │
@@ -158,7 +162,7 @@ fourth-spark/
 │   │   │   │   ├── query.ts     # 通用查询辅助
 │   │   │   │   ├── sync.ts      # Runtime → PostgreSQL 数据同步
 │   │   │   │   └── migrate.ts   # 生产环境 migration 执行
-│   │   │   ├── lib/                             # 服务模块 (28 个)
+│   │   │   ├── lib/                             # 服务模块 (27 个)
 │   │   │   │   ├── process-manager.ts           # 薄包装：注册 Provider → 导出 runtimeManager
 │   │   │   │   ├── session-monitor.ts           # 会话状态监控与自动恢复
 │   │   │   │   ├── sync-scheduler.ts            # 每小时全量同步 Issue/PR/Comment/Tag
@@ -183,13 +187,14 @@ fourth-spark/
 │   │   │   │   ├── git-runner.ts                # Git 命令执行器
 │   │   │   │   ├── system-agents.ts             # 内置 Agent 初始化
 │   │   │   │   ├── opencode.ts                  # OpenCode REST API 辅助
-│   │   │   │   ├── apns.ts                      # Apple Push Notification
-│   │   │   │   ├── notify.ts                    # macOS 桌面通知
+│   │   │   │   ├── memory-consolidation.ts      # Agent 记忆合并与归并
+│   │   │   │   ├── log-rotate.ts                # 运行时进程日志轮转
+│   │   │   │   ├── claude-onboard.ts            # Claude 初始化引导流程
 │   │   │   │   ├── lockfile.ts                  # 进程锁文件
 │   │   │   │   └── config.ts                    # 环境变量、端口、版本、Worker 配置
 │   │   │   ├── mcp/
 │   │   │   │   └── git-tools.ts         # MCP Server: 13 个 Git 平台工具
-│   │   │   ├── routes/                  # Hono 路由 (22 模块)
+│   │   │   ├── routes/                  # Hono 路由 (23 模块)
 │   │   │   │   ├── repos.ts             # 仓库 CRUD + 进程控制
 │   │   │   │   ├── sessions.ts          # 会话管理 + prompt
 │   │   │   │   ├── events.ts            # SSE 事件流代理
@@ -209,7 +214,8 @@ fourth-spark/
 │   │   │   │   ├── cloud.ts             # Cloud 账号池管理
 │   │   │   │   ├── transcribe.ts        # 语音转文字 (SenseVoice)
 │   │   │   │   ├── workspaces.ts        # Workspace 管理
-│   │   │   │   ├── push.ts              # 设备 Token 注册
+│   │   │   │   ├── analytics.ts          # 费用分析统计
+│   │   │   │   ├── fs.ts                # 文件系统浏览
 │   │   │   │   ├── health.ts            # 健康检查
 │   │   │   │   └── mcp.ts              # MCP 协议路由
 │   │   │   └── middleware/
@@ -225,34 +231,56 @@ fourth-spark/
 │           ├── pages/
 │           │   ├── ReposPage.tsx         # 仓库列表 + 注册
 │           │   ├── RunPage.tsx           # Agent 对话主界面
-│           │   ├── IssuesPage.tsx        # Issue 管理
-│           │   ├── PullRequestsPage.tsx  # PR 管理
-│           │   └── SettingsPage.tsx      # 设置 (Git Host、AGENTS.md、账号)
-│           ├── components/              # 16 个 UI 组件
+│           │   ├── DevPage.tsx           # Issue/PR Tab 切换容器
+│           │   ├── IssuesPage.tsx        # Issue 管理（DevPage 子视图）
+│           │   ├── PullRequestsPage.tsx  # PR 管理（DevPage 子视图）
+│           │   ├── AgentsPage.tsx        # 自定义 Agent 列表 + 管理
+│           │   ├── AgentDetailPage.tsx   # Agent 详情编辑
+│           │   ├── AnalyticsPage.tsx     # 费用分析仪表盘
+│           │   └── SettingsPage.tsx      # 设置 (Git Host、AGENTS.md、账号、模型、诊断)
+│           ├── components/              # 31 个 UI 组件
 │           │   ├── Layout.tsx           # 全局布局 + 侧边栏导航
 │           │   ├── RunView.tsx          # 消息列表渲染
+│           │   ├── SessionSidebar.tsx   # 会话列表侧边栏
 │           │   ├── InputBar.tsx         # 消息输入框
 │           │   ├── VoiceButton.tsx      # 语音输入按钮 (SenseVoice)
+│           │   ├── VoiceOverlay.tsx     # 语音录制浮层
 │           │   ├── Attachments.tsx      # 文件附件选择
-│           │   ├── SidePanel.tsx        # 会话列表侧边栏
+│           │   ├── SidePanel.tsx        # 文件预览侧边栏
 │           │   ├── ToolCallPanel.tsx    # 工具调用展开面板
 │           │   ├── TodoProgress.tsx     # Todo 进度条
 │           │   ├── ExecutionBlock.tsx   # 执行块渲染
-│           │   ├── ModelCombobox.tsx    # 模型选择下拉
 │           │   ├── QuestionPanel.tsx    # Agent 提问交互
 │           │   ├── MarkdownTable.tsx    # Markdown 表格渲染
 │           │   ├── SwipeDrawer.tsx      # 移动端侧滑抽屉
-│           │   └── ...
-│           ├── stores/                  # Zustand 状态管理 (10 个)
+│           │   ├── GuideTour.tsx        # 新手引导浮层
+│           │   ├── DirectoryBrowser.tsx # 文件系统浏览器
+│           │   ├── AddRepoModal.tsx     # 添加仓库弹窗
+│           │   ├── AgentsMdModal.tsx    # AGENTS.md 编辑弹窗
+│           │   ├── CommentComposer.tsx  # Issue/PR 评论编辑器
+│           │   ├── IssueTree.tsx        # Issue 层级树
+│           │   ├── IssueFilters.tsx     # Issue 筛选器
+│           │   ├── IssueRow.tsx         # Issue 列表行
+│           │   ├── IssueDetailPanel.tsx # Issue 详情面板
+│           │   ├── IssueDetailWithTabs.tsx # Issue 详情 Tab 视图
+│           │   ├── IssueCreateForm.tsx  # Issue 创建表单
+│           │   ├── PrRow.tsx            # PR 列表行
+│           │   ├── PrDetailPanel.tsx    # PR 详情面板
+│           │   ├── LinkedIssueList.tsx  # Session 关联 Issue 列表
+│           │   ├── LinkedPrList.tsx     # Session 关联 PR 列表
+│           │   ├── ErrorBoundary.tsx    # 错误边界 + 崩溃兜底
+│           │   └── ToastContainer.tsx   # Toast 通知容器
+│           ├── stores/                  # Zustand 状态管理 (11 个)
 │           │   ├── repo-store.ts        # 仓库列表 + 活跃仓库
 │           │   ├── session-store.ts     # 会话、消息、状态
 │           │   ├── agent-store.ts       # 内置 Agent 列表
 │           │   ├── custom-agent-store.ts # 自定义 Agent
 │           │   ├── issue-store.ts       # Issue 数据
 │           │   ├── pr-store.ts          # PR 数据
+│           │   ├── analytics-store.ts   # 费用分析数据 + 轮询
 │           │   ├── draft-store.ts       # 消息草稿自动保存
-│           │   ├── layout-store.ts      # 布局状态
-│           │   ├── theme-store.ts       # 主题 (dark/light)
+│           │   ├── layout-store.ts      # 布局状态（含引导状态）
+│           │   ├── theme-store.ts       # 主题 (system/dark/light)
 │           │   └── toast-store.ts       # Toast 通知
 │           ├── lib/                     # 核心逻辑
 │           │   ├── api-client.ts        # 后端 API 封装
@@ -262,7 +290,10 @@ fourth-spark/
 │           │   ├── global-event-dispatcher.ts # SSE 事件分发
 │           │   ├── sse-events.ts        # SSE 消息解析
 │           │   ├── message-parts.ts     # 消息内容类型处理
-│           │   ├── push-notifications.ts # Capacitor 推送
+│           │   ├── freeze-monitor.ts    # UI 卡顿检测
+│           │   ├── date-utils.ts        # 日期格式化
+│           │   ├── format.ts            # 文本格式化
+│           │   ├── git-url.ts           # Git URL 解析
 │           │   └── config.ts            # API 地址配置
 │           └── hooks/
 │
@@ -368,6 +399,14 @@ Claude 订阅账号的自动轮换：
 - **分类** — general/decision/lesson/preference/pattern 五种记忆分类
 - **重要度** — 0–1 浮点评分，reinforce 操作自动提升 20%
 - **合并** — 多条旧记忆可合并为一条新记忆，旧记忆标记 supersededBy
+
+### MemoryConsolidation (`lib/memory-consolidation.ts`)
+
+Agent 记忆合并与归并：
+
+- **合并** — 多条语义重叠的旧记忆合并为一条新记忆，旧记忆标记 `supersededBy`
+- **归并策略** — 按 Agent 分组，计算重叠度，超阈值自动合并
+- **与 MemoryExtractor 配合** — Extractor 提取新记忆，Consolidation 归并冗余
 
 ### MCP Server (`mcp/git-tools.ts`)
 
