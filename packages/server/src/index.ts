@@ -191,13 +191,9 @@ async function startup() {
     logger.warn({ err }, "TLS certificate setup failed — HTTPS disabled")
   }
 
-  try {
-    await initWorkerConfig(getSetting)
-    await runtimeManager.startAll()
-    logger.info("all repos initialized")
-  } catch (err) {
-    logger.error({ err }, "failed to initialize repos")
-  }
+  await initWorkerConfig(getSetting)
+  await runtimeManager.startAll()
+  logger.info("all repos initialized")
 
   startSyncScheduler()
 
