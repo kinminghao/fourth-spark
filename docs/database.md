@@ -1,6 +1,6 @@
 # 数据库设计
 
-PostgreSQL 16，通过 Docker 运行，使用 [Drizzle ORM](https://orm.drizzle.team/) 管理 schema。
+PostgreSQL 16，通过 Docker 运行，使用 [Drizzle ORM](https://orm.drizzle.team/) 管理 schema。共 20 张表。
 
 ## 表关系概览
 
@@ -30,7 +30,6 @@ repos ─────────────┬──── milestones
 
 settings              (全局 KV，无 FK)
 gitHosts              (Git 平台凭证，无 FK)
-deviceTokens          (iOS 推送 Token，无 FK)
 ```
 
 ## 表定义
@@ -305,16 +304,6 @@ deviceTokens          (iOS 推送 Token，无 FK)
 | platform | text | `github` / `gitea` / `gitlab` |
 | name | text | 显示名称 |
 | token | text | Access Token |
-| createdAt | bigint | 创建时间戳 |
-| updatedAt | bigint | 更新时间戳 |
-
-### deviceTokens — 推送设备
-
-| 列 | 类型 | 说明 |
-|----|------|------|
-| id | text PK | UUID |
-| token | text (unique) | APNs 设备 Token |
-| platform | text | `ios` |
 | createdAt | bigint | 创建时间戳 |
 | updatedAt | bigint | 更新时间戳 |
 

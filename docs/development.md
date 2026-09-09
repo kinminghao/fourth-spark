@@ -95,7 +95,7 @@ make db-migrate    # 执行 migration
 
 ## 路由结构
 
-所有 API 路由挂在两个层级（22 个路由模块）：
+所有 API 路由挂在两个层级（23 个路由模块）：
 
 ```
 /api/                          全局路由
@@ -105,13 +105,14 @@ make db-migrate    # 执行 migration
 ├── health                     服务健康检查
 ├── usage                      用量统计 + 账号切换
 ├── cloud                      Cloud 账号池管理
-├── push                       设备 Token 注册
 ├── transcribe                 语音转文字 (SenseVoice)
 ├── agents-md                  全局 AGENTS.md
 ├── custom-agents              全局自定义 Agent
 ├── custom-agents/:id/memories Agent 记忆 CRUD
 ├── custom-agents/:id/sessions Agent 可提取会话列表
-└── prompt-fragments           全局 Prompt 片段
+├── prompt-fragments           全局 Prompt 片段
+├── analytics                  费用分析统计
+└── fs                         文件系统浏览
 
 /api/repos/:repoId/            仓库作用域路由
 ├── sessions                   会话管理 + prompt

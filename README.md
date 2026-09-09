@@ -22,8 +22,7 @@ Server (Bun + Hono :3000 / HTTPS :3443)
     ├── MCP Server ──────── Git 平台操作代理 (GitHub · Gitea · GitLab)
     ├── SenseVoice ──────── 本地语音转文字 (离线 STT)
     ├── TLS Manager ─────── 自签证书，LAN HTTPS 访问
-    ├── Notifications ───── macOS 桌面通知 + iOS APNs 推送
-    └── PostgreSQL ──────── 21 张表全量持久化
+    └── PostgreSQL ──────── 20 张表全量持久化
 ```
 
 每个仓库对应一个独立的 Agent 运行时进程（OpenCode 或 Claude Code），端口/进程自动管理，互不干扰。
@@ -56,19 +55,23 @@ fourth-spark start              # 拉起 PostgreSQL + 后台启动
 
 **[Session 管理](docs/features/session-management.md)** — 会话可与 Issue / PR 双向关联，侧边栏查看关联历史；支持按 Custom Agent 和模型新建会话，模型可从钉选列表快速选择
 
-**[智能运维](docs/features/smart-ops.md)** — Claude 多账号自动轮换（cooldown 持久化跨重启恢复）、会话中断自动恢复、截断自动续写（带停滞检测）、空响应自动重试、桌面（macOS）和 iOS 推送通知
+**[智能运维](docs/features/smart-ops.md)** — Claude 多账号自动轮换（cooldown 持久化跨重启恢复）、会话中断自动恢复、截断自动续写（带停滞检测）、空响应自动重试、macOS 桌面通知
 
 **[Cloud 账号池](docs/features/cloud-account-pool.md)** — 可选连接 [claude-accounts-pool](https://github.com/nicepkg/claude-accounts-pool) Master 服务器，多台机器共享账号池，自动 lease 续约和 rate limit 上报，在设置页面一键切换本地 / 云端模式
 
 **语音输入** — 集成 SenseVoice 本地语音识别（~240 MB 模型，首次启动自动下载），支持离线语音转文字输入 Agent 对话
 
-**Agent 记忆** — 自定义 Agent 的会话记忆自动提取与管理，支持新增、更新、合并、强化等操作，按分类和重要度排序，跨会话持久化
+**Agent 记忆** — 自定义 Agent 的会话记忆自动提取与管理，支持新增、更新、合并、强化等操作，按分类和重要度排序，跨会话持久化；支持记忆合并（consolidation）自动归并冗余记忆
+
+**费用分析** — Analytics 仪表盘按时间范围、仓库、Agent 维度展示 Token 消耗和费用趋势图表，支持日粒度成本追踪
+
+**新手引导** — 首次使用时自动启动交互式 Guide Tour，按步骤引导注册仓库、创建会话、发送消息等核心操作
 
 **后台数据同步** — SyncScheduler 每小时自动从 Git 平台全量同步 Issue、PR、Milestone、Comment、Tag，无需手动触发
 
 **LAN HTTPS 访问** — TLS Manager 自动生成自签证书，局域网内其他设备可通过 HTTPS :3443 安全访问
 
-**[数据持久化](docs/features/data-persistence.md)** — 会话、消息、工具调用、Todo、Issue、PR、Milestone、标签、Custom Agent、Prompt 片段、Workspace、Session 关联、Agent 记忆等全量存入 PostgreSQL（21 张表），进程重启不丢数据
+**[数据持久化](docs/features/data-persistence.md)** — 会话、消息、工具调用、Todo、Issue、PR、Milestone、标签、Custom Agent、Prompt 片段、Workspace、Session 关联、Agent 记忆等全量存入 PostgreSQL（20 张表），进程重启不丢数据
 
 ## CLI
 
@@ -86,7 +89,7 @@ fourth-spark upgrade            检查并更新到最新版本
 |----|------|
 | Server | Bun, Hono, Drizzle ORM, PostgreSQL, Zod, Pino, MCP SDK |
 | Web | React 19, Vite, Tailwind CSS 4, Zustand, React Router |
-| Mobile | Capacitor (iOS), APNs |
+| Mobile | Capacitor (iOS) |
 | Infra | Docker Compose, GitHub Actions, npm 跨平台二进制分发 |
 
 ## 从源码开发
@@ -120,4 +123,4 @@ make dev      # 启动 Server (:3000) + Web (:5173)
 | [Session 管理](docs/features/session-management.md) | 生命周期、Issue/PR 关联、Workspace 绑定、数据同步 |
 | [智能运维](docs/features/smart-ops.md) | 截断续写、空响应重试、账号轮换、通知系统、参数配置 |
 | [Cloud 账号池](docs/features/cloud-account-pool.md) | Lease 协议、LeaseKeeper、Rate Limit 上报、模式切换 |
-| [数据持久化](docs/features/data-persistence.md) | 19 张表 Schema、同步机制、迁移流程、索引策略 |
+| [数据持久化](docs/features/data-persistence.md) | 20 张表 Schema、同步机制、迁移流程、索引策略 |
