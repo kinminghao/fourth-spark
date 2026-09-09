@@ -18,10 +18,15 @@ transcribeRoute.post("/", async (c) => {
     return c.json({ error: "SenseVoice models not downloaded" }, 503)
   }
 
+  const MAX_AUDIO_SIZE = 50 * 1024 * 1024 // 50MB
+
   const body = await c.req.parseBody()
   const audio = body["audio"]
   if (!(audio instanceof File)) {
     return c.json({ error: "missing audio file" }, 400)
+  }
+  if (audio.size > MAX_AUDIO_SIZE) {
+    return c.json({ error: "File too large (max 50MB)" }, 413)
   }
 
   const tmpPath = join(tmpdir(), `fourth-spark-stt-${randomUUID()}.wav`)
