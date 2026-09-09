@@ -39,24 +39,26 @@ async function syncRepo(repoId: string, gitUrl: string): Promise<void> {
 
   try {
     const gitMilestones = await client.listMilestones({ state: "all" })
-    for (const gm of gitMilestones) {
-      const msId = `${repoId}_ms_${gm.id}`
-      const values = {
-        id: msId,
-        repoId,
-        number: gm.number ?? gm.id,
-        title: gm.title,
-        description: gm.description || null,
-        state: gm.state,
-        dueOn: gm.due_on ? new Date(gm.due_on).getTime() : null,
-        openIssues: gm.open_issues ?? 0,
-        closedIssues: gm.closed_issues ?? 0,
-        createdAt: new Date(gm.created_at).getTime(),
-        updatedAt: new Date(gm.updated_at).getTime(),
+    await db.transaction(async (tx) => {
+      for (const gm of gitMilestones) {
+        const msId = `${repoId}_ms_${gm.id}`
+        const values = {
+          id: msId,
+          repoId,
+          number: gm.number ?? gm.id,
+          title: gm.title,
+          description: gm.description || null,
+          state: gm.state,
+          dueOn: gm.due_on ? new Date(gm.due_on).getTime() : null,
+          openIssues: gm.open_issues ?? 0,
+          closedIssues: gm.closed_issues ?? 0,
+          createdAt: new Date(gm.created_at).getTime(),
+          updatedAt: new Date(gm.updated_at).getTime(),
+        }
+        const { id: _, createdAt: __, ...updateSet } = values
+        await tx.insert(milestones).values(values).onConflictDoUpdate({ target: milestones.id, set: updateSet })
       }
-      const { id: _, createdAt: __, ...updateSet } = values
-      await db.insert(milestones).values(values).onConflictDoUpdate({ target: milestones.id, set: updateSet })
-    }
+    })
   } catch (err) {
     logger.warn({ err, repoId }, "[sync-scheduler] failed to sync milestones")
   }
@@ -68,27 +70,29 @@ async function syncRepo(repoId: string, gitUrl: string): Promise<void> {
     while (true) {
       const batch = await client.listIssues({ state: "all", page, limit })
       if (batch.length === 0) break
-      for (const gi of batch) {
-        const values = {
-          id: issueId(repoId, gi.number),
-          repoId,
-          number: gi.number,
-          title: gi.title,
-          body: gi.body || null,
-          state: gi.state,
-          labels: gi.labels?.map((l) => ({ id: l.id, name: l.name, color: l.color })) ?? [],
-          htmlUrl: gi.html_url,
-          milestoneId: gi.milestone ? `${repoId}_ms_${gi.milestone.id}` : null,
-          authorLogin: gi.user?.login ?? null,
-          authorAvatar: gi.user?.avatar_url ?? null,
-          assignees: gi.assignees?.map((a) => ({ login: a.login, avatar_url: a.avatar_url })) ?? [],
-          commentCount: gi.comments ?? 0,
-          createdAt: new Date(gi.created_at).getTime(),
-          updatedAt: new Date(gi.updated_at).getTime(),
+      await db.transaction(async (tx) => {
+        for (const gi of batch) {
+          const values = {
+            id: issueId(repoId, gi.number),
+            repoId,
+            number: gi.number,
+            title: gi.title,
+            body: gi.body || null,
+            state: gi.state,
+            labels: gi.labels?.map((l) => ({ id: l.id, name: l.name, color: l.color })) ?? [],
+            htmlUrl: gi.html_url,
+            milestoneId: gi.milestone ? `${repoId}_ms_${gi.milestone.id}` : null,
+            authorLogin: gi.user?.login ?? null,
+            authorAvatar: gi.user?.avatar_url ?? null,
+            assignees: gi.assignees?.map((a) => ({ login: a.login, avatar_url: a.avatar_url })) ?? [],
+            commentCount: gi.comments ?? 0,
+            createdAt: new Date(gi.created_at).getTime(),
+            updatedAt: new Date(gi.updated_at).getTime(),
+          }
+          const { id: _id, createdAt: _ca, ...updateSet } = values
+          await tx.insert(issues).values(values).onConflictDoUpdate({ target: issues.id, set: updateSet })
         }
-        const { id: _id, createdAt: _ca, ...updateSet } = values
-        await db.insert(issues).values(values).onConflictDoUpdate({ target: issues.id, set: updateSet })
-      }
+      })
       totalIssues += batch.length
       if (batch.length < limit) break
       page++
@@ -127,49 +131,62 @@ async function syncRepo(repoId: string, gitUrl: string): Promise<void> {
     next()
   })
 
-  for (const { issueNum, comments } of commentResults) {
-    for (const gc of comments) {
-      const values = {
-        id: `${repoId}_c${gc.id}`,
-        issueId: issueId(repoId, issueNum),
-        repoId,
-        authorLogin: gc.user.login,
-        authorAvatar: gc.user.avatar_url ?? null,
-        body: gc.body,
-        createdAt: new Date(gc.created_at).getTime(),
-        updatedAt: new Date(gc.updated_at).getTime(),
-      }
-      const { id: _id, createdAt: _ca, ...updateSet } = values
-      await db.insert(issueComments).values(values).onConflictDoUpdate({ target: issueComments.id, set: updateSet })
+  try {
+    for (const { issueNum, comments } of commentResults) {
+      await db.transaction(async (tx) => {
+        for (const gc of comments) {
+          const values = {
+            id: `${repoId}_c${gc.id}`,
+            issueId: issueId(repoId, issueNum),
+            repoId,
+            authorLogin: gc.user.login,
+            authorAvatar: gc.user.avatar_url ?? null,
+            body: gc.body,
+            createdAt: new Date(gc.created_at).getTime(),
+            updatedAt: new Date(gc.updated_at).getTime(),
+          }
+          const { id: _id, createdAt: _ca, ...updateSet } = values
+          await tx.insert(issueComments).values(values).onConflictDoUpdate({ target: issueComments.id, set: updateSet })
+        }
+      })
+      totalComments += comments.length
     }
-    totalComments += comments.length
+  } catch (err) {
+    logger.warn({ err, repoId }, "[sync-scheduler] failed to sync comments")
   }
 
   const allDbIssues = await db.select({ id: issues.id, labels: issues.labels }).from(issues).where(eq(issues.repoId, repoId))
   const seenTags = new Map<string, string>()
   let totalTags = 0
 
-  for (const row of allDbIssues) {
-    if (!row.labels || row.labels.length === 0) continue
-    for (const label of row.labels) {
-      if (seenTags.has(label.name)) continue
-      const tid = `${repoId}_tag_${label.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`
-      await db.insert(tags).values({
-        id: tid,
-        repoId,
-        name: label.name,
-        color: label.color || "6b7280",
-        description: null,
-        createdAt: Date.now(),
-      }).onConflictDoNothing()
-      seenTags.set(label.name, tid)
-      totalTags++
+  try {
+    for (const row of allDbIssues) {
+      if (!row.labels || row.labels.length === 0) continue
+      const labels = row.labels
+      await db.transaction(async (tx) => {
+        for (const label of labels) {
+          if (seenTags.has(label.name)) continue
+          const tid = `${repoId}_tag_${label.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`
+          await tx.insert(tags).values({
+            id: tid,
+            repoId,
+            name: label.name,
+            color: label.color || "6b7280",
+            description: null,
+            createdAt: Date.now(),
+          }).onConflictDoNothing()
+          seenTags.set(label.name, tid)
+          totalTags++
+        }
+        const tagIds = labels.map((l) => seenTags.get(l.name)!).filter(Boolean)
+        if (tagIds.length > 0) {
+          await tx.delete(issueTags).where(eq(issueTags.issueId, row.id))
+          await tx.insert(issueTags).values(tagIds.map((tid) => ({ issueId: row.id, tagId: tid }))).onConflictDoNothing()
+        }
+      })
     }
-    const tagIds = row.labels.map((l) => seenTags.get(l.name)!).filter(Boolean)
-    if (tagIds.length > 0) {
-      await db.delete(issueTags).where(eq(issueTags.issueId, row.id))
-      await db.insert(issueTags).values(tagIds.map((tid) => ({ issueId: row.id, tagId: tid }))).onConflictDoNothing()
-    }
+  } catch (err) {
+    logger.warn({ err, repoId }, "[sync-scheduler] failed to sync tags")
   }
 
   let totalPrs = 0
@@ -216,36 +233,38 @@ async function syncRepo(repoId: string, gitUrl: string): Promise<void> {
           next()
         })
 
-        for (const { detail, diffStats } of enriched) {
-          const values = {
-            id: prId(repoId, detail.number),
-            repoId,
-            number: detail.number,
-            title: detail.title,
-            body: detail.body || null,
-            state: detail.merged_at ? "merged" : detail.state,
-            headBranch: detail.head?.ref ?? "",
-            baseBranch: detail.base?.ref ?? "",
-            labels: detail.labels?.map((l) => ({ id: l.id, name: l.name, color: l.color })) ?? [],
-            htmlUrl: detail.html_url,
-            authorLogin: detail.user?.login ?? null,
-            authorAvatar: detail.user?.avatar_url ?? null,
-            assignees: detail.assignees?.map((a) => ({ login: a.login, avatar_url: a.avatar_url })) ?? [],
-            mergeable: detail.mergeable === true ? "true" : detail.mergeable === false ? "false" : null,
-            draft: detail.draft ? 1 : 0,
-            commentCount: detail.comments ?? 0,
-            additions: detail.additions ?? null,
-            deletions: detail.deletions ?? null,
-            changedFilesCount: detail.changed_files ?? null,
-            commitCount: detail.commits ?? null,
-            createdAt: new Date(detail.created_at).getTime(),
-            updatedAt: new Date(detail.updated_at).getTime(),
-            mergedAt: detail.merged_at ? new Date(detail.merged_at).getTime() : null,
-            diffStats,
+        await db.transaction(async (tx) => {
+          for (const { detail, diffStats } of enriched) {
+            const values = {
+              id: prId(repoId, detail.number),
+              repoId,
+              number: detail.number,
+              title: detail.title,
+              body: detail.body || null,
+              state: detail.merged_at ? "merged" : detail.state,
+              headBranch: detail.head?.ref ?? "",
+              baseBranch: detail.base?.ref ?? "",
+              labels: detail.labels?.map((l) => ({ id: l.id, name: l.name, color: l.color })) ?? [],
+              htmlUrl: detail.html_url,
+              authorLogin: detail.user?.login ?? null,
+              authorAvatar: detail.user?.avatar_url ?? null,
+              assignees: detail.assignees?.map((a) => ({ login: a.login, avatar_url: a.avatar_url })) ?? [],
+              mergeable: detail.mergeable === true ? "true" : detail.mergeable === false ? "false" : null,
+              draft: detail.draft ? 1 : 0,
+              commentCount: detail.comments ?? 0,
+              additions: detail.additions ?? null,
+              deletions: detail.deletions ?? null,
+              changedFilesCount: detail.changed_files ?? null,
+              commitCount: detail.commits ?? null,
+              createdAt: new Date(detail.created_at).getTime(),
+              updatedAt: new Date(detail.updated_at).getTime(),
+              mergedAt: detail.merged_at ? new Date(detail.merged_at).getTime() : null,
+              diffStats,
+            }
+            const { id: _id, createdAt: _ca, ...updateSet } = values
+            await tx.insert(pullRequests).values(values).onConflictDoUpdate({ target: pullRequests.id, set: updateSet })
           }
-          const { id: _id, createdAt: _ca, ...updateSet } = values
-          await db.insert(pullRequests).values(values).onConflictDoUpdate({ target: pullRequests.id, set: updateSet })
-        }
+        })
 
         totalPrs += batch.length
         if (batch.length < limit) break
@@ -259,15 +278,21 @@ async function syncRepo(repoId: string, gitUrl: string): Promise<void> {
   const allPrs = await db.select({ id: pullRequests.id, number: pullRequests.number, body: pullRequests.body })
     .from(pullRequests).where(eq(pullRequests.repoId, repoId))
   let totalLinks = 0
-  for (const row of allPrs) {
-    const refs = parseIssueRefs(row.body)
-    for (const issueNum of refs) {
-      const iid = `${repoId}_${issueNum}`
-      const [exists] = await db.select({ id: issues.id }).from(issues).where(eq(issues.id, iid))
-      if (!exists) continue
-      await db.insert(prIssueLinks).values({ prId: row.id, issueId: iid }).onConflictDoNothing()
-      totalLinks++
-    }
+  try {
+    await db.transaction(async (tx) => {
+      for (const row of allPrs) {
+        const refs = parseIssueRefs(row.body)
+        for (const issueNum of refs) {
+          const iid = `${repoId}_${issueNum}`
+          const [exists] = await tx.select({ id: issues.id }).from(issues).where(eq(issues.id, iid))
+          if (!exists) continue
+          await tx.insert(prIssueLinks).values({ prId: row.id, issueId: iid }).onConflictDoNothing()
+          totalLinks++
+        }
+      }
+    })
+  } catch (err) {
+    logger.warn({ err, repoId }, "[sync-scheduler] failed to sync PR-issue links")
   }
 
   logger.info({ repoId, totalIssues, totalComments, totalTags, totalPrs, totalLinks }, "[sync-scheduler] repo sync complete")
