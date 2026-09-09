@@ -162,6 +162,21 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
     }
   }
 
+  /** Persist a PID record to disk immediately after spawn, before any async
+   *  work (waitForReady etc.). This closes the window where a crash between
+   *  spawn and the later `writePidFile()` would leave an unrecoverable orphan.
+   *  Deduplicates by repoId so a stale entry for the same repo is replaced. */
+  function persistPidEarly(pid: number, port: number, repoId: string): void {
+    try {
+      mkdirSync(PID_DIR, { recursive: true })
+      const records = readPidFile().filter((r) => r.repoId !== repoId)
+      records.push({ pid, port, repoId })
+      writeFileSync(PID_FILE, JSON.stringify(records, null, 2))
+    } catch (err) {
+      logger.warn({ err }, "failed to write early PID record")
+    }
+  }
+
   async function adoptOrphans(): Promise<Map<string, PidRecord>> {
     const adopted = new Map<string, PidRecord>()
     const oldRecords = readPidFile()
@@ -263,6 +278,7 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
       },
     })
     proc.unref()
+    persistPidEarly(proc.pid, port, repoId)
 
     const baseUrl = `http://127.0.0.1:${port}`
     const client = new HttpRuntimeClient(baseUrl, localPath)
