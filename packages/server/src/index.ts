@@ -247,7 +247,10 @@ async function startup() {
   logger.info({ port: PORT }, "HTTP server ready")
 }
 
-startup()
+startup().catch((err) => {
+  logger.fatal({ err }, "startup failed")
+  process.exit(1)
+})
 
 // ---------------------------------------------------------------------------
 // Graceful shutdown — covers SIGINT (Ctrl-C), SIGTERM (kill), SIGHUP (bun --watch)
