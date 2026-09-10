@@ -13,7 +13,7 @@
 //   * cloud lease keeper lifecycle (RuntimeManager owns the pool switch)
 // ---------------------------------------------------------------------------
 
-import { type Subprocess } from "bun"
+import type { Subprocess } from "bun"
 import { eq, inArray } from "drizzle-orm"
 import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs"
 import { join } from "node:path"
@@ -54,11 +54,16 @@ interface PidRecord {
   repoId: string
 }
 
+interface ProcessHandle {
+  pid: number
+  kill(): void
+}
+
 interface ManagedRepo {
   id: string
   localPath: string
   port: number
-  process: Subprocess
+  process: ProcessHandle
   client: HttpRuntimeClient
 }
 
@@ -349,7 +354,7 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
         if (record) {
           const baseUrl = `http://127.0.0.1:${record.port}`
           const client = new HttpRuntimeClient(baseUrl, localPath)
-          const fakeProc = { pid: record.pid, kill: () => killPid(record.pid) } as unknown as Subprocess
+          const fakeProc: ProcessHandle = { pid: record.pid, kill: () => killPid(record.pid) }
           const entry: ManagedRepo = { id: repoId, localPath, port: record.port, process: fakeProc, client }
           managed.set(repoId, entry)
           writePidFile()
