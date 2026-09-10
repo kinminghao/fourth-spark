@@ -1,5 +1,6 @@
 import type { Hono } from "hono"
 import { eq, and, asc, inArray, isNull, desc } from "drizzle-orm"
+import { parsePagination, paginatedResponse } from "../../lib/pagination"
 import { parseBody } from "../../lib/validation"
 import { runtimeManager } from "../../lib/process-manager"
 import { workspaceManager } from "../../lib/workspace-manager"
@@ -157,7 +158,8 @@ export function registerCrudRoutes(app: Hono): void {
   app.get("/", async (c) => {
     const repoId = c.req.param("repoId")
     const directory = await getRepoDirectory(repoId!)
-    if (!directory) return c.json([])
+    const pg = parsePagination({ limit: c.req.query("limit"), offset: c.req.query("offset") })
+    if (!directory) return c.json(paginatedResponse([], 0, pg))
 
     const client = runtimeManager.getClient(repoId)
     let liveIds: Set<string> | undefined
@@ -210,7 +212,10 @@ export function registerCrudRoutes(app: Hono): void {
       const tb = (b.time as { updated?: number })?.updated ?? 0
       return tb - ta
     })
-    return c.json(merged)
+
+    const total = merged.length
+    const items = merged.slice(pg.offset, pg.offset + pg.limit)
+    return c.json(paginatedResponse(items, total, pg))
   })
 
   // Bulk status — returns all session statuses in one call.

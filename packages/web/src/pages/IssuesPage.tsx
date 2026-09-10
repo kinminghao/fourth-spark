@@ -14,6 +14,7 @@ import { IssueRow, FullWidthIssueRow } from "../components/IssueRow"
 import { IssueTreeSidebar } from "../components/IssueTree"
 import { IssueSessionSidebar } from "../components/SessionSidebar"
 import { IssueFilters, STATE_FILTERS, type StateFilter, type TypeFilter, type ExpandedFilter } from "../components/IssueFilters"
+import { Pagination, PAGE_SIZE } from "../components/Pagination"
 
 export function IssuesPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("open")
@@ -27,6 +28,7 @@ export function IssuesPage() {
   const [expandedFilter, setExpandedFilter] = useState<ExpandedFilter>(null)
   const [selectedAuthor, setSelectedAuthor] = useState<string | null>(null)
   const [selectedAssignee, setSelectedAssignee] = useState<string | null>(null)
+  const [page, setPage] = useState(0)
 
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -101,7 +103,7 @@ export function IssuesPage() {
     }
   }, [activeRepoId, loadTags, loadMilestones])
 
-  // --- Filtering (delegated to hook) ---
+  useEffect(() => { setPage(0) }, [stateFilter, typeFilter, searchQuery, tagFilterMode, selectedMilestoneId, selectedAuthor, selectedAssignee])
 
   const {
     childrenMap, issueType, milestoneMap,
@@ -111,6 +113,11 @@ export function IssuesPage() {
     stateFilter, typeFilter, searchQuery,
     selectedMilestoneId, selectedAuthor, selectedAssignee,
   })
+
+  const pagedIssues = useMemo(() => {
+    const start = page * PAGE_SIZE
+    return finalFiltered.slice(start, start + PAGE_SIZE)
+  }, [finalFiltered, page])
 
   // --- Session counts ---
 
@@ -279,7 +286,7 @@ export function IssuesPage() {
             </p>
           ) : (
             <ul className={clsx(selectedId ? "space-y-0.5" : "space-y-1")}>
-              {finalFiltered.map((issue) =>
+              {pagedIssues.map((issue) =>
                 selectedId ? (
                   <IssueRow
                     key={issue.id}
@@ -304,6 +311,7 @@ export function IssuesPage() {
             </ul>
           )}
         </div>
+        <Pagination total={finalFiltered.length} page={page} onPageChange={setPage} />
       </div>
 
       {selectedId && (
@@ -317,7 +325,7 @@ export function IssuesPage() {
               <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">无匹配 Issue</p>
             ) : (
               <ul className="space-y-0.5">
-                {finalFiltered.map((issue) => (
+                {pagedIssues.map((issue) => (
                   <IssueRow
                     key={issue.id}
                     issue={issue}
@@ -334,6 +342,7 @@ export function IssuesPage() {
               </ul>
             )}
           </div>
+          <Pagination total={finalFiltered.length} page={page} onPageChange={setPage} />
         </div>
       </SwipeDrawer>
       )}

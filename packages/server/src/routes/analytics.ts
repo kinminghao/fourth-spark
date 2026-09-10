@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { sql, and, gte, lt, eq, sum, count } from "drizzle-orm"
 import { db } from "../db/index"
 import { sessions, repos } from "../db/schema"
+import { parsePagination } from "../lib/pagination"
 
 export const analyticsRoutes = new Hono()
 
@@ -187,8 +188,10 @@ analyticsRoutes.get("/summary", async (c) => {
     }))
   }
 
+  const pg = parsePagination({ limit: c.req.query("limit") ?? "200", offset: c.req.query("offset") })
   const total = groups.reduce<AnalyticsSummary>((acc, g) => addSummary(acc, g), { ...zeroes })
+  const paginatedGroups = groups.slice(pg.offset, pg.offset + pg.limit)
 
-  const response: AnalyticsResponse = { groups, total }
+  const response: AnalyticsResponse = { groups: paginatedGroups, total }
   return c.json(response)
 })
