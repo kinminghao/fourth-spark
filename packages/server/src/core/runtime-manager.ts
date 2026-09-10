@@ -141,12 +141,20 @@ export function createDefaultRuntimeManager(): RuntimeManager {
           const { readAuthAnthropic } = await import("../lib/auth-files")
           const auth = await readAuthAnthropic()
           if (auth?.access) {
-            await provider.credentialWriter.write({
-              kind: auth.refresh ? "full" : "lease",
-              access: auth.access,
-              ...(auth.refresh ? { refresh: auth.refresh } : {}),
-              expires: auth.expires,
-            } as Parameters<typeof provider.credentialWriter.write>[0])
+            if (auth.refresh) {
+              await provider.credentialWriter.write({
+                kind: "full",
+                refresh: auth.refresh,
+                access: auth.access,
+                expires: auth.expires,
+              })
+            } else if (auth.expires !== undefined) {
+              await provider.credentialWriter.write({
+                kind: "lease",
+                access: auth.access,
+                expires: auth.expires,
+              })
+            }
             logger.info({ repoId, providerId }, "synced active credential to runtime")
           }
         } catch {}
