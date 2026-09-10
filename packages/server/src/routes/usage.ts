@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { z } from "zod"
 import { collectUsage, retagActiveInCache } from "../lib/claude-usage"
 import { switchToAccount } from "../lib/account-switcher"
 import { isWorkerMode, getWorkerConfig } from "../lib/config"
@@ -6,6 +7,15 @@ import { createLeaseClient } from "../lib/lease-client"
 import { writeLease } from "../lib/lease-writer"
 import { runtimeManager } from "../lib/process-manager"
 import { authorize, exchange, removeAccount } from "../lib/claude-onboard"
+import { parseBody } from "../lib/validation"
+
+const SwitchAccountBody = z.object({
+  accountId: z.string().min(1),
+})
+const ExchangeBody = z.object({
+  pendingId: z.string().min(1),
+  code: z.string().min(1),
+})
 
 export const usageRoutes = new Hono()
 
@@ -15,10 +25,8 @@ usageRoutes.get("/", async (c) => {
 })
 
 usageRoutes.post("/switch", async (c) => {
-  const body = await c.req.json<{ accountId?: string }>()
-  if (!body.accountId || typeof body.accountId !== "string") {
-    return c.json({ error: "accountId is required" }, 400)
-  }
+  const [body, err] = await parseBody(c, SwitchAccountBody)
+  if (err) return err
 
   if (isWorkerMode()) {
     const cfg = getWorkerConfig()
@@ -64,13 +72,8 @@ usageRoutes.post("/exchange", async (c) => {
   if (isWorkerMode()) {
     return c.json({ error: "account onboarding is not available in worker mode" }, 400)
   }
-  const body = await c.req.json<{ pendingId?: string; code?: string }>()
-  if (!body.pendingId || typeof body.pendingId !== "string") {
-    return c.json({ error: "pendingId is required" }, 400)
-  }
-  if (!body.code || typeof body.code !== "string") {
-    return c.json({ error: "code is required" }, 400)
-  }
+  const [body, err] = await parseBody(c, ExchangeBody)
+  if (err) return err
   const result = await exchange(body.pendingId, body.code.trim())
   if (!result.ok) {
     const status = result.reason === "throttled" ? 429 : 400

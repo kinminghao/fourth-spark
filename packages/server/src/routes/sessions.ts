@@ -1,7 +1,9 @@
 import { Hono } from "hono"
+import { z } from "zod"
 import { eq, and, asc, inArray, isNull, isNotNull, desc, not, like, notInArray } from "drizzle-orm"
 import { resolve, relative, extname, isAbsolute } from "node:path"
 import { lstatSync } from "node:fs"
+import { parseBody } from "../lib/validation"
 import { runtimeManager } from "../lib/process-manager"
 import { sessionMonitor } from "../lib/session-monitor"
 import { workspaceManager } from "../lib/workspace-manager"
@@ -15,6 +17,58 @@ import { parseGitUrl } from "../lib/git-url"
 import { getHostInfo, getAuthenticatedLogin, createGitIssueClient } from "../lib/git-provider"
 import { logger } from "../middleware/logger"
 import type { SessionStatus, PromptFile } from "../core/runtime-types"
+
+// ---------------------------------------------------------------------------
+// Request body schemas
+// ---------------------------------------------------------------------------
+
+const CreateSessionBody = z.object({
+  message: z.string().optional(),
+  agent: z.string().optional(),
+  model: z.string().optional(),
+  variant: z.string().optional(),
+  title: z.string().optional(),
+  issueId: z.string().optional(),
+  customAgentId: z.string().optional(),
+  files: z.array(z.object({
+    mime: z.string(),
+    url: z.string(),
+    filename: z.string().optional(),
+  })).optional(),
+})
+
+const SessionPromptBody = z.object({
+  content: z.string(),
+  agent: z.string().optional(),
+  model: z.string().optional(),
+  variant: z.string().optional(),
+  files: z.array(z.object({
+    mime: z.string(),
+    url: z.string(),
+    filename: z.string().optional(),
+  })).optional(),
+})
+
+const SessionRevertBody = z.object({
+  messageID: z.string().min(1),
+  partID: z.string().optional(),
+})
+
+const QuestionReplyBody = z.object({
+  answers: z.array(z.array(z.string())),
+})
+
+const UpdateSessionBody = z.object({
+  issueId: z.string().nullable().optional(),
+  title: z.string().optional(),
+  completedAt: z.number().nullable().optional(),
+  pinnedAt: z.number().nullable().optional(),
+})
+
+const SessionLinkBody = z.object({
+  type: z.enum(["issue", "pr"]),
+  targetId: z.string().min(1),
+})
 
 // ---------------------------------------------------------------------------
 // Session file preview — previewable extension allowlist
@@ -167,18 +221,16 @@ sessions.post("/", async (c) => {
     return c.json({ error: "Repo not found", status: 404 }, 404)
   }
 
-  const body = await c.req.json<{ message?: string; agent?: string; model?: string; variant?: string; title?: string; issueId?: string; customAgentId?: string; files?: PromptFile[] }>().catch(() => null)
-  if (!body) {
-    return c.json({ error: "Request body is required", status: 400 }, 400)
-  }
+  const [body, err] = await parseBody(c, CreateSessionBody)
+  if (err) return err
   const message = typeof body.message === "string" ? body.message.trim() : ""
   const hasContext = Boolean(body.issueId) || Boolean(body.customAgentId)
 
   let files: PromptFile[] = []
   try {
     files = validateFiles(body.files)
-  } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Invalid files", status: 400 }, 400)
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "Invalid files", status: 400 }, 400)
   }
 
   const hasFiles = files.length > 0
@@ -273,12 +325,12 @@ sessions.post("/", async (c) => {
   })
   try {
     await client.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT, files })
-  } catch (err) {
-    logger.error({ err, sessionId: session.id, agent, model }, "prompt failed after session creation, cleaning up")
+  } catch (e) {
+    logger.error({ err: e, sessionId: session.id, agent, model }, "prompt failed after session creation, cleaning up")
     await client.deleteSession(session.id).catch(() => {})
     await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id)).catch(() => {})
     if (workspaceId) await workspaceManager.remove(workspaceId).catch(() => {})
-    throw err
+    throw e
   }
 
   if (body.issueId) {
@@ -464,16 +516,14 @@ sessions.delete("/:id", async (c) => {
 
 sessions.post("/:id/prompt", async (c) => {
   const client = runtimeManager.requireClient(c.req.param("repoId"))
-  const body = await c.req.json<{ content?: string; agent?: string; model?: string; variant?: string; files?: PromptFile[] }>().catch(() => null)
-  if (!body || typeof body.content !== "string") {
-    return c.json({ error: "Body must include a 'content' string", status: 400 }, 400)
-  }
+  const [body, err] = await parseBody(c, SessionPromptBody)
+  if (err) return err
 
   let files: PromptFile[] = []
   try {
     files = validateFiles(body.files)
-  } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Invalid files", status: 400 }, 400)
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "Invalid files", status: 400 }, 400)
   }
 
   if (body.content.length === 0 && files.length === 0) {
@@ -488,10 +538,8 @@ sessions.post("/:id/prompt", async (c) => {
 
 sessions.post("/:id/revert", async (c) => {
   const client = runtimeManager.requireClient(c.req.param("repoId"))
-  const body = await c.req.json<{ messageID?: string; partID?: string }>().catch(() => null)
-  if (!body || typeof body.messageID !== "string" || !body.messageID) {
-    return c.json({ error: "Body must include a 'messageID' string", status: 400 }, 400)
-  }
+  const [body, err] = await parseBody(c, SessionRevertBody)
+  if (err) return err
   const session = await client.revert(c.req.param("id"), body.messageID, body.partID)
   return c.json(session)
 })
@@ -507,10 +555,8 @@ sessions.post("/:id/abort", async (c) => {
 sessions.post("/:id/questions/reply", async (c) => {
   const sessionId = c.req.param("id")
   const client = runtimeManager.requireClient(c.req.param("repoId"))
-  const body = await c.req.json<{ answers?: string[][] }>().catch(() => null)
-  if (!body?.answers || !Array.isArray(body.answers)) {
-    return c.json({ error: "'answers' must be an array of string arrays", status: 400 }, 400)
-  }
+  const [body, err] = await parseBody(c, QuestionReplyBody)
+  if (err) return err
   const pending = await client.listQuestions()
   const match = pending.find((q) => q.sessionID === sessionId)
   if (!match) {
@@ -585,8 +631,8 @@ sessions.get("/:id/todos", async (c) => {
 
 sessions.patch("/:id", async (c) => {
   const sessionId = c.req.param("id")
-  const body = await c.req.json<{ issueId?: string | null; title?: string; completedAt?: number | null; pinnedAt?: number | null }>().catch(() => null)
-  if (!body) return c.json({ error: "empty body" }, 400)
+  const [body, err] = await parseBody(c, UpdateSessionBody)
+  if (err) return err
   const updates: Record<string, unknown> = {}
   if ("issueId" in body) updates.issueId = body.issueId ?? null
   if ("title" in body && typeof body.title === "string") updates.title = body.title
@@ -617,9 +663,8 @@ sessions.get("/:id/links", async (c) => {
 
 sessions.post("/:id/links", async (c) => {
   const sessionId = c.req.param("id")
-  const body = await c.req.json<{ type: "issue" | "pr"; targetId: string }>().catch(() => null)
-  if (!body?.type || !body?.targetId) return c.json({ error: "type and targetId required" }, 400)
-  if (body.type !== "issue" && body.type !== "pr") return c.json({ error: "type must be 'issue' or 'pr'" }, 400)
+  const [body, err] = await parseBody(c, SessionLinkBody)
+  if (err) return err
   await db.insert(sessionLinks).values({
     sessionId,
     type: body.type,
@@ -631,8 +676,8 @@ sessions.post("/:id/links", async (c) => {
 
 sessions.delete("/:id/links", async (c) => {
   const sessionId = c.req.param("id")
-  const body = await c.req.json<{ type: "issue" | "pr"; targetId: string }>().catch(() => null)
-  if (!body?.type || !body?.targetId) return c.json({ error: "type and targetId required" }, 400)
+  const [body, err] = await parseBody(c, SessionLinkBody)
+  if (err) return err
   await db.delete(sessionLinks)
     .where(and(
       eq(sessionLinks.sessionId, sessionId),

@@ -1,7 +1,20 @@
 import { Hono } from "hono"
+import { z } from "zod"
 import { eq, or, isNull, asc } from "drizzle-orm"
 import { db } from "../db/index"
 import { promptFragments } from "../db/schema"
+import { parseBody } from "../lib/validation"
+
+const CreateFragmentBody = z.object({
+  name: z.string().min(1),
+  content: z.string().optional(),
+})
+
+const UpdateFragmentBody = z.object({
+  name: z.string().optional(),
+  content: z.string().optional(),
+  sortOrder: z.number().int().optional(),
+})
 
 export const globalFragments = new Hono()
 
@@ -13,8 +26,8 @@ globalFragments.get("/", async (c) => {
 })
 
 globalFragments.post("/", async (c) => {
-  const body = await c.req.json<{ name?: string; content?: string }>().catch(() => null)
-  if (!body?.name) return c.json({ error: "name is required" }, 400)
+  const [body, err] = await parseBody(c, CreateFragmentBody)
+  if (err) return err
 
   const now = Date.now()
   const row = {
@@ -32,8 +45,8 @@ globalFragments.post("/", async (c) => {
 
 globalFragments.put("/:id", async (c) => {
   const id = c.req.param("id")
-  const body = await c.req.json<{ name?: string; content?: string; sortOrder?: number }>().catch(() => null)
-  if (!body) return c.json({ error: "empty body" }, 400)
+  const [body, err] = await parseBody(c, UpdateFragmentBody)
+  if (err) return err
 
   const updates: Record<string, unknown> = { updatedAt: Date.now() }
   if (body.name !== undefined) updates.name = body.name.trim()

@@ -1,9 +1,50 @@
 import { Hono } from "hono"
+import { z } from "zod"
 import { eq, or, and, isNull, asc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { customAgents, customAgentFragments, promptFragments } from "../db/schema"
+import { parseBody } from "../lib/validation"
 
 const ALLOWED_BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atlas - Plan Executor"]
+
+const CreateCustomAgentBody = z.object({
+  name: z.string().min(1),
+  baseAgent: z.string().min(1),
+  model: z.string().optional(),
+  variant: z.string().optional(),
+  systemPrompt: z.string().optional(),
+  systemPromptPosition: z.number().int().optional(),
+  fragmentIds: z.array(z.string()).optional(),
+})
+
+const UpdateCustomAgentBody = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  baseAgent: z.string().optional(),
+  model: z.string().nullable().optional(),
+  variant: z.string().nullable().optional(),
+  memoryModel: z.string().nullable().optional(),
+  systemPrompt: z.string().optional(),
+  systemPromptPosition: z.number().int().optional(),
+  sortOrder: z.number().int().optional(),
+  fragmentIds: z.array(z.string()).optional(),
+})
+
+const ImportCustomAgentBody = z.object({
+  version: z.number().optional(),
+  type: z.literal("fourth-spark-custom-agent"),
+  agent: z.object({
+    name: z.string().min(1),
+    baseAgent: z.string().min(1),
+    model: z.string().nullable().optional(),
+    variant: z.string().nullable().optional(),
+    systemPrompt: z.string().optional(),
+  }),
+  fragments: z.array(z.object({
+    name: z.string().optional(),
+    content: z.string().optional(),
+  })).optional(),
+})
 
 type FragmentInfo = { id: string; name: string; content: string }
 
@@ -50,19 +91,9 @@ globalCustomAgents.get("/", async (c) => {
 })
 
 globalCustomAgents.post("/", async (c) => {
-  const body = await c.req.json<{
-    name?: string
-    baseAgent?: string
-    model?: string
-    variant?: string
-    systemPrompt?: string
-    systemPromptPosition?: number
-    fragmentIds?: string[]
-  }>().catch(() => null)
+  const [body, err] = await parseBody(c, CreateCustomAgentBody)
+  if (err) return err
 
-  if (!body?.name || !body?.baseAgent) {
-    return c.json({ error: "name and baseAgent are required" }, 400)
-  }
   if (!ALLOWED_BASE_AGENTS.includes(body.baseAgent)) {
     return c.json({ error: `baseAgent must be one of: ${ALLOWED_BASE_AGENTS.join(", ")}` }, 400)
   }
@@ -93,18 +124,8 @@ globalCustomAgents.put("/:id", async (c) => {
   const [existing] = await db.select({ isSystem: customAgents.isSystem }).from(customAgents).where(eq(customAgents.id, id))
   const isSystem = existing?.isSystem === 1
 
-  const body = await c.req.json<{
-    name?: string
-    baseAgent?: string
-    model?: string | null
-    variant?: string | null
-    memoryModel?: string | null
-    systemPrompt?: string
-    systemPromptPosition?: number
-    sortOrder?: number
-    fragmentIds?: string[]
-  }>().catch(() => null)
-  if (!body) return c.json({ error: "empty body" }, 400)
+  const [body, err] = await parseBody(c, UpdateCustomAgentBody)
+  if (err) return err
 
   if (body.baseAgent && !ALLOWED_BASE_AGENTS.includes(body.baseAgent)) {
     return c.json({ error: `baseAgent must be one of: ${ALLOWED_BASE_AGENTS.join(", ")}` }, 400)
@@ -174,20 +195,10 @@ globalCustomAgents.get("/:id/export", async (c) => {
 // ---------------------------------------------------------------------------
 
 globalCustomAgents.post("/import", async (c) => {
-  const body = await c.req.json<{
-    version?: number
-    type?: string
-    agent?: { name?: string; baseAgent?: string; model?: string | null; variant?: string | null; systemPrompt?: string }
-    fragments?: Array<{ name?: string; content?: string }>
-  }>().catch(() => null)
+  const [body, err] = await parseBody(c, ImportCustomAgentBody)
+  if (err) return err
 
-  if (!body || body.type !== "fourth-spark-custom-agent" || !body.agent) {
-    return c.json({ error: "invalid import format: expected fourth-spark-custom-agent JSON" }, 400)
-  }
   const { agent: agentData, fragments: fragData = [] } = body
-  if (!agentData.name || !agentData.baseAgent) {
-    return c.json({ error: "agent name and baseAgent are required" }, 400)
-  }
   if (!ALLOWED_BASE_AGENTS.includes(agentData.baseAgent)) {
     return c.json({ error: `baseAgent must be one of: ${ALLOWED_BASE_AGENTS.join(", ")}` }, 400)
   }
@@ -252,19 +263,9 @@ repoCustomAgents.get("/", async (c) => {
 
 repoCustomAgents.post("/", async (c) => {
   const repoId = c.req.param("repoId")!
-  const body = await c.req.json<{
-    name?: string
-    baseAgent?: string
-    model?: string
-    variant?: string
-    systemPrompt?: string
-    systemPromptPosition?: number
-    fragmentIds?: string[]
-  }>().catch(() => null)
+  const [body, err] = await parseBody(c, CreateCustomAgentBody)
+  if (err) return err
 
-  if (!body?.name || !body?.baseAgent) {
-    return c.json({ error: "name and baseAgent are required" }, 400)
-  }
   if (!ALLOWED_BASE_AGENTS.includes(body.baseAgent)) {
     return c.json({ error: `baseAgent must be one of: ${ALLOWED_BASE_AGENTS.join(", ")}` }, 400)
   }

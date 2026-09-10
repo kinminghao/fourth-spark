@@ -2,6 +2,13 @@ import { Hono } from "hono"
 import { resolve, dirname, basename } from "node:path"
 import { readdirSync, lstatSync, existsSync } from "node:fs"
 import { homedir } from "node:os"
+import { z } from "zod"
+import { parseOptionalBody } from "../lib/validation"
+
+const BrowseBody = z.object({
+  path: z.string().optional(),
+  showHidden: z.boolean().optional(),
+})
 
 export const fsRoutes = new Hono()
 
@@ -42,10 +49,11 @@ function isNoise(name: string): boolean {
 
 // POST /api/fs/browse
 fsRoutes.post("/browse", async (c) => {
-  const body = await c.req.json<{ path?: string; showHidden?: boolean }>().catch(() => null)
+  const [body, err] = await parseOptionalBody(c, BrowseBody)
+  if (err) return err
 
-  const showHidden = body?.showHidden ?? false
-  const rawPath = body?.path?.trim() || homedir()
+  const showHidden = body.showHidden ?? false
+  const rawPath = body.path?.trim() || homedir()
 
   // Reject paths containing traversal sequences before resolution
   if (rawPath.includes("..")) {

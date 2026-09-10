@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { z } from "zod"
 import { eq, and, desc, asc, inArray } from "drizzle-orm"
 import { mkdir, writeFile, readFile, unlink } from "node:fs/promises"
 import { existsSync } from "node:fs"
@@ -13,6 +14,47 @@ import { resolveAgent } from "../lib/agent-validator"
 import { COMMENT_POLISHER_ID, ISSUE_POLISHER_ID } from "../lib/system-agents"
 import { buildIssueContext } from "./sessions"
 import { logger } from "../middleware/logger"
+import { parseBody, parseOptionalBody } from "../lib/validation"
+
+// ---------------------------------------------------------------------------
+// Request body schemas
+// ---------------------------------------------------------------------------
+
+const SyncIssuesBody = z.object({
+  state: z.enum(["open", "closed", "all"]).optional(),
+})
+
+const CreateIssueBody = z.object({
+  title: z.string().min(1),
+  body: z.string().optional(),
+})
+
+const AddChildBody = z.object({
+  childNumber: z.number().int().positive(),
+})
+
+const MergeCloseBody = z.object({
+  closeIssue: z.boolean().optional(),
+})
+
+const UpdateIssueBody = z.object({
+  title: z.string().optional(),
+  body: z.string().optional(),
+  state: z.enum(["open", "closed"]).optional(),
+})
+
+const PolishDraftBody = z.object({
+  draft: z.string().min(1),
+})
+
+const CreateCommentBody = z.object({
+  body: z.string().min(1),
+})
+
+const PolishCreateBody = z.object({
+  title: z.string().min(1),
+  body: z.string().optional(),
+})
 
 const DRAFT_DIR = "/tmp/fourth-spark/drafts"
 
@@ -154,8 +196,9 @@ issueRoutes.post("/sync", async (c) => {
 
   const client = createGitIssueClient(remote.host, remote.owner, remote.repo, info.token, info.platform)
 
-  const body = await c.req.json<{ state?: "open" | "closed" | "all" }>().catch(() => null)
-  const state = body?.state ?? "all"
+  const [body, err] = await parseOptionalBody(c, SyncIssuesBody)
+  if (err) return err
+  const state = body.state ?? "all"
 
   // Must run before issue sync: issues.milestone_id FKs milestones.id, so milestone rows must exist first.
   let totalMilestones = 0
@@ -287,8 +330,8 @@ issueRoutes.post("/", async (c) => {
   const ctx = await getRepoGitClient(repoId)
   if (!ctx) return c.json({ error: "Repo not found or git host not configured" }, 400)
 
-  const body = await c.req.json<{ title: string; body?: string }>().catch(() => null)
-  if (!body?.title) return c.json({ error: "title is required" }, 400)
+  const [body, err] = await parseBody(c, CreateIssueBody)
+  if (err) return err
 
   const gi = await ctx.client.createIssue({ title: body.title, body: body.body })
   const values = issueToDb(repoId, gi)
@@ -302,8 +345,8 @@ issueRoutes.post("/:number/children", async (c) => {
   const parentNumber = Number(c.req.param("number"))
   if (!Number.isFinite(parentNumber)) return c.json({ error: "invalid issue number" }, 400)
 
-  const body = await c.req.json<{ childNumber?: number }>().catch(() => null)
-  if (!body?.childNumber) return c.json({ error: "childNumber is required" }, 400)
+  const [body, err] = await parseBody(c, AddChildBody)
+  if (err) return err
 
   const parentId = issueId(repoId, parentNumber)
   const childId = issueId(repoId, body.childNumber)
@@ -423,8 +466,9 @@ issueRoutes.post("/:number/pulls/:prNumber/merge", async (c) => {
     return c.json({ error: "合入失败: 未知错误" }, 500)
   }
 
-  const body = await c.req.json<{ closeIssue?: boolean }>().catch(() => null)
-  if (body?.closeIssue) {
+  const [body, err] = await parseOptionalBody(c, MergeCloseBody)
+  if (err) return err
+  if (body.closeIssue) {
     const gi = await ctx.client.updateIssue(number, { state: "closed" })
     const values = issueToDb(repoId, gi)
     const { id: _, createdAt: __, ...updateSet } = values
@@ -442,8 +486,8 @@ issueRoutes.patch("/:number", async (c) => {
   const ctx = await getRepoGitClient(repoId)
   if (!ctx) return c.json({ error: "Repo not found or git host not configured" }, 400)
 
-  const body = await c.req.json<{ title?: string; body?: string; state?: "open" | "closed" }>().catch(() => null)
-  if (!body) return c.json({ error: "empty body" }, 400)
+  const [body, err] = await parseBody(c, UpdateIssueBody)
+  if (err) return err
 
   const gi = await ctx.client.updateIssue(number, body)
   const values = issueToDb(repoId, gi)
@@ -462,8 +506,9 @@ issueRoutes.post("/:number/polish", async (c) => {
   const number = Number(c.req.param("number"))
   if (!Number.isFinite(number)) return c.json({ error: "invalid issue number" }, 400)
 
-  const body = await c.req.json<{ draft: string }>().catch(() => null)
-  if (!body?.draft?.trim()) return c.json({ error: "draft is required" }, 400)
+  const [body, err] = await parseBody(c, PolishDraftBody)
+  if (err) return err
+  if (!body.draft.trim()) return c.json({ error: "draft is required" }, 400)
 
   const repoClient = runtimeManager.requireClient(repoId)
   const [repo] = await db.select().from(repos).where(eq(repos.id, repoId))
@@ -551,8 +596,9 @@ issueRoutes.post("/:number/comments", async (c) => {
   const number = Number(c.req.param("number"))
   if (!Number.isFinite(number)) return c.json({ error: "invalid issue number" }, 400)
 
-  const body = await c.req.json<{ body: string }>().catch(() => null)
-  if (!body?.body?.trim()) return c.json({ error: "comment body is required" }, 400)
+  const [body, err] = await parseBody(c, CreateCommentBody)
+  if (err) return err
+  if (!body.body.trim()) return c.json({ error: "comment body is required" }, 400)
 
   const ctx = await getRepoGitClient(repoId)
   if (!ctx) return c.json({ error: "Repo not found or git host not configured" }, 400)
@@ -586,8 +632,9 @@ issueRoutes.post("/:number/comments", async (c) => {
 issueRoutes.post("/polish-create", async (c) => {
   const repoId = c.req.param("repoId")!
 
-  const body = await c.req.json<{ title: string; body?: string }>().catch(() => null)
-  if (!body?.title?.trim()) return c.json({ error: "title is required" }, 400)
+  const [body, err] = await parseBody(c, PolishCreateBody)
+  if (err) return err
+  if (!body.title.trim()) return c.json({ error: "title is required" }, 400)
 
   const repoClient = runtimeManager.requireClient(repoId)
   const [repo] = await db.select().from(repos).where(eq(repos.id, repoId))
