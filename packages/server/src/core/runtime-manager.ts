@@ -134,7 +134,6 @@ export function createDefaultRuntimeManager(): RuntimeManager {
       if (!provider) throw new Error(`Runtime provider "${providerId}" not registered`)
 
       await provider.initialize(repoId, localPath)
-      repoProviders.set(repoId, providerId)
 
       if (providerId !== "opencode") {
         try {
@@ -157,6 +156,7 @@ export function createDefaultRuntimeManager(): RuntimeManager {
         throw new Error(`Runtime provider "${providerId}" did not produce a client for repo ${repoId}`)
       }
 
+      repoProviders.set(repoId, providerId)
       sessionMonitor.register(repoId, client)
       return client
     },
