@@ -22,7 +22,7 @@ export function registerIssueTools(server: McpServer, repoId: string, sessionId?
     },
     async () => {
       try {
-        const { repo, remote, info } = await getClientForRepo(repoId)
+        const { repo, remote, platform } = await getClientForRepo(repoId)
         return textResult({
           repoId: repo.id,
           name: repo.name,
@@ -30,7 +30,7 @@ export function registerIssueTools(server: McpServer, repoId: string, sessionId?
           host: remote.host,
           owner: remote.owner,
           repo: remote.repo,
-          platform: info.platform,
+          platform,
         })
       } catch (err) {
         return errorResult(String(err))

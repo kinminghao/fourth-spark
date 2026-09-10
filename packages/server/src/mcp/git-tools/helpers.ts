@@ -1,27 +1,22 @@
 import { eq } from "drizzle-orm"
 import { db } from "../../db/index"
-import { repos, sessionLinks, sessions as sessionsTable, workspaces } from "../../db/schema"
-import { parseGitUrl } from "../../lib/git-url"
-import { getHostInfo, createGitIssueClient, type GitIssue, type GitComment, type GitPullRequest } from "../../lib/git-provider"
+import { sessionLinks, sessions as sessionsTable, workspaces } from "../../db/schema"
+import type { GitIssueClient } from "../../lib/git-provider"
+import { getRepoGitClient } from "../../lib/git-utils"
 import { runtimeManager } from "../../lib/process-manager"
 import { logger } from "../../middleware/logger"
+
+// Re-export shared helpers so tool files import from one place
+export { issueToDb, commentToDb, prToDb } from "../../lib/git-utils"
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 export async function getClientForRepo(repoId: string) {
-  const [repo] = await db.select().from(repos).where(eq(repos.id, repoId))
-  if (!repo) throw new Error(`Repo ${repoId} not found in database`)
-
-  const remote = parseGitUrl(repo.gitUrl)
-  if (!remote) throw new Error(`Cannot parse git URL: ${repo.gitUrl}`)
-
-  const info = await getHostInfo(remote.host)
-  if (!info) throw new Error(`No credentials configured for host: ${remote.host}`)
-
-  const client = createGitIssueClient(remote.host, remote.owner, remote.repo, info.token, info.platform)
-  return { repo, remote, info, client }
+  const result = await getRepoGitClient(repoId)
+  if (!result) throw new Error(`Failed to resolve git client for repo ${repoId}`)
+  return result
 }
 
 export function textResult(data: unknown) {
@@ -30,66 +25,6 @@ export function textResult(data: unknown) {
 
 export function errorResult(message: string) {
   return { content: [{ type: "text" as const, text: message }], isError: true }
-}
-
-export function issueToDb(repoId: string, gi: GitIssue) {
-  return {
-    id: `${repoId}_${gi.number}`,
-    repoId,
-    number: gi.number,
-    title: gi.title,
-    body: gi.body || null,
-    state: gi.state,
-    labels: gi.labels?.map((l) => ({ id: l.id, name: l.name, color: l.color })) ?? [],
-    htmlUrl: gi.html_url,
-    authorLogin: gi.user?.login ?? null,
-    authorAvatar: gi.user?.avatar_url ?? null,
-    assignees: gi.assignees ?? [],
-    commentCount: gi.comments ?? 0,
-    createdAt: new Date(gi.created_at).getTime(),
-    updatedAt: new Date(gi.updated_at).getTime(),
-  }
-}
-
-export function commentToDb(repoId: string, issueNum: number, gc: GitComment) {
-  return {
-    id: `${repoId}_c${gc.id}`,
-    issueId: `${repoId}_${issueNum}`,
-    repoId,
-    authorLogin: gc.user.login,
-    authorAvatar: gc.user.avatar_url ?? null,
-    body: gc.body,
-    createdAt: new Date(gc.created_at).getTime(),
-    updatedAt: new Date(gc.updated_at).getTime(),
-  }
-}
-
-export function prToDb(repoId: string, pr: GitPullRequest) {
-  return {
-    id: `${repoId}_pr_${pr.number}`,
-    repoId,
-    number: pr.number,
-    title: pr.title,
-    body: pr.body || null,
-    state: pr.state,
-    headBranch: pr.head.ref,
-    baseBranch: pr.base.ref,
-    labels: pr.labels?.map((l) => ({ id: l.id, name: l.name, color: l.color })) ?? [],
-    htmlUrl: pr.html_url,
-    authorLogin: pr.user.login,
-    authorAvatar: pr.user.avatar_url,
-    assignees: pr.assignees ?? [],
-    mergeable: pr.mergeable === null ? null : String(pr.mergeable),
-    draft: pr.draft ? 1 : 0,
-    commentCount: pr.comments ?? 0,
-    additions: pr.additions ?? null,
-    deletions: pr.deletions ?? null,
-    changedFilesCount: pr.changed_files ?? null,
-    commitCount: pr.commits ?? null,
-    createdAt: new Date(pr.created_at).getTime(),
-    updatedAt: new Date(pr.updated_at).getTime(),
-    mergedAt: pr.merged_at ? new Date(pr.merged_at).getTime() : null,
-  }
 }
 
 /**

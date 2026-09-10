@@ -131,9 +131,17 @@ export function registerCrudRoutes(app: Hono): void {
       await client.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT, files })
     } catch (e) {
       logger.error({ err: e, sessionId: session.id, agent, model }, "prompt failed after session creation, cleaning up")
-      await client.deleteSession(session.id).catch(() => {})
-      await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id)).catch(() => {})
-      if (workspaceId) await workspaceManager.remove(workspaceId).catch(() => {})
+      await client.deleteSession(session.id).catch((cleanupErr) =>
+        logger.error({ err: cleanupErr, sessionId: session.id }, "failed to delete runtime session during cleanup"),
+      )
+      await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id)).catch((cleanupErr) =>
+        logger.error({ err: cleanupErr, sessionId: session.id }, "failed to delete DB session during cleanup"),
+      )
+      if (workspaceId) {
+        await workspaceManager.remove(workspaceId).catch((cleanupErr) =>
+          logger.error({ err: cleanupErr, workspaceId }, "failed to remove workspace during cleanup"),
+        )
+      }
       throw e
     }
 
