@@ -39,14 +39,22 @@ function useHasPendingQuestion(): boolean {
 
 export function InputBar() {
   const [value, setValue] = useState("")
-  const [selectedModel, setSelectedModel] = useState("")
-  const [selectedVariant, setSelectedVariant] = useState("")
   const [pinnedModels, setPinnedModels] = useState<ModelInfo[]>([])
   const [quickInputs, setQuickInputs] = useState<Array<{ label: string; text: string; autoSend?: boolean }>>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
   const activeRepoId = useRepoStore((state) => state.activeRepoId)
+  const selectedModel = useSessionStore((state) => {
+    const id = state.activeSessionId
+    return id ? (state.sessionModels[id] ?? "") : ""
+  })
+  const selectedVariant = useSessionStore((state) => {
+    const id = state.activeSessionId
+    return id ? (state.sessionVariants[id] ?? "") : ""
+  })
+  const setSessionModel = useSessionStore((state) => state.setSessionModel)
+  const setSessionVariant = useSessionStore((state) => state.setSessionVariant)
   const status = useSessionStore((state) => {
     const id = state.activeSessionId
     return id ? state.sessionStatuses[id] : undefined
@@ -300,7 +308,7 @@ export function InputBar() {
           <div className="ml-auto flex min-w-0 shrink items-center gap-1.5">
             <select
               value={selectedVariant}
-              onChange={(e) => setSelectedVariant(e.target.value)}
+              onChange={(e) => { if (activeSessionId) setSessionVariant(activeSessionId, e.target.value) }}
               className="w-16 min-w-0 rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[11px] text-fg-4 focus:border-fg-5 focus:outline-none"
             >
               <option value="">默认</option>
@@ -310,7 +318,7 @@ export function InputBar() {
             {pinnedModels.length > 0 && (
               <select
                 value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
+                onChange={(e) => { if (activeSessionId) setSessionModel(activeSessionId, e.target.value) }}
                 className="w-24 min-w-0 rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[11px] text-fg-4 focus:border-fg-5 focus:outline-none"
               >
                 <option value="">默认模型</option>
