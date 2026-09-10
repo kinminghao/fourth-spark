@@ -88,12 +88,16 @@ interface SessionState {
   queuedMessageIds: Record<string, string[]>
   sessionLinks: Record<string, SessionLinks>
   allSessionLinks: Record<string, SessionLinkSummary>
+  sessionModels: Record<string, string>
+  sessionVariants: Record<string, string>
   sessionFilter: SessionFilter
   sessionSearch: string
   loadingSessions: boolean
   loadError: string | null
   sendError: string | null
 
+  setSessionModel: (sessionId: string, model: string) => void
+  setSessionVariant: (sessionId: string, variant: string) => void
   setSessionFilter: (filter: SessionFilter) => void
   setSessionSearch: (search: string) => void
   toggleSessionComplete: (id: string) => Promise<void>
@@ -142,12 +146,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   queuedMessageIds: {},
   sessionLinks: {},
   allSessionLinks: {},
+  sessionModels: {},
+  sessionVariants: {},
   sessionFilter: "active",
   sessionSearch: "",
   loadingSessions: false,
   loadError: null,
   sendError: null,
 
+  setSessionModel: (sessionId, model) => set((state) => ({
+    sessionModels: { ...state.sessionModels, [sessionId]: model },
+  })),
+  setSessionVariant: (sessionId, variant) => set((state) => ({
+    sessionVariants: { ...state.sessionVariants, [sessionId]: variant },
+  })),
   setSessionFilter: (filter) => set({ sessionFilter: filter }),
   setSessionSearch: (search) => set({ sessionSearch: search }),
 
@@ -391,6 +403,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const { [id]: _removedQueued, ...queuedMessageIds } = state.queuedMessageIds
       const { [id]: _removedLinks, ...sessionLinks } = state.sessionLinks
       const { [id]: _removedAllLinks, ...allSessionLinks } = state.allSessionLinks
+      const { [id]: _removedModel, ...sessionModels } = state.sessionModels
+      const { [id]: _removedVariant, ...sessionVariants } = state.sessionVariants
 
       return {
         sessions: state.sessions.filter((s) => s.id !== id),
@@ -402,6 +416,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         queuedMessageIds,
         sessionLinks,
         allSessionLinks,
+        sessionModels,
+        sessionVariants,
         activeSessionId:
           state.activeSessionId === id ? null : state.activeSessionId,
       }
@@ -497,6 +513,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       queuedMessageIds: {},
       sessionLinks: {},
       allSessionLinks: {},
+      sessionModels: {},
+      sessionVariants: {},
       sessionSearch: "",
       loadError: null,
       sendError: null,
