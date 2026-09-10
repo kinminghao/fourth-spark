@@ -1,0 +1,227 @@
+import type { Hono } from "hono"
+import { eq, and, desc } from "drizzle-orm"
+import { db } from "../../db/index"
+import { pullRequests, prIssueLinks, issues, repos } from "../../db/schema"
+import { parseGitUrl } from "../../lib/git-url"
+import { createGitIssueClient, getHostInfo, GitApiError, type GitPullRequest } from "../../lib/git-provider"
+import { logger } from "../../middleware/logger"
+import { parseOptionalBody } from "../../lib/validation"
+import {
+  SyncPullsBody,
+  prId,
+  rewriteAttachmentUrls,
+  extractUpstreamMessage,
+  prToDb,
+  parseIssueRefs,
+  getRepoGitClient,
+} from "./helpers"
+
+export function registerCrudRoutes(app: Hono): void {
+  // GET / — list pull requests from DB
+  app.get("/", async (c) => {
+    const repoId = c.req.param("repoId")!
+    const state = c.req.query("state") ?? "open"
+
+    const conditions = [eq(pullRequests.repoId, repoId)]
+    if (state !== "all") conditions.push(eq(pullRequests.state, state))
+
+    const rows = await db.select().from(pullRequests)
+      .where(and(...conditions))
+      .orderBy(desc(pullRequests.updatedAt))
+
+    for (const row of rows) {
+      row.body = rewriteAttachmentUrls(row.body, repoId)
+    }
+
+    return c.json(rows)
+  })
+
+  // POST /sync — sync PRs from git platform to DB
+  app.post("/sync", async (c) => {
+    const repoId = c.req.param("repoId")!
+
+    const [repo] = await db.select().from(repos).where(eq(repos.id, repoId))
+    if (!repo) return c.json({ error: "仓库不存在" }, 404)
+    const remote = parseGitUrl(repo.gitUrl)
+    if (!remote) return c.json({ error: "仓库的 Git URL 格式无效" }, 400)
+    const info = await getHostInfo(remote.host)
+    if (!info) return c.json({ error: `未配置 ${remote.host} 的访问令牌，请在设置中添加对应的 Git Host` }, 400)
+
+    const client = createGitIssueClient(remote.host, remote.owner, remote.repo, info.token, info.platform)
+
+    const [body, err] = await parseOptionalBody(c, SyncPullsBody)
+    if (err) return err
+    const state = body.state ?? "all"
+
+    let page = 1
+    let total = 0
+    const limit = 50
+    try {
+      // For "all" state, we need to fetch open and closed separately (most git APIs don't support "all" for PRs)
+      const states: Array<"open" | "closed"> = state === "all" ? ["open", "closed"] : [state as "open" | "closed"]
+
+      const CONCURRENCY = 5
+
+      for (const s of states) {
+        page = 1
+        while (true) {
+          const batch = await client.listPullRequests({ state: s, page, limit })
+          if (batch.length === 0) break
+
+          const enriched: Array<{ detail: GitPullRequest; diffStats: Array<{ filename: string; status: string; additions: number; deletions: number }> | null }>  = []
+          let active = 0
+          const queue = [...batch]
+
+          await new Promise<void>((resolve) => {
+            if (queue.length === 0) return resolve()
+            let finished = 0
+            const count = queue.length
+
+            function next() {
+              while (active < CONCURRENCY && queue.length > 0) {
+                const gpr = queue.shift()!
+                active++
+                Promise.all([
+                  client.getPullRequest(gpr.number).catch(() => gpr),
+                  client.listPullRequestFiles(gpr.number).catch(() => null),
+                ])
+                  .then(([detail, files]) => {
+                    const diffStats = files
+                      ? files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
+                      : null
+                    enriched.push({ detail: detail as GitPullRequest, diffStats })
+                  })
+                  .finally(() => {
+                    active--
+                    finished++
+                    if (finished === count) resolve()
+                    else next()
+                  })
+              }
+            }
+            next()
+          })
+
+          for (const { detail, diffStats } of enriched) {
+            const values = { ...prToDb(repoId, detail), diffStats }
+            const { id: _, createdAt: __, ...updateSet } = values
+            await db.insert(pullRequests).values(values).onConflictDoUpdate({ target: pullRequests.id, set: updateSet })
+          }
+
+          total += batch.length
+          if (batch.length < limit) break
+          page++
+        }
+      }
+    } catch (err) {
+      logger.error({ err, repoId, state, page }, "failed to sync PRs from git host")
+      const status = (err as { status?: number }).status
+      if (status === 401 || status === 403) {
+        return c.json({ error: `Git 平台认证失败 (${status})，请检查访问令牌是否有效` }, 400)
+      }
+      return c.json({ error: "从 Git 平台拉取 PR 失败，请稍后重试" }, 502)
+    }
+
+    let totalLinks = 0
+    const allPrs = await db.select({ id: pullRequests.id, number: pullRequests.number, body: pullRequests.body })
+      .from(pullRequests).where(eq(pullRequests.repoId, repoId))
+    for (const row of allPrs) {
+      const refs = parseIssueRefs(row.body)
+      for (const issueNum of refs) {
+        const iid = `${repoId}_${issueNum}`
+        const [exists] = await db.select({ id: issues.id }).from(issues).where(eq(issues.id, iid))
+        if (!exists) continue
+        await db.insert(prIssueLinks).values({ prId: row.id, issueId: iid }).onConflictDoNothing()
+        totalLinks++
+      }
+    }
+
+    logger.info({ repoId, total, totalLinks, state }, "PR sync complete")
+    return c.json({ synced: total, links: totalLinks })
+  })
+
+  // GET /:number — get single PR from DB (fallback to platform)
+  app.get("/:number", async (c) => {
+    const repoId = c.req.param("repoId")!
+    const number = Number(c.req.param("number"))
+    if (!Number.isFinite(number)) return c.json({ error: "invalid PR number" }, 400)
+
+    const pid = prId(repoId, number)
+    const [row] = await db.select().from(pullRequests).where(eq(pullRequests.id, pid))
+
+    if (row) {
+      if (row.additions === null || row.diffStats === null) {
+        const ctx = await getRepoGitClient(repoId)
+        if (ctx) {
+          try {
+            const detail = await ctx.client.getPullRequest(number)
+            const files = await ctx.client.listPullRequestFiles(number)
+            const diffStats = files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
+            const statsUpdate = {
+              additions: detail.additions ?? 0,
+              deletions: detail.deletions ?? 0,
+              changedFilesCount: detail.changed_files ?? 0,
+              commitCount: detail.commits ?? 0,
+              diffStats,
+            }
+            await db.update(pullRequests).set(statsUpdate).where(eq(pullRequests.id, pid))
+            Object.assign(row, statsUpdate)
+          } catch (err) {
+            logger.warn({ err, repoId, prNumber: number }, "failed to fetch PR diff stats on demand")
+          }
+        }
+      }
+      row.body = rewriteAttachmentUrls(row.body, repoId)
+      return c.json(row)
+    }
+
+    // Fallback: fetch from platform
+    const ctx = await getRepoGitClient(repoId)
+    if (!ctx) return c.json({ error: "Repo not found or git host not configured" }, 400)
+
+    const gpr = await ctx.client.getPullRequest(number)
+    const files = await ctx.client.listPullRequestFiles(number).catch(() => [])
+    const diffStats = files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
+    const values = { ...prToDb(repoId, gpr), diffStats }
+    await db.insert(pullRequests).values(values).onConflictDoNothing()
+    values.body = rewriteAttachmentUrls(values.body, repoId)
+    return c.json(values)
+  })
+
+  // POST /:number/merge — merge a PR
+  app.post("/:number/merge", async (c) => {
+    const repoId = c.req.param("repoId")!
+    const number = Number(c.req.param("number"))
+    if (!Number.isFinite(number)) return c.json({ error: "invalid PR number" }, 400)
+
+    const ctx = await getRepoGitClient(repoId)
+    if (!ctx) return c.json({ error: "Repo not found or git host not configured" }, 400)
+
+    try {
+      await ctx.client.mergePullRequest(number)
+    } catch (err) {
+      if (err instanceof GitApiError) {
+        const msg = err.message
+        const isConflict = msg.includes("merge conflict") || msg.includes("not mergeable") || err.status === 405 || err.status === 409
+        const status = isConflict ? 409 : err.status >= 400 && err.status < 600 ? err.status : 500
+        const userMessage = isConflict
+          ? "PR 存在合并冲突，请先解决冲突后再合入"
+          : `合入失败: ${extractUpstreamMessage(msg)}`
+        return c.json({ error: userMessage, code: isConflict ? "MERGE_CONFLICT" : "MERGE_FAILED" }, status as 409)
+      }
+      return c.json({ error: "合入失败: 未知错误" }, 500)
+    }
+
+    // Refresh PR state in DB after merge
+    try {
+      const gpr = await ctx.client.getPullRequest(number)
+      const values = prToDb(repoId, gpr)
+      const { id: _, createdAt: __, ...updateSet } = values
+      await db.insert(pullRequests).values(values).onConflictDoUpdate({ target: pullRequests.id, set: updateSet })
+    } catch (err) {
+      logger.warn({ err, repoId, prNumber: number }, "failed to refresh PR after merge")
+    }
+
+    return c.json({ ok: true })
+  })
+}

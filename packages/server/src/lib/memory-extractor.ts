@@ -21,19 +21,6 @@ const MAX_EXTRACTION_CONTENT_LENGTH = 200
 export const MAX_CONSOLIDATION_CONTENT_LENGTH = 600
 const SENTINEL_PATTERNS = /\[\/?\s*AGENT\s*MEMORY\s*\]|<\|.*?\|>|^system\s*:/gim
 
-// Strip structural context headers injected by the server into historical messages.
-// Without this, the extractor (running as Sisyphus) may interpret [WORKSPACE] /
-// [AGENT MEMORY] blocks as its own current context and treat data content as live tasks.
-const MSG_WORKSPACE_BLOCK = /\[WORKSPACE\][\s\S]*?\[\/WORKSPACE\]/g
-const MSG_AGENT_MEMORY_BLOCK = /\[AGENT MEMORY\][\s\S]*/
-
-function sanitizeMessageContent(text: string): string {
-  return text
-    .replace(MSG_WORKSPACE_BLOCK, "[工作区]")
-    .replace(MSG_AGENT_MEMORY_BLOCK, "")
-    .trim()
-}
-
 function newMemoryId(): string {
   return `mem_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`
 }
@@ -90,8 +77,7 @@ export async function buildExtractionData(sessionId: string, customAgentId: stri
       if (part.type === "text") {
         const p = part as Record<string, unknown>
         const text = (p.content as string) ?? (p.text as string) ?? ""
-        const sanitized = sanitizeMessageContent(text)
-        if (sanitized) lines.push({ role, content: sanitized })
+        if (text.trim()) lines.push({ role, content: text })
       } else if (part.type === "tool-call" || part.type === "tool-result") {
         const toolName = (part as Record<string, unknown>).toolName as string ?? (part as Record<string, unknown>).tool as string ?? "tool"
         const input = JSON.stringify((part as Record<string, unknown>).input ?? "").slice(0, TOOL_SUMMARY_LIMIT)
