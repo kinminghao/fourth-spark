@@ -149,7 +149,9 @@ export function createDefaultRuntimeManager(): RuntimeManager {
             } as Parameters<typeof provider.credentialWriter.write>[0])
             logger.info({ repoId, providerId }, "synced active credential to runtime")
           }
-        } catch {}
+        } catch (err) {
+          logger.warn({ err, repoId, providerId }, "failed to sync credential to runtime")
+        }
       }
 
       const client = provider.getClient(repoId)
