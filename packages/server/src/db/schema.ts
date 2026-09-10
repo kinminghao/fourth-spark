@@ -1,4 +1,4 @@
-import { pgTable, text, real, bigint, integer, jsonb, timestamp, primaryKey, index, uniqueIndex } from "drizzle-orm/pg-core"
+import { pgTable, text, real, bigint, integer, jsonb, timestamp, primaryKey, index, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core"
 
 export const repos = pgTable("repos", {
   id: text("id").primaryKey(),
@@ -51,7 +51,7 @@ export const milestones = pgTable("milestones", {
 export const issues = pgTable("issues", {
   id: text("id").primaryKey(),
   repoId: text("repo_id").notNull().references(() => repos.id, { onDelete: "cascade" }),
-  parentId: text("parent_id"),
+  parentId: text("parent_id").references((): AnyPgColumn => issues.id, { onDelete: "set null" }),
   number: integer("number").notNull(),
   title: text("title").notNull(),
   body: text("body"),
@@ -114,7 +114,7 @@ export const customAgentFragments = pgTable("custom_agent_fragments", {
 
 export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
-  parentId: text("parent_id"),
+  parentId: text("parent_id").references((): AnyPgColumn => sessions.id, { onDelete: "set null" }),
   repoId: text("repo_id").references(() => repos.id, { onDelete: "set null" }),
   workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
   issueId: text("issue_id").references(() => issues.id, { onDelete: "set null" }),
