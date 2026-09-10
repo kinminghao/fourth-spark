@@ -241,11 +241,11 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
   async function initialSync(client: RuntimeClient, repoId: string): Promise<void> {
     logger.info({ repoId }, "starting initial session sync")
     const sessionList = await client.listSessions()
-    syncSessionsList(sessionList).catch(() => {})
+    await syncSessionsList(sessionList)
     for (const session of sessionList) {
       try {
         const msgs = await client.getMessages(session.id)
-        syncMessagesList(session.id, msgs).catch(() => {})
+        await syncMessagesList(session.id, msgs)
       } catch (err) {
         logger.warn({ err, repoId, sessionId: session.id }, "skipping message sync for session")
       }
@@ -297,9 +297,7 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
     managed.set(repoId, entry)
     writePidFile()
 
-    initialSync(client, repoId).catch((err) => {
-      logger.error({ err, repoId }, "initial session sync failed")
-    })
+    await initialSync(client, repoId)
 
     return entry
   }
