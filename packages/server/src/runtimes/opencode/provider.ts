@@ -14,14 +14,14 @@
 // ---------------------------------------------------------------------------
 
 import { type Subprocess } from "bun"
-import { eq } from "drizzle-orm"
+import { eq, inArray } from "drizzle-orm"
 import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs"
 import { join } from "node:path"
 
 import type { RuntimeProvider, RuntimeHealth } from "../../core/runtime-provider"
 import type { RuntimeClient } from "../../core/runtime-client"
 import { db } from "../../db/index"
-import { repos } from "../../db/schema"
+import { repos, sessions } from "../../db/schema"
 import { syncSessionsList, syncMessagesList } from "../../db/sync"
 import { logger } from "../../middleware/logger"
 
@@ -240,18 +240,51 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
   }
 
   async function initialSync(client: RuntimeClient, repoId: string): Promise<void> {
-    logger.info({ repoId }, "starting initial session sync")
     const sessionList = await client.listSessions()
-    await syncSessionsList(sessionList)
-    for (const session of sessionList) {
-      try {
-        const msgs = await client.getMessages(session.id)
-        await syncMessagesList(session.id, msgs)
-      } catch (err) {
-        logger.warn({ err, repoId, sessionId: session.id }, "skipping message sync for session")
-      }
+    const remoteIds = sessionList
+      .map((s: Record<string, unknown>) => typeof s.id === "string" ? s.id : "")
+      .filter(Boolean)
+
+    if (remoteIds.length === 0) {
+      logger.info({ repoId }, "initial sync: no sessions from runtime, skipping")
+      return
     }
-    logger.info({ repoId, count: sessionList.length }, "initial session sync complete")
+
+    // Query DB for existing session IDs to avoid redundant writes
+    const existing = await db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(inArray(sessions.id, remoteIds))
+    const existingIds = new Set(existing.map((r) => r.id))
+
+    const newSessions = sessionList.filter(
+      (s: Record<string, unknown>) => typeof s.id === "string" && !existingIds.has(s.id),
+    )
+
+    if (newSessions.length === 0) {
+      logger.info({ repoId, total: remoteIds.length }, "initial sync: all sessions already in DB, skipping")
+      return
+    }
+
+    await syncSessionsList(newSessions)
+    logger.info({ repoId, total: remoteIds.length, synced: newSessions.length }, "initial sync: new sessions synced")
+
+    // Message details for new sessions — fire-and-forget, not blocking startup
+    const syncMessages = async () => {
+      for (const session of newSessions) {
+        const sid = (session as Record<string, unknown>).id as string
+        try {
+          const msgs = await client.getMessages(sid)
+          await syncMessagesList(sid, msgs)
+        } catch (err) {
+          logger.warn({ err, repoId, sessionId: sid }, "background message sync failed for session")
+        }
+      }
+      logger.info({ repoId, count: newSessions.length }, "background message sync complete")
+    }
+    syncMessages().catch((err) => {
+      logger.error({ err, repoId }, "background message sync aborted")
+    })
   }
 
   async function spawnOpenCode(repoId: string, localPath: string, port: number): Promise<ManagedRepo> {
@@ -295,7 +328,9 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
     managed.set(repoId, entry)
     writePidFile()
 
-    await initialSync(client, repoId)
+    initialSync(client, repoId).catch((err) => {
+      logger.error({ err, repoId }, "initial sync failed")
+    })
 
     return entry
   }
