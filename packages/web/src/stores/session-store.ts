@@ -207,17 +207,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
     set({ loadingSessions: true, loadError: null })
     try {
-      const [sessions, allLinks] = await Promise.all([
-        api.listSessions(repoId),
+      const [result, allLinks] = await Promise.all([
+        api.listSessions(repoId, { limit: 200 }),
         api.getAllSessionLinks(repoId).catch(() => null),
       ])
-      // Discard stale response if active repo changed while loading
       if (getRepoId() !== repoId) return
-      const next: Partial<SessionState> = { sessions, loadingSessions: false }
+      const next: Partial<SessionState> = { sessions: result.items, loadingSessions: false }
       if (allLinks) next.allSessionLinks = allLinks
       set(next)
     } catch (error) {
-      if (getRepoId() !== repoId) return // stale
+      if (getRepoId() !== repoId) return
       set({
         loadingSessions: false,
         loadError:

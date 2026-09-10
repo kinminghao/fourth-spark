@@ -5,8 +5,11 @@ import type { Issue, Tag, Milestone } from "../lib/api-client"
 import { useRepoStore } from "./repo-store"
 import { useToastStore } from "./toast-store"
 
+const ISSUES_LOAD_LIMIT = 1000
+
 interface IssueState {
   issues: Issue[]
+  issueTotal: number
   tags: Tag[]
   tagFilterMode: Map<string, "include" | "exclude">
   milestones: Milestone[]
@@ -37,6 +40,7 @@ interface IssueState {
 
 export const useIssueStore = create<IssueState>((set, get) => ({
   issues: [],
+  issueTotal: 0,
   tags: [],
   tagFilterMode: new Map<string, "include" | "exclude">(),
   milestones: [],
@@ -50,6 +54,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   matchingCandidateId: null,
   clearIssues: () => set({
     issues: [],
+    issueTotal: 0,
     tags: [],
     tagFilterMode: new Map<string, "include" | "exclude">(),
     milestones: [],
@@ -102,13 +107,13 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   loadIssues: async () => {
     const repoId = useRepoStore.getState().activeRepoId
     if (!repoId) {
-      set({ issues: [], loaded: true })
+      set({ issues: [], issueTotal: 0, loaded: true })
       return
     }
     try {
-      const issues = await api.listIssues(repoId, "all")
+      const result = await api.listIssues(repoId, "all", { limit: ISSUES_LOAD_LIMIT })
       if (useRepoStore.getState().activeRepoId !== repoId) return
-      set({ issues, loaded: true })
+      set({ issues: result.items, issueTotal: result.total, loaded: true })
     } catch {
       if (useRepoStore.getState().activeRepoId !== repoId) return
       set({ loaded: true })
@@ -121,12 +126,12 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     set({ syncing: true })
     try {
       await api.syncIssues(repoId, "open")
-      const [issues, tags, milestones] = await Promise.all([
-        api.listIssues(repoId, "all"),
+      const [issueResult, tags, milestones] = await Promise.all([
+        api.listIssues(repoId, "all", { limit: ISSUES_LOAD_LIMIT }),
         api.listTags(repoId),
         api.listMilestones(repoId),
       ])
-      set({ issues, tags, milestones, syncing: false })
+      set({ issues: issueResult.items, issueTotal: issueResult.total, tags, milestones, syncing: false })
     } catch (err) {
       set({ syncing: false })
       let message = "同步 Issue 失败"

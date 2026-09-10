@@ -179,6 +179,13 @@ export interface ModelInfo {
   supportsImage?: boolean
 }
 
+export interface PaginatedList<T> {
+  items: T[]
+  total: number
+  limit: number
+  offset: number
+}
+
 export class ApiError extends Error {
   readonly status: number
   constructor(message: string, status: number) {
@@ -243,6 +250,22 @@ function unwrapList<T>(payload: unknown, ...keys: string[]): T[] {
     }
   }
   return []
+}
+
+function unwrapPaginated<T>(payload: unknown, ...keys: string[]): PaginatedList<T> {
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>
+    if (Array.isArray(record.items) && typeof record.total === "number") {
+      return {
+        items: record.items as T[],
+        total: record.total,
+        limit: typeof record.limit === "number" ? record.limit : 50,
+        offset: typeof record.offset === "number" ? record.offset : 0,
+      }
+    }
+  }
+  const items = unwrapList<T>(payload, ...keys)
+  return { items, total: items.length, limit: items.length, offset: 0 }
 }
 
 // ---------------------------------------------------------------------------
@@ -405,8 +428,18 @@ export async function switchRuntime(repoId: string, runtimeType: string): Promis
 // Session API — /api/repos/:repoId/sessions
 // ---------------------------------------------------------------------------
 
-export async function listSessions(repoId: string): Promise<Session[]> {
-  return unwrapList<Session>(await apiFetch<unknown>(`${repoBase(repoId)}/sessions`), "sessions")
+export async function listSessions(
+  repoId: string,
+  opts?: { limit?: number; offset?: number },
+): Promise<PaginatedList<Session>> {
+  const params = new URLSearchParams()
+  if (opts?.limit != null) params.set("limit", String(opts.limit))
+  if (opts?.offset != null) params.set("offset", String(opts.offset))
+  const qs = params.toString()
+  return unwrapPaginated<Session>(
+    await apiFetch<unknown>(`${repoBase(repoId)}/sessions${qs ? `?${qs}` : ""}`),
+    "sessions",
+  )
 }
 
 export async function createSession(
@@ -771,9 +804,16 @@ export async function listMilestones(repoId: string, state?: string): Promise<Mi
 // Issue API — /api/repos/:repoId/issues
 // ---------------------------------------------------------------------------
 
-export async function listIssues(repoId: string, state = "open"): Promise<Issue[]> {
-  return unwrapList<Issue>(
-    await apiFetch<unknown>(`${repoBase(repoId)}/issues?state=${encodeURIComponent(state)}`),
+export async function listIssues(
+  repoId: string,
+  state = "open",
+  opts?: { limit?: number; offset?: number },
+): Promise<PaginatedList<Issue>> {
+  const params = new URLSearchParams({ state })
+  if (opts?.limit != null) params.set("limit", String(opts.limit))
+  if (opts?.offset != null) params.set("offset", String(opts.offset))
+  return unwrapPaginated<Issue>(
+    await apiFetch<unknown>(`${repoBase(repoId)}/issues?${params}`),
     "issues",
   )
 }

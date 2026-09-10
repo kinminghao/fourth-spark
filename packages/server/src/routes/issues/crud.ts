@@ -1,7 +1,8 @@
 import { Hono } from "hono"
-import { eq, and, desc, inArray } from "drizzle-orm"
+import { eq, and, desc, inArray, count } from "drizzle-orm"
 import { db } from "../../db/index"
 import { issues, issueComments, repos, tags, issueTags, milestones } from "../../db/schema"
+import { parsePagination, paginatedResponse } from "../../lib/pagination"
 import { parseGitUrl } from "../../lib/git-url"
 import { createGitIssueClient, getHostInfo, GitApiError, type GitComment } from "../../lib/git-provider"
 import { logger } from "../../middleware/logger"
@@ -26,8 +27,10 @@ export function registerCrudRoutes(app: Hono): void {
     const state = c.req.query("state") ?? "open"
     const tagFilter = c.req.query("tags")
     const milestoneFilter = c.req.query("milestone")
+    const pg = parsePagination({ limit: c.req.query("limit"), offset: c.req.query("offset") })
 
-    let rows: (typeof issues.$inferSelect)[]
+    // Build WHERE conditions shared by both count and data queries
+    let where: ReturnType<typeof and>
 
     if (tagFilter) {
       const tagNames = tagFilter.split(",").map((t) => t.trim()).filter(Boolean)
@@ -36,7 +39,7 @@ export function registerCrudRoutes(app: Hono): void {
           .where(and(eq(tags.repoId, repoId), inArray(tags.name, tagNames)))
         const tagIds = matchedTags.map((t) => t.id)
 
-        if (tagIds.length === 0) return c.json([])
+        if (tagIds.length === 0) return c.json(paginatedResponse([], 0, pg))
 
         const linked = await db.select({ issueId: issueTags.issueId }).from(issueTags)
           .where(inArray(issueTags.tagId, tagIds))
@@ -45,33 +48,40 @@ export function registerCrudRoutes(app: Hono): void {
           issueIdCounts.set(r.issueId, (issueIdCounts.get(r.issueId) ?? 0) + 1)
         }
         const matchedIssueIds = [...issueIdCounts.entries()]
-          .filter(([, count]) => count >= tagIds.length)
+          .filter(([, cnt]) => cnt >= tagIds.length)
           .map(([id]) => id)
 
-        if (matchedIssueIds.length === 0) return c.json([])
+        if (matchedIssueIds.length === 0) return c.json(paginatedResponse([], 0, pg))
 
         const conditions = [eq(issues.repoId, repoId), inArray(issues.id, matchedIssueIds)]
         if (state !== "all") conditions.push(eq(issues.state, state))
         if (milestoneFilter) conditions.push(eq(issues.milestoneId, milestoneFilter))
-        rows = await db.select().from(issues).where(and(...conditions)).orderBy(desc(issues.updatedAt))
+        where = and(...conditions)
       } else {
         const conditions = [eq(issues.repoId, repoId)]
         if (state !== "all") conditions.push(eq(issues.state, state))
         if (milestoneFilter) conditions.push(eq(issues.milestoneId, milestoneFilter))
-        rows = await db.select().from(issues).where(and(...conditions)).orderBy(desc(issues.updatedAt))
+        where = and(...conditions)
       }
     } else {
       const conditions = [eq(issues.repoId, repoId)]
       if (state !== "all") conditions.push(eq(issues.state, state))
       if (milestoneFilter) conditions.push(eq(issues.milestoneId, milestoneFilter))
-      rows = await db.select().from(issues).where(and(...conditions)).orderBy(desc(issues.updatedAt))
+      where = and(...conditions)
     }
+
+    const [{ total }] = await db.select({ total: count() }).from(issues).where(where)
+    const rows = await db.select().from(issues)
+      .where(where)
+      .orderBy(desc(issues.updatedAt))
+      .limit(pg.limit)
+      .offset(pg.offset)
 
     for (const row of rows) {
       row.body = rewriteAttachmentUrls(row.body, repoId)
     }
 
-    return c.json(rows)
+    return c.json(paginatedResponse(rows, total, pg))
   })
 
   app.post("/sync", async (c) => {
