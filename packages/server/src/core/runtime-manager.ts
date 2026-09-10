@@ -196,7 +196,8 @@ export function createDefaultRuntimeManager(): RuntimeManager {
 
     async startAll(): Promise<void> {
       if (isWorkerMode()) {
-        const cfg = getWorkerConfig()!
+        const cfg = getWorkerConfig()
+        if (!cfg) throw new Error("Worker config unavailable despite worker mode being active")
         logger.info({ masterUrl: cfg.masterUrl, workerId: cfg.workerId }, "cloud worker mode: initializing")
         const client = createLeaseClient(cfg.masterUrl, cfg.workerId)
         const healthy = await client.healthCheck()
@@ -269,7 +270,8 @@ export function createDefaultRuntimeManager(): RuntimeManager {
         return
       }
 
-      const cfg = getWorkerConfig()!
+      const cfg = getWorkerConfig()
+      if (!cfg) throw new Error("Worker config unavailable despite worker mode being active")
       logger.info({ masterUrl: cfg.masterUrl, workerId: cfg.workerId }, "cloud pool: reconnecting")
       const client = createLeaseClient(cfg.masterUrl, cfg.workerId)
       const healthy = await client.healthCheck()
