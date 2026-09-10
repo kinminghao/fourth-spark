@@ -45,10 +45,10 @@ export const agentMemoryRoutes = new Hono()
 
 agentMemoryRoutes.get("/", async (c) => {
   const agentId = c.req.param("agentId")
-  if (!agentId) return c.json({ error: "Missing agentId", status: 400 }, 400)
+  if (!agentId) return c.json({ error: "Missing agentId" }, 400)
 
   const check = await requireMemoryEnabled(agentId)
-  if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
+  if (check.error) return c.json({ error: check.error }, check.status as 403 | 404)
 
   const category = c.req.query("category")
   const includeSuperseded = c.req.query("includeSuperseded") === "true"
@@ -70,10 +70,10 @@ agentMemoryRoutes.get("/", async (c) => {
 
 agentMemoryRoutes.get("/stats", async (c) => {
   const agentId = c.req.param("agentId")
-  if (!agentId) return c.json({ error: "Missing agentId", status: 400 }, 400)
+  if (!agentId) return c.json({ error: "Missing agentId" }, 400)
 
   const check = await requireMemoryEnabled(agentId)
-  if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
+  if (check.error) return c.json({ error: check.error }, check.status as 403 | 404)
 
   const stats = await getConsolidationStats(agentId)
   return c.json(stats)
@@ -81,10 +81,10 @@ agentMemoryRoutes.get("/stats", async (c) => {
 
 agentMemoryRoutes.post("/consolidate", async (c) => {
   const agentId = c.req.param("agentId")
-  if (!agentId) return c.json({ error: "Missing agentId", status: 400 }, 400)
+  if (!agentId) return c.json({ error: "Missing agentId" }, 400)
 
   const check = await requireMemoryEnabled(agentId)
-  if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
+  if (check.error) return c.json({ error: check.error }, check.status as 403 | 404)
 
   const { repos } = await import("../db/schema")
   const allRepoRows = await db.select({ id: repos.id }).from(repos)
@@ -94,7 +94,7 @@ agentMemoryRoutes.post("/consolidate", async (c) => {
     if (client) entries.push({ repoId: repo.id, client })
   }
 
-  if (entries.length === 0) return c.json({ error: "No runtime clients available", status: 503 }, 503)
+  if (entries.length === 0) return c.json({ error: "No runtime clients available" }, 503)
 
   try {
     triggerManualConsolidation(agentId, entries).catch((err) =>
@@ -102,16 +102,16 @@ agentMemoryRoutes.post("/consolidate", async (c) => {
     return c.json({ status: "started" })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return c.json({ error: msg, status: 409 }, 409)
+    return c.json({ error: msg }, 409)
   }
 })
 
 agentMemoryRoutes.post("/", async (c) => {
   const agentId = c.req.param("agentId")
-  if (!agentId) return c.json({ error: "Missing agentId", status: 400 }, 400)
+  if (!agentId) return c.json({ error: "Missing agentId" }, 400)
 
   const check = await requireMemoryEnabled(agentId)
-  if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
+  if (check.error) return c.json({ error: check.error }, check.status as 403 | 404)
 
   const [body, err] = await parseBody(c, CreateMemoryBody)
   if (err) return err
@@ -136,17 +136,17 @@ agentMemoryRoutes.post("/", async (c) => {
 agentMemoryRoutes.put("/:memId", async (c) => {
   const agentId = c.req.param("agentId")
   const memId = c.req.param("memId")
-  if (!agentId || !memId) return c.json({ error: "Missing agentId or memId", status: 400 }, 400)
+  if (!agentId || !memId) return c.json({ error: "Missing agentId or memId" }, 400)
 
   const check = await requireMemoryEnabled(agentId)
-  if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
+  if (check.error) return c.json({ error: check.error }, check.status as 403 | 404)
 
   const [body, err] = await parseBody(c, UpdateMemoryBody)
   if (err) return err
 
   const [existing] = await db.select().from(agentMemories)
     .where(and(eq(agentMemories.id, memId), eq(agentMemories.customAgentId, agentId)))
-  if (!existing) return c.json({ error: "Memory not found", status: 404 }, 404)
+  if (!existing) return c.json({ error: "Memory not found" }, 404)
 
   const updates: Record<string, unknown> = { updatedAt: Date.now() }
   if (body.content !== undefined) updates.content = body.content
@@ -171,14 +171,14 @@ agentMemoryRoutes.put("/:memId", async (c) => {
 agentMemoryRoutes.delete("/:memId", async (c) => {
   const agentId = c.req.param("agentId")
   const memId = c.req.param("memId")
-  if (!agentId || !memId) return c.json({ error: "Missing agentId or memId", status: 400 }, 400)
+  if (!agentId || !memId) return c.json({ error: "Missing agentId or memId" }, 400)
 
   const check = await requireMemoryEnabled(agentId)
-  if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
+  if (check.error) return c.json({ error: check.error }, check.status as 403 | 404)
 
   const [existing] = await db.select().from(agentMemories)
     .where(and(eq(agentMemories.id, memId), eq(agentMemories.customAgentId, agentId)))
-  if (!existing) return c.json({ error: "Memory not found", status: 404 }, 404)
+  if (!existing) return c.json({ error: "Memory not found" }, 404)
 
   await db.update(agentMemories).set({ supersededBy: "user-deleted", updatedAt: Date.now() }).where(eq(agentMemories.id, memId))
   return c.json({ ok: true })
@@ -200,10 +200,10 @@ async function findClientForSession(sessionId: string): Promise<{ repoId: string
 
 agentMemoryRoutes.post("/extract", async (c) => {
   const agentId = c.req.param("agentId")
-  if (!agentId) return c.json({ error: "Missing agentId", status: 400 }, 400)
+  if (!agentId) return c.json({ error: "Missing agentId" }, 400)
 
   const check = await requireMemoryEnabled(agentId)
-  if (check.error) return c.json({ error: check.error, status: check.status }, check.status as 403 | 404)
+  if (check.error) return c.json({ error: check.error }, check.status as 403 | 404)
 
   const [body, err] = await parseBody(c, ExtractMemoriesBody)
   if (err) return err
@@ -215,7 +215,7 @@ agentMemoryRoutes.post("/extract", async (c) => {
       eq(sessionsTable.customAgentId, agentId),
     ))
 
-  if (validSessions.length === 0) return c.json({ error: "No matching sessions found", status: 404 }, 404)
+  if (validSessions.length === 0) return c.json({ error: "No matching sessions found" }, 404)
 
   const results: Array<{ sessionId: string; status: string; actions?: number; error?: string }> = []
 
@@ -299,7 +299,7 @@ export const agentSessionRoutes = new Hono()
 
 agentSessionRoutes.get("/", async (c) => {
   const agentId = c.req.param("agentId")
-  if (!agentId) return c.json({ error: "Missing agentId", status: 400 }, 400)
+  if (!agentId) return c.json({ error: "Missing agentId" }, 400)
 
   const rows = await db.select({
     id: sessionsTable.id,

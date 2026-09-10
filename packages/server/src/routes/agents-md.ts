@@ -68,14 +68,14 @@ export const repoAgentsMd = new Hono()
 
 repoAgentsMd.get("/:id/agents-md", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
-  if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
+  if (!repo) return c.json({ error: "Repo not found" }, 404)
   const fileName = instructionFileName(repo.runtimeType)
   return c.json({ content: await safeRead(join(repo.localPath, fileName)) })
 })
 
 repoAgentsMd.put("/:id/agents-md", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
-  if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
+  if (!repo) return c.json({ error: "Repo not found" }, 404)
   const [body, err] = await parseBody(c, UpdateRepoAgentsMdBody)
   if (err) return err
   const fileName = instructionFileName(repo.runtimeType)
