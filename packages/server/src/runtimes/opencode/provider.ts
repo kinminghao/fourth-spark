@@ -330,6 +330,9 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
       }
     })()
 
+    // Safe: steps ②–④ (check startingLocks → create IIFE → set startingLocks)
+    // run in one synchronous frame — the IIFE suspends at its first `await`
+    // and returns control HERE, so no other call can interleave before the set.
     startingLocks.set(repoId, promise)
     return promise
   }
