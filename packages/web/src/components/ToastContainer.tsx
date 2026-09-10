@@ -87,6 +87,7 @@ export function ToastContainer() {
   return (
     <div
       className="pointer-events-none fixed top-4 right-4 z-50 flex w-[calc(100%-2rem)] max-w-sm flex-col"
+      role="status"
       aria-live="polite"
       aria-atomic="false"
     >
