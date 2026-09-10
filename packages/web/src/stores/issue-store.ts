@@ -107,8 +107,10 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     }
     try {
       const issues = await api.listIssues(repoId, "all")
+      if (useRepoStore.getState().activeRepoId !== repoId) return
       set({ issues, loaded: true })
     } catch {
+      if (useRepoStore.getState().activeRepoId !== repoId) return
       set({ loaded: true })
     }
   },

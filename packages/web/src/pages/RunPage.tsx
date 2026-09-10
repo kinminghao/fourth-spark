@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useReducer, useRef, useState } from "react"
 import { Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Pencil, Pin, Plus, Search, Trash2, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -646,39 +646,44 @@ function FilePreviewContent({ file }: { file: PreviewFileInfo }) {
   )
 }
 
+type TabState = { tabs: PreviewFileInfo[]; activeIdx: number | null }
+type TabAction =
+  | { type: "reset" }
+  | { type: "open"; info: PreviewFileInfo }
+  | { type: "close"; idx: number }
+  | { type: "activate"; idx: number | null }
+
+function tabReducer(state: TabState, action: TabAction): TabState {
+  switch (action.type) {
+    case "reset":
+      return { tabs: [], activeIdx: null }
+    case "open": {
+      const existing = state.tabs.findIndex((t) => t.url === action.info.url)
+      if (existing >= 0) return { ...state, activeIdx: existing }
+      return { tabs: [...state.tabs, action.info], activeIdx: state.tabs.length }
+    }
+    case "close": {
+      const next = state.tabs.filter((_, i) => i !== action.idx)
+      let activeIdx = state.activeIdx
+      if (activeIdx === action.idx) activeIdx = null
+      else if (activeIdx !== null && activeIdx > action.idx) activeIdx = activeIdx - 1
+      return { tabs: next, activeIdx }
+    }
+    case "activate":
+      return { ...state, activeIdx: action.idx }
+  }
+}
+
 function usePreviewTabs(activeSessionId: string | null) {
-  const [tabs, setTabs] = useState<PreviewFileInfo[]>([])
-  const [activeIdx, setActiveIdx] = useState<number | null>(null)
+  const [state, dispatch] = useReducer(tabReducer, { tabs: [], activeIdx: null })
 
-  useEffect(() => { setTabs([]); setActiveIdx(null) }, [activeSessionId])
+  useEffect(() => { dispatch({ type: "reset" }) }, [activeSessionId])
 
-  const open = (info: PreviewFileInfo) => {
-    setTabs((prev) => {
-      const existing = prev.findIndex((t) => t.url === info.url)
-      if (existing >= 0) {
-        setActiveIdx(existing)
-        return prev
-      }
-      setActiveIdx(prev.length)
-      return [...prev, info]
-    })
-  }
+  const open = useCallback((info: PreviewFileInfo) => dispatch({ type: "open", info }), [])
+  const close = useCallback((idx: number) => dispatch({ type: "close", idx }), [])
+  const activate = useCallback((idx: number | null) => dispatch({ type: "activate", idx }), [])
 
-  const close = (idx: number) => {
-    setTabs((prev) => {
-      const next = prev.filter((_, i) => i !== idx)
-      setActiveIdx((cur) => {
-        if (cur === idx) return null
-        if (cur !== null && cur > idx) return cur - 1
-        return cur
-      })
-      return next
-    })
-  }
-
-  const activate = (idx: number | null) => setActiveIdx(idx)
-
-  return { tabs, activeIdx, open, close, activate }
+  return { tabs: state.tabs, activeIdx: state.activeIdx, open, close, activate }
 }
 
 export function RunPage() {

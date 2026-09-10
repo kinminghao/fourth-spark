@@ -936,7 +936,7 @@ export function AgentDetailPage() {
     api.listGlobalFragments()
       .then(setFragments)
       .catch(() => setFragments([]))
-  }, [])
+  }, [agentId])
 
   useEffect(() => {
     if (agents.length > 0 && !agent) {

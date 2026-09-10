@@ -19,8 +19,10 @@ export const useCustomAgentStore = create<CustomAgentState>((set) => ({
       const agents = repoId
         ? await api.listRepoCustomAgents(repoId)
         : await api.listGlobalCustomAgents()
+      if (useRepoStore.getState().activeRepoId !== repoId) return
       set({ agents, loaded: true })
     } catch {
+      if (useRepoStore.getState().activeRepoId !== repoId) return
       set({ loaded: true })
     }
   },

@@ -81,8 +81,10 @@ export const usePrStore = create<PrState>((set, get) => ({
     }
     try {
       const pulls = await api.listPulls(repoId, "all")
+      if (useRepoStore.getState().activeRepoId !== repoId) return
       set({ pulls, loaded: true })
     } catch {
+      if (useRepoStore.getState().activeRepoId !== repoId) return
       set({ loaded: true })
     }
   },
