@@ -30,6 +30,7 @@ import { orchestrator } from "../lib/session-orchestrator"
 import { ExecutionBlock } from "./ExecutionBlock"
 import { TodoProgressCompact } from "./TodoProgress"
 import { InputBar } from "./InputBar"
+import { agentAvatar } from "../lib/constants"
 
 const STATUS_META: Record<
   string,
@@ -41,24 +42,7 @@ const STATUS_META: Record<
   error: { glyph: "✗", label: "error", color: "text-red-400", spin: false },
 }
 
-// Deterministic initial-letter avatar. Static class strings so Tailwind can pick them up.
-const AGENT_AVATAR_PALETTE = [
-  { bg: "bg-blue-500/15", text: "text-blue-500" },
-  { bg: "bg-purple-500/15", text: "text-purple-500" },
-  { bg: "bg-emerald-500/15", text: "text-emerald-500" },
-  { bg: "bg-amber-500/15", text: "text-amber-500" },
-  { bg: "bg-rose-500/15", text: "text-rose-500" },
-  { bg: "bg-cyan-500/15", text: "text-cyan-500" },
-  { bg: "bg-indigo-500/15", text: "text-indigo-500" },
-  { bg: "bg-orange-500/15", text: "text-orange-500" },
-] as const
 
-function agentAvatar(name: string): { bg: string; text: string; initial: string } {
-  const trimmed = name.trim()
-  const code = trimmed.charCodeAt(0) || 0
-  const palette = AGENT_AVATAR_PALETTE[code % AGENT_AVATAR_PALETTE.length]
-  return { ...palette, initial: (trimmed.charAt(0) || "?").toUpperCase() }
-}
 
 function StatusBadge({ status, reason }: { status: string | undefined; reason?: string }) {
   const meta = STATUS_META[status ?? "idle"] ?? STATUS_META.idle
