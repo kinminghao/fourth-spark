@@ -60,6 +60,7 @@ export function createLeaseKeeper(client: LeaseClient) {
     ticking = true
     try {
       const auth = await readAuthAnthropic()
+      if (disposed) return
       if (!renewalDue(auth)) return
 
       const failure = await renew()
