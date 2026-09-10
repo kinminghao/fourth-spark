@@ -1,6 +1,5 @@
 import * as api from "./api-client"
 import { useSessionStore } from "../stores/session-store"
-import { useRepoStore } from "../stores/repo-store"
 
 const POLL_MS = 60_000
 
@@ -11,9 +10,11 @@ type SupervisorCallbacks = {
 export class SessionSupervisor {
   private timer: ReturnType<typeof setInterval> | null = null
   private paused = false
+  private repoId: string
   private callbacks: SupervisorCallbacks
 
-  constructor(callbacks: SupervisorCallbacks) {
+  constructor(repoId: string, callbacks: SupervisorCallbacks) {
+    this.repoId = repoId
     this.callbacks = callbacks
   }
 
@@ -41,10 +42,9 @@ export class SessionSupervisor {
   }
 
   private tick(): void {
-    const repoId = useRepoStore.getState().activeRepoId
-    if (!repoId) return
+    const repoId = this.repoId
 
-    void useSessionStore.getState().loadSessions()
+    void useSessionStore.getState().loadSessions(repoId)
 
     void api
       .getAllSessionStatuses(repoId)

@@ -66,10 +66,11 @@ export function InputBar() {
 
   const handleVoiceSubmit = useCallback(
     async (text: string) => {
-      const ok = await sendMessage(text, selectedModel || undefined, selectedVariant || undefined)
+      if (!activeRepoId) return false
+      const ok = await sendMessage(activeRepoId, text, selectedModel || undefined, selectedVariant || undefined)
       if (!ok) return false
     },
-    [sendMessage, selectedModel, selectedVariant],
+    [activeRepoId, sendMessage, selectedModel, selectedVariant],
   )
 
   const voice = useVoiceInput(handleVoiceSubmit)
@@ -175,7 +176,7 @@ export function InputBar() {
     if (disabled || (!content && attachments.length === 0)) {
       return
     }
-    const ok = await sendMessage(content, selectedModel || undefined, selectedVariant || undefined, promptFiles.length > 0 ? promptFiles : undefined)
+    const ok = await sendMessage(activeRepoId!, content, selectedModel || undefined, selectedVariant || undefined, promptFiles.length > 0 ? promptFiles : undefined)
     if (ok) {
       setValue("")
       clear()
@@ -237,7 +238,7 @@ export function InputBar() {
               disabled={disabled}
               onClick={() => {
                 if (qi.autoSend) {
-                  void sendMessage(qi.text, selectedModel || undefined, selectedVariant || undefined)
+                  if (activeRepoId) void sendMessage(activeRepoId, qi.text, selectedModel || undefined, selectedVariant || undefined)
                 } else {
                   setValue(qi.text)
                   if (activeSessionId) setDraft(activeSessionId, qi.text)

@@ -9,9 +9,11 @@ class SessionOrchestrator {
   private dispatcher: GlobalEventDispatcher | null = null
   private supervisor: SessionSupervisor | null = null
   private visibilityHandler: (() => void) | null = null
+  private repoId: string | null = null
 
   start(repoId: string): void {
     this.stop()
+    this.repoId = repoId
 
     const poolCallbacks: WorkerPoolCallbacks = {
       onWorkerIdle: (sessionId) => this.removeWorker(sessionId),
@@ -26,7 +28,7 @@ class SessionOrchestrator {
     })
     this.dispatcher.start()
 
-    this.supervisor = new SessionSupervisor({
+    this.supervisor = new SessionSupervisor(repoId, {
       ensureWorker: (sessionId) => this.ensureWorker(sessionId, poolCallbacks),
     })
     this.supervisor.start()
@@ -65,7 +67,7 @@ class SessionOrchestrator {
     }
     const worker = this.ensureWorker(sessionId, poolCallbacks)
     worker.activate()
-    void useSessionStore.getState().refreshSessionData(sessionId)
+    if (this.repoId) void useSessionStore.getState().refreshSessionData(this.repoId, sessionId)
   }
 
   deactivateSession(sessionId: string): void {
@@ -75,7 +77,7 @@ class SessionOrchestrator {
   private ensureWorker(sessionId: string, callbacks: WorkerPoolCallbacks): SessionWorker {
     let worker = this.workers.get(sessionId)
     if (!worker) {
-      worker = new SessionWorker(sessionId, callbacks)
+      worker = new SessionWorker(sessionId, this.repoId!, callbacks)
       this.workers.set(sessionId, worker)
       freezeMonitor.setGauge("workers", this.workers.size)
     }

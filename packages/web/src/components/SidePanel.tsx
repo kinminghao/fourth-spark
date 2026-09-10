@@ -202,12 +202,14 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
 
   const exitMatch = () => { setMatchMode(null); setQuery("") }
 
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
+
   const handleToggle = async (type: "issue" | "pr", targetId: string, isLinked: boolean) => {
-    if (!sessionId) return
+    if (!sessionId || !activeRepoId) return
     if (isLinked) {
-      await removeLink(sessionId, type, targetId)
+      await removeLink(activeRepoId, sessionId, type, targetId)
     } else {
-      await addLink(sessionId, type, targetId)
+      await addLink(activeRepoId, sessionId, type, targetId)
     }
   }
 
@@ -444,6 +446,7 @@ function SubtasksTab() {
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
   const sessionStatuses = useSessionStore((s) => s.sessionStatuses)
   const setActiveSession = useSessionStore((s) => s.setActiveSession)
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
   const parentId = activeSession?.parentID ?? activeSessionId
@@ -479,7 +482,7 @@ function SubtasksTab() {
             <li key={child.id}>
               <button
                 type="button"
-                onClick={() => { if (!isCurrent) void setActiveSession(child.id) }}
+                onClick={() => { if (!isCurrent && activeRepoId) void setActiveSession(activeRepoId, child.id) }}
                 className={clsx(
                   "group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
                   isCurrent

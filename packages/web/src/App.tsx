@@ -14,6 +14,8 @@ import { useCustomAgentStore } from "./stores/custom-agent-store"
 import { useIssueStore } from "./stores/issue-store"
 import { usePrStore } from "./stores/pr-store"
 import { useThemeStore } from "./stores/theme-store"
+import { useToastStore } from "./stores/toast-store"
+import { setNotificationHandler } from "./stores/notifications"
 import { ToastContainer } from "./components/ToastContainer"
 import { ErrorBoundary, AppCrashFallback, guarded } from "./components/ErrorBoundary"
 import { orchestrator } from "./lib/session-orchestrator"
@@ -49,6 +51,10 @@ function AppInner() {
 
   useEffect(() => {
     freezeMonitor.start()
+    setNotificationHandler(
+      useToastStore.getState().addToast,
+      useToastStore.getState().removeToast,
+    )
     void useRepoStore.getState().loadRepos()
     const cleanupTheme = useThemeStore.getState().init()
     return () => {
@@ -72,10 +78,10 @@ function AppInner() {
       useSessionStore.getState().clearSessions()
       useIssueStore.getState().clearIssues()
       usePrStore.getState().clearPulls()
-      void useSessionStore.getState().loadSessions()
-      void useCustomAgentStore.getState().loadAgents()
-      void useIssueStore.getState().loadIssues()
-      void usePrStore.getState().loadPulls()
+      void useSessionStore.getState().loadSessions(activeRepoId)
+      void useCustomAgentStore.getState().loadAgents(activeRepoId)
+      void useIssueStore.getState().loadIssues(activeRepoId)
+      void usePrStore.getState().loadPulls(activeRepoId)
       orchestrator.start(activeRepoId)
     } else {
       useSessionStore.getState().clearSessions()

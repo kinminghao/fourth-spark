@@ -14,6 +14,7 @@ type BufferedEvent = { name: string; data: unknown }
 
 export class SessionWorker {
   readonly sessionId: string
+  readonly repoId: string
   private idleTimer: ReturnType<typeof setTimeout> | null = null
   private flushTimer: ReturnType<typeof setInterval> | null = null
   private active = false
@@ -22,8 +23,9 @@ export class SessionWorker {
   private eventQueue: BufferedEvent[] = []
   private deltaBuffer: Map<string, { messageId: string; text: string }> = new Map()
 
-  constructor(sessionId: string, callbacks: WorkerPoolCallbacks) {
+  constructor(sessionId: string, repoId: string, callbacks: WorkerPoolCallbacks) {
     this.sessionId = sessionId
+    this.repoId = repoId
     this.callbacks = callbacks
     this.resetIdleTimer()
   }
@@ -66,7 +68,7 @@ export class SessionWorker {
   }
 
   refreshOnIdle(): void {
-    void useSessionStore.getState().refreshSessionData(this.sessionId)
+    void useSessionStore.getState().refreshSessionData(this.repoId, this.sessionId)
   }
 
   stop(): void {

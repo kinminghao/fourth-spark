@@ -231,7 +231,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     if (!activeRepoId || (!text && !hasContext && attachments.length === 0)) return
     setDraft("")
     clear()
-    void createSession(text, undefined, undefined, selectedVariant || undefined, issueId || undefined, customAgentId || undefined, promptFiles.length > 0 ? promptFiles : undefined)
+    void createSession(activeRepoId!, text, undefined, undefined, selectedVariant || undefined, issueId || undefined, customAgentId || undefined, promptFiles.length > 0 ? promptFiles : undefined)
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -253,9 +253,10 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
 
   const handleVoiceSubmit = useCallback(
     (text: string) => {
-      void createSession(text, undefined, undefined, selectedVariant || undefined, issueId || undefined, customAgentId || undefined)
+      if (!activeRepoId) return
+      void createSession(activeRepoId, text, undefined, undefined, selectedVariant || undefined, issueId || undefined, customAgentId || undefined)
     },
-    [createSession, issueId, customAgentId, selectedVariant],
+    [activeRepoId, createSession, issueId, customAgentId, selectedVariant],
   )
 
   const voice = useVoiceInput(handleVoiceSubmit)
@@ -471,14 +472,15 @@ function IssueMatchView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const candidate = useIssueStore((s) => s.issues.find((i) => i.id === candidateId))
   const exitMatchMode = useIssueStore((s) => s.exitMatchMode)
   const linkChild = useIssueStore((s) => s.linkChild)
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const [linking, setLinking] = useState(false)
 
   if (!parent) return null
 
   const handleConfirm = async () => {
-    if (!candidate) return
+    if (!candidate || !activeRepoId) return
     setLinking(true)
-    await linkChild(parent.number, candidate.number)
+    await linkChild(activeRepoId, parent.number, candidate.number)
     setLinking(false)
   }
 
@@ -597,6 +599,7 @@ export function RunView({
   const sendError = useSessionStore((state) => state.sendError)
   const abortSession = useSessionStore((state) => state.abortSession)
   const revertToMessage = useSessionStore((state) => state.revertToMessage)
+  const activeRepoId = useRepoStore((state) => state.activeRepoId)
   const activeRepo = useRepoStore((state) => state.repos.find((r) => r.id === state.activeRepoId))
   const canRevert = activeRepo?.runtimeType !== "claude-code"
   const [revertingId, setRevertingId] = useState<string | null>(null)
@@ -636,11 +639,11 @@ export function RunView({
         target instanceof HTMLTextAreaElement ||
         target?.isContentEditable
       ) return
-      void abortSession()
+      if (activeRepoId) void abortSession(activeRepoId)
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [status, abortSession])
+  }, [status, abortSession, activeRepoId])
 
   const matchingParentId = useIssueStore((state) => state.matchingParentId)
 
@@ -685,7 +688,7 @@ export function RunView({
               <button
                 type="button"
                 aria-label="返回父会话"
-                onClick={(e) => { e.stopPropagation(); void useSessionStore.getState().setActiveSession(session.parentID!) }}
+                onClick={(e) => { e.stopPropagation(); if (activeRepoId) void useSessionStore.getState().setActiveSession(activeRepoId, session.parentID!) }}
                 className="mb-0.5 flex items-center gap-1 text-[11px] text-fg-4 transition-colors hover:text-blue-400"
               >
                 <ArrowLeft className="h-3 w-3" />
@@ -749,7 +752,7 @@ export function RunView({
                 <button
                   type="button"
                   aria-label={retrying ? "停止重试" : "停止运行"}
-                  onClick={() => void abortSession()}
+                  onClick={() => activeRepoId && void abortSession(activeRepoId)}
                   className="mt-0.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 font-mono text-xs text-fg-2 transition-colors hover:border-red-500/50 hover:text-red-400"
                 >
                   <Square className="h-3 w-3 fill-current" />
@@ -768,7 +771,7 @@ export function RunView({
             <button
               type="button"
               aria-label="返回父会话"
-              onClick={() => void useSessionStore.getState().setActiveSession(session.parentID!)}
+              onClick={() => activeRepoId && void useSessionStore.getState().setActiveSession(activeRepoId, session.parentID!)}
               className="mb-0.5 flex items-center gap-1 text-[11px] text-fg-4 transition-colors hover:text-blue-400"
             >
               <ArrowLeft className="h-3 w-3" />
@@ -821,7 +824,7 @@ export function RunView({
           <button
             type="button"
             aria-label={retrying ? "停止重试" : "停止运行"}
-            onClick={() => void abortSession()}
+            onClick={() => activeRepoId && void abortSession(activeRepoId)}
             className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-xs text-fg-2 transition-colors hover:border-red-500/50 hover:text-red-400"
           >
             <Square className="h-3 w-3 fill-current" />
@@ -849,7 +852,7 @@ export function RunView({
               !messagesMeta.loading
             ) {
               const prevHeight = element.scrollHeight
-              loadMoreMessages(activeSessionId).then(() => {
+              loadMoreMessages(activeRepoId!, activeSessionId).then(() => {
                 requestAnimationFrame(() => {
                   if (scrollRef.current) {
                     scrollRef.current.scrollTop = scrollRef.current.scrollHeight - prevHeight
@@ -870,7 +873,7 @@ export function RunView({
               <button
                 type="button"
                 aria-label="加载更早的消息"
-                onClick={() => activeSessionId && loadMoreMessages(activeSessionId)}
+                onClick={() => activeSessionId && activeRepoId && loadMoreMessages(activeRepoId, activeSessionId)}
                 className="mx-auto rounded-md border border-line px-3 py-1 font-mono text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-2"
               >
                 加载更早的消息
@@ -895,7 +898,7 @@ export function RunView({
                             const count = messages.length - index
                             if (!window.confirm(`回退到此处？将移除后续 ${count} 条对话记录（不影响已产生的代码改动）。`)) return
                             setRevertingId(message.id)
-                            await revertToMessage(activeSessionId!, message.id)
+                            await revertToMessage(activeRepoId!, activeSessionId!, message.id)
                             setRevertingId(null)
                           }}
                           className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-line bg-base px-2.5 py-1 font-mono text-[11px] text-fg-4 opacity-60 shadow-sm transition-all duration-150 hover:border-amber-500/50 hover:text-amber-400 md:opacity-30 md:group-hover/revert:opacity-100 disabled:opacity-50"

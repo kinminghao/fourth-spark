@@ -895,6 +895,7 @@ export function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>()
   const navigate = useNavigate()
   const repoName = useRepoStore(selectActiveRepoName)
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const agents = useCustomAgentStore((s) => s.agents)
   const agent = agents.find(a => a.id === agentId)
   const { data: fragmentsData } = useAsyncData(
@@ -915,13 +916,13 @@ export function AgentDetailPage() {
   const handleSave = async (data: { name: string; baseAgent: string; model?: string; variant?: string; memoryModel?: string | null; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
     if (!agentId) return
     await api.updateCustomAgent(agentId, data)
-    void useCustomAgentStore.getState().loadAgents()
+    void useCustomAgentStore.getState().loadAgents(activeRepoId)
   }
 
   const handleDelete = async () => {
     if (!agentId) return
     await api.deleteCustomAgent(agentId)
-    void useCustomAgentStore.getState().loadAgents()
+    void useCustomAgentStore.getState().loadAgents(activeRepoId)
     navigate(repoName ? `/${encodeURIComponent(repoName)}/agents` : "/repos", { replace: true })
   }
 

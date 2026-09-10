@@ -529,13 +529,13 @@ export function AgentsPage() {
     }
     setShowAgentForm(false)
     load()
-    void useCustomAgentStore.getState().loadAgents()
+    void useCustomAgentStore.getState().loadAgents(activeRepoId)
   }
 
   const handleDeleteAgent = async (id: string) => {
     await api.deleteCustomAgent(id)
     load()
-    void useCustomAgentStore.getState().loadAgents()
+    void useCustomAgentStore.getState().loadAgents(activeRepoId)
   }
 
   const handleCreateFrag = async (data: { name: string; content: string }) => {
@@ -590,7 +590,7 @@ export function AgentsPage() {
           <CustomAgentForm availableFragments={fragments} onSave={handleCreateAgent} onCancel={() => setShowAgentForm(false)} />
         )}
         {showImport && (
-          <ImportAgentForm onImported={() => { setShowImport(false); load(); void useCustomAgentStore.getState().loadAgents() }} onCancel={() => setShowImport(false)} />
+          <ImportAgentForm onImported={() => { setShowImport(false); load(); void useCustomAgentStore.getState().loadAgents(activeRepoId) }} onCancel={() => setShowImport(false)} />
         )}
 
         {/* Agent cards grid */}
