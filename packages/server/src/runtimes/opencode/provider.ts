@@ -26,6 +26,7 @@ import { syncSessionsList, syncMessagesList } from "../../db/sync"
 import { logger } from "../../middleware/logger"
 
 import { injectMcpConfig, removeMcpConfig } from "./mcp"
+import { childEnv } from "../../lib/child-env"
 import { HttpRuntimeClient } from "./client"
 import { openCodeCredentialWriter } from "./credential"
 import { getRotatingLogFd } from "../../lib/log-rotate"
@@ -272,10 +273,7 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
       stdout: logFd,
       stderr: logFd,
       detached: true,
-      env: {
-        ...process.env,
-        PORT: String(port),
-      },
+      env: childEnv({ PORT: String(port) }),
     })
     proc.unref()
     persistPidEarly(proc.pid, port, repoId)

@@ -28,6 +28,7 @@ import {
   type Todo,
 } from "../../core/runtime-types"
 import { logger } from "../../middleware/logger"
+import { childEnv } from "../../lib/child-env"
 
 import {
   type ClaudeSessionState,
@@ -433,7 +434,7 @@ export class StdioRuntimeClient implements RuntimeClient {
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
-      env: { ...process.env },
+      env: childEnv(),
     }) as Subprocess<"pipe", "pipe", "pipe">
 
     logger.info({ sessionId, pid: proc.pid, contentLength: content.length, files: files.length }, "writing prompt to claude stdin")
