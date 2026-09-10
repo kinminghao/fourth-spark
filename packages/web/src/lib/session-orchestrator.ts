@@ -23,13 +23,13 @@ class SessionOrchestrator {
     }
 
     this.dispatcher = new GlobalEventDispatcher(repoId, (sessionId, eventName, data) => {
-      const worker = this.ensureWorker(sessionId, poolCallbacks)
+      const worker = this.ensureWorker(sessionId, repoId, poolCallbacks)
       worker.dispatch(eventName, data)
     })
     this.dispatcher.start()
 
     this.supervisor = new SessionSupervisor(repoId, {
-      ensureWorker: (sessionId) => this.ensureWorker(sessionId, poolCallbacks),
+      ensureWorker: (sessionId) => this.ensureWorker(sessionId, repoId, poolCallbacks),
     })
     this.supervisor.start()
 
@@ -57,27 +57,28 @@ class SessionOrchestrator {
   }
 
   activateSession(sessionId: string): void {
+    if (!this.repoId || !sessionId) return
+    const repoId = this.repoId
     for (const w of this.workers.values()) {
       if (w.sessionId !== sessionId) w.deactivate()
     }
-    if (!sessionId) return
     const poolCallbacks: WorkerPoolCallbacks = {
       onWorkerIdle: (sid) => this.removeWorker(sid),
       onSessionIdle: (sid) => this.workers.get(sid)?.refreshOnIdle(),
     }
-    const worker = this.ensureWorker(sessionId, poolCallbacks)
+    const worker = this.ensureWorker(sessionId, repoId, poolCallbacks)
     worker.activate()
-    if (this.repoId) void useSessionStore.getState().refreshSessionData(this.repoId, sessionId)
+    void useSessionStore.getState().refreshSessionData(repoId, sessionId)
   }
 
   deactivateSession(sessionId: string): void {
     this.workers.get(sessionId)?.deactivate()
   }
 
-  private ensureWorker(sessionId: string, callbacks: WorkerPoolCallbacks): SessionWorker {
+  private ensureWorker(sessionId: string, repoId: string, callbacks: WorkerPoolCallbacks): SessionWorker {
     let worker = this.workers.get(sessionId)
     if (!worker) {
-      worker = new SessionWorker(sessionId, this.repoId!, callbacks)
+      worker = new SessionWorker(sessionId, repoId, callbacks)
       this.workers.set(sessionId, worker)
       freezeMonitor.setGauge("workers", this.workers.size)
     }
