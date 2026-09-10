@@ -3,10 +3,11 @@ import { useNavigate, useParams } from "react-router-dom"
 import { ArrowLeft, Brain, Check, Clipboard, Clock, Download, Edit3, Loader2, Trash2, X, Zap } from "lucide-react"
 import clsx from "clsx"
 import * as api from "../lib/api-client"
-import type { AgentMemory, AgentSession, ConsolidationStats, CustomAgent, ModelInfo, PromptFragment } from "../lib/api-client"
+import type { AgentMemory, ConsolidationStats, CustomAgent, ModelInfo, PromptFragment } from "../lib/api-client"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { GUIDE_AGENT_PREFIX, MOCK_MEMORIES } from "../components/guide-mock-data"
+import { useAsyncData } from "../hooks/use-async-data"
 
 const BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atlas - Plan Executor"]
 const PINNED_MODELS_KEY = "pinned_models"
@@ -324,12 +325,8 @@ function ConsolidationStatsBar({ stats, running, onTrigger }: {
 
 function MemorySection({ agentId }: { agentId: string }) {
   const isMockAgent = agentId.startsWith(GUIDE_AGENT_PREFIX)
-  const [memories, setMemories] = useState<AgentMemory[]>(isMockAgent ? MOCK_MEMORIES : [])
-  const [loading, setLoading] = useState(!isMockAgent)
   const [filter, setFilter] = useState<string | null>(null)
   const [showSuperseded, setShowSuperseded] = useState(false)
-  const [sessions, setSessions] = useState<AgentSession[]>([])
-  const [sessionsLoading, setSessionsLoading] = useState(true)
   const [showSessions, setShowSessions] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [extracting, setExtracting] = useState(false)
@@ -337,28 +334,24 @@ function MemorySection({ agentId }: { agentId: string }) {
   const [consolidationStats, setConsolidationStats] = useState<ConsolidationStats | null>(null)
   const [consolidationRunning, setConsolidationRunning] = useState(false)
 
-  const load = useCallback(async () => {
-    if (isMockAgent) { setMemories(MOCK_MEMORIES); setLoading(false); return }
-    setLoading(true)
-    try {
-      const data = await api.listAgentMemories(agentId, {
-        includeSuperseded: showSuperseded,
-      })
-      setMemories(data)
-    } catch {
-      setMemories([])
-    }
-    setLoading(false)
-  }, [agentId, showSuperseded, isMockAgent])
+  // --- memories ---
+  const { data: memoriesData, loading, reload: load } = useAsyncData(
+    () => isMockAgent
+      ? Promise.resolve(MOCK_MEMORIES)
+      : api.listAgentMemories(agentId, { includeSuperseded: showSuperseded }),
+    [agentId, showSuperseded, isMockAgent],
+    { showErrorToast: !isMockAgent, errorMessage: "加载记忆失败" },
+  )
+  const memories = memoriesData ?? []
 
+  // --- consolidation stats ---
   const loadStats = useCallback(() => {
     if (isMockAgent) return
     api.getMemoryConsolidationStats(agentId)
       .then(setConsolidationStats)
       .catch(() => setConsolidationStats(null))
-  }, [agentId])
+  }, [agentId, isMockAgent])
 
-  useEffect(() => { void load() }, [load])
   useEffect(() => { loadStats() }, [loadStats])
 
   const handleTriggerConsolidation = async () => {
@@ -382,16 +375,13 @@ function MemorySection({ agentId }: { agentId: string }) {
     setTimeout(() => { clearInterval(pollInterval); setConsolidationRunning(false) }, 300_000)
   }
 
-  useEffect(() => {
-    if (!showSessions) return
-    let cancelled = false
-    setSessionsLoading(true)
-    api.listAgentSessions(agentId)
-      .then(data => { if (!cancelled) setSessions(data) })
-      .catch(() => { if (!cancelled) setSessions([]) })
-      .finally(() => { if (!cancelled) setSessionsLoading(false) })
-    return () => { cancelled = true }
-  }, [agentId, showSessions])
+  // --- sessions (loaded on demand) ---
+  const { data: sessionsData, loading: sessionsLoading } = useAsyncData(
+    () => api.listAgentSessions(agentId),
+    [agentId, showSessions],
+    { skip: !showSessions, errorMessage: "加载 Session 列表失败" },
+  )
+  const sessions = sessionsData ?? []
 
   const allActive = memories.filter(m => !m.supersededBy)
   const active = filter ? allActive.filter(m => m.category === filter) : allActive
@@ -586,17 +576,12 @@ function MemorySection({ agentId }: { agentId: string }) {
 // ---------------------------------------------------------------------------
 
 function SessionList({ agentId }: { agentId: string }) {
-  const [sessions, setSessions] = useState<AgentSession[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    api.listAgentSessions(agentId)
-      .then(data => { if (!cancelled) setSessions(data) })
-      .catch(() => { if (!cancelled) setSessions([]) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [agentId])
+  const { data, loading } = useAsyncData(
+    () => api.listAgentSessions(agentId),
+    [agentId],
+    { errorMessage: "加载 Session 历史失败" },
+  )
+  const sessions = data ?? []
 
   return (
     <section className="rounded-xl border border-line bg-surface p-5">
@@ -928,15 +913,14 @@ export function AgentDetailPage() {
   const repoName = useRepoStore(selectActiveRepoName)
   const agents = useCustomAgentStore((s) => s.agents)
   const agent = agents.find(a => a.id === agentId)
-  const [fragments, setFragments] = useState<PromptFragment[]>([])
+  const { data: fragmentsData } = useAsyncData(
+    () => api.listGlobalFragments(),
+    [agentId],
+    { errorMessage: "加载提示词片段失败" },
+  )
+  const fragments = fragmentsData ?? []
   const [copied, setCopied] = useState(false)
   const [deleting, setDeleting] = useState(false)
-
-  useEffect(() => {
-    api.listGlobalFragments()
-      .then(setFragments)
-      .catch(() => setFragments([]))
-  }, [agentId])
 
   useEffect(() => {
     if (agents.length > 0 && !agent) {

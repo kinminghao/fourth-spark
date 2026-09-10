@@ -26,6 +26,7 @@ import { useToastStore } from "../stores/toast-store"
 import { AddRepoModal } from "../components/AddRepoModal"
 import { AgentsMdModal } from "../components/AgentsMdModal"
 import { extractHostFromGitUrl } from "../lib/git-url"
+import { useAsyncData } from "../hooks/use-async-data"
 
 const BYTES_PER_KB = 1024
 const BYTES_PER_MB = BYTES_PER_KB * 1024
@@ -43,49 +44,38 @@ const WS_BRANCH_PREFIX = "ws/"
 
 function WorkspacesSection({ repoId }: { repoId: string }) {
   const [expanded, setExpanded] = useState(false)
-  const [workspaces, setWorkspaces] = useState<api.Workspace[] | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [cleaning, setCleaning] = useState(false)
+  const [mutationError, setMutationError] = useState<string | null>(null)
 
-  const load = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const list = await api.listWorkspaces(repoId)
-      setWorkspaces(list)
-    } catch (err) {
-      setError(err instanceof api.ApiError ? err.message : "加载失败")
-    }
-    setLoading(false)
-  }
+  const { data: workspaces, loading, error: loadError, reload } = useAsyncData(
+    () => api.listWorkspaces(repoId),
+    [repoId, expanded],
+    { skip: !expanded, showErrorToast: false, errorMessage: "加载失败" },
+  )
 
-  useEffect(() => {
-    if (expanded && workspaces === null) {
-      void load()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expanded])
+  const error = mutationError ?? loadError
 
   const handleRemove = async (id: string) => {
     setRemovingId(id)
+    setMutationError(null)
     try {
       await api.removeWorkspace(repoId, id)
-      await load()
+      reload()
     } catch (err) {
-      setError(err instanceof api.ApiError ? err.message : "删除失败")
+      setMutationError(err instanceof api.ApiError ? err.message : "删除失败")
     }
     setRemovingId(null)
   }
 
   const handleCleanup = async () => {
     setCleaning(true)
+    setMutationError(null)
     try {
       await api.cleanupWorkspaces(repoId)
-      await load()
+      reload()
     } catch (err) {
-      setError(err instanceof api.ApiError ? err.message : "清理失败")
+      setMutationError(err instanceof api.ApiError ? err.message : "清理失败")
     }
     setCleaning(false)
   }
@@ -132,7 +122,7 @@ function WorkspacesSection({ repoId }: { repoId: string }) {
               <span className="truncate">{error}</span>
               <button
                 type="button"
-                onClick={() => setError(null)}
+                onClick={() => setMutationError(null)}
                 className="shrink-0 rounded p-0.5 transition-colors hover:bg-red-500/10"
               >
                 <X className="h-3 w-3" />
