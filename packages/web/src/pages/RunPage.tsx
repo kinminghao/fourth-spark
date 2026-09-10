@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 import { Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Pencil, Pin, Plus, Search, Trash2, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -65,7 +65,7 @@ function statusDotClass(status: string | undefined): string {
 
 const SWIPE_HINT_KEY = "fs:swipe-hint-shown"
 
-function SessionItem({
+function SessionItemInner({
   session, isActive, isConfirming, peekHint,
   onSelect, onDelete, onConfirm, onCancelConfirm, onRename, onToggleComplete, onTogglePin,
   status, issue, linkedItems, todos,
@@ -427,6 +427,23 @@ function SessionItem({
     </li>
   )
 }
+
+const SessionItem = memo(SessionItemInner, (prev, next) =>
+  prev.session.id === next.session.id &&
+  prev.session.title === next.session.title &&
+  prev.session.agent === next.session.agent &&
+  prev.session.completedAt === next.session.completedAt &&
+  prev.session.pinnedAt === next.session.pinnedAt &&
+  prev.session.time?.updated === next.session.time?.updated &&
+  prev.isActive === next.isActive &&
+  prev.isConfirming === next.isConfirming &&
+  prev.peekHint === next.peekHint &&
+  prev.status === next.status &&
+  prev.issue?.number === next.issue?.number &&
+  prev.issue?.state === next.issue?.state &&
+  (prev.linkedItems?.length ?? 0) === (next.linkedItems?.length ?? 0) &&
+  prev.todos === next.todos,
+)
 
 function SessionPanel({ onClose }: { onClose?: () => void }) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null)

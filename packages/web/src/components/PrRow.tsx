@@ -1,9 +1,10 @@
+import { memo } from "react"
 import { AlertTriangle } from "lucide-react"
 import clsx from "clsx"
 import type { PersistentPullRequest } from "../lib/api-client"
 import { relativeTime } from "../lib/date-utils"
 
-export function CompactPrRow({
+function CompactPrRowInner({
   pr,
   isActive,
   onSelect,
@@ -66,7 +67,15 @@ export function CompactPrRow({
   )
 }
 
-export function FullWidthPrRow({
+export const CompactPrRow = memo(CompactPrRowInner, (prev, next) =>
+  prev.pr.number === next.pr.number &&
+  prev.pr.state === next.pr.state &&
+  prev.pr.title === next.pr.title &&
+  prev.pr.draft === next.pr.draft &&
+  prev.isActive === next.isActive,
+)
+
+function FullWidthPrRowInner({
   pr,
   onSelect,
 }: {
@@ -144,3 +153,11 @@ export function FullWidthPrRow({
     </li>
   )
 }
+
+export const FullWidthPrRow = memo(FullWidthPrRowInner, (prev, next) =>
+  prev.pr.number === next.pr.number &&
+  prev.pr.state === next.pr.state &&
+  prev.pr.title === next.pr.title &&
+  prev.pr.draft === next.pr.draft &&
+  prev.pr.mergeable === next.pr.mergeable,
+)

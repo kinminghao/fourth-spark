@@ -1,9 +1,10 @@
+import { memo } from "react"
 import { Flag, MessageCircle } from "lucide-react"
 import clsx from "clsx"
 import type { Issue, Milestone } from "../lib/api-client"
 import { relativeTime } from "../lib/date-utils"
 
-export function IssueRow({
+function IssueRowInner({
   issue,
   sessionCount,
   isActive,
@@ -88,7 +89,17 @@ export function IssueRow({
   )
 }
 
-export function FullWidthIssueRow({
+export const IssueRow = memo(IssueRowInner, (prev, next) =>
+  prev.issue.id === next.issue.id &&
+  prev.issue.state === next.issue.state &&
+  prev.issue.title === next.issue.title &&
+  prev.sessionCount === next.sessionCount &&
+  prev.isActive === next.isActive &&
+  prev.isEpic === next.isEpic &&
+  prev.milestone?.id === next.milestone?.id,
+)
+
+function FullWidthIssueRowInner({
   issue,
   sessionCount,
   isEpic,
@@ -193,3 +204,12 @@ export function FullWidthIssueRow({
     </li>
   )
 }
+
+export const FullWidthIssueRow = memo(FullWidthIssueRowInner, (prev, next) =>
+  prev.issue.id === next.issue.id &&
+  prev.issue.state === next.issue.state &&
+  prev.issue.title === next.issue.title &&
+  prev.sessionCount === next.sessionCount &&
+  prev.isEpic === next.isEpic &&
+  prev.milestone?.id === next.milestone?.id,
+)
