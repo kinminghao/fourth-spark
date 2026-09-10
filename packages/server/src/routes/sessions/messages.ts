@@ -7,10 +7,11 @@ import { DEFAULT_VARIANT } from "../../lib/config"
 import { syncMessagesList } from "../../db/sync"
 import { getMessagesFromDB, getMessagesPaginated } from "../../db/query"
 import { db } from "../../db/index"
-import { sessions as sessionsTable } from "../../db/schema"
+import { sessions as sessionsTable, workspaces, repos } from "../../db/schema"
 import { logger } from "../../middleware/logger"
 import type { PromptFile } from "../../core/runtime-types"
 import { SessionPromptBody, SessionRevertBody, QuestionReplyBody, validateFiles } from "./schemas"
+import { injectModelConfig } from "../../runtimes/opencode/mcp"
 
 export function registerMessageRoutes(app: Hono): void {
   app.post("/:id/prompt", async (c) => {
@@ -29,6 +30,25 @@ export function registerMessageRoutes(app: Hono): void {
       return c.json({ error: "Body must include a non-empty 'content' string or at least one file", status: 400 }, 400)
     }
     const sessionId = c.req.param("id")
+
+    if (body.model) {
+      const repoId = c.req.param("repoId")
+      const [session] = await db.select({ workspaceId: sessionsTable.workspaceId, repoId: sessionsTable.repoId })
+        .from(sessionsTable).where(eq(sessionsTable.id, sessionId))
+      if (session) {
+        let configDir: string | undefined
+        if (session.workspaceId) {
+          const [ws] = await db.select({ localPath: workspaces.localPath }).from(workspaces).where(eq(workspaces.id, session.workspaceId))
+          configDir = ws?.localPath
+        }
+        if (!configDir && session.repoId) {
+          const [repo] = await db.select({ localPath: repos.localPath, runtimeType: repos.runtimeType }).from(repos).where(eq(repos.id, session.repoId))
+          if (repo?.runtimeType !== "claude-code") configDir = repo?.localPath
+        }
+        if (configDir) injectModelConfig(configDir, body.model)
+      }
+    }
+
     await client.prompt(sessionId, body.content, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT, files })
     // Auto-clear completedAt when sending a new message to a completed session
     await db.update(sessionsTable).set({ completedAt: null }).where(and(eq(sessionsTable.id, sessionId), isNotNull(sessionsTable.completedAt)))
