@@ -6,7 +6,7 @@ import { repos } from "../db/schema"
 import { runtimeManager } from "../lib/process-manager"
 import { existsSync, mkdirSync } from "node:fs"
 import { homedir } from "node:os"
-import { runGit, runGitWithRetry, withRepoLock, cleanupStaleLock, pruneRemoteRefs, classifyGitError } from "../lib/git-runner"
+import { runGit, runGitWithRetry, withRepoLock, cleanupStaleLock, pruneRemoteRefs, classifyGitError, isValidGitBranchName } from "../lib/git-runner"
 import { parseGitUrl, normalizeGitUrl } from "../lib/git-url"
 
 export const repoRoutes = new Hono()
@@ -217,13 +217,16 @@ repoRoutes.post("/:id/checkout", async (c) => {
     return c.json({ error: "branch is required", status: 400 }, 400)
   }
   const targetBranch = body.branch
+  if (!isValidGitBranchName(targetBranch)) {
+    return c.json({ error: "Invalid branch name", status: 400 }, 400)
+  }
 
   return await withRepoLock(repo.localPath, () => {
     // Stash uncommitted changes before checkout (matching pull's --autostash behavior)
     const stashResult = runGit(["stash", "--include-untracked"], repo.localPath)
     const didStash = stashResult.ok && !stashResult.stdout.includes("No local changes")
 
-    const result = runGit(["checkout", targetBranch], repo.localPath)
+    const result = runGit(["checkout", "--", targetBranch], repo.localPath)
 
     if (!result.ok) {
       // Restore stash if checkout failed
