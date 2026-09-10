@@ -67,7 +67,7 @@ export const issues = pgTable("issues", {
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 }, (t) => [
   uniqueIndex("issues_repo_number_idx").on(t.repoId, t.number),
-  index("issues_repo_state_idx").on(t.repoId, t.state),
+  index("issues_repo_state_idx").on(t.repoId, t.state, t.updatedAt),
   index("issues_parent_idx").on(t.parentId),
   index("issues_milestone_idx").on(t.milestoneId),
 ])
@@ -137,7 +137,7 @@ export const sessions = pgTable("sessions", {
 }, (t) => [
   index("sessions_user_idx").on(t.userId),
   index("sessions_time_created_idx").on(t.timeCreated),
-  index("sessions_repo_idx").on(t.repoId),
+  index("sessions_repo_idx").on(t.repoId, t.timeUpdated),
   index("sessions_workspace_idx").on(t.workspaceId),
   index("sessions_issue_idx").on(t.issueId),
   index("sessions_custom_agent_idx").on(t.customAgentId),
@@ -193,7 +193,7 @@ export const agentMemories = pgTable("agent_memories", {
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 }, (t) => [
-  index("agent_memories_agent_idx").on(t.customAgentId),
+  index("agent_memories_agent_idx").on(t.customAgentId, t.supersededBy),
   index("agent_memories_category_idx").on(t.customAgentId, t.category),
   index("agent_memories_active_idx").on(t.customAgentId, t.importance),
 ])
