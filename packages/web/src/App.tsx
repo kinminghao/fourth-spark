@@ -46,8 +46,6 @@ function AppInner() {
   const repos = useRepoStore((s) => s.repos)
   const repoLoading = useRepoStore((s) => s.loading)
   const setActiveRepo = useRepoStore((s) => s.setActiveRepo)
-  const loadSessions = useSessionStore((s) => s.loadSessions)
-  const clearSessions = useSessionStore((s) => s.clearSessions)
 
   useEffect(() => {
     freezeMonitor.start()
@@ -71,21 +69,21 @@ function AppInner() {
 
   useEffect(() => {
     if (activeRepoId) {
-      clearSessions()
+      useSessionStore.getState().clearSessions()
       useIssueStore.getState().clearIssues()
       usePrStore.getState().clearPulls()
-      void loadSessions()
+      void useSessionStore.getState().loadSessions()
       void useCustomAgentStore.getState().loadAgents()
       void useIssueStore.getState().loadIssues()
       void usePrStore.getState().loadPulls()
       orchestrator.start(activeRepoId)
     } else {
-      clearSessions()
+      useSessionStore.getState().clearSessions()
       useIssueStore.getState().clearIssues()
       usePrStore.getState().clearPulls()
     }
     return () => orchestrator.stop()
-  }, [activeRepoId, loadSessions, clearSessions])
+  }, [activeRepoId])
 
   if (repoLoading) {
     return (
