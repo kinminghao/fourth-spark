@@ -14,7 +14,8 @@ function getProps(data: R): R | null {
 }
 
 function num(v: unknown, fallback = 0): number {
-  return typeof v === "number" ? v : fallback
+  const n = typeof v === "number" ? v : fallback
+  return Number.isFinite(n) ? Math.max(0, n) : fallback
 }
 
 function str(v: unknown, fallback = ""): string {
@@ -84,7 +85,7 @@ async function upsertMessage(sessionId: string, props: R): Promise<void> {
     model: str(model?.modelID || props.modelID) || null,
     provider: str(model?.providerID || props.providerID) || null,
     variant: str(model?.variant || props.variant) || null,
-    cost: typeof props.cost === "number" ? props.cost : null,
+    cost: typeof props.cost === "number" && Number.isFinite(props.cost) ? Math.max(0, props.cost) : null,
     timeCreated: num((props.time as R)?.created, now),
     timeUpdated: num((props.time as R)?.updated, now),
   }
