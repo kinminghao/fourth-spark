@@ -2,10 +2,12 @@ import { create } from "zustand"
 import * as api from "../lib/api-client"
 import { ApiError } from "../lib/api-client"
 import type { Issue, Tag, Milestone } from "../lib/api-client"
-import { useRepoStore } from "./repo-store"
-import { useToastStore } from "./toast-store"
 
 const ISSUES_LOAD_LIMIT = 1000
+
+/** Monotonic version counter — incremented on every load/sync call so stale
+ *  responses from a previous repo context are silently discarded. */
+let _loadVersion = 0
 
 interface IssueState {
   issues: Issue[]
@@ -16,6 +18,7 @@ interface IssueState {
   selectedMilestoneId: string | null
   loaded: boolean
   syncing: boolean
+  syncError: string | null
   selectedIssueId: string | null
   viewingIssueId: string | null
   viewingTreeRootId: string | null
@@ -26,15 +29,15 @@ interface IssueState {
   setViewingIssue: (id: string | null, treeRootId?: string | null) => void
   enterMatchMode: (parentId: string) => void
   exitMatchMode: () => void
-  linkChild: (parentNumber: number, childNumber: number) => Promise<boolean>
-  updateIssueState: (issueNumber: number, state: "open" | "closed") => Promise<boolean>
-  loadIssues: () => Promise<void>
-  syncIssues: () => Promise<void>
-  createIssue: (title: string, body?: string) => Promise<Issue | null>
-  loadTags: () => Promise<void>
+  linkChild: (repoId: string, parentNumber: number, childNumber: number) => Promise<boolean>
+  updateIssueState: (repoId: string, issueNumber: number, state: "open" | "closed") => Promise<boolean>
+  loadIssues: (repoId: string) => Promise<void>
+  syncIssues: (repoId: string) => Promise<void>
+  createIssue: (repoId: string, title: string, body?: string) => Promise<Issue | null>
+  loadTags: (repoId: string) => Promise<void>
   cycleTagFilter: (tagId: string) => void
   clearTagFilter: () => void
-  loadMilestones: () => Promise<void>
+  loadMilestones: (repoId: string) => Promise<void>
   setMilestoneFilter: (id: string | null) => void
 }
 
@@ -47,34 +50,37 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   selectedMilestoneId: null,
   loaded: false,
   syncing: false,
+  syncError: null,
   selectedIssueId: null,
   viewingIssueId: null,
   viewingTreeRootId: null,
   matchingParentId: null,
   matchingCandidateId: null,
-  clearIssues: () => set({
-    issues: [],
-    issueTotal: 0,
-    tags: [],
-    tagFilterMode: new Map<string, "include" | "exclude">(),
-    milestones: [],
-    selectedMilestoneId: null,
-    loaded: false,
-    selectedIssueId: null,
-    viewingIssueId: null,
-    viewingTreeRootId: null,
-    matchingParentId: null,
-    matchingCandidateId: null,
-  }),
+  clearIssues: () => {
+    ++_loadVersion
+    set({
+      issues: [],
+      issueTotal: 0,
+      tags: [],
+      tagFilterMode: new Map<string, "include" | "exclude">(),
+      milestones: [],
+      selectedMilestoneId: null,
+      loaded: false,
+      syncError: null,
+      selectedIssueId: null,
+      viewingIssueId: null,
+      viewingTreeRootId: null,
+      matchingParentId: null,
+      matchingCandidateId: null,
+    })
+  },
   setSelectedIssue: (id) => set({ selectedIssueId: id }),
   setViewingIssue: (id, treeRootId) => set({ viewingIssueId: id, viewingTreeRootId: treeRootId ?? null }),
   enterMatchMode: (parentId) => set({ matchingParentId: parentId, matchingCandidateId: null }),
   exitMatchMode: () => {
     set({ matchingParentId: null, matchingCandidateId: null })
   },
-  linkChild: async (parentNumber, childNumber) => {
-    const repoId = useRepoStore.getState().activeRepoId
-    if (!repoId) return false
+  linkChild: async (repoId, parentNumber, childNumber) => {
     try {
       await api.linkChildIssue(repoId, parentNumber, childNumber)
       const parentId = get().issues.find((i) => i.number === parentNumber)?.id
@@ -90,9 +96,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     }
   },
 
-  updateIssueState: async (issueNumber, state) => {
-    const repoId = useRepoStore.getState().activeRepoId
-    if (!repoId) return false
+  updateIssueState: async (repoId, issueNumber, state) => {
     try {
       const updated = await api.updateIssue(repoId, issueNumber, { state })
       set((s) => ({
@@ -104,26 +108,21 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     }
   },
 
-  loadIssues: async () => {
-    const repoId = useRepoStore.getState().activeRepoId
-    if (!repoId) {
-      set({ issues: [], issueTotal: 0, loaded: true })
-      return
-    }
+  loadIssues: async (repoId) => {
+    const version = ++_loadVersion
     try {
       const result = await api.listIssues(repoId, "all", { limit: ISSUES_LOAD_LIMIT })
-      if (useRepoStore.getState().activeRepoId !== repoId) return
+      if (_loadVersion !== version) return
       set({ issues: result.items, issueTotal: result.total, loaded: true })
     } catch {
-      if (useRepoStore.getState().activeRepoId !== repoId) return
+      if (_loadVersion !== version) return
       set({ loaded: true })
     }
   },
 
-  syncIssues: async () => {
-    const repoId = useRepoStore.getState().activeRepoId
-    if (!repoId) return
-    set({ syncing: true })
+  syncIssues: async (repoId) => {
+    const version = ++_loadVersion
+    set({ syncing: true, syncError: null })
     try {
       await api.syncIssues(repoId, "open")
       const [issueResult, tags, milestones] = await Promise.all([
@@ -131,9 +130,10 @@ export const useIssueStore = create<IssueState>((set, get) => ({
         api.listTags(repoId),
         api.listMilestones(repoId),
       ])
+      if (_loadVersion !== version) return
       set({ issues: issueResult.items, issueTotal: issueResult.total, tags, milestones, syncing: false })
     } catch (err) {
-      set({ syncing: false })
+      if (_loadVersion !== version) return
       let message = "同步 Issue 失败"
       if (err instanceof ApiError) {
         try {
@@ -143,13 +143,11 @@ export const useIssueStore = create<IssueState>((set, get) => ({
           if (err.message) message = err.message
         }
       }
-      useToastStore.getState().addToast(message, "error")
+      set({ syncing: false, syncError: message })
     }
   },
 
-  createIssue: async (title, body) => {
-    const repoId = useRepoStore.getState().activeRepoId
-    if (!repoId) return null
+  createIssue: async (repoId, title, body) => {
     try {
       const issue = await api.createIssue(repoId, title, body)
       set((state) => ({ issues: [issue, ...state.issues] }))
@@ -159,12 +157,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     }
   },
 
-  loadTags: async () => {
-    const repoId = useRepoStore.getState().activeRepoId
-    if (!repoId) {
-      set({ tags: [] })
-      return
-    }
+  loadTags: async (repoId) => {
     try {
       const tags = await api.listTags(repoId)
       set({ tags })
@@ -184,12 +177,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
   clearTagFilter: () => set({ tagFilterMode: new Map<string, "include" | "exclude">() }),
 
-  loadMilestones: async () => {
-    const repoId = useRepoStore.getState().activeRepoId
-    if (!repoId) {
-      set({ milestones: [] })
-      return
-    }
+  loadMilestones: async (repoId) => {
     try {
       const milestones = await api.listMilestones(repoId)
       set({ milestones })

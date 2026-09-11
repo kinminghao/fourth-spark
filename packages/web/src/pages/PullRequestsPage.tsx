@@ -14,6 +14,7 @@ import { listPrLinkedIssues, type Issue, type PersistentPullRequest } from "../l
 import { usePrStore } from "../stores/pr-store"
 import { useIssueStore } from "../stores/issue-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
+import { useToastStore } from "../stores/toast-store"
 import { PrDetailPanel } from "../components/PrDetailPanel"
 import { IssueDetailPanel } from "../components/IssueDetailPanel"
 import { LinkedIssueList } from "../components/LinkedIssueList"
@@ -196,6 +197,7 @@ export function PullRequestsPage() {
   const pulls = usePrStore((s) => s.pulls)
   const syncing = usePrStore((s) => s.syncing)
   const syncPulls = usePrStore((s) => s.syncPulls)
+  const syncError = usePrStore((s) => s.syncError)
   const matchingPrId = usePrStore((s) => s.matchingPrId)
   const enterMatchMode = usePrStore((s) => s.enterMatchMode)
   const exitMatchMode = usePrStore((s) => s.exitMatchMode)
@@ -206,6 +208,10 @@ export function PullRequestsPage() {
   const selectedId = searchParams.get("id")
   const tab: PrDetailTab = searchParams.get("tab") === "issue" ? "issue" : "pr"
   const issueId = searchParams.get("issueId")
+
+  useEffect(() => {
+    if (syncError) useToastStore.getState().addToast(syncError, "error")
+  }, [syncError])
 
   useEffect(() => {
     const legacy = searchParams.get("prId")
@@ -267,10 +273,10 @@ export function PullRequestsPage() {
     if (!matchingPr) return
     const isLinked = linkedIssueIds.has(issue.id)
     if (isLinked) {
-      const ok = await usePrStore.getState().unlinkIssue(matchingPr.number, issue.number)
+      const ok = await usePrStore.getState().unlinkIssue(activeRepoId!, matchingPr.number, issue.number)
       if (ok) setLinkedIssueIds((prev) => { const next = new Set(prev); next.delete(issue.id); return next })
     } else {
-      const ok = await linkIssue(matchingPr.number, issue.number)
+      const ok = await linkIssue(activeRepoId!, matchingPr.number, issue.number)
       if (ok) setLinkedIssueIds((prev) => new Set(prev).add(issue.id))
     }
   }
@@ -360,7 +366,7 @@ export function PullRequestsPage() {
               {/* Sync: right-aligned on mobile, end of row on desktop */}
               <button
                 type="button"
-                onClick={() => void syncPulls()}
+                onClick={() => activeRepoId && void syncPulls(activeRepoId)}
                 disabled={syncing || !activeRepoId}
                 title="同步 PR"
                 className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-2 disabled:opacity-40 md:order-last md:ml-0"
@@ -423,7 +429,7 @@ export function PullRequestsPage() {
               {activeRepoId && (
                 <button
                   type="button"
-                  onClick={() => void syncPulls()}
+                  onClick={() => activeRepoId && void syncPulls(activeRepoId)}
                   disabled={syncing}
                   title="同步"
                   className="flex h-7 w-7 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"

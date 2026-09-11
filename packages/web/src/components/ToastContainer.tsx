@@ -31,13 +31,14 @@ export function ToastContainer() {
   const toasts = useToastStore((s) => s.toasts)
   const removeToast = useToastStore((s) => s.removeToast)
   const setActiveSession = useSessionStore((s) => s.setActiveSession)
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const repoName = useRepoStore(selectActiveRepoName)
   const navigate = useNavigate()
 
   const handleClick = (t: RenderToast) => {
     removeToast(t.id)
-    if (t.sessionId) {
-      void setActiveSession(t.sessionId)
+    if (t.sessionId && activeRepoId) {
+      void setActiveSession(activeRepoId, t.sessionId)
       navigate(`/${encodeURIComponent(repoName!)}/run`)
     }
   }

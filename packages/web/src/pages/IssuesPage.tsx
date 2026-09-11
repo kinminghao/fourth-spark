@@ -5,6 +5,7 @@ import clsx from "clsx"
 import { useIssueStore } from "../stores/issue-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
+import { useToastStore } from "../stores/toast-store"
 import { useSwipeDrawer } from "../hooks/use-swipe-drawer"
 import { useIssueFilters } from "../hooks/use-issue-filters"
 import { SwipeDrawer } from "../components/SwipeDrawer"
@@ -43,6 +44,7 @@ export function IssuesPage() {
   const selectedMilestoneId = useIssueStore((s) => s.selectedMilestoneId)
   const loadMilestones = useIssueStore((s) => s.loadMilestones)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
+  const syncError = useIssueStore((s) => s.syncError)
   const repoName = useRepoStore(selectActiveRepoName)
   const sessions = useSessionStore((s) => s.sessions)
   const navigate = useNavigate()
@@ -99,10 +101,14 @@ export function IssuesPage() {
 
   useEffect(() => {
     if (activeRepoId) {
-      void loadTags()
-      void loadMilestones()
+      void loadTags(activeRepoId)
+      void loadMilestones(activeRepoId)
     }
   }, [activeRepoId, loadTags, loadMilestones])
+
+  useEffect(() => {
+    if (syncError) useToastStore.getState().addToast(syncError, "error")
+  }, [syncError])
 
   useEffect(() => { setPage(0) }, [stateFilter, typeFilter, searchQuery, tagFilterMode, selectedMilestoneId, selectedAuthor, selectedAssignee])
 
@@ -219,7 +225,7 @@ export function IssuesPage() {
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => void syncIssues()}
+                    onClick={() => activeRepoId && void syncIssues(activeRepoId)}
                     disabled={syncing}
                     title="同步"
                     className="flex h-7 w-7 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"

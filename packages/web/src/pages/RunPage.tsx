@@ -514,13 +514,13 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
             status={statuses[session.id]}
             issue={linkedIssue ? { number: linkedIssue.number, title: linkedIssue.title, state: linkedIssue.state } : undefined}
             linkedItems={linkedItems.length > 0 ? linkedItems : undefined}
-            onSelect={() => { void setActiveSession(session.id); onClose?.() }}
-            onDelete={() => { void deleteSession(session.id); setConfirmingId(null) }}
+            onSelect={() => { if (activeRepoId) void setActiveSession(activeRepoId, session.id); onClose?.() }}
+            onDelete={() => { if (activeRepoId) void deleteSession(activeRepoId, session.id); setConfirmingId(null) }}
             onConfirm={() => setConfirmingId(session.id)}
             onCancelConfirm={() => setConfirmingId(null)}
-            onRename={(title) => void renameSession(session.id, title)}
-            onToggleComplete={() => void toggleSessionComplete(session.id)}
-            onTogglePin={() => void toggleSessionPin(session.id)}
+            onRename={(title) => activeRepoId && void renameSession(activeRepoId, session.id, title)}
+            onToggleComplete={() => activeRepoId && void toggleSessionComplete(activeRepoId, session.id)}
+            onTogglePin={() => activeRepoId && void toggleSessionPin(activeRepoId, session.id)}
             todos={allTodos[session.id] ?? EMPTY_TODOS}
           />
         )

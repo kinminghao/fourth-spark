@@ -2,29 +2,31 @@ import { create } from "zustand"
 import * as api from "../lib/api-client"
 import { ApiError } from "../lib/api-client"
 import type { CustomAgent } from "../lib/api-client"
-import { useRepoStore } from "./repo-store"
-import { useToastStore } from "./toast-store"
+import { notify } from "./notifications"
+
+/** Monotonic version counter for stale-response discarding. */
+let _loadVersion = 0
 
 interface CustomAgentState {
   agents: CustomAgent[]
   loaded: boolean
-  loadAgents: () => Promise<void>
+  loadAgents: (repoId: string | null) => Promise<void>
 }
 
 export const useCustomAgentStore = create<CustomAgentState>((set) => ({
   agents: [],
   loaded: false,
 
-  loadAgents: async () => {
-    const repoId = useRepoStore.getState().activeRepoId
+  loadAgents: async (repoId) => {
+    const version = ++_loadVersion
     try {
       const agents = repoId
         ? await api.listRepoCustomAgents(repoId)
         : await api.listGlobalCustomAgents()
-      if (useRepoStore.getState().activeRepoId !== repoId) return
+      if (_loadVersion !== version) return
       set({ agents, loaded: true })
     } catch (err) {
-      if (useRepoStore.getState().activeRepoId !== repoId) return
+      if (_loadVersion !== version) return
       set({ loaded: true })
       let message = "加载 Agent 列表失败"
       if (err instanceof ApiError) {
@@ -35,7 +37,7 @@ export const useCustomAgentStore = create<CustomAgentState>((set) => ({
           if (err.message) message = err.message
         }
       }
-      useToastStore.getState().addToast(message, "error")
+      notify(message, "error")
     }
   },
 }))

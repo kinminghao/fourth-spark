@@ -86,12 +86,12 @@ export function PrDetailPanel({
         const openIssues = linkedIssues.filter((i) => i.state === "open")
         await Promise.all(openIssues.map((i) => updateIssue(activeRepoId, i.number, { state: "closed" })))
         setLinkedIssues((prev) => prev.map((i) => i.state === "open" ? { ...i, state: "closed" as const } : i))
-        void useIssueStore.getState().loadIssues()
+        void useIssueStore.getState().loadIssues(activeRepoId)
         useToastStore.getState().addToast(`PR #${pr.number} 合入成功，已关闭 ${openIssues.length} 个 Issue`, "success")
       } else {
         useToastStore.getState().addToast(`PR #${pr.number} 合入成功`, "success")
       }
-      void usePrStore.getState().loadPulls()
+      void usePrStore.getState().loadPulls(activeRepoId)
     } catch (err) {
       let msg = "合入失败"
       if (err instanceof ApiError) {
@@ -109,7 +109,8 @@ export function PrDetailPanel({
   }
 
   const handleUnlink = async (issueNumber: number) => {
-    const ok = await unlinkIssue(pr.number, issueNumber)
+    if (!activeRepoId) return
+    const ok = await unlinkIssue(activeRepoId, pr.number, issueNumber)
     if (ok) setLinkedIssues((prev) => prev.filter((i) => i.number !== issueNumber))
   }
 

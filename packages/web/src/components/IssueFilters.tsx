@@ -83,7 +83,7 @@ export function IssueFilters({
           <div data-guide="issue-sync-create" className="ml-auto flex shrink-0 items-center gap-1 md:order-last md:ml-0">
             <button
               type="button"
-              onClick={() => void syncIssues()}
+              onClick={() => activeRepoId && void syncIssues(activeRepoId)}
               disabled={syncing}
               title="同步 Issues"
               className="flex h-8 w-8 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"

@@ -58,7 +58,7 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
   const submit = async () => {
     if (!title.trim() || busy) return
     setBusy(true)
-    await createIssue(title.trim(), body.trim() || undefined)
+    await createIssue(activeRepoId!, title.trim(), body.trim() || undefined)
     setBusy(false)
     onDone()
   }
@@ -66,7 +66,7 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
   const submitPolished = async () => {
     if (!polished?.title.trim() || busy) return
     setBusy(true)
-    await createIssue(polished.title.trim(), polished.body.trim() || undefined)
+    await createIssue(activeRepoId!, polished.title.trim(), polished.body.trim() || undefined)
     setBusy(false)
     discard()
     onDone()

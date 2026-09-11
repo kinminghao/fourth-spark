@@ -2,47 +2,53 @@ import { create } from "zustand"
 import * as api from "../lib/api-client"
 import { ApiError } from "../lib/api-client"
 import type { PersistentPullRequest } from "../lib/api-client"
-import { useRepoStore } from "./repo-store"
-import { useToastStore } from "./toast-store"
+
+/** Monotonic version counter for stale-response discarding. */
+let _loadVersion = 0
 
 interface PrState {
   pulls: PersistentPullRequest[]
   loaded: boolean
   syncing: boolean
+  syncError: string | null
   selectedPrId: string | null
   viewingPrId: string | null
   matchingPrId: string | null
   matchingCandidateIssueId: string | null
   clearPulls: () => void
   setViewingPr: (id: string | null) => void
-  loadPulls: () => Promise<void>
-  syncPulls: () => Promise<void>
+  loadPulls: (repoId: string) => Promise<void>
+  syncPulls: (repoId: string) => Promise<void>
   enterMatchMode: (prId: string) => void
   exitMatchMode: () => void
-  linkIssue: (prNumber: number, issueNumber: number) => Promise<boolean>
-  unlinkIssue: (prNumber: number, issueNumber: number) => Promise<boolean>
+  linkIssue: (repoId: string, prNumber: number, issueNumber: number) => Promise<boolean>
+  unlinkIssue: (repoId: string, prNumber: number, issueNumber: number) => Promise<boolean>
 }
 
 export const usePrStore = create<PrState>((set, get) => ({
   pulls: [],
   loaded: false,
   syncing: false,
+  syncError: null,
   selectedPrId: null,
   viewingPrId: null,
   matchingPrId: null,
   matchingCandidateIssueId: null,
 
-  clearPulls: () => set({
-    pulls: [],
-    loaded: false,
-    selectedPrId: null,
-    viewingPrId: null,
-    matchingPrId: null,
-    matchingCandidateIssueId: null,
-  }),
+  clearPulls: () => {
+    ++_loadVersion
+    set({
+      pulls: [],
+      loaded: false,
+      syncError: null,
+      selectedPrId: null,
+      viewingPrId: null,
+      matchingPrId: null,
+      matchingCandidateIssueId: null,
+    })
+  },
 
   setViewingPr: (id) => set({ viewingPrId: id }),
-
 
   enterMatchMode: (prId) => set({ matchingPrId: prId, matchingCandidateIssueId: null }),
 
@@ -51,9 +57,7 @@ export const usePrStore = create<PrState>((set, get) => ({
     set({ matchingPrId: null, matchingCandidateIssueId: null, selectedPrId: prId })
   },
 
-  linkIssue: async (prNumber, issueNumber) => {
-    const repoId = useRepoStore.getState().activeRepoId
-    if (!repoId) return false
+  linkIssue: async (repoId, prNumber, issueNumber) => {
     try {
       await api.linkPrToIssue(repoId, prNumber, issueNumber)
       return true
@@ -62,9 +66,7 @@ export const usePrStore = create<PrState>((set, get) => ({
     }
   },
 
-  unlinkIssue: async (prNumber, issueNumber) => {
-    const repoId = useRepoStore.getState().activeRepoId
-    if (!repoId) return false
+  unlinkIssue: async (repoId, prNumber, issueNumber) => {
     try {
       await api.unlinkPrFromIssue(repoId, prNumber, issueNumber)
       return true
@@ -73,32 +75,28 @@ export const usePrStore = create<PrState>((set, get) => ({
     }
   },
 
-  loadPulls: async () => {
-    const repoId = useRepoStore.getState().activeRepoId
-    if (!repoId) {
-      set({ pulls: [], loaded: true })
-      return
-    }
+  loadPulls: async (repoId) => {
+    const version = ++_loadVersion
     try {
       const pulls = await api.listPulls(repoId, "all")
-      if (useRepoStore.getState().activeRepoId !== repoId) return
+      if (_loadVersion !== version) return
       set({ pulls, loaded: true })
     } catch {
-      if (useRepoStore.getState().activeRepoId !== repoId) return
+      if (_loadVersion !== version) return
       set({ loaded: true })
     }
   },
 
-  syncPulls: async () => {
-    const repoId = useRepoStore.getState().activeRepoId
-    if (!repoId) return
-    set({ syncing: true })
+  syncPulls: async (repoId) => {
+    const version = ++_loadVersion
+    set({ syncing: true, syncError: null })
     try {
       await api.syncPulls(repoId, "open")
       const pulls = await api.listPulls(repoId, "all")
+      if (_loadVersion !== version) return
       set({ pulls, syncing: false })
     } catch (err) {
-      set({ syncing: false })
+      if (_loadVersion !== version) return
       let message = "同步 PR 失败"
       if (err instanceof ApiError) {
         try {
@@ -108,7 +106,7 @@ export const usePrStore = create<PrState>((set, get) => ({
           if (err.message) message = err.message
         }
       }
-      useToastStore.getState().addToast(message, "error")
+      set({ syncing: false, syncError: message })
     }
   },
 }))

@@ -9,6 +9,7 @@ import {
 } from "../lib/message-parts"
 import { useSessionStore } from "../stores/session-store"
 import { useToastStore } from "../stores/toast-store"
+import { useRepoStore } from "../stores/repo-store"
 
 function QuestionCard({
   q,
@@ -142,6 +143,7 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
   const replyQuestion = useSessionStore((s) => s.replyQuestion)
   const rejectQuestion = useSessionStore((s) => s.rejectQuestion)
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const [resolved, setResolved] = useState<"answered" | "dismissed" | null>(null)
   const [selections, setSelections] = useState<Record<number, string[]>>({})
   const [customTexts, setCustomTexts] = useState<Record<number, string>>({})
@@ -165,7 +167,7 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
     if (isSingle) {
       setResolved("answered")
       clearToast()
-      void replyQuestion([[label]])
+      if (activeRepoId) void replyQuestion(activeRepoId, [[label]])
       return
     }
 
@@ -209,7 +211,7 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
     if (resolved || !text) return
     setResolved("answered")
     clearToast()
-    void replyQuestion([[text]])
+    if (activeRepoId) void replyQuestion(activeRepoId, [[text]])
   }
 
   const answeredCount = questions.filter(
@@ -229,14 +231,14 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
       if (custom) return [custom]
       return selections[i] ?? []
     })
-    void replyQuestion(answers)
+    if (activeRepoId) void replyQuestion(activeRepoId, answers)
   }
 
   const handleDismiss = () => {
     if (resolved) return
     setResolved("dismissed")
     clearToast()
-    void rejectQuestion()
+    if (activeRepoId) void rejectQuestion(activeRepoId)
   }
 
   const active = pending && !resolved

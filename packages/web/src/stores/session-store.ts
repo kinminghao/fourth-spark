@@ -2,7 +2,9 @@
  * Central Zustand store: session list, per-session messages/todos/status, and
  * the actions that mutate them from both user intent and SSE events.
  *
- * All API calls are scoped to the active repo from the repo store.
+ * All API-calling actions receive `repoId` as an explicit parameter — no
+ * cross-store getState() reads.  UI notifications go through the lightweight
+ * `notify()` / `removeNotification()` abstraction (see notifications.ts).
  */
 
 import { create } from "zustand"
@@ -11,9 +13,10 @@ import type { Message, MessagePart, PromptFile, Session, Todo, SessionLinks, Ses
 
 type SessionFilter = "active" | "all"
 import { isQuestionTool, isQuestionPending } from "../lib/message-parts"
-import { useRepoStore } from "./repo-store"
+import { notify, removeNotification } from "./notifications"
 
-import { useToastStore } from "./toast-store"
+/** Monotonic version counter for stale-response discarding on loadSessions. */
+let _loadVersion = 0
 
 function questionToastId(sessionId: string): string {
   return `question-${sessionId}`
@@ -22,7 +25,7 @@ function questionToastId(sessionId: string): string {
 function fireQuestionToast(sessionId: string, sessions: Session[]): void {
   const session = sessions.find((s) => s.id === sessionId)
   const label = session?.title || sessionId.slice(-8)
-  useToastStore.getState().addToast(
+  notify(
     `${label} — 等待回复`,
     "warning",
     sessionId,
@@ -47,13 +50,7 @@ function partKey(part: MessagePart): string | undefined {
   return part.id ?? part.callID
 }
 
-function getRepoId(): string | null {
-  return useRepoStore.getState().activeRepoId
-}
-
-async function refreshSessionLinks(id: string, set: (fn: (s: SessionState) => Partial<SessionState>) => void): Promise<void> {
-  const repoId = getRepoId()
-  if (!repoId) return
+async function refreshSessionLinks(repoId: string, id: string, set: (fn: (s: SessionState) => Partial<SessionState>) => void): Promise<void> {
   try {
     const [links, allLinks] = await Promise.all([
       api.getSessionLinks(repoId, id),
@@ -100,20 +97,20 @@ interface SessionState {
   setSessionVariant: (sessionId: string, variant: string) => void
   setSessionFilter: (filter: SessionFilter) => void
   setSessionSearch: (search: string) => void
-  toggleSessionComplete: (id: string) => Promise<void>
-  toggleSessionPin: (id: string) => Promise<void>
-  loadSessions: () => Promise<void>
-  createSession: (message: string, agent?: string, model?: string, variant?: string, issueId?: string, customAgentId?: string, files?: PromptFile[]) => Promise<Session | null>
-  setActiveSession: (id: string) => Promise<void>
-  refreshSessionData: (id: string) => Promise<void>
-  loadMoreMessages: (sessionId: string) => Promise<void>
-  addLink: (sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
-  removeLink: (sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
-  deleteSession: (id: string) => Promise<void>
-  sendMessage: (content: string, model?: string, variant?: string, files?: PromptFile[]) => Promise<boolean>
-  replyQuestion: (answers: string[][]) => Promise<void>
-  rejectQuestion: () => Promise<void>
-  abortSession: () => Promise<void>
+  toggleSessionComplete: (repoId: string, id: string) => Promise<void>
+  toggleSessionPin: (repoId: string, id: string) => Promise<void>
+  loadSessions: (repoId: string) => Promise<void>
+  createSession: (repoId: string, message: string, agent?: string, model?: string, variant?: string, issueId?: string, customAgentId?: string, files?: PromptFile[]) => Promise<Session | null>
+  setActiveSession: (repoId: string, id: string) => Promise<void>
+  refreshSessionData: (repoId: string, id: string) => Promise<void>
+  loadMoreMessages: (repoId: string, sessionId: string) => Promise<void>
+  addLink: (repoId: string, sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
+  removeLink: (repoId: string, sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
+  deleteSession: (repoId: string | null, id: string) => Promise<void>
+  sendMessage: (repoId: string, content: string, model?: string, variant?: string, files?: PromptFile[]) => Promise<boolean>
+  replyQuestion: (repoId: string, answers: string[][]) => Promise<void>
+  rejectQuestion: (repoId: string) => Promise<void>
+  abortSession: (repoId: string) => Promise<void>
   clearSessions: () => void
   updateMessage: (sessionId: string, message: Message) => void
   updateMessagePart: (
@@ -131,8 +128,8 @@ interface SessionState {
   setSessionStatus: (sessionId: string, status: string, reason?: string) => void
   bulkSetStatuses: (statuses: Record<string, string>) => void
   updateSessionInfo: (info: Partial<Session> & { id: string }) => void
-  renameSession: (id: string, title: string) => Promise<void>
-  revertToMessage: (sessionId: string, messageID: string) => Promise<boolean>
+  renameSession: (repoId: string, id: string, title: string) => Promise<void>
+  revertToMessage: (repoId: string, sessionId: string, messageID: string) => Promise<boolean>
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -163,9 +160,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   setSessionFilter: (filter) => set({ sessionFilter: filter }),
   setSessionSearch: (search) => set({ sessionSearch: search }),
 
-  toggleSessionPin: async (id) => {
-    const repoId = getRepoId()
-    if (!repoId) return
+  toggleSessionPin: async (repoId, id) => {
     const session = get().sessions.find((s) => s.id === id)
     if (!session) return
     const pinnedAt = session.pinnedAt ? null : Date.now()
@@ -177,13 +172,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       await api.updateSessionPinned(repoId, id, pinnedAt)
     } catch {
-      await get().loadSessions()
+      await get().loadSessions(repoId)
     }
   },
 
-  toggleSessionComplete: async (id) => {
-    const repoId = getRepoId()
-    if (!repoId) return
+  toggleSessionComplete: async (repoId, id) => {
     const session = get().sessions.find((s) => s.id === id)
     if (!session) return
     const completedAt = session.completedAt ? null : Date.now()
@@ -195,28 +188,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       await api.updateSessionCompleted(repoId, id, completedAt)
     } catch {
-      await get().loadSessions()
+      await get().loadSessions(repoId)
     }
   },
 
-  loadSessions: async () => {
-    const repoId = getRepoId()
-    if (!repoId) {
-      set({ sessions: [], loadingSessions: false })
-      return
-    }
+  loadSessions: async (repoId) => {
+    const version = ++_loadVersion
     set({ loadingSessions: true, loadError: null })
     try {
       const [result, allLinks] = await Promise.all([
         api.listSessions(repoId, { limit: 200 }),
         api.getAllSessionLinks(repoId).catch(() => null),
       ])
-      if (getRepoId() !== repoId) return
+      if (_loadVersion !== version) return
       const next: Partial<SessionState> = { sessions: result.items, loadingSessions: false }
       if (allLinks) next.allSessionLinks = allLinks
       set(next)
     } catch (error) {
-      if (getRepoId() !== repoId) return
+      if (_loadVersion !== version) return
       set({
         loadingSessions: false,
         loadError:
@@ -225,9 +214,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  createSession: async (message, agent, model, variant, issueId, customAgentId, files) => {
-    const repoId = getRepoId()
-    if (!repoId) return null
+  createSession: async (repoId, message, agent, model, variant, issueId, customAgentId, files) => {
     set({ sendError: null })
     try {
       const session = await api.createSession(repoId, message, agent, model, variant, issueId, customAgentId, files)
@@ -241,7 +228,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }))
       get().setSessionStatus(session.id, "busy")
       if (issueId) {
-        useToastStore.getState().addToast("已自动分配为处理人", "success")
+        notify("已自动分配为处理人", "success")
       }
       return session
     } catch (error) {
@@ -253,17 +240,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  setActiveSession: async (id) => {
-    const repoId = getRepoId()
-    if (!repoId) return
+  setActiveSession: async (repoId, id) => {
     set({ activeSessionId: id, sendError: null })
-    await get().refreshSessionData(id)
+    await get().refreshSessionData(repoId, id)
   },
 
-  refreshSessionData: async (id) => {
-    const repoId = getRepoId()
-    if (!repoId) return
-
+  refreshSessionData: async (repoId, id) => {
     const isInitialLoad = !get().messages[id] || get().messages[id].length === 0
     const msgsOpts = isInitialLoad ? { limit: MESSAGES_PAGE_SIZE } : undefined
 
@@ -271,9 +253,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       api.getSessionSnapshot(repoId, id),
       api.getMessages(repoId, id, msgsOpts),
     ])
-
-    // Discard stale response if active repo changed while loading
-    if (getRepoId() !== repoId) return
 
     const snap = snapResult.status === "fulfilled" ? snapResult.value : null
     const revertMessageID = snap?.session?.revert?.messageID
@@ -318,9 +297,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  loadMoreMessages: async (sessionId) => {
-    const repoId = getRepoId()
-    if (!repoId) return
+  loadMoreMessages: async (repoId, sessionId) => {
     const meta = get().messagesMeta[sessionId]
     if (!meta?.hasMore || meta.loading) return
 
@@ -359,32 +336,27 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  addLink: async (sessionId, type, targetId) => {
-    const repoId = getRepoId()
-    if (!repoId) return false
+  addLink: async (repoId, sessionId, type, targetId) => {
     try {
       await api.addSessionLink(repoId, sessionId, type, targetId)
-      await refreshSessionLinks(sessionId, set)
+      await refreshSessionLinks(repoId, sessionId, set)
       return true
     } catch {
       return false
     }
   },
 
-  removeLink: async (sessionId, type, targetId) => {
-    const repoId = getRepoId()
-    if (!repoId) return false
+  removeLink: async (repoId, sessionId, type, targetId) => {
     try {
       await api.removeSessionLink(repoId, sessionId, type, targetId)
-      await refreshSessionLinks(sessionId, set)
+      await refreshSessionLinks(repoId, sessionId, set)
       return true
     } catch {
       return false
     }
   },
 
-  deleteSession: async (id) => {
-    const repoId = getRepoId()
+  deleteSession: async (repoId, id) => {
     if (repoId) {
       try {
         await api.deleteSession(repoId, id)
@@ -423,10 +395,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
   },
 
-  sendMessage: async (content, model?, variant?, files?) => {
-    const repoId = getRepoId()
+  sendMessage: async (repoId, content, model?, variant?, files?) => {
     const sessionId = get().activeSessionId
-    if (!repoId || !sessionId) return false
+    if (!sessionId) return false
     const session = get().sessions.find((s) => s.id === sessionId)
     const wasBusy = get().sessionStatuses[sessionId] === "busy"
     set({ sendError: null })
@@ -458,10 +429,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  replyQuestion: async (answers) => {
-    const repoId = getRepoId()
+  replyQuestion: async (repoId, answers) => {
     const sessionId = get().activeSessionId
-    if (!repoId || !sessionId) return
+    if (!sessionId) return
     try {
       await api.replyQuestion(repoId, sessionId, answers)
     } catch (error) {
@@ -472,10 +442,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  rejectQuestion: async () => {
-    const repoId = getRepoId()
+  rejectQuestion: async (repoId) => {
     const sessionId = get().activeSessionId
-    if (!repoId || !sessionId) return
+    if (!sessionId) return
     try {
       await api.rejectQuestion(repoId, sessionId)
     } catch {
@@ -483,10 +452,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  abortSession: async () => {
-    const repoId = getRepoId()
+  abortSession: async (repoId) => {
     const sessionId = get().activeSessionId
-    if (!repoId || !sessionId) return
+    if (!sessionId) return
     try {
       await api.abortSession(repoId, sessionId)
     } catch {
@@ -496,6 +464,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   clearSessions: () => {
+    ++_loadVersion
     for (const k of Object.keys(_pendingQueueMarks)) delete _pendingQueueMarks[k]
     set({
       sessions: [],
@@ -647,15 +616,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const session = get().sessions.find((s) => s.id === sessionId)
       const label = session?.title || sessionId.slice(-8)
       if (status === "idle" && prev !== undefined && prev !== "idle") {
-        useToastStore.getState().removeToast(questionToastId(sessionId))
-        useToastStore.getState().addToast(`${label} — 完成`, "success", sessionId)
+        removeNotification(questionToastId(sessionId))
+        notify(`${label} — 完成`, "success", sessionId)
       } else if (status === "busy" && (prev === undefined || prev === "idle")) {
-        useToastStore.getState().addToast(`${label} — 开始运行`, "info", sessionId)
+        notify(`${label} — 开始运行`, "info", sessionId)
       } else if (status === "retry") {
-        useToastStore.getState().addToast(`${label} — 进入重试`, "warning", sessionId)
+        notify(`${label} — 进入重试`, "warning", sessionId)
       } else if (status === "error") {
         const msg = reason ? `${label} — 错误: ${reason}` : `${label} — 发生错误`
-        useToastStore.getState().addToast(msg, "error", sessionId)
+        notify(msg, "error", sessionId)
       }
     }
     set((state) => {
@@ -675,9 +644,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ sessionStatuses: { ...get().sessionStatuses, ...statuses } })
   },
 
-  renameSession: async (id, title) => {
-    const repoId = getRepoId()
-    if (!repoId) return
+  renameSession: async (repoId, id, title) => {
     set((state) => ({
       sessions: state.sessions.map((s) =>
         s.id === id ? { ...s, title } : s,
@@ -686,16 +653,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       await api.renameSession(repoId, id, title)
     } catch {
-      await get().loadSessions()
+      await get().loadSessions(repoId)
     }
   },
 
-  revertToMessage: async (sessionId, messageID) => {
-    const repoId = getRepoId()
-    if (!repoId) return false
+  revertToMessage: async (repoId, sessionId, messageID) => {
     try {
       await api.revertSession(repoId, sessionId, messageID)
-      await get().refreshSessionData(sessionId)
+      await get().refreshSessionData(repoId, sessionId)
       return true
     } catch {
       return false

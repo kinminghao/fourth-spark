@@ -325,6 +325,7 @@ function useChildSessionId(part: MessagePart): string | null {
 function TaskSessionLink({ part }: { part: MessagePart }) {
   const resolvedId = useChildSessionId(part)
   const setActiveSession = useSessionStore((s) => s.setActiveSession)
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
 
   if (!resolvedId) return null
 
@@ -333,7 +334,7 @@ function TaskSessionLink({ part }: { part: MessagePart }) {
       type="button"
       onClick={(e) => {
         e.stopPropagation()
-        void setActiveSession(resolvedId)
+        if (activeRepoId) void setActiveSession(activeRepoId, resolvedId)
       }}
       className="mt-2 flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-xs text-blue-400 transition-colors hover:border-blue-500/50 hover:bg-blue-500/10"
     >

@@ -157,7 +157,7 @@ export function IssueDetailPanel({
             disabled={togglingState}
             onClick={async () => {
               setTogglingState(true)
-              await updateIssueState(issue.number, issue.state === "open" ? "closed" : "open")
+              await updateIssueState(activeRepoId!, issue.number, issue.state === "open" ? "closed" : "open")
               setTogglingState(false)
             }}
             className={clsx(
