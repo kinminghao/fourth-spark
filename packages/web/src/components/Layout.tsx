@@ -56,10 +56,11 @@ function RepoSwitcher({
 }) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  const [focusedIndex, setFocusedIndex] = useState(-1)
   const ref = useRef<HTMLDivElement>(null)
   const activeRepo = repos.find((r) => r.id === activeRepoId)
 
-  const close = useCallback(() => setOpen(false), [])
+  const close = useCallback(() => { setOpen(false); setFocusedIndex(-1) }, [])
 
   useEffect(() => {
     if (!open) return
@@ -70,12 +71,40 @@ function RepoSwitcher({
     return () => document.removeEventListener("mousedown", handler)
   }, [open, close])
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!open) return
+    switch (e.key) {
+      case "Escape":
+        e.preventDefault()
+        close()
+        break
+      case "ArrowDown":
+        e.preventDefault()
+        setFocusedIndex((i) => Math.min(i + 1, repos.length - 1))
+        break
+      case "ArrowUp":
+        e.preventDefault()
+        setFocusedIndex((i) => Math.max(i - 1, 0))
+        break
+      case "Enter":
+        if (focusedIndex >= 0 && focusedIndex < repos.length) {
+          e.preventDefault()
+          onRepoChange(repos[focusedIndex].id)
+          close()
+        }
+        break
+    }
+  }, [open, close, focusedIndex, repos, onRepoChange])
+
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative" onKeyDown={handleKeyDown}>
       <button
         type="button"
         data-guide="repo-switcher"
         onClick={() => setOpen((v) => !v)}
+        aria-label="切换仓库"
+        aria-haspopup="listbox"
+        aria-expanded={open}
         className="flex max-w-[140px] items-center gap-1 rounded-md border border-line bg-base px-2 py-1 text-xs text-fg-2 transition-colors hover:border-blue-500 sm:max-w-[200px]"
       >
         <Box className="h-3 w-3 shrink-0 text-fg-4" />
@@ -88,17 +117,20 @@ function RepoSwitcher({
 
       {open && (
         <div className="absolute left-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
-          <div className="max-h-64 overflow-y-auto py-1">
-            {repos.map((r) => (
+          <div role="listbox" aria-label="仓库列表" className="max-h-64 overflow-y-auto py-1">
+            {repos.map((r, i) => (
               <button
                 key={r.id}
                 type="button"
+                role="option"
+                aria-selected={r.id === activeRepoId}
                 onClick={() => { onRepoChange(r.id); close() }}
                 className={clsx(
                   "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors",
                   r.id === activeRepoId
                     ? "font-medium text-blue-600"
                     : "text-fg-2 hover:bg-elevated",
+                  focusedIndex === i && "bg-elevated",
                 )}
               >
                 {r.id === activeRepoId ? (

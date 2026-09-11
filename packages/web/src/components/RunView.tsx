@@ -305,6 +305,8 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
                     <button
                       key={a.id}
                       type="button"
+                      aria-label={`选择代理 ${a.name}`}
+                      aria-pressed={customAgentId === a.id}
                       onClick={() => setCustomAgentId(a.id)}
                       className={clsx(
                         "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
@@ -496,6 +498,7 @@ function IssueMatchView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
         <div className="flex-1" />
         <button
           type="button"
+          aria-label="退出匹配模式"
           onClick={exitMatchMode}
           className="flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
         >
@@ -536,6 +539,7 @@ function IssueMatchView({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
         <div className="flex items-center justify-center gap-3 border-t border-line bg-base px-4 py-3">
           <button
             type="button"
+            aria-label={linking ? "关联中" : `确认将 #${candidate.number} 设为 #${parent.number} 的子任务`}
             onClick={() => void handleConfirm()}
             disabled={linking}
             className="flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
@@ -680,6 +684,7 @@ export function RunView({
             {session?.parentID && (
               <button
                 type="button"
+                aria-label="返回父会话"
                 onClick={(e) => { e.stopPropagation(); void useSessionStore.getState().setActiveSession(session.parentID!) }}
                 className="mb-0.5 flex items-center gap-1 text-[11px] text-fg-4 transition-colors hover:text-blue-400"
               >
@@ -726,6 +731,7 @@ export function RunView({
                   <span className="w-14 shrink-0 font-mono text-xs text-fg-5">Issue</span>
                   <button
                     type="button"
+                    aria-label={`查看 Issue #${linkedIssue.number}: ${linkedIssue.title}`}
                     onClick={() => navigate(`/${encodeURIComponent(repoName!)}/dev/issues?id=${linkedIssue.id}`)}
                     className="flex items-center gap-1.5 truncate font-mono text-xs text-fg-3 transition-colors hover:text-blue-400"
                   >
@@ -742,6 +748,7 @@ export function RunView({
               {stoppable && (
                 <button
                   type="button"
+                  aria-label={retrying ? "停止重试" : "停止运行"}
                   onClick={() => void abortSession()}
                   className="mt-0.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 font-mono text-xs text-fg-2 transition-colors hover:border-red-500/50 hover:text-red-400"
                 >
@@ -760,6 +767,7 @@ export function RunView({
           {session?.parentID && (
             <button
               type="button"
+              aria-label="返回父会话"
               onClick={() => void useSessionStore.getState().setActiveSession(session.parentID!)}
               className="mb-0.5 flex items-center gap-1 text-[11px] text-fg-4 transition-colors hover:text-blue-400"
             >
@@ -780,6 +788,7 @@ export function RunView({
         {linkedIssue && (
           <button
             type="button"
+            aria-label={`查看 Issue #${linkedIssue.number}: ${linkedIssue.title}`}
             onClick={() => navigate(`/${encodeURIComponent(repoName!)}/dev/issues?id=${linkedIssue.id}`)}
             className="flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
           >
@@ -811,6 +820,7 @@ export function RunView({
         {stoppable && (
           <button
             type="button"
+            aria-label={retrying ? "停止重试" : "停止运行"}
             onClick={() => void abortSession()}
             className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-xs text-fg-2 transition-colors hover:border-red-500/50 hover:text-red-400"
           >
@@ -859,6 +869,7 @@ export function RunView({
             {messagesMeta && !messagesMeta.loading && messagesMeta.hasMore && (
               <button
                 type="button"
+                aria-label="加载更早的消息"
                 onClick={() => activeSessionId && loadMoreMessages(activeSessionId)}
                 className="mx-auto rounded-md border border-line px-3 py-1 font-mono text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-2"
               >
@@ -878,6 +889,7 @@ export function RunView({
                       {canRevert && !stoppable && (
                         <button
                           type="button"
+                          aria-label="回退到此处"
                           disabled={revertingId !== null}
                           onClick={async () => {
                             const count = messages.length - index
