@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { AlertTriangle, Brain, Check, Clock, ChevronDown, Edit3, Loader2, Plus, Upload, Trash2, X } from "lucide-react"
 import clsx from "clsx"
@@ -6,6 +6,7 @@ import * as api from "../lib/api-client"
 import type { CustomAgent, CustomAgentExport, ModelInfo, PromptFragment } from "../lib/api-client"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
+import { useAsyncData } from "../hooks/use-async-data"
 import { agentAvatar } from "../lib/constants"
 
 // ---------------------------------------------------------------------------
@@ -475,9 +476,6 @@ export function AgentsPage() {
   const navigate = useNavigate()
   const repoName = useRepoStore(selectActiveRepoName)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
-  const [agents, setAgents] = useState<CustomAgent[]>([])
-  const [fragments, setFragments] = useState<PromptFragment[]>([])
-  const [loading, setLoading] = useState(true)
   const [showAgentForm, setShowAgentForm] = useState(false)
   const [showFragForm, setShowFragForm] = useState(false)
   const [editingFrag, setEditingFrag] = useState<PromptFragment | null>(null)
@@ -488,16 +486,20 @@ export function AgentsPage() {
   const [memoryCounts, setMemoryCounts] = useState<Record<string, number>>({})
   const [sessionCounts, setSessionCounts] = useState<Record<string, number>>({})
 
-  const load = useCallback(() => {
-    const agentsP = activeRepoId
-      ? api.listRepoCustomAgents(activeRepoId)
-      : api.listGlobalCustomAgents()
-    Promise.all([agentsP, api.listGlobalFragments()])
-      .then(([a, f]) => { setAgents(a); setFragments(f); setLoading(false) })
-      .catch(() => setLoading(false))
-  }, [activeRepoId])
+  const { data: agentsData, loading, reload: load } = useAsyncData(
+    async () => {
+      const agentsP = activeRepoId
+        ? api.listRepoCustomAgents(activeRepoId)
+        : api.listGlobalCustomAgents()
+      const [a, f] = await Promise.all([agentsP, api.listGlobalFragments()])
+      return { agents: a, fragments: f }
+    },
+    [activeRepoId],
+    { errorMessage: "加载 Agent 列表失败" },
+  )
 
-  useEffect(() => { setLoading(true); load() }, [load])
+  const agents = agentsData?.agents ?? []
+  const fragments = agentsData?.fragments ?? []
 
   // Load stats for each agent
   useEffect(() => {
@@ -532,7 +534,7 @@ export function AgentsPage() {
 
   const handleDeleteAgent = async (id: string) => {
     await api.deleteCustomAgent(id)
-    setAgents(prev => prev.filter(a => a.id !== id))
+    load()
     void useCustomAgentStore.getState().loadAgents()
   }
 
@@ -551,7 +553,7 @@ export function AgentsPage() {
 
   const handleDeleteFrag = async (id: string) => {
     await api.deleteFragment(id)
-    setFragments(prev => prev.filter(f => f.id !== id))
+    load()
   }
 
   if (!activeRepoId) {

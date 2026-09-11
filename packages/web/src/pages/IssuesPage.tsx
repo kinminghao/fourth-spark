@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
-import { RefreshCw, Search, X } from "lucide-react"
+import { Loader2, RefreshCw, Search, X } from "lucide-react"
 import clsx from "clsx"
 import { useIssueStore } from "../stores/issue-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
@@ -33,6 +33,7 @@ export function IssuesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const issues = useIssueStore((s) => s.issues)
+  const issuesLoaded = useIssueStore((s) => s.loaded)
   const syncing = useIssueStore((s) => s.syncing)
   const syncIssues = useIssueStore((s) => s.syncIssues)
   const tags = useIssueStore((s) => s.tags)
@@ -280,6 +281,11 @@ export function IssuesPage() {
             <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">
               请先选择一个仓库
             </p>
+          ) : !issuesLoaded ? (
+            <div className="flex flex-col items-center gap-2 py-8">
+              <Loader2 className="h-4 w-4 fs-spin text-fg-5" />
+              <p className="text-xs text-fg-5">加载中…</p>
+            </div>
           ) : finalFiltered.length === 0 ? (
             <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">
               {issues.length === 0 ? "点击 ↻ 同步 Issues" : "无匹配 Issue"}
