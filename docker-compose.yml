@@ -3,7 +3,7 @@ services:
     image: postgres:16-alpine
     container_name: fourth-spark-db
     ports:
-      - "5432:5432"
+      - "${PG_HOST_PORT:-5460}:5432"
     environment:
       POSTGRES_USER: fourth_spark
       POSTGRES_PASSWORD: fourth_spark
