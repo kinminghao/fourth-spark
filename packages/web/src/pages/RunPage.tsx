@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useReducer, useRef, useState } from "react"
-import { Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Pencil, Pin, Plus, Search, Trash2, X } from "lucide-react"
+import { CheckCircle2, ChevronLeft, ChevronRight, Copy, Pencil, Pin, Plus, Search, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import clsx from "clsx"
@@ -66,12 +66,12 @@ function statusDotClass(status: string | undefined): string {
 const SWIPE_HINT_KEY = "fs:swipe-hint-shown"
 
 function SessionItemInner({
-  session, isActive, isConfirming, peekHint,
-  onSelect, onDelete, onConfirm, onCancelConfirm, onRename, onToggleComplete, onTogglePin,
+  session, isActive, peekHint,
+  onSelect, onRename, onToggleComplete, onTogglePin,
   status, issue, linkedItems, todos,
 }: {
-  session: Session; isActive: boolean; isConfirming: boolean; peekHint?: boolean
-  onSelect: () => void; onDelete: () => void; onConfirm: () => void; onCancelConfirm: () => void
+  session: Session; isActive: boolean; peekHint?: boolean
+  onSelect: () => void
   onRename: (title: string) => void; onToggleComplete: () => void; onTogglePin: () => void
   status: string | undefined
   issue?: { number: number; title: string; state: string }
@@ -110,7 +110,7 @@ function SessionItemInner({
   }
 
   /* ---- iOS-style swipe-to-reveal (mobile) ---- */
-  const REVEAL_W = 192
+  const REVEAL_W = 144
   const contentRef = useRef<HTMLDivElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
   const currentX = useRef(0)
@@ -201,17 +201,6 @@ function SessionItemInner({
         style={{ width: 0 }}
       >
         <div className="absolute right-0 top-0 bottom-0 flex" style={{ width: REVEAL_W }}>
-        {isConfirming ? (
-          <>
-            <button type="button" onClick={() => { onDelete(); closeSwipe() }} className="flex w-12 items-center justify-center bg-red-500 text-white active:bg-red-600">
-              <Check className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={() => { onCancelConfirm(); closeSwipe() }} className="flex w-12 items-center justify-center bg-neutral-500 text-white active:bg-neutral-600">
-              <X className="h-4 w-4" />
-            </button>
-          </>
-        ) : (
-          <>
             <button
               type="button"
               onClick={() => { onTogglePin(); closeSwipe() }}
@@ -236,12 +225,6 @@ function SessionItemInner({
               <Pencil className="h-3.5 w-3.5" />
               <span className="text-[9px] leading-none">重命名</span>
             </button>
-            <button type="button" onClick={() => onConfirm()} className="flex w-12 flex-col items-center justify-center gap-0.5 bg-red-500 text-white active:bg-red-600">
-              <Trash2 className="h-3.5 w-3.5" />
-              <span className="text-[9px] leading-none">删除</span>
-            </button>
-          </>
-        )}
         </div>
       </div>
 
@@ -354,13 +337,7 @@ function SessionItemInner({
         </button>
 
         {/* Desktop hover buttons */}
-        {isConfirming ? (
-          <span className="absolute right-1.5 top-1.5 hidden items-center gap-1 rounded bg-surface/90 px-0.5 md:flex">
-            <button type="button" onClick={onDelete} className="rounded p-1 text-red-400 hover:bg-red-500/10"><Check className="h-3.5 w-3.5" /></button>
-            <button type="button" onClick={onCancelConfirm} className="rounded p-1 text-fg-3 hover:bg-elevated"><X className="h-3.5 w-3.5" /></button>
-          </span>
-        ) : (
-          <span className="absolute right-1.5 top-1.5 hidden items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 md:flex">
+        <span className="absolute right-1.5 top-1.5 hidden items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 md:flex">
             <button
               type="button"
               onClick={onTogglePin}
@@ -395,11 +372,7 @@ function SessionItemInner({
             >
               <Copy className="h-3.5 w-3.5" />
             </button>
-            <button type="button" onClick={onConfirm} className="rounded p-1 text-fg-5 hover:text-red-400">
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
           </span>
-        )}
       </div>
 
       {/* Long-press context menu (mobile) */}
@@ -436,7 +409,6 @@ const SessionItem = memo(SessionItemInner, (prev, next) =>
   prev.session.pinnedAt === next.session.pinnedAt &&
   prev.session.time?.updated === next.session.time?.updated &&
   prev.isActive === next.isActive &&
-  prev.isConfirming === next.isConfirming &&
   prev.peekHint === next.peekHint &&
   prev.status === next.status &&
   prev.issue?.number === next.issue?.number &&
@@ -446,7 +418,6 @@ const SessionItem = memo(SessionItemInner, (prev, next) =>
 )
 
 function SessionPanel({ onClose }: { onClose?: () => void }) {
-  const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [showPeekHint] = useState(() => {
     if (typeof window === "undefined") return false
     if (localStorage.getItem(SWIPE_HINT_KEY)) return false
@@ -460,7 +431,6 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
   const sessionFilter = useSessionStore((s) => s.sessionFilter)
   const setSessionFilter = useSessionStore((s) => s.setSessionFilter)
   const setActiveSession = useSessionStore((s) => s.setActiveSession)
-  const deleteSession = useSessionStore((s) => s.deleteSession)
   const renameSession = useSessionStore((s) => s.renameSession)
   const toggleSessionComplete = useSessionStore((s) => s.toggleSessionComplete)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
@@ -505,24 +475,20 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
           for (const p of sLinks.pullRequests) linkedItems.push({ number: p.number, state: p.state, type: "pr", mergedAt: p.mergedAt })
         }
         return (
-          <SessionItem
-            key={session.id}
-            session={session}
-            isActive={session.id === activeSessionId}
-            isConfirming={confirmingId === session.id}
-            peekHint={showPeekHint && idx === 0}
-            status={statuses[session.id]}
-            issue={linkedIssue ? { number: linkedIssue.number, title: linkedIssue.title, state: linkedIssue.state } : undefined}
-            linkedItems={linkedItems.length > 0 ? linkedItems : undefined}
-            onSelect={() => { if (activeRepoId) void setActiveSession(activeRepoId, session.id); onClose?.() }}
-            onDelete={() => { if (activeRepoId) void deleteSession(activeRepoId, session.id); setConfirmingId(null) }}
-            onConfirm={() => setConfirmingId(session.id)}
-            onCancelConfirm={() => setConfirmingId(null)}
-            onRename={(title) => activeRepoId && void renameSession(activeRepoId, session.id, title)}
-            onToggleComplete={() => activeRepoId && void toggleSessionComplete(activeRepoId, session.id)}
-            onTogglePin={() => activeRepoId && void toggleSessionPin(activeRepoId, session.id)}
-            todos={allTodos[session.id] ?? EMPTY_TODOS}
-          />
+            <SessionItem
+              key={session.id}
+              session={session}
+              isActive={session.id === activeSessionId}
+              peekHint={showPeekHint && idx === 0}
+              status={statuses[session.id]}
+              issue={linkedIssue ? { number: linkedIssue.number, title: linkedIssue.title, state: linkedIssue.state } : undefined}
+              linkedItems={linkedItems.length > 0 ? linkedItems : undefined}
+              onSelect={() => { if (activeRepoId) void setActiveSession(activeRepoId, session.id); onClose?.() }}
+              onRename={(title) => activeRepoId && void renameSession(activeRepoId, session.id, title)}
+              onToggleComplete={() => activeRepoId && void toggleSessionComplete(activeRepoId, session.id)}
+              onTogglePin={() => activeRepoId && void toggleSessionPin(activeRepoId, session.id)}
+              todos={allTodos[session.id] ?? EMPTY_TODOS}
+            />
         )
       })}
     </ul>

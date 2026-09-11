@@ -457,12 +457,6 @@ export async function createSession(
   })
 }
 
-export async function deleteSession(repoId: string, id: string): Promise<void> {
-  await apiFetch<void>(`${repoBase(repoId)}/sessions/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  })
-}
-
 export async function sendMessage(repoId: string, sessionId: string, content: string, agent?: string, model?: string, variant?: string, files?: PromptFile[]): Promise<void> {
   await apiFetch<void>(
     `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/prompt`,
