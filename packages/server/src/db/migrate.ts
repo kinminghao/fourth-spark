@@ -5,7 +5,7 @@ import { homedir } from "node:os"
 
 const DATABASE_URL =
   process.env.DATABASE_URL ??
-  "postgresql://fourth_spark:fourth_spark@localhost:5432/fourth_spark"
+  "postgresql://fourth_spark:fourth_spark@localhost:5460/fourth_spark"
 
 interface JournalEntry {
   idx: number

@@ -4,7 +4,7 @@ import { createServer, createConnection } from "node:net"
 import { PID_FILE, LOG_FILE, MAX_LOG_BYTES, ensureDataDir, isProcessRunning, findDockerCompose, getDockerComposeCmd, ensureDependencies } from "./paths"
 
 const DEFAULT_PORT = 3000
-const PG_PORT = 5432
+const DEFAULT_PG_PORT = 5460
 
 function parsePort(args: string[]): number | null {
   const idx = args.indexOf("--port")
@@ -37,19 +37,25 @@ function isPortReachable(port: number, host = "127.0.0.1"): Promise<boolean> {
   })
 }
 
-function isPortOccupiedByOther(port: number, containerName: string): boolean {
+function getContainerPgPort(): number | null {
   try {
-    const out = execSync(`lsof -i :${port} -P -n -t -sTCP:LISTEN 2>/dev/null`, { stdio: "pipe" }).toString().trim()
-    if (!out) return false
-    try {
-      const containerId = execSync(`docker inspect --format '{{.State.Pid}}' ${containerName} 2>/dev/null`, { stdio: "pipe" }).toString().trim()
-      return !out.split("\n").some((pid) => pid === containerId)
-    } catch {
-      return true
+    const out = execSync("docker port fourth-spark-db 5432 2>/dev/null", { stdio: "pipe" }).toString().trim()
+    const match = out.match(/:(\d+)/)
+    if (match) {
+      const port = parseInt(match[1], 10)
+      if (!isNaN(port)) return port
     }
   } catch {
-    return false
+    // Container not running or no port mapping
   }
+  return null
+}
+
+async function resolvePgPort(): Promise<number> {
+  const existing = getContainerPgPort()
+  if (existing) return existing
+  if (await isPortFree(DEFAULT_PG_PORT)) return DEFAULT_PG_PORT
+  return findFreePort(DEFAULT_PG_PORT + 1)
 }
 
 export async function startCommand(args: string[]): Promise<void> {
@@ -67,18 +73,17 @@ export async function startCommand(args: string[]): Promise<void> {
 
   const composePath = findDockerCompose()
   const composeCmd = getDockerComposeCmd()
+  let pgPort = DEFAULT_PG_PORT
   if (composePath && composeCmd && !process.env.DATABASE_URL) {
-    if (isPortOccupiedByOther(PG_PORT, "fourth-spark-db")) {
-      console.error(`ERROR: Port ${PG_PORT} is already in use by another process.`)
-      console.error("Options:")
-      console.error(`  1. Stop the process using port ${PG_PORT}`)
-      console.error("  2. Use an external database: DATABASE_URL=postgresql://... fourth-spark start")
-      process.exit(1)
+    pgPort = await resolvePgPort()
+    if (pgPort !== DEFAULT_PG_PORT) {
+      console.log(`  Port ${DEFAULT_PG_PORT} in use, using ${pgPort} for PostgreSQL`)
     }
 
     console.log("→ Starting PostgreSQL...")
     try {
-      execSync(`${composeCmd.join(" ")} -f "${composePath}" up -d postgres`, { stdio: "pipe" })
+      const composeEnv = { ...process.env, PG_HOST_PORT: String(pgPort) }
+      execSync(`${composeCmd.join(" ")} -f "${composePath}" up -d postgres`, { stdio: "pipe", env: composeEnv })
       let ready = false
       for (let i = 0; i < 60; i++) {
         try {
@@ -90,10 +95,9 @@ export async function startCommand(args: string[]): Promise<void> {
         }
       }
       if (ready) {
-        // Docker port forwarding may lag behind container readiness (especially on macOS)
         let hostReachable = false
         for (let i = 0; i < 20; i++) {
-          if (await isPortReachable(PG_PORT)) { hostReachable = true; break }
+          if (await isPortReachable(pgPort)) { hostReachable = true; break }
           await new Promise((r) => setTimeout(r, 500))
         }
         if (!hostReachable) ready = false
@@ -104,6 +108,8 @@ export async function startCommand(args: string[]): Promise<void> {
       console.error("Make sure Docker is running, then retry.")
       process.exit(1)
     }
+
+    process.env.DATABASE_URL = `postgresql://fourth_spark:fourth_spark@localhost:${pgPort}/fourth_spark`
   }
 
   console.log("→ Running database migrations...")
@@ -164,6 +170,7 @@ export async function startCommand(args: string[]): Promise<void> {
     console.log("=== fourth-spark started ===")
     console.log(`  PID:  ${pid}`)
     console.log(`  URL:  http://localhost:${port}`)
+    console.log(`  DB:   localhost:${pgPort}`)
     console.log(`  Logs: ${LOG_FILE}`)
     console.log("")
     console.log("  fourth-spark stop    — stop all services")
