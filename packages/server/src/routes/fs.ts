@@ -57,28 +57,28 @@ fsRoutes.post("/browse", async (c) => {
 
   // Reject paths containing traversal sequences before resolution
   if (rawPath.includes("..")) {
-    return c.json({ error: "路径不允许包含 '..'", status: 400 }, 400)
+    return c.json({ error: "路径不允许包含 '..'" }, 400)
   }
 
   const resolved = resolve(rawPath)
 
   if (!existsSync(resolved)) {
-    return c.json({ error: "路径不存在", status: 400 }, 400)
+    return c.json({ error: "路径不存在" }, 400)
   }
 
   const stat = lstatSync(resolved)
   if (stat.isSymbolicLink()) {
-    return c.json({ error: "不允许通过符号链接访问", status: 403 }, 403)
+    return c.json({ error: "不允许通过符号链接访问" }, 403)
   }
   if (!stat.isDirectory()) {
-    return c.json({ error: "路径不是目录", status: 400 }, 400)
+    return c.json({ error: "路径不是目录" }, 400)
   }
 
   let dirEntries: string[]
   try {
     dirEntries = readdirSync(resolved)
   } catch {
-    return c.json({ error: "无法读取目录", status: 403 }, 403)
+    return c.json({ error: "无法读取目录" }, 403)
   }
 
   const entries: Array<{ name: string; isGitRepo: boolean }> = []

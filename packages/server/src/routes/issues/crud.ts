@@ -271,7 +271,7 @@ export function registerCrudRoutes(app: Hono): void {
       }
     }
 
-    return c.json({ ok: true, parentId, childId })
+    return c.json({ parentId, childId })
   })
 
   app.get("/attachments/:uuid", async (c) => {

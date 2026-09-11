@@ -120,7 +120,7 @@ workspaceRoutes.delete("/:id", async (c) => {
     await workspaceManager.remove(workspaceId)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return c.json({ error: msg, status: 500 }, 500)
+    return c.json({ error: msg }, 500)
   }
   return c.json({ ok: true })
 })

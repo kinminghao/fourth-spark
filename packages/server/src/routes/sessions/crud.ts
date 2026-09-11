@@ -19,11 +19,11 @@ export function registerCrudRoutes(app: Hono): void {
   app.post("/", async (c) => {
     const repoId = c.req.param("repoId")
     if (!repoId) {
-      return c.json({ error: "Missing repoId", status: 400 }, 400)
+      return c.json({ error: "Missing repoId" }, 400)
     }
     const [repo] = await db.select().from(repos).where(eq(repos.id, repoId))
     if (!repo) {
-      return c.json({ error: "Repo not found", status: 404 }, 404)
+      return c.json({ error: "Repo not found" }, 404)
     }
 
     const [body, err] = await parseBody(c, CreateSessionBody)
@@ -35,12 +35,12 @@ export function registerCrudRoutes(app: Hono): void {
     try {
       files = validateFiles(body.files)
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "Invalid files", status: 400 }, 400)
+      return c.json({ error: e instanceof Error ? e.message : "Invalid files" }, 400)
     }
 
     const hasFiles = files.length > 0
     if (!message && !hasContext && !hasFiles) {
-      return c.json({ error: "Either a non-empty 'message', an 'issueId', a 'customAgentId', or a file is required", status: 400 }, 400)
+      return c.json({ error: "Either a non-empty 'message', an 'issueId', a 'customAgentId', or a file is required" }, 400)
     }
 
     let agent = body.agent
@@ -311,7 +311,7 @@ export function registerCrudRoutes(app: Hono): void {
       }
     }
     const session = await getSessionFromDB(sessionId)
-    if (!session) return c.json({ error: "Session not found", status: 404 }, 404)
+    if (!session) return c.json({ error: "Session not found" }, 404)
     return c.json(session)
   })
 

@@ -42,7 +42,7 @@ export function registerFileRoutes(app: Hono): void {
   app.get("/:id/files", async (c) => {
     const sessionId = c.req.param("id")
     const ws = await resolveSessionWorkspace(sessionId)
-    if (!ws) return c.json({ error: "Session has no workspace", status: 404 }, 404)
+    if (!ws) return c.json({ error: "Session has no workspace" }, 404)
 
     const changedFiles = await workspaceManager.getChangedFiles(ws.id)
     const previewable = changedFiles
