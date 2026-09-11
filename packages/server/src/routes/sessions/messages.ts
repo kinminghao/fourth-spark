@@ -22,11 +22,11 @@ export function registerMessageRoutes(app: Hono): void {
     try {
       files = validateFiles(body.files)
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "Invalid files", status: 400 }, 400)
+      return c.json({ error: e instanceof Error ? e.message : "Invalid files" }, 400)
     }
 
     if (body.content.length === 0 && files.length === 0) {
-      return c.json({ error: "Body must include a non-empty 'content' string or at least one file", status: 400 }, 400)
+      return c.json({ error: "Body must include a non-empty 'content' string or at least one file" }, 400)
     }
     const sessionId = c.req.param("id")
     await client.prompt(sessionId, body.content, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT, files })
@@ -59,7 +59,7 @@ export function registerMessageRoutes(app: Hono): void {
     const pending = await client.listQuestions()
     const match = pending.find((q) => q.sessionID === sessionId)
     if (!match) {
-      return c.json({ error: "No pending question for this session", status: 404 }, 404)
+      return c.json({ error: "No pending question for this session" }, 404)
     }
     await client.replyQuestion(match.id, body.answers)
     return c.json({ ok: true })
@@ -71,7 +71,7 @@ export function registerMessageRoutes(app: Hono): void {
     const pending = await client.listQuestions()
     const match = pending.find((q) => q.sessionID === sessionId)
     if (!match) {
-      return c.json({ error: "No pending question for this session", status: 404 }, 404)
+      return c.json({ error: "No pending question for this session" }, 404)
     }
     await client.rejectQuestion(match.id)
     return c.json({ ok: true })

@@ -49,11 +49,11 @@ repoRoutes.post("/resolve", async (c) => {
   const localPath = body.localPath.replace(/\/+$/, "")
 
   if (!existsSync(localPath)) {
-    return c.json({ error: "路径不存在", status: 400 }, 400)
+    return c.json({ error: "路径不存在" }, 400)
   }
 
   if (!existsSync(`${localPath}/.git`)) {
-    return c.json({ error: "该目录不是 Git 仓库", status: 400 }, 400)
+    return c.json({ error: "该目录不是 Git 仓库" }, 400)
   }
 
   const name = basename(localPath)
@@ -81,18 +81,18 @@ repoRoutes.post("/clone", async (c) => {
     : join(defaultBase, repoName)
 
   if (body.targetDir?.includes("..")) {
-    return c.json({ error: "目标路径不允许包含 '..'", status: 400 }, 400)
+    return c.json({ error: "目标路径不允许包含 '..'" }, 400)
   }
 
   if (existsSync(targetDir)) {
-    return c.json({ error: `目标目录已存在: ${targetDir}`, status: 409 }, 409)
+    return c.json({ error: `目标目录已存在: ${targetDir}` }, 409)
   }
 
   const parentDir = resolve(targetDir, "..")
   try {
     mkdirSync(parentDir, { recursive: true })
   } catch {
-    return c.json({ error: `无法创建父目录: ${parentDir}`, status: 500 }, 500)
+    return c.json({ error: `无法创建父目录: ${parentDir}` }, 500)
   }
 
   const result = await runGitWithRetry(
@@ -103,7 +103,7 @@ repoRoutes.post("/clone", async (c) => {
 
   if (!result.ok) {
     const errorInfo = classifyGitError(result.stdout, result.stderr)
-    return c.json({ error: errorInfo.message, code: errorInfo.code, status: 500 }, 500)
+    return c.json({ error: errorInfo.message, code: errorInfo.code }, 500)
   }
 
   let clonedGitUrl = normalizeGitUrl(gitUrl)
@@ -119,14 +119,14 @@ repoRoutes.post("/", async (c) => {
   if (err) return err
 
   if (!existsSync(body.localPath)) {
-    return c.json({ error: `Local path does not exist: ${body.localPath}`, status: 400 }, 400)
+    return c.json({ error: `Local path does not exist: ${body.localPath}` }, 400)
   }
 
   const runtimeType = body.runtimeType ?? "opencode"
 
   const [existing] = await db.select({ id: repos.id, name: repos.name }).from(repos).where(eq(repos.localPath, body.localPath))
   if (existing) {
-    return c.json({ error: `Local path already registered as repo "${existing.name}". Delete it first before re-adding.`, status: 409 }, 409)
+    return c.json({ error: `Local path already registered as repo "${existing.name}". Delete it first before re-adding.` }, 409)
   }
 
   const id = crypto.randomUUID()
@@ -170,7 +170,7 @@ repoRoutes.get("/", async (c) => {
 // GET /api/repos/:id — get a single repo.
 repoRoutes.get("/:id", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
-  if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
+  if (!repo) return c.json({ error: "Repo not found" }, 404)
   return c.json({ ...repo, worktreeEnabled: Boolean(repo.worktreeEnabled), running: runtimeManager.isRunning(repo.id), branch: getBranch(repo.localPath) })
 })
 
@@ -185,26 +185,26 @@ repoRoutes.delete("/:id", async (c) => {
 // POST /api/repos/:id/start — manually start a stopped repo.
 repoRoutes.post("/:id/start", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
-  if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
+  if (!repo) return c.json({ error: "Repo not found" }, 404)
   try {
     await runtimeManager.start(repo.id, repo.localPath, repo.runtimeType ?? undefined)
-    return c.json({ ok: true, status: "active" })
+    return c.json({ status: "active" })
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to start"
-    return c.json({ error: msg, status: 500 }, 500)
+    return c.json({ error: msg }, 500)
   }
 })
 
 // POST /api/repos/:id/stop — manually stop a running repo.
 repoRoutes.post("/:id/stop", async (c) => {
   await runtimeManager.stop(c.req.param("id"))
-  return c.json({ ok: true, status: "inactive" })
+  return c.json({ status: "inactive" })
 })
 
 // GET /api/repos/:id/branches — list all branches.
 repoRoutes.get("/:id/branches", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
-  if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
+  if (!repo) return c.json({ error: "Repo not found" }, 404)
 
   const current = getBranch(repo.localPath)
 
@@ -229,13 +229,13 @@ repoRoutes.get("/:id/branches", async (c) => {
 // POST /api/repos/:id/checkout — switch branch.
 repoRoutes.post("/:id/checkout", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
-  if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
+  if (!repo) return c.json({ error: "Repo not found" }, 404)
 
   const [body, err] = await parseBody(c, CheckoutBody)
   if (err) return err
   const targetBranch = body.branch
   if (!isValidGitBranchName(targetBranch)) {
-    return c.json({ error: "Invalid branch name", status: 400 }, 400)
+    return c.json({ error: "Invalid branch name" }, 400)
   }
 
   return await withRepoLock(repo.localPath, () => {
@@ -249,7 +249,7 @@ repoRoutes.post("/:id/checkout", async (c) => {
       // Restore stash if checkout failed
       if (didStash) runGit(["stash", "pop"], repo.localPath)
       const errorInfo = classifyGitError(result.stdout, result.stderr)
-      return c.json({ error: errorInfo.message, code: errorInfo.code, status: 400 }, 400)
+      return c.json({ error: errorInfo.message, code: errorInfo.code }, 400)
     }
 
     // Pop stash after successful checkout
@@ -258,21 +258,20 @@ repoRoutes.post("/:id/checkout", async (c) => {
       if (!popResult.ok) {
         // Stash pop conflict — leave stash, warn user
         return c.json({
-          ok: true,
           branch: getBranch(repo.localPath),
           warning: "分支切换成功，但暂存的修改恢复时有冲突，请手动执行 git stash pop 解决",
         })
       }
     }
 
-    return c.json({ ok: true, branch: getBranch(repo.localPath) })
+    return c.json({ branch: getBranch(repo.localPath) })
   })
 })
 
 // POST /api/repos/:id/pull — pull latest code from remote.
 repoRoutes.post("/:id/pull", async (c) => {
   const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
-  if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
+  if (!repo) return c.json({ error: "Repo not found" }, 404)
 
   return await withRepoLock(repo.localPath, async () => {
     // Pre-pull cleanup: remove stale lock files and prune remote refs
@@ -283,7 +282,7 @@ repoRoutes.post("/:id/pull", async (c) => {
 
     if (!result.ok) {
       const errorInfo = classifyGitError(result.stdout, result.stderr)
-      return c.json({ error: errorInfo.message, code: errorInfo.code, status: 500 }, 500)
+      return c.json({ error: errorInfo.message, code: errorInfo.code }, 500)
     }
 
     const alreadyUpToDate = /already up.to.date/i.test(result.stdout)
@@ -303,7 +302,7 @@ repoRoutes.post("/:id/pull", async (c) => {
       summary += "（已自动暂存并恢复本地修改）"
     }
 
-    return c.json({ ok: true, output: result.stdout, branch: getBranch(repo.localPath), summary, alreadyUpToDate, autostashed, filesChanged })
+    return c.json({ output: result.stdout, branch: getBranch(repo.localPath), summary, alreadyUpToDate, autostashed, filesChanged })
   })
 })
 
@@ -312,10 +311,10 @@ repoRoutes.patch("/:id/runtime", async (c) => {
   const [body, err] = await parseBody(c, UpdateRuntimeBody)
   if (err) return err
   const [repo] = await db.select().from(repos).where(eq(repos.id, id))
-  if (!repo) return c.json({ error: "Repo not found", status: 404 }, 404)
+  if (!repo) return c.json({ error: "Repo not found" }, 404)
 
   if (repo.runtimeType === body.runtimeType) {
-    return c.json({ ok: true, runtimeType: body.runtimeType })
+    return c.json({ runtimeType: body.runtimeType })
   }
 
   const wasRunning = runtimeManager.isRunning(id)
@@ -324,7 +323,7 @@ repoRoutes.patch("/:id/runtime", async (c) => {
   if (wasRunning) {
     await runtimeManager.start(id, repo.localPath, body.runtimeType)
   }
-  return c.json({ ok: true, runtimeType: body.runtimeType })
+  return c.json({ runtimeType: body.runtimeType })
 })
 
 repoRoutes.patch("/:id/worktree", async (c) => {
@@ -332,5 +331,5 @@ repoRoutes.patch("/:id/worktree", async (c) => {
   const [body, err] = await parseBody(c, UpdateWorktreeBody)
   if (err) return err
   await db.update(repos).set({ worktreeEnabled: body.enabled ? 1 : 0, updatedAt: Date.now() }).where(eq(repos.id, id))
-  return c.json({ ok: true, worktreeEnabled: body.enabled })
+  return c.json({ worktreeEnabled: body.enabled })
 })

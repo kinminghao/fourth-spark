@@ -291,7 +291,7 @@ export function PullRequestsPage() {
     : allIssues.filter((i) => `#${i.number} ${i.title}`.toLowerCase().includes(isq))
 
   const selectedPr = pulls.find((p) => p.id === selectedId) ?? null
-  const showDetail = matchingPr ?? selectedPr
+  const showDetail = activeRepoId ? (matchingPr ?? selectedPr) : null
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
