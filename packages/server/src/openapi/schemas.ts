@@ -152,7 +152,7 @@ export const PullRequest = z.object({
   authorAvatar: z.string().nullable(),
   assignees: z.array(AssigneeSchema).nullable(),
   mergeable: z.string().nullable(),
-  draft: z.number(),
+  draft: z.union([z.literal(0), z.literal(1)]),
   commentCount: z.number(),
   additions: z.number().nullable(),
   deletions: z.number().nullable(),
