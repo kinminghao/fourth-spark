@@ -227,7 +227,8 @@ export function cleanupStaleLock(repoPath: string): void {
   if (!existsSync(lockPath)) return
 
   // Check if any git process is actively running in this directory
-  const pgrepResult = Bun.spawnSync(["pgrep", "-f", `git.*${repoPath}`], { timeout: 5_000 })
+  const escapedPath = repoPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const pgrepResult = Bun.spawnSync(["pgrep", "-f", `git.*${escapedPath}`], { timeout: 5_000 })
   if (pgrepResult.exitCode === 0 && pgrepResult.stdout.toString().trim()) {
     logger.info({ repoPath }, "git lock file exists but git process is running, skipping cleanup")
     return
