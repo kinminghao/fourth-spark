@@ -631,6 +631,14 @@ export async function importCustomAgent(data: CustomAgentExport): Promise<Custom
   return apiFetch<CustomAgent>("/api/custom-agents/import", { method: "POST", body: JSON.stringify(data) })
 }
 
+export async function reorderCustomAgents(items: Array<{ id: string; sortOrder: number }>): Promise<void> {
+  await apiFetch<{ ok: boolean }>("/api/custom-agents/reorder", { method: "PATCH", body: JSON.stringify({ items }) })
+}
+
+export async function reorderRepoCustomAgents(repoId: string, items: Array<{ id: string; sortOrder: number }>): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`${repoBase(repoId)}/custom-agents/reorder`, { method: "PATCH", body: JSON.stringify({ items }) })
+}
+
 export interface MemoryVersion {
   content: string
   importance: number

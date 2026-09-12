@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { AlertTriangle, Brain, Clock, ChevronDown, Edit3, Loader2, Plus, Upload, X } from "lucide-react"
+import { AlertTriangle, Brain, Clock, ChevronDown, Edit3, GripVertical, Loader2, Plus, Upload, X } from "lucide-react"
 import clsx from "clsx"
+import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from "@dnd-kit/core"
+import type { DragEndEvent } from "@dnd-kit/core"
+import { SortableContext, useSortable, arrayMove, rectSortingStrategy } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import { InlineConfirm } from "../components/InlineConfirm"
 import * as api from "../lib/api-client"
 import type { CustomAgent, CustomAgentExport, ModelInfo, PromptFragment } from "../lib/api-client"
@@ -24,66 +28,88 @@ const SP_KEY = "__system_prompt__"
 // AgentCard — card grid item
 // ---------------------------------------------------------------------------
 
-function AgentCard({ agent, memoryCount, sessionCount, onClick, onDelete }: {
+function SortableAgentCard({ agent, memoryCount, sessionCount, onClick, onDelete }: {
   agent: CustomAgent
   memoryCount: number
   sessionCount: number
   onClick: () => void
   onDelete: () => void
 }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: agent.id })
   const isSystem = agent.isSystem === 1
   const avatar = agentAvatar(agent.name)
 
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  }
+
   return (
     <div
-      className="flex cursor-pointer flex-col rounded-xl border border-line bg-surface transition-colors hover:border-fg-6/60"
-      onClick={onClick}
+      ref={setNodeRef}
+      style={style}
+      className="group"
     >
-      <div className="flex items-start gap-3 p-4 pb-3">
-        <div className={clsx(
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold",
-          avatar.bg,
-          avatar.text,
-        )}>
-          {avatar.initial}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold text-fg">{agent.name}</span>
-            {isSystem && (
-              <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">系统</span>
-            )}
-            {agent.repoId && (
-              <span className="shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">repo</span>
+      <div
+        className="flex cursor-pointer flex-col rounded-xl border border-line bg-surface transition-colors hover:border-fg-6/60"
+        onClick={onClick}
+      >
+        <div className="flex items-start gap-3 p-4 pb-3">
+          <button
+            type="button"
+            className="mt-0.5 flex h-9 w-5 shrink-0 cursor-grab items-center justify-center text-fg-6 hover:text-fg-4 active:cursor-grabbing"
+            {...attributes}
+            {...listeners}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+          <div className={clsx(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold",
+            avatar.bg,
+            avatar.text,
+          )}>
+            {avatar.initial}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-semibold text-fg">{agent.name}</span>
+              {isSystem && (
+                <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">系统</span>
+              )}
+              {agent.repoId && (
+                <span className="shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">repo</span>
+              )}
+            </div>
+            <p className="mt-0.5 text-[11px] text-fg-4">
+              <span className="font-mono">{agent.baseAgent}</span>
+              {agent.model && <span className="ml-1.5 text-fg-5">· {agent.model}</span>}
+            </p>
+            {agent.description && (
+              <p className="mt-1 text-xs text-fg-5 line-clamp-2">{agent.description}</p>
             )}
           </div>
-          <p className="mt-0.5 text-[11px] text-fg-4">
-            <span className="font-mono">{agent.baseAgent}</span>
-            {agent.model && <span className="ml-1.5 text-fg-5">· {agent.model}</span>}
-          </p>
-          {agent.description && (
-            <p className="mt-1 text-xs text-fg-5 line-clamp-2">{agent.description}</p>
+        </div>
+
+        <div className="flex items-center gap-4 border-t border-line/60 px-4 py-2.5">
+          <span className="flex items-center gap-1.5 text-[11px] text-fg-5">
+            <Brain className="h-3 w-3" />
+            <span>记忆 {memoryCount}</span>
+          </span>
+          <span className="flex items-center gap-1.5 text-[11px] text-fg-5">
+            <Clock className="h-3 w-3" />
+            <span>会话 {sessionCount}</span>
+          </span>
+          <div className="flex-1" />
+          {!isSystem && (
+            <InlineConfirm
+              onConfirm={onDelete}
+              stopPropagation
+              triggerClassName="text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100 [.group:hover_&]:opacity-100"
+            />
           )}
         </div>
-      </div>
-
-      <div className="flex items-center gap-4 border-t border-line/60 px-4 py-2.5">
-        <span className="flex items-center gap-1.5 text-[11px] text-fg-5">
-          <Brain className="h-3 w-3" />
-          <span>记忆 {memoryCount}</span>
-        </span>
-        <span className="flex items-center gap-1.5 text-[11px] text-fg-5">
-          <Clock className="h-3 w-3" />
-          <span>会话 {sessionCount}</span>
-        </span>
-        <div className="flex-1" />
-        {!isSystem && (
-          <InlineConfirm
-            onConfirm={onDelete}
-            stopPropagation
-            triggerClassName="text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100 [.group:hover_&]:opacity-100"
-          />
-        )}
       </div>
     </div>
   )
@@ -503,6 +529,35 @@ export function AgentsPage() {
     return a.isSystem < 2
   })
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor),
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = visibleAgents.findIndex((a) => a.id === active.id)
+    const newIndex = visibleAgents.findIndex((a) => a.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const reordered = arrayMove(visibleAgents, oldIndex, newIndex)
+    const items = reordered.map((a, i) => ({ id: a.id, sortOrder: i }))
+
+    if (activeRepoId) {
+      void api.reorderRepoCustomAgents(activeRepoId, items).then(() => {
+        load()
+        void useCustomAgentStore.getState().loadAgents(activeRepoId)
+      })
+    } else {
+      void api.reorderCustomAgents(items).then(() => {
+        load()
+        void useCustomAgentStore.getState().loadAgents(activeRepoId)
+      })
+    }
+  }
+
   const handleCreateAgent = async (data: { name: string; baseAgent: string; model?: string; variant?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
     if (activeRepoId) {
       await api.createRepoCustomAgent(activeRepoId, data)
@@ -588,19 +643,22 @@ export function AgentsPage() {
             <p className="text-xs text-fg-5">点击上方「创建」开始。</p>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {visibleAgents.map(a => (
-              <div key={a.id} className="group">
-                <AgentCard
-                  agent={a}
-                  memoryCount={memoryCounts[a.id] ?? 0}
-                  sessionCount={sessionCounts[a.id] ?? 0}
-                  onClick={() => navigate(`/${encodeURIComponent(repoName ?? "")}/agents/${a.id}`)}
-                  onDelete={() => void handleDeleteAgent(a.id)}
-                />
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={visibleAgents.map((a) => a.id)} strategy={rectSortingStrategy}>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {visibleAgents.map(a => (
+                  <SortableAgentCard
+                    key={a.id}
+                    agent={a}
+                    memoryCount={memoryCounts[a.id] ?? 0}
+                    sessionCount={sessionCounts[a.id] ?? 0}
+                    onClick={() => navigate(`/${encodeURIComponent(repoName ?? "")}/agents/${a.id}`)}
+                    onDelete={() => void handleDeleteAgent(a.id)}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
         )}
 
         {/* Prompt Fragments (collapsible) */}
