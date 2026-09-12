@@ -15,7 +15,7 @@
 
 import type { Subprocess } from "bun"
 import { eq, inArray } from "drizzle-orm"
-import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync } from "node:fs"
 import { join } from "node:path"
 
 import type { RuntimeProvider, RuntimeHealth } from "../../core/runtime-provider"
@@ -154,7 +154,9 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
       for (const entry of managed.values()) {
         records.push({ pid: entry.process.pid, port: entry.port, repoId: entry.id })
       }
-      writeFileSync(PID_FILE, JSON.stringify(records, null, 2))
+      const tmp = `${PID_FILE}.tmp-${process.pid}`
+      writeFileSync(tmp, JSON.stringify(records, null, 2))
+      renameSync(tmp, PID_FILE)
     } catch (err) {
       logger.warn({ err }, "failed to write PID file")
     }
@@ -177,7 +179,9 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
       mkdirSync(PID_DIR, { recursive: true })
       const records = readPidFile().filter((r) => r.repoId !== repoId)
       records.push({ pid, port, repoId })
-      writeFileSync(PID_FILE, JSON.stringify(records, null, 2))
+      const tmp = `${PID_FILE}.tmp-${process.pid}`
+      writeFileSync(tmp, JSON.stringify(records, null, 2))
+      renameSync(tmp, PID_FILE)
     } catch (err) {
       logger.warn({ err }, "failed to write early PID record")
     }
