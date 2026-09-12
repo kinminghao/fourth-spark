@@ -65,7 +65,12 @@ export async function buildIssueContext(issueId: string): Promise<string | null>
     .where(inArray(issueComments.issueId, allIds))
     .orderBy(asc(issueComments.createdAt))
 
-  const commentMap = Map.groupBy(allComments, (c) => c.issueId)
+  const commentMap = allComments.reduce((map, c) => {
+    const arr = map.get(c.issueId) ?? []
+    arr.push(c)
+    map.set(c.issueId, arr)
+    return map
+  }, new Map<number, typeof allComments>())
 
   const sections = chain.map((issue, i) => {
     const isLeaf = i === chain.length - 1
