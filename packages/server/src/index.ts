@@ -167,7 +167,7 @@ async function startup() {
       const ran = await runMigrations()
       if (ran) logger.info("database migrations applied")
     } catch (err) {
-      logger.error({ err }, "migration failed — continuing with existing schema")
+      logger.warn({ err }, "migration failed — continuing with existing schema")
     }
   }
 
