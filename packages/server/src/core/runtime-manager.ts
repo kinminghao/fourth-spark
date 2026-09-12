@@ -245,6 +245,10 @@ export function createDefaultRuntimeManager(): RuntimeManager {
     },
 
     killAllSync(): void {
+      if (activeLeaseKeeper) {
+        activeLeaseKeeper.dispose()
+        activeLeaseKeeper = undefined
+      }
       for (const provider of providers.values()) {
         provider.killAllSync()
       }
