@@ -181,19 +181,23 @@ export async function runGitWithRetry(
 const repoLocks = new Map<string, Promise<void>>()
 
 export async function withRepoLock<T>(repoPath: string, fn: () => T | Promise<T>): Promise<T> {
-  // Wait for any existing operation on this repo to finish
-  while (repoLocks.has(repoPath)) {
-    await repoLocks.get(repoPath)
-  }
+  // Synchronous read-then-write: no await between checking the map and claiming
+  // the slot, so no other caller can interleave.
+  const prev = repoLocks.get(repoPath) ?? Promise.resolve()
 
   let resolve!: () => void
   const lockPromise = new Promise<void>((r) => { resolve = r })
   repoLocks.set(repoPath, lockPromise)
 
+  await prev
+
   try {
     return await fn()
   } finally {
-    repoLocks.delete(repoPath)
+    // Only clean up if we're the tail of the chain (no one queued after us)
+    if (repoLocks.get(repoPath) === lockPromise) {
+      repoLocks.delete(repoPath)
+    }
     resolve()
   }
 }
