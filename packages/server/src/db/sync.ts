@@ -13,6 +13,10 @@ function getProps(data: R): R | null {
   return asRecord("properties" in data ? data.properties : data)
 }
 
+/** Upper bounds — no single request/session realistically exceeds these */
+const MAX_TOKENS = 10_000_000
+const MAX_COST = 10_000 // USD
+
 function num(v: unknown, fallback = 0): number {
   const n = typeof v === "number" ? v : fallback
   return Number.isFinite(n) ? Math.max(0, n) : fallback
@@ -64,12 +68,12 @@ async function upsertSession(props: R): Promise<void> {
     agent: str(props.agent) || null,
     model: asRecord(props.model),
     directory: str(props.directory) || null,
-    cost: num(props.cost),
-    tokensInput: num(props.tokens_input || (props.tokens as R)?.input),
-    tokensOutput: num(props.tokens_output || (props.tokens as R)?.output),
-    tokensReasoning: num(props.tokens_reasoning || (props.tokens as R)?.reasoning),
-    tokensCacheRead: num(props.tokens_cache_read || ((props.tokens as R)?.cache as R)?.read),
-    tokensCacheWrite: num(props.tokens_cache_write || ((props.tokens as R)?.cache as R)?.write),
+    cost: Math.min(num(props.cost), MAX_COST),
+    tokensInput: Math.min(num(props.tokens_input || (props.tokens as R)?.input), MAX_TOKENS),
+    tokensOutput: Math.min(num(props.tokens_output || (props.tokens as R)?.output), MAX_TOKENS),
+    tokensReasoning: Math.min(num(props.tokens_reasoning || (props.tokens as R)?.reasoning), MAX_TOKENS),
+    tokensCacheRead: Math.min(num(props.tokens_cache_read || ((props.tokens as R)?.cache as R)?.read), MAX_TOKENS),
+    tokensCacheWrite: Math.min(num(props.tokens_cache_write || ((props.tokens as R)?.cache as R)?.write), MAX_TOKENS),
     timeCreated: num((props.time as R)?.created, now),
     timeUpdated: num((props.time as R)?.updated, now),
   }
@@ -90,7 +94,7 @@ async function upsertMessage(sessionId: string, props: R): Promise<void> {
     model: str(model?.modelID || props.modelID) || null,
     provider: str(model?.providerID || props.providerID) || null,
     variant: str(model?.variant || props.variant) || null,
-    cost: typeof props.cost === "number" && Number.isFinite(props.cost) ? Math.max(0, props.cost) : null,
+    cost: typeof props.cost === "number" && Number.isFinite(props.cost) ? Math.min(Math.max(0, props.cost), MAX_COST) : null,
     timeCreated: num((props.time as R)?.created, now),
     timeUpdated: num((props.time as R)?.updated, now),
   }
