@@ -13,7 +13,7 @@ import type { PromptFile } from "../../core/runtime-types"
 import { SessionPromptBody, SessionRevertBody, QuestionReplyBody, validateFiles } from "./schemas"
 
 export function registerMessageRoutes(app: Hono): void {
-  app.post("/:id/prompt", async (c) => {
+  app.post("/:id/actions/prompt", async (c) => {
     const client = runtimeManager.requireClient(c.req.param("repoId"))
     const [body, err] = await parseBody(c, SessionPromptBody)
     if (err) return err
@@ -35,7 +35,7 @@ export function registerMessageRoutes(app: Hono): void {
     return c.json({ ok: true })
   })
 
-  app.post("/:id/revert", async (c) => {
+  app.post("/:id/actions/revert", async (c) => {
     const client = runtimeManager.requireClient(c.req.param("repoId"))
     const [body, err] = await parseBody(c, SessionRevertBody)
     if (err) return err
@@ -43,7 +43,7 @@ export function registerMessageRoutes(app: Hono): void {
     return c.json(session)
   })
 
-  app.post("/:id/abort", async (c) => {
+  app.post("/:id/actions/abort", async (c) => {
     const sessionId = c.req.param("id")
     const client = runtimeManager.requireClient(c.req.param("repoId"))
     sessionMonitor.markAborted(sessionId)
