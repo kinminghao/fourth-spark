@@ -48,10 +48,15 @@ export const PolishCreateBody = z.object({
 
 export const DRAFT_DIR = join(TMP_BASE_DIR, "drafts")
 
+/** Strip anything that isn't alphanumeric, underscore, or hyphen to prevent path traversal. */
+function safeRepoId(repoId: string): string {
+  return repoId.replace(/[^a-zA-Z0-9_-]/g, "_")
+}
+
 export function draftPath(repoId: string, issueNumber: number): string {
-  return `${DRAFT_DIR}/${repoId}-${issueNumber}.md`
+  return `${DRAFT_DIR}/${safeRepoId(repoId)}-${issueNumber}.md`
 }
 
 export function issueCreateDraftPath(repoId: string): string {
-  return `${DRAFT_DIR}/${repoId}-new-issue.md`
+  return `${DRAFT_DIR}/${safeRepoId(repoId)}-new-issue.md`
 }
