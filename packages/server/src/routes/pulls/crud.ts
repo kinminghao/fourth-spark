@@ -82,8 +82,14 @@ export function registerCrudRoutes(app: Hono): void {
                 const gpr = queue.shift()!
                 active++
                 Promise.all([
-                  client.getPullRequest(gpr.number).catch(() => gpr),
-                  client.listPullRequestFiles(gpr.number).catch(() => null),
+                  client.getPullRequest(gpr.number).catch((err) => {
+                    logger.warn({ err, prNumber: gpr.number }, "failed to get PR detail, using list data")
+                    return gpr
+                  }),
+                  client.listPullRequestFiles(gpr.number).catch((err) => {
+                    logger.warn({ err, prNumber: gpr.number }, "failed to get PR diff stats")
+                    return null
+                  }),
                 ])
                   .then(([detail, files]) => {
                     const diffStats = files
