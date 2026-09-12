@@ -168,7 +168,9 @@ export function registerCrudRoutes(app: Hono): void {
     if (client) {
       try {
         const list = await client.listSessions()
-        syncSessionsList(list).catch(() => {})
+        syncSessionsList(list).catch((err) => {
+          logger.warn({ err, repoId }, "session list sync failed")
+        })
         const ids = list.map((s) => s.id)
         liveIds = new Set(ids)
         const dbRows = ids.length > 0
