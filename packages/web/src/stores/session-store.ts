@@ -106,7 +106,6 @@ interface SessionState {
   loadMoreMessages: (repoId: string, sessionId: string) => Promise<void>
   addLink: (repoId: string, sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
   removeLink: (repoId: string, sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
-  deleteSession: (repoId: string | null, id: string) => Promise<void>
   sendMessage: (repoId: string, content: string, model?: string, variant?: string, files?: PromptFile[]) => Promise<boolean>
   replyQuestion: (repoId: string, answers: string[][]) => Promise<void>
   rejectQuestion: (repoId: string) => Promise<void>
@@ -354,45 +353,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     } catch {
       return false
     }
-  },
-
-  deleteSession: async (repoId, id) => {
-    if (repoId) {
-      try {
-        await api.deleteSession(repoId, id)
-      } catch {
-        // Best-effort.
-      }
-    }
-    delete _pendingQueueMarks[id]
-    set((state) => {
-      const { [id]: _removedMessages, ...messages } = state.messages
-      const { [id]: _removedMeta, ...messagesMeta } = state.messagesMeta
-      const { [id]: _removedTodos, ...todos } = state.todos
-      const { [id]: _removedStatus, ...sessionStatuses } = state.sessionStatuses
-      const { [id]: _removedReason, ...errorReasons } = state.errorReasons
-      const { [id]: _removedQueued, ...queuedMessageIds } = state.queuedMessageIds
-      const { [id]: _removedLinks, ...sessionLinks } = state.sessionLinks
-      const { [id]: _removedAllLinks, ...allSessionLinks } = state.allSessionLinks
-      const { [id]: _removedModel, ...sessionModels } = state.sessionModels
-      const { [id]: _removedVariant, ...sessionVariants } = state.sessionVariants
-
-      return {
-        sessions: state.sessions.filter((s) => s.id !== id),
-        messages,
-        messagesMeta,
-        todos,
-        sessionStatuses,
-        errorReasons,
-        queuedMessageIds,
-        sessionLinks,
-        allSessionLinks,
-        sessionModels,
-        sessionVariants,
-        activeSessionId:
-          state.activeSessionId === id ? null : state.activeSessionId,
-      }
-    })
   },
 
   sendMessage: async (repoId, content, model?, variant?, files?) => {
