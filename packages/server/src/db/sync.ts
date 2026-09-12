@@ -23,12 +23,17 @@ function str(v: unknown, fallback = ""): string {
 }
 
 /**
- * Recursively strip PostgreSQL-incompatible Unicode NULL bytes (\u0000)
- * from all string values in an object. PG JSONB rejects \u0000.
+ * Recursively strip PostgreSQL-incompatible characters from all string
+ * values in an object before JSONB insertion:
+ * - NULL bytes (\u0000): explicitly rejected by PG JSONB
+ * - Lone surrogates (\uD800-\uDFFF unpaired): invalid UTF-8, rejected by PG
  */
+// Lone high surrogate not followed by low, or lone low surrogate not preceded by high
+const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g
+
 function sanitizeForPg(value: unknown): unknown {
   if (typeof value === "string") {
-    return value.replaceAll("\u0000", "")
+    return value.replaceAll("\u0000", "").replace(LONE_SURROGATE_RE, "")
   }
   if (Array.isArray(value)) {
     return value.map(sanitizeForPg)
