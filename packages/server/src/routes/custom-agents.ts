@@ -30,6 +30,10 @@ const UpdateCustomAgentBody = z.object({
   fragmentIds: z.array(z.string()).optional(),
 })
 
+const ReorderBody = z.object({
+  items: z.array(z.object({ id: z.string(), sortOrder: z.number().int() })).min(1),
+})
+
 const ImportCustomAgentBody = z.object({
   version: z.number().optional(),
   type: z.literal("fourth-spark-custom-agent"),
@@ -167,6 +171,23 @@ globalCustomAgents.delete("/:id", async (c) => {
 })
 
 // ---------------------------------------------------------------------------
+// Reorder — PATCH /api/custom-agents/reorder
+// ---------------------------------------------------------------------------
+
+globalCustomAgents.patch("/reorder", async (c) => {
+  const [body, err] = await parseBody(c, ReorderBody)
+  if (err) return err
+
+  const now = Date.now()
+  for (const item of body.items) {
+    await db.update(customAgents)
+      .set({ sortOrder: item.sortOrder, updatedAt: now })
+      .where(and(eq(customAgents.id, item.id), isNull(customAgents.repoId)))
+  }
+  return c.json({ ok: true })
+})
+
+// ---------------------------------------------------------------------------
 // Export — GET /api/custom-agents/:id/export
 // ---------------------------------------------------------------------------
 
@@ -259,6 +280,20 @@ repoCustomAgents.get("/", async (c) => {
     .where(or(isNull(customAgents.repoId), eq(customAgents.repoId, repoId)))
     .orderBy(asc(customAgents.sortOrder), asc(customAgents.createdAt))
   return c.json(await attachFragments(rows))
+})
+
+repoCustomAgents.patch("/reorder", async (c) => {
+  const repoId = c.req.param("repoId")!
+  const [body, err] = await parseBody(c, ReorderBody)
+  if (err) return err
+
+  const now = Date.now()
+  for (const item of body.items) {
+    await db.update(customAgents)
+      .set({ sortOrder: item.sortOrder, updatedAt: now })
+      .where(and(eq(customAgents.id, item.id), or(isNull(customAgents.repoId), eq(customAgents.repoId, repoId))))
+  }
+  return c.json({ ok: true })
 })
 
 repoCustomAgents.post("/", async (c) => {
