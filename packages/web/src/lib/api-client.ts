@@ -459,14 +459,14 @@ export async function createSession(
 
 export async function sendMessage(repoId: string, sessionId: string, content: string, agent?: string, model?: string, variant?: string, files?: PromptFile[]): Promise<void> {
   await apiFetch<void>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/prompt`,
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/actions/prompt`,
     { method: "POST", body: JSON.stringify({ content, agent, model, variant, files }) },
   )
 }
 
 export async function abortSession(repoId: string, sessionId: string): Promise<void> {
   await apiFetch<void>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/abort`,
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/actions/abort`,
     { method: "POST" },
   )
 }
@@ -487,7 +487,7 @@ export async function rejectQuestion(repoId: string, sessionId: string): Promise
 
 export async function revertSession(repoId: string, sessionId: string, messageID: string): Promise<Session> {
   return apiFetch<Session>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/revert`,
+    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/actions/revert`,
     { method: "POST", body: JSON.stringify({ messageID }) },
   )
 }
