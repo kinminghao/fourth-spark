@@ -1,4 +1,7 @@
+import { join } from "node:path"
 import { z } from "zod"
+
+import { TMP_BASE_DIR } from "../../lib/config"
 
 // Re-export shared helpers from lib/git-utils so consumers import from one place
 export { issueId, issueToDb, commentToDb, extractUpstreamMessage, rewriteAttachmentUrls, getRepoGitClient } from "../../lib/git-utils"
@@ -43,7 +46,7 @@ export const PolishCreateBody = z.object({
   body: z.string().optional(),
 })
 
-export const DRAFT_DIR = "/tmp/fourth-spark/drafts"
+export const DRAFT_DIR = join(TMP_BASE_DIR, "drafts")
 
 export function draftPath(repoId: string, issueNumber: number): string {
   return `${DRAFT_DIR}/${repoId}-${issueNumber}.md`
