@@ -3,10 +3,10 @@ import { eq } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "../db/index"
 import { settings } from "../db/schema"
-import { parseBody } from "../lib/validation"
+import { parseBody, MAX_SETTING_VALUE_LENGTH } from "../lib/validation"
 
 const UpdateSettingBody = z.object({
-  value: z.string(),
+  value: z.string().max(MAX_SETTING_VALUE_LENGTH),
 })
 
 export const settingsRoutes = new Hono()
