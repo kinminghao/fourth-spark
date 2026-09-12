@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { AlertTriangle, Brain, Check, Clock, ChevronDown, Edit3, Loader2, Plus, Upload, Trash2, X } from "lucide-react"
+import { AlertTriangle, Brain, Clock, ChevronDown, Edit3, Loader2, Plus, Upload, X } from "lucide-react"
 import clsx from "clsx"
+import { InlineConfirm } from "../components/InlineConfirm"
 import * as api from "../lib/api-client"
 import type { CustomAgent, CustomAgentExport, ModelInfo, PromptFragment } from "../lib/api-client"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
@@ -30,7 +31,6 @@ function AgentCard({ agent, memoryCount, sessionCount, onClick, onDelete }: {
   onClick: () => void
   onDelete: () => void
 }) {
-  const [confirming, setConfirming] = useState(false)
   const isSystem = agent.isSystem === 1
   const avatar = agentAvatar(agent.name)
 
@@ -77,21 +77,12 @@ function AgentCard({ agent, memoryCount, sessionCount, onClick, onDelete }: {
           <span>会话 {sessionCount}</span>
         </span>
         <div className="flex-1" />
-        {!isSystem && !confirming && (
-          <button type="button" onClick={(e) => { e.stopPropagation(); setConfirming(true) }} title="删除"
-            className="rounded p-1 text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100 [.group:hover_&]:opacity-100">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        )}
-        {confirming && (
-          <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-            <button type="button" onClick={onDelete} className="rounded p-1 text-red-400 hover:bg-red-500/10">
-              <Check className="h-3.5 w-3.5" />
-            </button>
-            <button type="button" onClick={() => setConfirming(false)} className="rounded p-1 text-fg-4 hover:bg-elevated">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
+        {!isSystem && (
+          <InlineConfirm
+            onConfirm={onDelete}
+            stopPropagation
+            triggerClassName="text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100 [.group:hover_&]:opacity-100"
+          />
         )}
       </div>
     </div>
@@ -329,7 +320,6 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
 // ---------------------------------------------------------------------------
 
 function FragmentRow({ fragment, onEdit, onDelete }: { fragment: PromptFragment; onEdit: () => void; onDelete: () => void }) {
-  const [confirming, setConfirming] = useState(false)
   return (
     <div className="group flex items-center gap-3 rounded-lg border border-line bg-base px-3 py-2">
       <div className="min-w-0 flex-1">
@@ -337,17 +327,9 @@ function FragmentRow({ fragment, onEdit, onDelete }: { fragment: PromptFragment;
         {fragment.content && <p className="mt-0.5 truncate font-mono text-[11px] text-fg-5">{fragment.content}</p>}
       </div>
       <div className="flex items-center gap-1">
-        {confirming ? (
-          <>
-            <button type="button" onClick={onDelete} className="rounded p-1 text-red-400 hover:bg-red-500/10"><Check className="h-3.5 w-3.5" /></button>
-            <button type="button" onClick={() => setConfirming(false)} className="rounded p-1 text-fg-4 hover:bg-elevated"><X className="h-3.5 w-3.5" /></button>
-          </>
-        ) : (
-          <>
-            <button type="button" onClick={onEdit} className="rounded p-1 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100"><Edit3 className="h-3.5 w-3.5" /></button>
-            <button type="button" onClick={() => setConfirming(true)} className="rounded p-1 text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
-          </>
-        )}
+        <InlineConfirm onConfirm={onDelete} triggerClassName="text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100">
+          <button type="button" onClick={onEdit} className="rounded p-1 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100"><Edit3 className="h-3.5 w-3.5" /></button>
+        </InlineConfirm>
       </div>
     </div>
   )

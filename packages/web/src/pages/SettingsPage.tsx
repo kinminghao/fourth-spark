@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Activity, AlertTriangle, Ban, Box, Check, ChevronDown, ChevronUp, Clock, Cloud, Cpu, Eye, EyeOff, FileText, Gauge, GitBranch, Keyboard, Loader2, Plus, RefreshCw, Save, Search, Trash2, User, Users, Wifi, X, Zap } from "lucide-react"
 import clsx from "clsx"
+import { InlineConfirm } from "../components/InlineConfirm"
 import * as api from "../lib/api-client"
 import type { AccountUsage, GitHost, ModelInfo, UsageResult, UsageWindow } from "../lib/api-client"
 import { useRepoStore } from "../stores/repo-store"
@@ -479,8 +480,6 @@ function UsageSection() {
 }
 
 function GitHostRow({ host, onDelete }: { host: GitHost; onDelete: () => void }) {
-  const [confirming, setConfirming] = useState(false)
-
   return (
     <div className="group flex items-center gap-3 rounded-lg border border-line bg-base px-4 py-3">
       <div className="min-w-0 flex-1">
@@ -494,24 +493,11 @@ function GitHostRow({ host, onDelete }: { host: GitHost; onDelete: () => void })
           <span className="text-fg-5">{host.token}</span>
         </div>
       </div>
-      {confirming ? (
-        <div className="flex items-center gap-1">
-          <button type="button" onClick={onDelete} className="rounded p-1.5 text-red-400 hover:bg-red-500/10">
-            <Check className="h-4 w-4" />
-          </button>
-          <button type="button" onClick={() => setConfirming(false)} className="rounded p-1.5 text-fg-4 hover:bg-elevated">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setConfirming(true)}
-          className="rounded p-1.5 text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      )}
+      <InlineConfirm
+        onConfirm={onDelete}
+        size="md"
+        triggerClassName="text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+      />
     </div>
   )
 }
