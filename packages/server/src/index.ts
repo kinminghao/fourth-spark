@@ -1,7 +1,9 @@
 import { Hono } from "hono"
+import { apiReference } from "@scalar/hono-api-reference"
 import { corsMiddleware } from "./middleware/cors"
 import { requestLogger, logger } from "./middleware/logger"
 import { onError } from "./middleware/errors"
+import { generateOpenApiSpec } from "./openapi/index"
 import { sessions } from "./routes/sessions"
 import { events, globalEvents } from "./routes/events"
 import { agents } from "./routes/agents"
@@ -43,6 +45,23 @@ const app = new Hono()
 app.use("*", corsMiddleware)
 app.use("*", requestLogger)
 app.onError(onError)
+
+// ---------------------------------------------------------------------------
+// OpenAPI documentation
+// ---------------------------------------------------------------------------
+let cachedSpec: ReturnType<typeof generateOpenApiSpec> | null = null
+app.get("/api/doc.json", (c) => {
+  if (!cachedSpec) cachedSpec = generateOpenApiSpec()
+  return c.json(cachedSpec as unknown as Record<string, unknown>)
+})
+app.get(
+  "/api/doc",
+  apiReference({
+    spec: { url: "/api/doc.json" },
+    pageTitle: "Fourth Spark API",
+    theme: "kepler",
+  }),
+)
 
 // ---------------------------------------------------------------------------
 // Global routes
