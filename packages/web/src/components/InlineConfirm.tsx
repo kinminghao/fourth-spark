@@ -82,7 +82,7 @@ export function InlineConfirm({
       {children}
       <button
         type="button"
-        onClick={(e) => { if (stopPropagation) e.stopPropagation(); setConfirming(true) }}
+        onClick={(e) => { handleStop?.(e); setConfirming(true) }}
         title={title}
         className={clsx(
           roundClass, padClass,
