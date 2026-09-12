@@ -85,9 +85,14 @@ export function useAsyncData<T>(
   // responses from a previous invocation are silently discarded.
   const versionRef = useRef(0)
 
-  // Keep the latest fetcher accessible without adding it to deps.
+  // Keep the latest fetcher/options accessible via refs so `execute`
+  // has a stable identity and never depends on caller-provided deps.
   const fetcherRef = useRef(fetcher)
   fetcherRef.current = fetcher
+  const errorMessageRef = useRef(errorMessage)
+  errorMessageRef.current = errorMessage
+  const showErrorToastRef = useRef(showErrorToast)
+  showErrorToastRef.current = showErrorToast
 
   const execute = useCallback(async () => {
     const version = ++versionRef.current
@@ -99,17 +104,16 @@ export function useAsyncData<T>(
       setData(result)
     } catch (err) {
       if (versionRef.current !== version) return
-      const msg = parseError(err, errorMessage)
+      const msg = parseError(err, errorMessageRef.current)
       setError(msg)
-      if (showErrorToast) {
+      if (showErrorToastRef.current) {
         useToastStore.getState().addToast(msg, "error")
       }
     }
     if (versionRef.current === version) {
       setLoading(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
+  }, [])
 
   useEffect(() => {
     if (skip) {
@@ -121,7 +125,8 @@ export function useAsyncData<T>(
       // Bump version so any in-flight response is discarded.
       versionRef.current++
     }
-  }, [execute, skip])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [...deps, skip])
 
   return { data, loading, error, reload: execute }
 }
