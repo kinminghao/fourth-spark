@@ -62,27 +62,7 @@ function StatusBadge({ status, reason }: { status: string | undefined; reason?: 
   )
 }
 
-const MODEL_CONTEXT_LIMITS: Record<string, number> = {
-  "claude-opus-4": 1_000_000,
-  "claude-sonnet-4": 1_000_000,
-  "claude-sonnet-5": 1_000_000,
-  "claude-opus-5": 1_000_000,
-  "claude-3-7-sonnet": 200_000,
-  "claude-3-5-sonnet": 200_000,
-  "claude-3-5-haiku": 200_000,
-  "claude-3-opus": 200_000,
-  "claude-3-sonnet": 200_000,
-  "claude-3-haiku": 200_000,
-}
 const DEFAULT_CONTEXT_LIMIT = 1_000_000
-
-function getContextLimit(modelID?: string): number {
-  if (!modelID) return DEFAULT_CONTEXT_LIMIT
-  for (const [prefix, limit] of Object.entries(MODEL_CONTEXT_LIMITS)) {
-    if (modelID.startsWith(prefix)) return limit
-  }
-  return DEFAULT_CONTEXT_LIMIT
-}
 
 import { formatTokens, formatCost } from "../lib/format"
 
@@ -98,7 +78,7 @@ function getLastAssistantTokens(messages: readonly ApiMessage[]) {
   return null
 }
 
-function ContextInfo({ session, messages }: { session: Session | null; messages: readonly ApiMessage[] }) {
+function ContextInfo({ session, messages, contextLimit }: { session: Session | null; messages: readonly ApiMessage[]; contextLimit: number }) {
   const lastTokens = getLastAssistantTokens(messages)
   const cost = session?.cost ?? 0
   if (!lastTokens && !cost) return null
@@ -106,7 +86,6 @@ function ContextInfo({ session, messages }: { session: Session | null; messages:
   const contextLength = lastTokens
     ? lastTokens.input + (lastTokens.cache?.read ?? 0) + (lastTokens.cache?.write ?? 0)
     : 0
-  const contextLimit = getContextLimit(session?.model?.modelID)
   const percentage = contextLength > 0 ? Math.min(Math.round((contextLength / contextLimit) * 100), 999) : 0
 
   const percentColor =
@@ -607,6 +586,20 @@ export function RunView({
   const linkedIssue = useIssueStore((state) =>
     session?.issueId ? state.issues.find((i) => i.id === session.issueId) : undefined,
   )
+  const [models, setModels] = useState<ModelInfo[]>([])
+  useEffect(() => {
+    if (!activeRepoId) { setModels([]); return }
+    let cancelled = false
+    void listModels(activeRepoId).then((m) => { if (!cancelled) setModels(m) }).catch(() => { if (!cancelled) setModels([]) })
+    return () => { cancelled = true }
+  }, [activeRepoId])
+
+  const contextLimit = (() => {
+    const modelId = session?.model?.modelID
+    if (!modelId) return DEFAULT_CONTEXT_LIMIT
+    const matched = models.find((m) => m.id.endsWith(`/${modelId}`))
+    return matched?.contextLimit ?? DEFAULT_CONTEXT_LIMIT
+  })()
 
   useEffect(() => {
     if (!activeSessionId) return
@@ -727,7 +720,7 @@ export function RunView({
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-14 shrink-0 font-mono text-xs text-fg-5">Context</span>
-                <ContextInfo session={session} messages={messages} />
+                <ContextInfo session={session} messages={messages} contextLimit={contextLimit} />
               </div>
               {linkedIssue && (
                 <div className="flex items-center gap-2">
@@ -786,7 +779,7 @@ export function RunView({
               {session.agent}
             </p>
           )}
-          <ContextInfo session={session} messages={messages} />
+          <ContextInfo session={session} messages={messages} contextLimit={contextLimit} />
         </div>
         {linkedIssue && (
           <button
