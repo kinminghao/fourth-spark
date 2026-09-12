@@ -205,13 +205,13 @@ export function registerCrudRoutes(app: Hono): void {
 
     const merged = [...(liveResult ?? []), ...dbOnly]
     merged.sort((a, b) => {
-      const pa = (a as Record<string, unknown>).pinnedAt as number | undefined
-      const pb = (b as Record<string, unknown>).pinnedAt as number | undefined
+      const pa = typeof a.pinnedAt === "number" ? a.pinnedAt : undefined
+      const pb = typeof b.pinnedAt === "number" ? b.pinnedAt : undefined
       if (pa && !pb) return -1
       if (!pa && pb) return 1
       if (pa && pb) return pb - pa
-      const ta = (a.time as { updated?: number })?.updated ?? 0
-      const tb = (b.time as { updated?: number })?.updated ?? 0
+      const ta = a.time != null && typeof a.time === "object" && "updated" in a.time && typeof a.time.updated === "number" ? a.time.updated : 0
+      const tb = b.time != null && typeof b.time === "object" && "updated" in b.time && typeof b.time.updated === "number" ? b.time.updated : 0
       return tb - ta
     })
 

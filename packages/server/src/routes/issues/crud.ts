@@ -145,9 +145,8 @@ export function registerCrudRoutes(app: Hono): void {
       }
     } catch (err) {
       logger.error({ err, repoId, state, page }, "failed to sync issues from git host")
-      const status = (err as { status?: number }).status
-      if (status === 401 || status === 403) {
-        return c.json({ error: `Git 平台认证失败 (${status})，请检查访问令牌是否有效` }, 400)
+      if (err instanceof GitApiError && (err.status === 401 || err.status === 403)) {
+        return c.json({ error: `Git 平台认证失败 (${err.status})，请检查访问令牌是否有效` }, 400)
       }
       return c.json({ error: "从 Git 平台拉取 Issue 失败，请稍后重试" }, 502)
     }

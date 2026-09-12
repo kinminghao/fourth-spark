@@ -30,7 +30,7 @@ export type Message = {
   id: string
   role: string
   parts?: MessagePart[]
-  info?: { agent?: string; providerID?: string; modelID?: string }
+  info?: { id?: string; agent?: string; providerID?: string; modelID?: string }
 }
 
 export type Todo = {
