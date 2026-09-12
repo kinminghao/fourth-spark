@@ -65,6 +65,11 @@ function statusDotClass(status: string | undefined): string {
 
 const SWIPE_HINT_KEY = "fs:swipe-hint-shown"
 
+const REVEAL_W = 144
+const PEEK_X = -60
+const PEEK_DELAY_MS = 600
+const PEEK_HOLD_MS = 800
+
 function SessionItemInner({
   session, isActive, peekHint,
   onSelect, onRename, onToggleComplete, onTogglePin,
@@ -110,7 +115,6 @@ function SessionItemInner({
   }
 
   /* ---- iOS-style swipe-to-reveal (mobile) ---- */
-  const REVEAL_W = 144
   const contentRef = useRef<HTMLDivElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
   const currentX = useRef(0)
@@ -175,7 +179,6 @@ function SessionItemInner({
   /* ---- First-visit peek animation ---- */
   useEffect(() => {
     if (!peekHint) return
-    const PEEK_X = -60
     const delay = setTimeout(() => {
       const el = contentRef.current
       const ac = actionsRef.current
@@ -186,9 +189,9 @@ function SessionItemInner({
         if (el) el.style.transition = "transform 500ms cubic-bezier(.25,.8,.25,1)"
         if (ac) ac.style.transition = "width 500ms cubic-bezier(.25,.8,.25,1)"
         applyX(0)
-      }, 800)
+      }, PEEK_HOLD_MS)
       return () => clearTimeout(hold)
-    }, 600)
+    }, PEEK_DELAY_MS)
     return () => clearTimeout(delay)
   }, [peekHint])
 
