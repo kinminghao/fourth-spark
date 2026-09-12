@@ -156,11 +156,12 @@ export function registerCrudRoutes(app: Hono): void {
     let totalComments = 0
 
     const CONCURRENCY = 5
+    const COMMENT_SYNC_TIMEOUT_MS = 120_000
     let active = 0
     const queue = [...allIssues]
     const results: Array<{ issueNum: number; comments: GitComment[] }> = []
 
-    await new Promise<void>((resolve) => {
+    const commentSync = new Promise<void>((resolve) => {
       if (queue.length === 0) return resolve()
       let finished = 0
       const total = queue.length
@@ -182,6 +183,16 @@ export function registerCrudRoutes(app: Hono): void {
       }
       next()
     })
+
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`comment sync timed out after ${COMMENT_SYNC_TIMEOUT_MS / 1000}s`)), COMMENT_SYNC_TIMEOUT_MS),
+    )
+
+    try {
+      await Promise.race([commentSync, timeout])
+    } catch (err) {
+      logger.error({ err, repoId, fetched: results.length, total: allIssues.length }, "comment sync aborted")
+    }
 
     for (const { issueNum, comments } of results) {
       if (comments.length === 0) continue
