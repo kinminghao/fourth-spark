@@ -3,16 +3,16 @@ import { z } from "zod"
 import { eq, or, isNull, asc } from "drizzle-orm"
 import { db } from "../db/index"
 import { promptFragments } from "../db/schema"
-import { parseBody } from "../lib/validation"
+import { parseBody, MAX_NAME_LENGTH, MAX_CONTENT_LENGTH } from "../lib/validation"
 
 const CreateFragmentBody = z.object({
-  name: z.string().min(1),
-  content: z.string().optional(),
+  name: z.string().min(1).max(MAX_NAME_LENGTH),
+  content: z.string().max(MAX_CONTENT_LENGTH).optional(),
 })
 
 const UpdateFragmentBody = z.object({
-  name: z.string().optional(),
-  content: z.string().optional(),
+  name: z.string().max(MAX_NAME_LENGTH).optional(),
+  content: z.string().max(MAX_CONTENT_LENGTH).optional(),
   sortOrder: z.number().int().optional(),
 })
 

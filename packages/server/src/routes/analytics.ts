@@ -3,6 +3,7 @@ import { sql, and, gte, lt, eq, sum, count } from "drizzle-orm"
 import { db } from "../db/index"
 import { sessions, repos } from "../db/schema"
 import { parsePagination } from "../lib/pagination"
+import { MAX_ANALYTICS_RANGE_MS } from "../lib/validation"
 
 export const analyticsRoutes = new Hono()
 
@@ -68,6 +69,15 @@ analyticsRoutes.get("/summary", async (c) => {
   const to = Number(toStr)
   if (!Number.isFinite(from) || !Number.isFinite(to)) {
     return c.json({ error: "from and to must be valid numbers" }, 400)
+  }
+  if (from < 0 || to < 0) {
+    return c.json({ error: "from and to must be non-negative" }, 400)
+  }
+  if (from >= to) {
+    return c.json({ error: "from must be less than to" }, 400)
+  }
+  if (to - from > MAX_ANALYTICS_RANGE_MS) {
+    return c.json({ error: `Time range must not exceed ${MAX_ANALYTICS_RANGE_MS}ms (~1 year)` }, 400)
   }
   if (!groupBy || !["repo", "day", "agent"].includes(groupBy)) {
     return c.json({ error: "groupBy must be one of: repo, day, agent" }, 400)

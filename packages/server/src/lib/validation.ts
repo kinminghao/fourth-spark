@@ -53,3 +53,8 @@ export async function parseOptionalBody<T extends z.ZodType>(
   }
   return [result.data, null]
 }
+
+export const MAX_NAME_LENGTH = 200
+export const MAX_CONTENT_LENGTH = 100_000       // ~100KB
+export const MAX_SETTING_VALUE_LENGTH = 50_000
+export const MAX_ANALYTICS_RANGE_MS = 366 * 24 * 60 * 60 * 1000 // ~1 year

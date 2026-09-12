@@ -3,28 +3,28 @@ import { z } from "zod"
 import { eq, or, and, isNull, asc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
 import { customAgents, customAgentFragments, promptFragments } from "../db/schema"
-import { parseBody } from "../lib/validation"
+import { parseBody, MAX_NAME_LENGTH, MAX_CONTENT_LENGTH } from "../lib/validation"
 
 const ALLOWED_BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atlas - Plan Executor"]
 
 const CreateCustomAgentBody = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1).max(MAX_NAME_LENGTH),
   baseAgent: z.string().min(1),
   model: z.string().optional(),
   variant: z.string().optional(),
-  systemPrompt: z.string().optional(),
+  systemPrompt: z.string().max(MAX_CONTENT_LENGTH).optional(),
   systemPromptPosition: z.number().int().optional(),
   fragmentIds: z.array(z.string()).optional(),
 })
 
 const UpdateCustomAgentBody = z.object({
-  name: z.string().optional(),
-  description: z.string().optional(),
+  name: z.string().max(MAX_NAME_LENGTH).optional(),
+  description: z.string().max(MAX_CONTENT_LENGTH).optional(),
   baseAgent: z.string().optional(),
   model: z.string().nullable().optional(),
   variant: z.string().nullable().optional(),
   memoryModel: z.string().nullable().optional(),
-  systemPrompt: z.string().optional(),
+  systemPrompt: z.string().max(MAX_CONTENT_LENGTH).optional(),
   systemPromptPosition: z.number().int().optional(),
   sortOrder: z.number().int().optional(),
   fragmentIds: z.array(z.string()).optional(),
@@ -34,15 +34,15 @@ const ImportCustomAgentBody = z.object({
   version: z.number().optional(),
   type: z.literal("fourth-spark-custom-agent"),
   agent: z.object({
-    name: z.string().min(1),
+    name: z.string().min(1).max(MAX_NAME_LENGTH),
     baseAgent: z.string().min(1),
     model: z.string().nullable().optional(),
     variant: z.string().nullable().optional(),
-    systemPrompt: z.string().optional(),
+    systemPrompt: z.string().max(MAX_CONTENT_LENGTH).optional(),
   }),
   fragments: z.array(z.object({
-    name: z.string().optional(),
-    content: z.string().optional(),
+    name: z.string().max(MAX_NAME_LENGTH).optional(),
+    content: z.string().max(MAX_CONTENT_LENGTH).optional(),
   })).optional(),
 })
 
