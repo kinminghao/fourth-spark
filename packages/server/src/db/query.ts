@@ -117,12 +117,8 @@ export async function getMessagesPaginated(
     partsByMessage.set(part.messageId, list)
   }
 
-  const [{ value: total }] = await db.select({ value: count() })
-    .from(messages).where(eq(messages.sessionId, sessionId))
-
   return {
     messages: msgRows.map((msg) => formatMessageRow(msg, partsByMessage.get(msg.id) ?? [])),
-    total,
     hasMore,
   }
 }
