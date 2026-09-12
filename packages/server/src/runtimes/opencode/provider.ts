@@ -30,22 +30,23 @@ import { childEnv } from "../../lib/child-env"
 import { HttpRuntimeClient } from "./client"
 import { openCodeCredentialWriter } from "./credential"
 import { getRotatingLogFd } from "../../lib/log-rotate"
+import {
+  TMP_BASE_DIR,
+  OPENCODE_PORT_BASE,
+  OPENCODE_PORT_MAX,
+  OPENCODE_READY_TIMEOUT_MS,
+  OPENCODE_POLL_TIMEOUT_MS,
+  OPENCODE_POLL_INTERVAL_MS,
+} from "../../lib/config"
 
 const RUNTIME_ID = "opencode"
-
-// ---------------------------------------------------------------------------
-// Port allocation range
-// ---------------------------------------------------------------------------
-
-const PORT_BASE = 8081
-const PORT_MAX = 8199
 
 // ---------------------------------------------------------------------------
 // PID file — one file per runtime so multiple runtimes never step on each
 // other's tracked processes.
 // ---------------------------------------------------------------------------
 
-const PID_DIR = join("/tmp", "fourth-spark")
+const PID_DIR = TMP_BASE_DIR
 const PID_FILE = join(PID_DIR, "pid-map.opencode.json")
 
 interface PidRecord {
@@ -112,18 +113,18 @@ async function verifyOpenCodeIdentity(port: number, expectedDir: string): Promis
   }
 }
 
-async function waitForReady(port: number, timeoutMs = 30_000): Promise<boolean> {
+async function waitForReady(port: number, timeoutMs = OPENCODE_READY_TIMEOUT_MS): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/agent`, {
-        signal: AbortSignal.timeout(1000),
+        signal: AbortSignal.timeout(OPENCODE_POLL_TIMEOUT_MS),
       })
       if (res.ok) return true
     } catch {
       // Not ready yet.
     }
-    await new Promise((r) => setTimeout(r, 500))
+    await new Promise((r) => setTimeout(r, OPENCODE_POLL_INTERVAL_MS))
   }
   return false
 }
@@ -237,11 +238,11 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
 
   async function allocatePort(): Promise<number> {
     const used = usedPorts()
-    for (let port = PORT_BASE; port <= PORT_MAX; port++) {
+    for (let port = OPENCODE_PORT_BASE; port <= OPENCODE_PORT_MAX; port++) {
       if (used.has(port)) continue
       if (await isPortFree(port)) return port
     }
-    throw new Error(`No free port in range ${PORT_BASE}–${PORT_MAX}`)
+    throw new Error(`No free port in range ${OPENCODE_PORT_BASE}–${OPENCODE_PORT_MAX}`)
   }
 
   async function initialSync(client: RuntimeClient, repoId: string): Promise<void> {

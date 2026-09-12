@@ -93,7 +93,36 @@ export async function reloadWorkerConfig(getSetting: (key: string) => Promise<st
   workerConfigCache = resolveWorkerConfigFromEnv()
 }
 
-import { hostname } from "node:os"
+import { hostname, tmpdir } from "node:os"
+import { join } from "node:path"
+
+// ---------------------------------------------------------------------------
+// Temp / PID directory base — defaults to <os.tmpdir()>/fourth-spark
+// ---------------------------------------------------------------------------
+
+export const TMP_BASE_DIR = process.env.FOURTH_SPARK_TMP_DIR ?? join(tmpdir(), "fourth-spark")
+
+// ---------------------------------------------------------------------------
+// OpenCode runtime port range
+// ---------------------------------------------------------------------------
+
+const DEFAULT_OPENCODE_PORT_BASE = 8081
+const DEFAULT_OPENCODE_PORT_MAX = 8199
+
+export const OPENCODE_PORT_BASE = Number(process.env.OPENCODE_PORT_BASE ?? DEFAULT_OPENCODE_PORT_BASE)
+export const OPENCODE_PORT_MAX = Number(process.env.OPENCODE_PORT_MAX ?? DEFAULT_OPENCODE_PORT_MAX)
+
+// ---------------------------------------------------------------------------
+// OpenCode startup timeouts (ms)
+// ---------------------------------------------------------------------------
+
+const DEFAULT_OPENCODE_READY_TIMEOUT_MS = 30_000
+const DEFAULT_OPENCODE_POLL_TIMEOUT_MS = 1000
+const DEFAULT_OPENCODE_POLL_INTERVAL_MS = 500
+
+export const OPENCODE_READY_TIMEOUT_MS = Number(process.env.OPENCODE_READY_TIMEOUT_MS ?? DEFAULT_OPENCODE_READY_TIMEOUT_MS)
+export const OPENCODE_POLL_TIMEOUT_MS = Number(process.env.OPENCODE_POLL_TIMEOUT_MS ?? DEFAULT_OPENCODE_POLL_TIMEOUT_MS)
+export const OPENCODE_POLL_INTERVAL_MS = Number(process.env.OPENCODE_POLL_INTERVAL_MS ?? DEFAULT_OPENCODE_POLL_INTERVAL_MS)
 
 export function getDefaultWorkerId(): string {
   return hostname().replace(/\.local$/, "").replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 64) || "worker-1"
