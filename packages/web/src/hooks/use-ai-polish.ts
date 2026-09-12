@@ -4,8 +4,7 @@ import { getSessionStatus } from "../lib/api-client"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
 import { useToastStore } from "../stores/toast-store"
-
-const POLL_INTERVAL_MS = 2000
+import { POLL_INTERVAL_MS } from "../lib/constants"
 
 export type PolishPhase = "idle" | "polishing" | "preview"
 

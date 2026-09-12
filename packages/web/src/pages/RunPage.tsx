@@ -14,6 +14,7 @@ import { RunView } from "../components/RunView"
 import { SidePanel, type PreviewFileInfo } from "../components/SidePanel"
 import { useSwipeDrawer } from "../hooks/use-swipe-drawer"
 import { SwipeDrawer } from "../components/SwipeDrawer"
+import { HIGHLIGHT_DURATION_MS, SCROLL_DELAY_MS } from "../lib/constants"
 
 
 function sessionTime(session: Session): number {
@@ -589,7 +590,7 @@ function scrollToMessage(messageId: string) {
   if (!el) return
   el.scrollIntoView({ behavior: "smooth", block: "center" })
   el.classList.add("fs-highlight")
-  setTimeout(() => el.classList.remove("fs-highlight"), 2000)
+  setTimeout(() => el.classList.remove("fs-highlight"), HIGHLIGHT_DURATION_MS)
 }
 
 const HTML_PREVIEW_EXTS = new Set([".html", ".htm"])
@@ -765,7 +766,7 @@ export function RunPage() {
           messages={messages}
           sessionLinks={sessionLinks}
           sessionId={activeSessionId}
-          onScrollToMessage={(id) => { setRightOpen(false); setTimeout(() => scrollToMessage(id), 300) }}
+          onScrollToMessage={(id) => { setRightOpen(false); setTimeout(() => scrollToMessage(id), SCROLL_DELAY_MS) }}
         />
       </SwipeDrawer>
 

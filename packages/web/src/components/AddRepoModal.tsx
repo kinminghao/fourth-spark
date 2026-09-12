@@ -5,6 +5,7 @@ import { useRepoStore } from "../stores/repo-store"
 import { resolveRepo, cloneRepo, listGitHosts } from "../lib/api-client"
 import { extractHostFromGitUrl } from "../lib/git-url"
 import { DirectoryBrowser } from "./DirectoryBrowser"
+import { DEBOUNCE_SLOW_MS, DEBOUNCE_MS } from "../lib/constants"
 
 type Mode = "browse" | "clone"
 
@@ -60,7 +61,7 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
     if (!trimmed) return
     const timer = setTimeout(() => {
       void resolveRef.current(trimmed)
-    }, 500)
+    }, DEBOUNCE_SLOW_MS)
     return () => clearTimeout(timer)
   }, [localPath, mode])
 
@@ -79,7 +80,7 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
           setHostWarning(found ? null : host)
         })
         .catch(() => { if (!cancelled) setHostWarning(null) })
-    }, 300)
+    }, DEBOUNCE_MS)
     return () => { cancelled = true; clearTimeout(timer) }
   }, [gitUrl])
 

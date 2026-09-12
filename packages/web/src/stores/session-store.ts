@@ -10,6 +10,7 @@
 import { create } from "zustand"
 import * as api from "../lib/api-client"
 import type { Message, MessagePart, PromptFile, Session, Todo, SessionLinks, SessionLinkSummary } from "../lib/api-client"
+import { MESSAGES_PAGE_SIZE, SESSIONS_LOAD_LIMIT } from "../lib/constants"
 
 type SessionFilter = "active" | "all"
 import { isQuestionTool, isQuestionPending } from "../lib/message-parts"
@@ -66,7 +67,6 @@ async function refreshSessionLinks(repoId: string, id: string, set: (fn: (s: Ses
   }
 }
 
-const MESSAGES_PAGE_SIZE = 20
 
 interface MessagesMeta {
   total: number
@@ -196,7 +196,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ loadingSessions: true, loadError: null })
     try {
       const [result, allLinks] = await Promise.all([
-        api.listSessions(repoId, { limit: 200 }),
+        api.listSessions(repoId, { limit: SESSIONS_LOAD_LIMIT }),
         api.getAllSessionLinks(repoId).catch(() => null),
       ])
       if (_loadVersion !== version) return

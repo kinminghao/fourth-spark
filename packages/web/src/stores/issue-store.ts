@@ -2,8 +2,7 @@ import { create } from "zustand"
 import * as api from "../lib/api-client"
 import { ApiError } from "../lib/api-client"
 import type { Issue, Tag, Milestone } from "../lib/api-client"
-
-const ISSUES_LOAD_LIMIT = 1000
+import { ISSUES_LOAD_LIMIT } from "../lib/constants"
 
 /** Monotonic version counter — incremented on every load/sync call so stale
  *  responses from a previous repo context are silently discarded. */

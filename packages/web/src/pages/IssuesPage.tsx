@@ -15,7 +15,8 @@ import { IssueRow, FullWidthIssueRow } from "../components/IssueRow"
 import { IssueTreeSidebar } from "../components/IssueTree"
 import { IssueSessionSidebar } from "../components/SessionSidebar"
 import { IssueFilters, STATE_FILTERS, type StateFilter, type TypeFilter, type ExpandedFilter } from "../components/IssueFilters"
-import { Pagination, PAGE_SIZE } from "../components/Pagination"
+import { Pagination } from "../components/Pagination"
+import { PAGE_SIZE } from "../lib/constants"
 
 export function IssuesPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("open")

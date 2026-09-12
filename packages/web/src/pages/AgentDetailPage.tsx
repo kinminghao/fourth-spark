@@ -7,7 +7,7 @@ import * as api from "../lib/api-client"
 import type { AgentMemory, ConsolidationStats, CustomAgent, ModelInfo, PromptFragment } from "../lib/api-client"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
-import { agentAvatar } from "../lib/constants"
+import { agentAvatar, COPY_FEEDBACK_MS } from "../lib/constants"
 import { GUIDE_AGENT_PREFIX, MOCK_MEMORIES } from "../components/guide-mock-data"
 import { useAsyncData } from "../hooks/use-async-data"
 
@@ -924,7 +924,7 @@ export function AgentDetailPage() {
     const data = await api.exportCustomAgent(agentId)
     await navigator.clipboard.writeText(JSON.stringify(data, null, 2))
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
   }
 
   if (!agent || !agentId) {

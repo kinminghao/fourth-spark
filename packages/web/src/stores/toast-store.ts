@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { TOAST_DURATION_MS } from "../lib/constants"
 
 export type ToastVariant = "info" | "success" | "warning" | "error"
 
@@ -35,7 +36,7 @@ export const useToastStore = create<ToastState>((set) => ({
     if (!opts?.persistent) {
       setTimeout(() => {
         set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))
-      }, 4000)
+      }, TOAST_DURATION_MS)
     }
   },
 

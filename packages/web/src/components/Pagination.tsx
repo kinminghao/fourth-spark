@@ -1,7 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import clsx from "clsx"
-
-const PAGE_SIZE = 50
+import { PAGE_SIZE } from "../lib/constants"
 
 interface PaginationProps {
   total: number
