@@ -13,8 +13,7 @@ import {
 } from "../lib/message-parts"
 import { useSessionStore } from "../stores/session-store"
 import { useRepoStore } from "../stores/repo-store"
-
-const OUTPUT_TRUNCATE_LIMIT = 2000
+import { OUTPUT_TRUNCATE_LIMIT, CONTENT_PREVIEW_LIMIT } from "../lib/constants"
 
 const WORKTREE_RE = /^.*\/\.fourth-spark\/worktrees\/[^/]+\//
 
@@ -387,7 +386,7 @@ function renderToolInput(name: string, raw: unknown): React.ReactNode | null {
   if (lower === "write") {
     const content = typeof record.content === "string" ? record.content : null
     if (content) {
-      const preview = content.length > 500 ? `${content.slice(0, 500)}…` : content
+      const preview = content.length > CONTENT_PREVIEW_LIMIT ? `${content.slice(0, CONTENT_PREVIEW_LIMIT)}…` : content
       return (
         <pre className="overflow-x-auto whitespace-pre-wrap break-words text-fg-2">
           {preview}

@@ -9,6 +9,7 @@ import { useLayoutStore } from "../stores/layout-store"
 import { listBranches, checkoutBranch, type BranchList } from "../lib/api-client"
 import { GuideTour } from "./GuideTour"
 import { sectionFromPath } from "./guide-steps"
+import { VERSION_CHECK_INTERVAL_MS } from "../lib/constants"
 
 interface NavItem {
   segment: string
@@ -301,7 +302,7 @@ function useLatestVersion() {
         .catch(() => {})
 
     check()
-    const id = setInterval(check, 30 * 60_000)
+    const id = setInterval(check, VERSION_CHECK_INTERVAL_MS)
     const onFocus = () => check()
     window.addEventListener("focus", onFocus)
     return () => { clearInterval(id); window.removeEventListener("focus", onFocus) }

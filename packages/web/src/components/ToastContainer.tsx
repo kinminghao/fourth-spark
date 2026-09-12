@@ -3,11 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { useToastStore, type Toast, type ToastVariant } from "../stores/toast-store"
 import { useSessionStore } from "../stores/session-store"
 import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
-
-/** How long the exit animation runs before the node is unmounted (ms). */
-const EXIT_MS = 300
-/** Total lifetime of a toast in the store — mirrors toast-store's setTimeout. */
-const DURATION_MS = 4000
+import { TOAST_EXIT_MS, TOAST_DURATION_MS } from "../lib/constants"
 
 type RenderToast = Toast & { exiting?: boolean }
 
@@ -71,7 +67,7 @@ export function ToastContainer() {
           setTimeout(() => {
             timers.delete(r.id)
             setRendered((cur) => cur.filter((x) => x.id !== r.id))
-          }, EXIT_MS),
+          }, TOAST_EXIT_MS),
         )
       }
     }
@@ -132,7 +128,7 @@ export function ToastContainer() {
                   <span
                     aria-hidden
                     className={`absolute bottom-0 left-0 h-0.5 w-full origin-left ${cfg.bar}`}
-                    style={{ animation: `toast-progress ${DURATION_MS}ms linear forwards` }}
+                    style={{ animation: `toast-progress ${TOAST_DURATION_MS}ms linear forwards` }}
                   />
                 )}
               </div>

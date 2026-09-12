@@ -2,13 +2,9 @@ import { useCallback, useEffect, useRef, useState, type ClipboardEvent } from "r
 import clsx from "clsx"
 import { FileText, ImagePlus, X } from "lucide-react"
 import type { PromptFile } from "../lib/api-client"
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, TEXT_FOLD_LINE_THRESHOLD, TEXT_FOLD_CHAR_THRESHOLD } from "../lib/constants"
 
-const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
-const MAX_ATTACHMENTS = 10
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
-
-const TEXT_FOLD_LINE_THRESHOLD = 5
-const TEXT_FOLD_CHAR_THRESHOLD = 500
 
 let attachmentSeq = 0
 
