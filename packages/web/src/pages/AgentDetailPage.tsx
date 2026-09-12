@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { ArrowLeft, Brain, Check, Clipboard, Clock, Download, Edit3, Loader2, Trash2, X, Zap } from "lucide-react"
+import { ArrowLeft, Brain, Check, Clipboard, Clock, Download, Edit3, Loader2, X, Zap } from "lucide-react"
 import clsx from "clsx"
+import { InlineConfirm } from "../components/InlineConfirm"
 import * as api from "../lib/api-client"
 import type { AgentMemory, ConsolidationStats, CustomAgent, ModelInfo, PromptFragment } from "../lib/api-client"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
@@ -129,7 +130,6 @@ function MemoryItem({ memory, categories, onUpdate, onDelete }: {
   const [content, setContent] = useState(memory.content)
   const [category, setCategory] = useState(memory.category)
   const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
 
   const style = getCategoryStyle(memory.category)
@@ -146,10 +146,6 @@ function MemoryItem({ memory, categories, onUpdate, onDelete }: {
     }
   }
 
-  const handleDelete = async () => {
-    setDeleting(false)
-    await onDelete(memory.id)
-  }
 
   if (editing) {
     return (
@@ -217,25 +213,11 @@ function MemoryItem({ memory, categories, onUpdate, onDelete }: {
         <div className="flex-1" />
         {!memory.supersededBy && (
           <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/mem:opacity-100">
-            {deleting ? (
-              <>
-                <button type="button" onClick={() => void handleDelete()} className="rounded p-1 text-red-400 hover:bg-red-500/10">
-                  <Check className="h-3.5 w-3.5" />
-                </button>
-                <button type="button" onClick={() => setDeleting(false)} className="rounded p-1 text-fg-4 hover:bg-elevated">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </>
-            ) : (
-              <>
-                <button type="button" onClick={() => setEditing(true)} className="rounded p-1 text-fg-5 hover:text-fg-3">
-                  <Edit3 className="h-3.5 w-3.5" />
-                </button>
-                <button type="button" onClick={() => setDeleting(true)} className="rounded p-1 text-fg-5 hover:text-red-400">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
+            <InlineConfirm onConfirm={() => void onDelete(memory.id)}>
+              <button type="button" onClick={() => setEditing(true)} className="rounded p-1 text-fg-5 hover:text-fg-3">
+                <Edit3 className="h-3.5 w-3.5" />
+              </button>
+            </InlineConfirm>
           </div>
         )}
       </div>
@@ -905,7 +887,6 @@ export function AgentDetailPage() {
   )
   const fragments = fragmentsData ?? []
   const [copied, setCopied] = useState(false)
-  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (agents.length > 0 && !agent) {
@@ -1004,21 +985,12 @@ export function AgentDetailPage() {
               {copied ? <Check className="h-4 w-4 text-green-500" /> : <Clipboard className="h-4 w-4" />}
             </button>
             {!isSystem && (
-              deleting ? (
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => void handleDelete()} className="rounded-md border border-red-500/30 p-1.5 text-red-400 hover:bg-red-500/10">
-                    <Check className="h-4 w-4" />
-                  </button>
-                  <button type="button" onClick={() => setDeleting(false)} className="rounded-md border border-line p-1.5 text-fg-4 hover:bg-elevated">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => setDeleting(true)} title="删除"
-                  className="rounded-md border border-line p-1.5 text-fg-4 transition-colors hover:border-red-500/30 hover:text-red-400">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              )
+              <InlineConfirm
+                onConfirm={() => void handleDelete()}
+                size="md"
+                variant="outlined"
+                triggerClassName="text-fg-4 transition-colors hover:text-red-400"
+              />
             )}
           </div>
         </div>
