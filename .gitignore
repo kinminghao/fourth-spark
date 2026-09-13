@@ -7,4 +7,5 @@ dist/
 *.omo
 *.tsbuildinfo
 docs/internal/
+AGENTS.md
 
