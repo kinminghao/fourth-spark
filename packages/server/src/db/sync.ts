@@ -17,12 +17,12 @@ function getProps(data: R): R | null {
 const MAX_TOKENS = 10_000_000
 const MAX_COST = 10_000 // USD
 
-function num(v: unknown, fallback = 0): number {
+export function num(v: unknown, fallback = 0): number {
   const n = typeof v === "number" ? v : fallback
   return Number.isFinite(n) ? Math.max(0, n) : fallback
 }
 
-function str(v: unknown, fallback = ""): string {
+export function str(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback
 }
 
@@ -35,7 +35,7 @@ function str(v: unknown, fallback = ""): string {
 // Lone high surrogate not followed by low, or lone low surrogate not preceded by high
 const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g
 
-function sanitizeForPg(value: unknown): unknown {
+export function sanitizeForPg(value: unknown): unknown {
   if (typeof value === "string") {
     return value.replaceAll("\u0000", "").replace(LONE_SURROGATE_RE, "")
   }
