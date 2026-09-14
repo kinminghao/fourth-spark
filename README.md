@@ -41,7 +41,7 @@ fourth-spark start              # 拉起 PostgreSQL + 后台启动
 
 ## 核心能力
 
-**[Agent 对话](docs/features/agent-conversation.md)** — SSE 流式渲染，工具调用可视化，Thinking 折叠展开，交互式 Question 应答，Todo 进度追踪，Token/Cost 实时统计，消息草稿自动保存
+**[Agent 对话](docs/features/agent-conversation.md)** — SSE 流式渲染，工具调用可视化，Thinking 折叠展开，交互式 Question 应答，Todo 进度追踪，Token/Cost 实时统计，消息草稿自动保存，附件上传
 
 **[Workspace 隔离](docs/features/workspace-isolation.md)** — 为每个任务创建独立的 Git Worktree，自动 symlink AGENTS.md，支持状态追踪（active / idle / merged / stale）、磁盘用量监控、批量清理已合并分支
 
@@ -51,9 +51,9 @@ fourth-spark start              # 拉起 PostgreSQL + 后台启动
 
 **[Git 平台集成](docs/features/git-integration.md)** — 通过 MCP 统一管理 GitHub / Gitea / GitLab 的 Issue、PR、Milestone、标签；支持 Issue 子任务 / Epic 树、PR-Issue 关联、评论管理；创建 Issue/PR 时自动关联当前 Session
 
-**[自定义 Agent](docs/features/custom-agents.md)** — 基于内置 Agent 创建自定义 Agent，指定模型和 System Prompt，组合可复用的 Prompt 片段并排序拼接，支持 JSON 导入导出在不同实例间共享；内置"评论助手"系统 Agent 用于 Issue 评论润色
+**[自定义 Agent](docs/features/custom-agents.md)** — 基于内置 Agent 创建自定义 Agent，指定模型和 System Prompt，组合可复用的 Prompt 片段并拖拽排序拼接，支持 JSON 导入导出在不同实例间共享；内置"评论助手"系统 Agent 用于 Issue 评论润色
 
-**[Session 管理](docs/features/session-management.md)** — 会话可与 Issue / PR 双向关联，侧边栏查看关联历史；支持按 Custom Agent 和模型新建会话，模型可从钉选列表快速选择
+**[Session 管理](docs/features/session-management.md)** — 会话可与 Issue / PR 双向关联，侧边栏查看关联历史；支持按 Custom Agent 和模型新建会话，模型可从钉选列表快速选择；支持会话置顶和子会话
 
 **[智能运维](docs/features/smart-ops.md)** — Claude 多账号自动轮换（cooldown 持久化跨重启恢复）、会话中断自动恢复、截断自动续写（带停滞检测）、空响应自动重试、macOS 桌面通知
 
@@ -73,14 +73,21 @@ fourth-spark start              # 拉起 PostgreSQL + 后台启动
 
 **[数据持久化](docs/features/data-persistence.md)** — 会话、消息、工具调用、Todo、Issue、PR、Milestone、标签、Custom Agent、Prompt 片段、Workspace、Session 关联、Agent 记忆等全量存入 PostgreSQL（20 张表），进程重启不丢数据
 
+**API 文档** — 内置 OpenAPI 规范自动生成，访问 `/api/doc` 打开 Scalar 交互式 API 文档，方便调试和集成
+
+**文件浏览** — Web UI 内置目录浏览器，可在线查看仓库文件结构和内容
+
+**主题切换** — 支持亮色 / 暗色主题切换
+
 ## CLI
 
 ```
-fourth-spark                    前台启动（Ctrl-C 停止）
+fourth-spark                    前台启动（Ctrl-C 停止，自动检查更新）
+fourth-spark serve              同上（显式子命令）
 fourth-spark start [--port N]   后台启动（含 PostgreSQL，默认端口 3000）
 fourth-spark stop               停止所有服务
 fourth-spark status             查看运行状态
-fourth-spark upgrade            检查并更新到最新版本
+fourth-spark upgrade [--canary] [--force]  检查并更新到最新版本
 ```
 
 ## 技术栈
