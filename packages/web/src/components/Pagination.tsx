@@ -1,5 +1,5 @@
-import { ChevronLeft, ChevronRight } from "lucide-react"
 import clsx from "clsx"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import { PAGE_SIZE } from "../lib/constants"
 
 interface PaginationProps {
@@ -31,9 +31,7 @@ export function Pagination({ total, page, pageSize = PAGE_SIZE, onPageChange }: 
           onClick={() => onPageChange(page - 1)}
           className={clsx(
             "flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-            page <= 0
-              ? "text-fg-6 cursor-not-allowed"
-              : "text-fg-4 hover:bg-elevated hover:text-fg-2",
+            page <= 0 ? "text-fg-6 cursor-not-allowed" : "text-fg-4 hover:bg-elevated hover:text-fg-2",
           )}
         >
           <ChevronLeft className="h-4 w-4" />
@@ -47,9 +45,7 @@ export function Pagination({ total, page, pageSize = PAGE_SIZE, onPageChange }: 
           onClick={() => onPageChange(page + 1)}
           className={clsx(
             "flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-            page >= totalPages - 1
-              ? "text-fg-6 cursor-not-allowed"
-              : "text-fg-4 hover:bg-elevated hover:text-fg-2",
+            page >= totalPages - 1 ? "text-fg-6 cursor-not-allowed" : "text-fg-4 hover:bg-elevated hover:text-fg-2",
           )}
         >
           <ChevronRight className="h-4 w-4" />

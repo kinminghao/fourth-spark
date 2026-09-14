@@ -6,15 +6,15 @@
 
 import type { RuntimeClient } from "../../core/runtime-client"
 import {
+  type Agent,
+  type Message,
+  type PendingQuestion,
+  type PromptOpts,
+  type ProviderListResponse,
   RuntimeError,
   type Session,
-  type Message,
-  type Todo,
-  type Agent,
   type SessionStatus,
-  type PendingQuestion,
-  type ProviderListResponse,
-  type PromptOpts,
+  type Todo,
 } from "../../core/runtime-types"
 
 const RUNTIME_ID = "opencode"
@@ -41,7 +41,7 @@ function makeFetchers(baseUrl: string) {
   async function getJson<T>(path: string, query?: Query): Promise<T> {
     const res = await fetch(buildUrl(path, query), { method: "GET" })
     await ensureOk(res, "GET", path)
-    return await res.json() as T
+    return (await res.json()) as T
   }
 
   async function postJson<T>(path: string, query?: Query, body?: unknown): Promise<T> {
@@ -51,7 +51,7 @@ function makeFetchers(baseUrl: string) {
       body: JSON.stringify(body ?? {}),
     })
     await ensureOk(res, "POST", path)
-    return await res.json() as T
+    return (await res.json()) as T
   }
 
   async function send(method: string, path: string, query?: Query, body?: unknown): Promise<void> {
@@ -109,19 +109,25 @@ export class HttpRuntimeClient implements RuntimeClient {
     let model: { modelID: string; providerID: string } | undefined
     if (opts?.model) {
       const slash = opts.model.indexOf("/")
-      model = slash > 0
-        ? { providerID: opts.model.slice(0, slash), modelID: opts.model.slice(slash + 1) }
-        : { providerID: "anthropic", modelID: opts.model }
+      model =
+        slash > 0
+          ? { providerID: opts.model.slice(0, slash), modelID: opts.model.slice(slash + 1) }
+          : { providerID: "anthropic", modelID: opts.model }
     }
-    return this.fetchers.send("POST", `/session/${sessionId}/prompt_async`, { directory: this.directory }, {
-      parts: [
-        { type: "text", text: content },
-        ...(opts?.files ?? []).map((f) => ({ type: "file", mime: f.mime, url: f.url, filename: f.filename })),
-      ],
-      agent: opts?.agent,
-      model,
-      variant: opts?.variant,
-    })
+    return this.fetchers.send(
+      "POST",
+      `/session/${sessionId}/prompt_async`,
+      { directory: this.directory },
+      {
+        parts: [
+          { type: "text", text: content },
+          ...(opts?.files ?? []).map((f) => ({ type: "file", mime: f.mime, url: f.url, filename: f.filename })),
+        ],
+        agent: opts?.agent,
+        model,
+        variant: opts?.variant,
+      },
+    )
   }
 
   abort(sessionId: string): Promise<void> {

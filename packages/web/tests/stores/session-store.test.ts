@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from "bun:test"
+import { beforeEach, describe, expect, mock, test } from "bun:test"
 
 // Mock api-client
 const mockListSessions = mock(() => Promise.resolve({ items: [], total: 0 }))
@@ -212,11 +212,13 @@ describe("session-store — appendMessagePartDelta", () => {
   test("appends delta to existing part", () => {
     useSessionStore.setState({
       messages: {
-        "ses-1": [{
-          id: "msg-1",
-          role: "assistant",
-          parts: [{ id: "p1", type: "text", text: "hel" }],
-        }] as any,
+        "ses-1": [
+          {
+            id: "msg-1",
+            role: "assistant",
+            parts: [{ id: "p1", type: "text", text: "hel" }],
+          },
+        ] as any,
       },
     })
 
@@ -239,5 +241,3 @@ describe("session-store — appendMessagePartDelta", () => {
     expect(parts[0].text).toBe("start")
   })
 })
-
-

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { onError } from "../../../src/middleware/errors"
-import { RuntimeError } from "../../../src/core/runtime-types"
 import type { Context } from "hono"
+import { RuntimeError } from "../../../src/core/runtime-types"
+import { onError } from "../../../src/middleware/errors"
 
 // onError doesn't use the Context parameter (it's prefixed with _c)
 const dummyCtx = {} as Context
@@ -14,7 +14,7 @@ describe("onError", () => {
     expect(res.status).toBe(429)
     expect(res.headers.get("Content-Type")).toBe("application/json")
 
-    const body = await res.json() as { error: string }
+    const body = (await res.json()) as { error: string }
     expect(body.error).toBe("rate limited")
   })
 
@@ -47,7 +47,7 @@ describe("onError", () => {
     const res = onError(err, dummyCtx)
 
     expect(res.status).toBe(500)
-    const body = await res.json() as { error: string }
+    const body = (await res.json()) as { error: string }
     expect(body.error).toBe("something broke")
   })
 
@@ -56,7 +56,7 @@ describe("onError", () => {
     const res = onError(err, dummyCtx)
 
     expect(res.status).toBe(500)
-    const body = await res.json() as { error: string }
+    const body = (await res.json()) as { error: string }
     expect(body.error).toBe("Internal Server Error")
   })
 
@@ -66,7 +66,7 @@ describe("onError", () => {
     const res = onError(err, dummyCtx)
 
     expect(res.status).toBe(500)
-    const body = await res.json() as { error: string }
+    const body = (await res.json()) as { error: string }
     expect(body.error).toBe("wrapper")
   })
 })

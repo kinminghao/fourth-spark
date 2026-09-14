@@ -1,24 +1,16 @@
+import clsx from "clsx"
+import { ArrowLeft, CircleDot, GitPullRequest, Link2, RefreshCw, Search, X } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
-import {
-  ArrowLeft,
-  CircleDot,
-  GitPullRequest,
-  Link2,
-  RefreshCw,
-  Search,
-  X,
-} from "lucide-react"
-import clsx from "clsx"
-import { listPrLinkedIssues, type Issue, type PersistentPullRequest } from "../lib/api-client"
-import { usePrStore } from "../stores/pr-store"
-import { useIssueStore } from "../stores/issue-store"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
-import { useToastStore } from "../stores/toast-store"
-import { PrDetailPanel } from "../components/PrDetailPanel"
 import { IssueDetailPanel } from "../components/IssueDetailPanel"
 import { LinkedIssueList } from "../components/LinkedIssueList"
+import { PrDetailPanel } from "../components/PrDetailPanel"
 import { CompactPrRow, FullWidthPrRow } from "../components/PrRow"
+import { type Issue, listPrLinkedIssues, type PersistentPullRequest } from "../lib/api-client"
+import { useIssueStore } from "../stores/issue-store"
+import { usePrStore } from "../stores/pr-store"
+import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
+import { useToastStore } from "../stores/toast-store"
 
 type PrDetailTab = "pr" | "issue"
 
@@ -31,15 +23,7 @@ const STATE_FILTERS: { key: StateFilter; label: string }[] = [
   { key: "all", label: "全部" },
 ]
 
-function IssueMatchRow({
-  issue,
-  linked,
-  onToggle,
-}: {
-  issue: Issue
-  linked: boolean
-  onToggle: () => void
-}) {
+function IssueMatchRow({ issue, linked, onToggle }: { issue: Issue; linked: boolean; onToggle: () => void }) {
   return (
     <li>
       <button
@@ -108,7 +92,9 @@ function PrDetailWithTabs({
       .catch(() => setLinkedIssues([]))
   }, [activeRepoId, pr.number])
 
-  const selectedIssue = issueId ? allIssues.find((i) => i.id === issueId) ?? linkedIssues.find((i) => i.id === issueId) ?? null : null
+  const selectedIssue = issueId
+    ? (allIssues.find((i) => i.id === issueId) ?? linkedIssues.find((i) => i.id === issueId) ?? null)
+    : null
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -119,9 +105,7 @@ function PrDetailWithTabs({
             onClick={() => onTabChange("pr")}
             className={clsx(
               "flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-medium transition-colors",
-              tab === "pr"
-                ? "border-blue-500 text-fg"
-                : "border-transparent text-fg-4 hover:text-fg-2",
+              tab === "pr" ? "border-blue-500 text-fg" : "border-transparent text-fg-4 hover:text-fg-2",
             )}
           >
             <GitPullRequest className="h-3.5 w-3.5" />
@@ -132,17 +116,17 @@ function PrDetailWithTabs({
             onClick={() => onTabChange("issue")}
             className={clsx(
               "flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-medium transition-colors",
-              tab === "issue"
-                ? "border-blue-500 text-fg"
-                : "border-transparent text-fg-4 hover:text-fg-2",
+              tab === "issue" ? "border-blue-500 text-fg" : "border-transparent text-fg-4 hover:text-fg-2",
             )}
           >
             <CircleDot className="h-3.5 w-3.5" />
             Issue
-            <span className={clsx(
-              "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
-              tab === "issue" ? "bg-blue-500/10 text-blue-500" : "bg-elevated text-fg-5",
-            )}>
+            <span
+              className={clsx(
+                "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+                tab === "issue" ? "bg-blue-500/10 text-blue-500" : "bg-elevated text-fg-5",
+              )}
+            >
               {linkedIssues.length}
             </span>
           </button>
@@ -169,10 +153,7 @@ function PrDetailWithTabs({
               返回列表
             </button>
           </div>
-          <IssueDetailPanel
-            issue={selectedIssue}
-            onBack={onBackToIssueList}
-          />
+          <IssueDetailPanel issue={selectedIssue} onBack={onBackToIssueList} />
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -226,36 +207,45 @@ export function PullRequestsPage() {
     if (searchParams.get("id")) return
     const stored = usePrStore.getState().viewingPrId
     if (stored) setSearchParams({ id: stored }, { replace: true })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [setSearchParams, searchParams.get]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openPr = useCallback((id: string) => {
-    setSearchParams({ id }, { replace: false })
-    setViewingPr(id)
-  }, [setSearchParams, setViewingPr])
+  const openPr = useCallback(
+    (id: string) => {
+      setSearchParams({ id }, { replace: false })
+      setViewingPr(id)
+    },
+    [setSearchParams, setViewingPr],
+  )
 
   const closePr = useCallback(() => {
     setSearchParams({}, { replace: false })
     setViewingPr(null)
   }, [setSearchParams, setViewingPr])
 
-  const changeTab = useCallback((newTab: PrDetailTab) => {
-    if (!selectedId) return
-    const params: Record<string, string> = { id: selectedId }
-    if (newTab === "issue") params.tab = "issue"
-    setSearchParams(params, { replace: false })
-  }, [selectedId, setSearchParams])
+  const changeTab = useCallback(
+    (newTab: PrDetailTab) => {
+      if (!selectedId) return
+      const params: Record<string, string> = { id: selectedId }
+      if (newTab === "issue") params.tab = "issue"
+      setSearchParams(params, { replace: false })
+    },
+    [selectedId, setSearchParams],
+  )
 
-  const openIssueTab = useCallback((iid: string) => {
-    if (!selectedId) return
-    setSearchParams({ id: selectedId, tab: "issue", issueId: iid }, { replace: false })
-  }, [selectedId, setSearchParams])
+  const openIssueTab = useCallback(
+    (iid: string) => {
+      if (!selectedId) return
+      setSearchParams({ id: selectedId, tab: "issue", issueId: iid }, { replace: false })
+    },
+    [selectedId, setSearchParams],
+  )
 
   const backToIssueList = useCallback(() => {
     if (!selectedId) return
     setSearchParams({ id: selectedId, tab: "issue" }, { replace: false })
   }, [selectedId, setSearchParams])
 
-  const matchingPr = matchingPrId ? pulls.find((p) => p.id === matchingPrId) ?? null : null
+  const matchingPr = matchingPrId ? (pulls.find((p) => p.id === matchingPrId) ?? null) : null
 
   const [linkedIssueIds, setLinkedIssueIds] = useState<Set<string>>(new Set())
 
@@ -274,7 +264,12 @@ export function PullRequestsPage() {
     const isLinked = linkedIssueIds.has(issue.id)
     if (isLinked) {
       const ok = await usePrStore.getState().unlinkIssue(activeRepoId!, matchingPr.number, issue.number)
-      if (ok) setLinkedIssueIds((prev) => { const next = new Set(prev); next.delete(issue.id); return next })
+      if (ok)
+        setLinkedIssueIds((prev) => {
+          const next = new Set(prev)
+          next.delete(issue.id)
+          return next
+        })
     } else {
       const ok = await linkIssue(activeRepoId!, matchingPr.number, issue.number)
       if (ok) setLinkedIssueIds((prev) => new Set(prev).add(issue.id))
@@ -304,9 +299,7 @@ export function PullRequestsPage() {
       <div
         className={clsx(
           "shrink-0 flex-col bg-surface",
-          showDetail
-            ? "hidden md:flex md:w-80 border-r border-line"
-            : "flex w-full",
+          showDetail ? "hidden md:flex md:w-80 border-r border-line" : "flex w-full",
         )}
       >
         {matchingPrId ? (
@@ -333,7 +326,11 @@ export function PullRequestsPage() {
                   className="min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-fg-6 focus:outline-none"
                 />
                 {issueSearchQuery && (
-                  <button type="button" onClick={() => setIssueSearchQuery("")} className="shrink-0 text-fg-5 hover:text-fg-3">
+                  <button
+                    type="button"
+                    onClick={() => setIssueSearchQuery("")}
+                    className="shrink-0 text-fg-5 hover:text-fg-3"
+                  >
                     <X className="h-3 w-3" />
                   </button>
                 )}
@@ -359,69 +356,78 @@ export function PullRequestsPage() {
             </div>
           </>
         ) : !showDetail ? (
-          <>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-line px-4 py-2.5">
-              {/* Title */}
-              <span className="shrink-0 text-sm font-semibold text-fg md:order-1">Pull Requests</span>
-              {/* Sync: right-aligned on mobile, end of row on desktop */}
-              <button
-                type="button"
-                onClick={() => activeRepoId && void syncPulls(activeRepoId)}
-                disabled={syncing || !activeRepoId}
-                title="同步 PR"
-                className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-2 disabled:opacity-40 md:order-last md:ml-0"
-              >
-                <RefreshCw className={clsx("h-4 w-4", syncing && "animate-spin")} />
-              </button>
-              {/* State filters: new row on mobile */}
-              <div className="w-full md:order-2 md:w-auto">
-                <div className="flex shrink-0 items-center rounded-lg bg-elevated/60 p-0.5">
-                  {STATE_FILTERS.map(({ key, label }) => {
-                    const count = key === "open" ? openCount : key === "merged" ? mergedCount : key === "closed" ? closedCount : pulls.length
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setStateFilter(key)}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-line px-4 py-2.5">
+            {/* Title */}
+            <span className="shrink-0 text-sm font-semibold text-fg md:order-1">Pull Requests</span>
+            {/* Sync: right-aligned on mobile, end of row on desktop */}
+            <button
+              type="button"
+              onClick={() => activeRepoId && void syncPulls(activeRepoId)}
+              disabled={syncing || !activeRepoId}
+              title="同步 PR"
+              className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-2 disabled:opacity-40 md:order-last md:ml-0"
+            >
+              <RefreshCw className={clsx("h-4 w-4", syncing && "animate-spin")} />
+            </button>
+            {/* State filters: new row on mobile */}
+            <div className="w-full md:order-2 md:w-auto">
+              <div className="flex shrink-0 items-center rounded-lg bg-elevated/60 p-0.5">
+                {STATE_FILTERS.map(({ key, label }) => {
+                  const count =
+                    key === "open"
+                      ? openCount
+                      : key === "merged"
+                        ? mergedCount
+                        : key === "closed"
+                          ? closedCount
+                          : pulls.length
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setStateFilter(key)}
+                      className={clsx(
+                        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                        stateFilter === key ? "bg-surface text-fg shadow-sm" : "text-fg-4 hover:text-fg-2",
+                      )}
+                    >
+                      {label}
+                      <span
                         className={clsx(
-                          "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                          stateFilter === key
-                            ? "bg-surface text-fg shadow-sm"
-                            : "text-fg-4 hover:text-fg-2",
-                        )}
-                      >
-                        {label}
-                        <span className={clsx(
                           "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
                           stateFilter === key ? "bg-blue-500/10 text-blue-500" : "text-fg-5",
-                        )}>
-                          {count}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-              {/* Search: new row on mobile, inline on desktop */}
-              <div className="w-full md:order-3 md:w-auto md:min-w-0 md:flex-1 md:px-1">
-                <div className="flex items-center gap-2 rounded-md border border-line bg-base px-2.5 py-1.5">
-                  <Search className="h-3.5 w-3.5 shrink-0 text-fg-5" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="搜索 PR..."
-                    className="min-w-0 flex-1 bg-transparent text-xs text-fg placeholder:text-fg-6 focus:outline-none"
-                  />
-                  {searchQuery && (
-                    <button type="button" onClick={() => setSearchQuery("")} className="shrink-0 text-fg-5 hover:text-fg-3">
-                      <X className="h-3 w-3" />
+                        )}
+                      >
+                        {count}
+                      </span>
                     </button>
-                  )}
-                </div>
+                  )
+                })}
               </div>
             </div>
-          </>
+            {/* Search: new row on mobile, inline on desktop */}
+            <div className="w-full md:order-3 md:w-auto md:min-w-0 md:flex-1 md:px-1">
+              <div className="flex items-center gap-2 rounded-md border border-line bg-base px-2.5 py-1.5">
+                <Search className="h-3.5 w-3.5 shrink-0 text-fg-5" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="搜索 PR..."
+                  className="min-w-0 flex-1 bg-transparent text-xs text-fg placeholder:text-fg-6 focus:outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="shrink-0 text-fg-5 hover:text-fg-3"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         ) : (
           <>
             <div className="flex items-center justify-between border-b border-line px-3 py-3">
@@ -440,7 +446,14 @@ export function PullRequestsPage() {
             </div>
             <div className="flex border-b border-line">
               {STATE_FILTERS.map(({ key, label }) => {
-                const count = key === "open" ? openCount : key === "merged" ? mergedCount : key === "closed" ? closedCount : pulls.length
+                const count =
+                  key === "open"
+                    ? openCount
+                    : key === "merged"
+                      ? mergedCount
+                      : key === "closed"
+                        ? closedCount
+                        : pulls.length
                 return (
                   <button
                     key={key}
@@ -448,16 +461,16 @@ export function PullRequestsPage() {
                     onClick={() => setStateFilter(key)}
                     className={clsx(
                       "flex flex-1 items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors",
-                      stateFilter === key
-                        ? "border-b-2 border-blue-500 text-blue-500"
-                        : "text-fg-4 hover:text-fg-2",
+                      stateFilter === key ? "border-b-2 border-blue-500 text-blue-500" : "text-fg-4 hover:text-fg-2",
                     )}
                   >
                     {label}
-                    <span className={clsx(
-                      "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
-                      stateFilter === key ? "bg-blue-500/10 text-blue-500" : "bg-elevated text-fg-5",
-                    )}>
+                    <span
+                      className={clsx(
+                        "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+                        stateFilter === key ? "bg-blue-500/10 text-blue-500" : "bg-elevated text-fg-5",
+                      )}
+                    >
                       {count}
                     </span>
                   </button>
@@ -475,7 +488,11 @@ export function PullRequestsPage() {
                   className="min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-fg-6 focus:outline-none"
                 />
                 {searchQuery && (
-                  <button type="button" onClick={() => setSearchQuery("")} className="shrink-0 text-fg-5 hover:text-fg-3">
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="shrink-0 text-fg-5 hover:text-fg-3"
+                  >
                     <X className="h-3 w-3" />
                   </button>
                 )}
@@ -504,11 +521,7 @@ export function PullRequestsPage() {
                       onSelect={() => openPr(pr.id)}
                     />
                   ) : (
-                    <FullWidthPrRow
-                      key={pr.id}
-                      pr={pr}
-                      onSelect={() => openPr(pr.id)}
-                    />
+                    <FullWidthPrRow key={pr.id} pr={pr} onSelect={() => openPr(pr.id)} />
                   ),
                 )}
               </ul>
@@ -526,8 +539,14 @@ export function PullRequestsPage() {
           onTabChange={changeTab}
           onSelectIssue={openIssueTab}
           onBackToIssueList={backToIssueList}
-          onBack={() => { closePr(); if (matchingPrId) exitMatchMode() }}
-          onClose={() => { closePr(); if (matchingPrId) exitMatchMode() }}
+          onBack={() => {
+            closePr()
+            if (matchingPrId) exitMatchMode()
+          }}
+          onClose={() => {
+            closePr()
+            if (matchingPrId) exitMatchMode()
+          }}
           onEnterMatch={() => enterMatchMode(showDetail.id)}
           onNavigateToIssue={(iid) => {
             if (!repoName) return

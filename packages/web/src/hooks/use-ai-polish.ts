@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { getSessionStatus } from "../lib/api-client"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
+import { POLL_INTERVAL_MS } from "../lib/constants"
+import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
 import { useToastStore } from "../stores/toast-store"
-import { POLL_INTERVAL_MS } from "../lib/constants"
 
 export type PolishPhase = "idle" | "polishing" | "preview"
 
@@ -62,10 +62,12 @@ export function useAiPolish<T>({
         }
       })
       .catch(() => {})
-    return () => { cancelled = true }
-  // loadExisting identity should be stable (useCallback at call-site)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repoId])
+    return () => {
+      cancelled = true
+    }
+    // loadExisting identity should be stable (useCallback at call-site)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repoId, loadExisting])
 
   const polish = useCallback(async () => {
     if (!repoId || phase === "polishing") return
@@ -91,10 +93,7 @@ export function useAiPolish<T>({
       }, POLL_INTERVAL_MS)
     } catch (err) {
       setPhase("idle")
-      useToastStore.getState().addToast(
-        err instanceof Error ? err.message : "润色启动失败",
-        "error",
-      )
+      useToastStore.getState().addToast(err instanceof Error ? err.message : "润色启动失败", "error")
     }
   }, [repoId, phase, startPolish, fetchResult, stopPolling])
 

@@ -1,7 +1,7 @@
-import { join, resolve, dirname } from "node:path"
-import { mkdirSync, existsSync, readFileSync } from "node:fs"
 import { execSync } from "node:child_process"
+import { existsSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
+import { dirname, join, resolve } from "node:path"
 
 const MIN_OPENCODE_VERSION = "1.4.0"
 
@@ -63,10 +63,7 @@ export function ensureDependencies(): void {
   try {
     execSync("git --version", { stdio: "pipe" })
   } catch {
-    errors.push(
-      "git is not installed\n" +
-      "  Install: https://git-scm.com/downloads",
-    )
+    errors.push("git is not installed\n" + "  Install: https://git-scm.com/downloads")
   }
 
   if (!process.env.DATABASE_URL) {
@@ -77,16 +74,16 @@ export function ensureDependencies(): void {
     } catch {
       errors.push(
         "Docker is not installed (required for PostgreSQL)\n" +
-        "  Install: https://docs.docker.com/get-docker/\n" +
-        "  Or set DATABASE_URL to use an external PostgreSQL",
+          "  Install: https://docs.docker.com/get-docker/\n" +
+          "  Or set DATABASE_URL to use an external PostgreSQL",
       )
     }
 
     if (dockerOk && !getDockerComposeCmd()) {
       errors.push(
         "Docker Compose is not available\n" +
-        "  Usually included with Docker Desktop\n" +
-        "  Or set DATABASE_URL to use an external PostgreSQL",
+          "  Usually included with Docker Desktop\n" +
+          "  Or set DATABASE_URL to use an external PostgreSQL",
       )
     }
   }
@@ -102,14 +99,11 @@ export function ensureDependencies(): void {
     if (tooOld) {
       errors.push(
         `OpenCode CLI version ${raw} is too old (requires >= ${MIN_OPENCODE_VERSION})\n` +
-        "  Upgrade: https://opencode.ai/docs",
+          "  Upgrade: https://opencode.ai/docs",
       )
     }
   } catch {
-    errors.push(
-      "OpenCode CLI is not installed (required for agent runtime)\n" +
-      "  Install: https://opencode.ai/docs",
-    )
+    errors.push("OpenCode CLI is not installed (required for agent runtime)\n" + "  Install: https://opencode.ai/docs")
   }
 
   if (errors.length > 0) {
@@ -130,11 +124,10 @@ export function ensureDependencies(): void {
       if (!hasOmo) {
         console.info(
           "\n  💡 Recommended: install oh-my-openagent for enhanced Agent capabilities\n" +
-          "     https://github.com/code-yeongyu/oh-my-openagent\n" +
-          "     Install: bunx oh-my-openagent install\n",
+            "     https://github.com/code-yeongyu/oh-my-openagent\n" +
+            "     Install: bunx oh-my-openagent install\n",
         )
       }
     }
-  } catch {
-  }
+  } catch {}
 }

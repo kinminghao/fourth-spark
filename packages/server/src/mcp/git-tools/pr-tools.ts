@@ -1,17 +1,17 @@
-import { McpServer } from "@modelcontextprotocol/server"
-import { z } from "zod"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { eq } from "drizzle-orm"
+import { z } from "zod"
 import { db } from "../../db/index"
 import { issueComments, pullRequests } from "../../db/schema"
 import { logger } from "../../middleware/logger"
 import {
-  getClientForRepo,
-  textResult,
-  errorResult,
   commentToDb,
+  errorResult,
+  getClientForRepo,
+  linkSessionTarget,
   prToDb,
   renameWorkspaceBranch,
-  linkSessionTarget,
+  textResult,
 } from "./helpers"
 
 export function registerPrTools(server: McpServer, repoId: string, sessionId?: string): void {
@@ -61,13 +61,19 @@ export function registerPrTools(server: McpServer, repoId: string, sessionId?: s
   server.registerTool(
     "create_pull_request",
     {
-      description: "Create a pull request. If issue_number is provided, the PR body will include 'Closes #N' to auto-close the issue on merge, and a comment linking the PR will be added to the issue.",
+      description:
+        "Create a pull request. If issue_number is provided, the PR body will include 'Closes #N' to auto-close the issue on merge, and a comment linking the PR will be added to the issue.",
       inputSchema: z.object({
         title: z.string().describe("PR title"),
         body: z.string().optional().describe("PR body (Markdown)"),
         head: z.string().describe("Source branch name"),
         base: z.string().describe("Target branch name (e.g. 'main')"),
-        issue_number: z.number().int().positive().optional().describe("Issue number to link — adds 'Closes #N' and comments on the issue"),
+        issue_number: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Issue number to link — adds 'Closes #N' and comments on the issue"),
       }),
     },
     async ({ title, body, head, base, issue_number }) => {
@@ -164,7 +170,8 @@ export function registerPrTools(server: McpServer, repoId: string, sessionId?: s
         const { client } = await getClientForRepo(repoId)
         await client.mergePullRequest(pr_number)
         const prId = `${repoId}_pr_${pr_number}`
-        await db.update(pullRequests)
+        await db
+          .update(pullRequests)
           .set({ state: "closed", mergedAt: Date.now(), updatedAt: Date.now() })
           .where(eq(pullRequests.id, prId))
         logger.info({ repoId, prNumber: pr_number }, "MCP: merged pull request")

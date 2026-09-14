@@ -1,15 +1,23 @@
 {
   "name": "fourth-spark",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "bun run --filter '*' dev",
     "dev:server": "bun run --filter server dev",
     "dev:web": "bun run --filter web dev",
     "build": "bun run --filter '*' build",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "bunx tsc -b --noEmit",
     "test": "bun run test:server && bun run test:web",
     "test:server": "bun run --filter server test",
     "test:web": "bun run --filter web test",
     "test:db": "bun run --filter server test:db"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.13"
   }
 }

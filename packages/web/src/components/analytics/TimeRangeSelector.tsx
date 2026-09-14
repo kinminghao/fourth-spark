@@ -84,9 +84,7 @@ export function TimeRangeSelector() {
             }}
             className={clsx(
               "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-              active
-                ? "border-blue-500 bg-blue-500/10 text-blue-600"
-                : "border-line text-fg-3 hover:bg-elevated",
+              active ? "border-blue-500 bg-blue-500/10 text-blue-600" : "border-line text-fg-3 hover:bg-elevated",
             )}
           >
             {preset.label}

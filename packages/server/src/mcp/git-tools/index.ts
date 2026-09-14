@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server"
+import type { McpToolProvider, ToolContext } from "../../core/types"
 import { registerIssueTools } from "./issue-tools"
 import { registerPrTools } from "./pr-tools"
-import type { McpToolProvider, ToolContext } from "../../core/types"
 
 export const gitToolProvider: McpToolProvider = {
   id: "fourth-spark-git",

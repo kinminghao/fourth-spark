@@ -1,8 +1,8 @@
-import { eq, inArray, asc } from "drizzle-orm"
+import { asc, eq, inArray } from "drizzle-orm"
 import { db } from "../../db/index"
-import { issues, issueComments, repos } from "../../db/schema"
+import { issueComments, issues, type repos } from "../../db/schema"
+import { createGitIssueClient, getAuthenticatedLogin, getHostInfo } from "../../lib/git-provider"
 import { parseGitUrl } from "../../lib/git-url"
-import { getHostInfo, getAuthenticatedLogin, createGitIssueClient } from "../../lib/git-provider"
 
 export async function autoAssignIssue(repo: typeof repos.$inferSelect, issueId: string) {
   const [issue] = await db.select().from(issues).where(eq(issues.id, issueId))
@@ -22,9 +22,12 @@ export async function autoAssignIssue(repo: typeof repos.$inferSelect, issueId: 
     assignees: [...existing.map((a) => a.login), login],
   })
 
-  await db.update(issues).set({
-    assignees: updated.assignees?.map((a) => ({ login: a.login, avatar_url: a.avatar_url })) ?? [],
-  }).where(eq(issues.id, issueId))
+  await db
+    .update(issues)
+    .set({
+      assignees: updated.assignees?.map((a) => ({ login: a.login, avatar_url: a.avatar_url })) ?? [],
+    })
+    .where(eq(issues.id, issueId))
 }
 
 export function stripMedia(text: string): string {
@@ -61,7 +64,9 @@ export async function buildIssueContext(issueId: string): Promise<string | null>
   if (chain.length === 0) return null
 
   const allIds = chain.map((i) => i.id)
-  const allComments = await db.select().from(issueComments)
+  const allComments = await db
+    .select()
+    .from(issueComments)
     .where(inArray(issueComments.issueId, allIds))
     .orderBy(asc(issueComments.createdAt))
 
@@ -70,7 +75,7 @@ export async function buildIssueContext(issueId: string): Promise<string | null>
     arr.push(c)
     map.set(c.issueId, arr)
     return map
-  }, new Map<number, typeof allComments>())
+  }, new Map<string, typeof allComments>())
 
   const sections = chain.map((issue, i) => {
     const isLeaf = i === chain.length - 1

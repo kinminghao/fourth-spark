@@ -22,9 +22,7 @@ export function injectMcpConfig(localPath: string, repoId: string, serverPort: n
     // corrupt or missing — start fresh
   }
 
-  const mcpPath = sessionId
-    ? `/api/repos/${repoId}/mcp/s/${sessionId}`
-    : `/api/repos/${repoId}/mcp`
+  const mcpPath = sessionId ? `/api/repos/${repoId}/mcp/s/${sessionId}` : `/api/repos/${repoId}/mcp`
 
   const mcpServers = (config.mcpServers ?? {}) as Record<string, unknown>
   mcpServers[MCP_SERVER_KEY] = {
@@ -32,7 +30,7 @@ export function injectMcpConfig(localPath: string, repoId: string, serverPort: n
     url: `http://127.0.0.1:${serverPort}${mcpPath}`,
   }
   config.mcpServers = mcpServers
-  writeFileSync(filePath, JSON.stringify(config, null, 2) + "\n")
+  writeFileSync(filePath, `${JSON.stringify(config, null, 2)}\n`)
   logger.info({ repoId, sessionId, filePath }, "injected MCP config into .mcp.json for Claude Code")
 }
 
@@ -52,7 +50,7 @@ export function removeMcpConfig(localPath: string): void {
     if (meaningful.length === 0) {
       unlinkSync(filePath)
     } else {
-      writeFileSync(filePath, JSON.stringify(config, null, 2) + "\n")
+      writeFileSync(filePath, `${JSON.stringify(config, null, 2)}\n`)
     }
   } catch {
     // best-effort cleanup

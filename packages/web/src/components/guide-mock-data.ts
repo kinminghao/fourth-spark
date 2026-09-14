@@ -1,7 +1,7 @@
-import type { Issue, PersistentPullRequest, Tag, CustomAgent, AgentMemory, Session } from "../lib/api-client"
+import type { AgentMemory, CustomAgent, Issue, PersistentPullRequest, Session, Tag } from "../lib/api-client"
+import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useIssueStore } from "../stores/issue-store"
 import { usePrStore } from "../stores/pr-store"
-import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useSessionStore } from "../stores/session-store"
 
 const REPO_ID = "__guide__"
@@ -102,9 +102,9 @@ const MOCK_PRS: PersistentPullRequest[] = [
 ]
 
 const MOCK_TAGS: Tag[] = [
-  { id: "guide-tag-1", repoId: REPO_ID, name: "bug", color: "d73a4a" },
-  { id: "guide-tag-2", repoId: REPO_ID, name: "feature", color: "0075ca" },
-  { id: "guide-tag-3", repoId: REPO_ID, name: "priority", color: "e4e669" },
+  { id: "guide-tag-1", repoId: REPO_ID, name: "bug", color: "d73a4a", description: null, createdAt: NOW },
+  { id: "guide-tag-2", repoId: REPO_ID, name: "feature", color: "0075ca", description: null, createdAt: NOW },
+  { id: "guide-tag-3", repoId: REPO_ID, name: "priority", color: "e4e669", description: null, createdAt: NOW },
 ]
 
 // ---------------------------------------------------------------------------
@@ -141,8 +141,20 @@ export const MOCK_MEMORIES: AgentMemory[] = [
     supersededBy: null,
     history: [
       { content: "用户使用 TypeScript", importance: 0.5, category: "编码规范", action: "create", ts: NOW - 7 * DAY },
-      { content: "用户偏好 TypeScript strict 模式", importance: 0.75, category: "编码规范", action: "update", ts: NOW - 3 * DAY },
-      { content: "用户偏好 TypeScript strict 模式，所有新文件必须启用 strictNullChecks", importance: 0.92, category: "编码规范", action: "reinforce", ts: NOW - DAY },
+      {
+        content: "用户偏好 TypeScript strict 模式",
+        importance: 0.75,
+        category: "编码规范",
+        action: "update",
+        ts: NOW - 3 * DAY,
+      },
+      {
+        content: "用户偏好 TypeScript strict 模式，所有新文件必须启用 strictNullChecks",
+        importance: 0.92,
+        category: "编码规范",
+        action: "reinforce",
+        ts: NOW - DAY,
+      },
     ],
     createdAt: NOW - 7 * DAY,
     updatedAt: NOW - DAY,
@@ -158,7 +170,13 @@ export const MOCK_MEMORIES: AgentMemory[] = [
     supersededBy: null,
     history: [
       { content: "项目使用 Tailwind CSS", importance: 0.6, category: "技术栈", action: "create", ts: NOW - 5 * DAY },
-      { content: "项目使用 Tailwind CSS 4 + zustand 状态管理，组件优先使用函数式写法", importance: 0.85, category: "技术栈", action: "merge", ts: NOW - 2 * DAY },
+      {
+        content: "项目使用 Tailwind CSS 4 + zustand 状态管理，组件优先使用函数式写法",
+        importance: 0.85,
+        category: "技术栈",
+        action: "merge",
+        ts: NOW - 2 * DAY,
+      },
     ],
     createdAt: NOW - 5 * DAY,
     updatedAt: NOW - 2 * DAY,
@@ -173,8 +191,20 @@ export const MOCK_MEMORIES: AgentMemory[] = [
     importance: 0.45,
     supersededBy: null,
     history: [
-      { content: "Git 提交信息使用 conventional commits 格式", importance: 0.7, category: "工作流", action: "create", ts: NOW - 10 * DAY },
-      { content: "Git 提交信息使用 conventional commits 格式", importance: 0.45, category: "工作流", action: "decay", ts: NOW - 4 * DAY },
+      {
+        content: "Git 提交信息使用 conventional commits 格式",
+        importance: 0.7,
+        category: "工作流",
+        action: "create",
+        ts: NOW - 10 * DAY,
+      },
+      {
+        content: "Git 提交信息使用 conventional commits 格式",
+        importance: 0.45,
+        category: "工作流",
+        action: "decay",
+        ts: NOW - 4 * DAY,
+      },
     ],
     createdAt: NOW - 10 * DAY,
     updatedAt: NOW - 4 * DAY,
@@ -201,7 +231,13 @@ let saved: Snapshot | null = null
 function resetNonTargetStores(scope: string) {
   if (!saved) return
   if (scope !== "dev") {
-    useIssueStore.setState({ issues: saved.issues, tags: saved.tags, loaded: saved.issueLoaded, viewingIssueId: null, viewingTreeRootId: null })
+    useIssueStore.setState({
+      issues: saved.issues,
+      tags: saved.tags,
+      loaded: saved.issueLoaded,
+      viewingIssueId: null,
+      viewingTreeRootId: null,
+    })
     usePrStore.setState({ pulls: saved.pulls, loaded: saved.prLoaded, viewingPrId: null })
   }
   if (scope !== "agent") {
@@ -248,7 +284,13 @@ export function injectMockData(scope: string) {
 
 export function restoreMockData() {
   if (!saved) return
-  useIssueStore.setState({ issues: saved.issues, tags: saved.tags, loaded: saved.issueLoaded, viewingIssueId: null, viewingTreeRootId: null })
+  useIssueStore.setState({
+    issues: saved.issues,
+    tags: saved.tags,
+    loaded: saved.issueLoaded,
+    viewingIssueId: null,
+    viewingTreeRootId: null,
+  })
   usePrStore.setState({ pulls: saved.pulls, loaded: saved.prLoaded, viewingPrId: null })
   useCustomAgentStore.setState({ agents: saved.agents })
   useSessionStore.setState({ sessions: saved.sessions, activeSessionId: saved.activeSessionId })

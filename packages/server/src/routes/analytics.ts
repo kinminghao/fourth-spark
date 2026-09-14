@@ -1,7 +1,7 @@
+import { and, count, eq, gte, lt, sql, sum } from "drizzle-orm"
 import { Hono } from "hono"
-import { sql, and, gte, lt, eq, sum, count } from "drizzle-orm"
 import { db } from "../db/index"
-import { sessions, repos } from "../db/schema"
+import { repos, sessions } from "../db/schema"
 import { parsePagination } from "../lib/pagination"
 import { MAX_ANALYTICS_RANGE_MS } from "../lib/validation"
 
@@ -34,8 +34,13 @@ interface AnalyticsResponse {
 }
 
 const zeroes: AnalyticsSummary = {
-  cost: 0, tokensInput: 0, tokensOutput: 0, tokensReasoning: 0,
-  tokensCacheRead: 0, tokensCacheWrite: 0, sessionCount: 0,
+  cost: 0,
+  tokensInput: 0,
+  tokensOutput: 0,
+  tokensReasoning: 0,
+  tokensCacheRead: 0,
+  tokensCacheWrite: 0,
+  sessionCount: 0,
 }
 
 function num(v: unknown): number {
@@ -83,10 +88,7 @@ analyticsRoutes.get("/summary", async (c) => {
     return c.json({ error: "groupBy must be one of: repo, day, agent" }, 400)
   }
 
-  const conditions = [
-    gte(sessions.timeCreated, from),
-    lt(sessions.timeCreated, to),
-  ]
+  const conditions = [gte(sessions.timeCreated, from), lt(sessions.timeCreated, to)]
   if (repoId) {
     conditions.push(eq(sessions.repoId, repoId))
   }

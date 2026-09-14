@@ -1,7 +1,16 @@
-import { spawn, execSync } from "node:child_process"
-import { readFileSync, writeFileSync, existsSync, openSync, statSync, truncateSync } from "node:fs"
-import { createServer, createConnection } from "node:net"
-import { PID_FILE, LOG_FILE, MAX_LOG_BYTES, ensureDataDir, isProcessRunning, findDockerCompose, getDockerComposeCmd, ensureDependencies } from "./paths"
+import { execSync, spawn } from "node:child_process"
+import { existsSync, openSync, readFileSync, statSync, truncateSync, writeFileSync } from "node:fs"
+import { createConnection, createServer } from "node:net"
+import {
+  ensureDataDir,
+  ensureDependencies,
+  findDockerCompose,
+  getDockerComposeCmd,
+  isProcessRunning,
+  LOG_FILE,
+  MAX_LOG_BYTES,
+  PID_FILE,
+} from "./paths"
 
 const DEFAULT_PORT = 3000
 const DEFAULT_PG_PORT = 5460
@@ -10,14 +19,16 @@ function parsePort(args: string[]): number | null {
   const idx = args.indexOf("--port")
   if (idx === -1 || idx + 1 >= args.length) return null
   const val = parseInt(args[idx + 1], 10)
-  return isNaN(val) ? null : val
+  return Number.isNaN(val) ? null : val
 }
 
 function isPortFree(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const srv = createServer()
     srv.once("error", () => resolve(false))
-    srv.listen(port, "0.0.0.0", () => { srv.close(() => resolve(true)) })
+    srv.listen(port, "0.0.0.0", () => {
+      srv.close(() => resolve(true))
+    })
   })
 }
 
@@ -31,9 +42,18 @@ async function findFreePort(start: number): Promise<number> {
 function isPortReachable(port: number, host = "127.0.0.1"): Promise<boolean> {
   return new Promise((resolve) => {
     const sock = createConnection({ port, host })
-    sock.once("connect", () => { sock.destroy(); resolve(true) })
-    sock.once("error", () => { sock.destroy(); resolve(false) })
-    sock.setTimeout(1000, () => { sock.destroy(); resolve(false) })
+    sock.once("connect", () => {
+      sock.destroy()
+      resolve(true)
+    })
+    sock.once("error", () => {
+      sock.destroy()
+      resolve(false)
+    })
+    sock.setTimeout(1000, () => {
+      sock.destroy()
+      resolve(false)
+    })
   })
 }
 
@@ -43,7 +63,7 @@ function getContainerPgPort(): number | null {
     const match = out.match(/:(\d+)/)
     if (match) {
       const port = parseInt(match[1], 10)
-      if (!isNaN(port)) return port
+      if (!Number.isNaN(port)) return port
     }
   } catch {
     // Container not running or no port mapping
@@ -64,7 +84,7 @@ export async function startCommand(args: string[]): Promise<void> {
 
   if (existsSync(PID_FILE)) {
     const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10)
-    if (!isNaN(pid) && isProcessRunning(pid)) {
+    if (!Number.isNaN(pid) && isProcessRunning(pid)) {
       console.log(`fourth-spark is already running (PID ${pid})`)
       console.log("Run 'fourth-spark stop' first.")
       process.exit(1)
@@ -97,7 +117,10 @@ export async function startCommand(args: string[]): Promise<void> {
       if (ready) {
         let hostReachable = false
         for (let i = 0; i < 20; i++) {
-          if (await isPortReachable(pgPort)) { hostReachable = true; break }
+          if (await isPortReachable(pgPort)) {
+            hostReachable = true
+            break
+          }
           await new Promise((r) => setTimeout(r, 500))
         }
         if (!hostReachable) ready = false

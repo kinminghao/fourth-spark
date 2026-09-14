@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { sanitizeForPg, num, str } from "../../../src/db/sync"
+import { num, sanitizeForPg, str } from "../../../src/db/sync"
 
 describe("sanitizeForPg", () => {
   test("passes clean strings through", () => {
@@ -30,8 +30,7 @@ describe("sanitizeForPg", () => {
   })
 
   test("recurses into objects", () => {
-    expect(sanitizeForPg({ key: "val\u0000ue", n: 42 }))
-      .toEqual({ key: "value", n: 42 })
+    expect(sanitizeForPg({ key: "val\u0000ue", n: 42 })).toEqual({ key: "value", n: 42 })
   })
 
   test("recurses into nested structures", () => {

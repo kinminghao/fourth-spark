@@ -14,8 +14,8 @@
 
 import type { RuntimeClient } from "../../core/runtime-client"
 import type { RuntimeHealth, RuntimeProvider } from "../../core/runtime-provider"
+import { getMessagesFromDB, getTodosFromDB, listSessionsFromDB } from "../../db/query"
 import { syncSseEvent } from "../../db/sync"
-import { listSessionsFromDB, getMessagesFromDB, getTodosFromDB } from "../../db/query"
 import { logger } from "../../middleware/logger"
 
 import { StdioRuntimeClient } from "./client"

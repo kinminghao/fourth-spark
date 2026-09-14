@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from "bun:test"
+import { beforeEach, describe, expect, mock, test } from "bun:test"
 
 // Mock process-manager to avoid heavy runtime initialization
 const mockGetClient = mock(() => null)
@@ -27,7 +27,7 @@ describe("health route — GET /", () => {
     ) as typeof fetch
 
     const res = await health.request("/")
-    const body = await res.json() as { status: string; version: string; latestVersion: string | null }
+    const body = (await res.json()) as { status: string; version: string; latestVersion: string | null }
 
     expect(res.status).toBe(200)
     expect(body.status).toBe("ok")
@@ -40,7 +40,7 @@ describe("health route — GET /", () => {
     globalThis.fetch = mock(() => Promise.reject(new Error("network error"))) as typeof fetch
 
     const res = await health.request("/")
-    const body = await res.json() as { status: string; latestVersion: string | null }
+    const body = (await res.json()) as { status: string; latestVersion: string | null }
 
     expect(res.status).toBe(200)
     expect(body.status).toBe("ok")
@@ -64,7 +64,7 @@ describe("repoHealth route — GET /", () => {
     app.route("/repos/:repoId/health", repoHealth)
 
     const res = await app.request("/repos/repo-1/health")
-    const body = await res.json() as { status: string; repoId: string }
+    const body = (await res.json()) as { status: string; repoId: string }
 
     expect(res.status).toBe(200)
     expect(body.status).toBe("not_running")
@@ -73,16 +73,14 @@ describe("repoHealth route — GET /", () => {
 
   test("returns ok with runtime details when client exists", async () => {
     mockGetClient.mockImplementation(() => ({ directory: "/tmp/repo-1" }))
-    mockHealthCheck.mockImplementation(() =>
-      Promise.resolve({ reachable: true, details: { port: 8081 } }),
-    )
+    mockHealthCheck.mockImplementation(() => Promise.resolve({ reachable: true, details: { port: 8081 } }))
 
     const { Hono } = await import("hono")
     const app = new Hono()
     app.route("/repos/:repoId/health", repoHealth)
 
     const res = await app.request("/repos/repo-1/health")
-    const body = await res.json() as any
+    const body = (await res.json()) as any
 
     expect(res.status).toBe(200)
     expect(body.status).toBe("ok")

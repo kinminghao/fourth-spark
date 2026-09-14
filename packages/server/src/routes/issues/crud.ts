@@ -1,24 +1,24 @@
-import { Hono } from "hono"
-import { eq, and, desc, inArray, count } from "drizzle-orm"
+import { and, count, desc, eq, inArray } from "drizzle-orm"
+import type { Hono } from "hono"
 import { db } from "../../db/index"
-import { issues, issueComments, repos, tags, issueTags, milestones } from "../../db/schema"
-import { parsePagination, paginatedResponse } from "../../lib/pagination"
+import { issueComments, issues, issueTags, milestones, repos, tags } from "../../db/schema"
+import { createGitIssueClient, GitApiError, type GitComment, getHostInfo } from "../../lib/git-provider"
 import { parseGitUrl } from "../../lib/git-url"
-import { createGitIssueClient, getHostInfo, GitApiError, type GitComment } from "../../lib/git-provider"
-import { logger } from "../../middleware/logger"
+import { paginatedResponse, parsePagination } from "../../lib/pagination"
 import { parseBody, parseOptionalBody } from "../../lib/validation"
+import { logger } from "../../middleware/logger"
 import {
-  SyncIssuesBody,
-  CreateIssueBody,
   AddChildBody,
-  MergeCloseBody,
-  UpdateIssueBody,
-  extractUpstreamMessage,
-  rewriteAttachmentUrls,
-  issueId,
+  CreateIssueBody,
   commentToDb,
-  issueToDb,
+  extractUpstreamMessage,
   getRepoGitClient,
+  issueId,
+  issueToDb,
+  MergeCloseBody,
+  rewriteAttachmentUrls,
+  SyncIssuesBody,
+  UpdateIssueBody,
 } from "./helpers"
 
 export function registerCrudRoutes(app: Hono): void {
@@ -33,23 +33,28 @@ export function registerCrudRoutes(app: Hono): void {
     let where: ReturnType<typeof and>
 
     if (tagFilter) {
-      const tagNames = tagFilter.split(",").map((t) => t.trim()).filter(Boolean)
+      const tagNames = tagFilter
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean)
       if (tagNames.length > 0) {
-        const matchedTags = await db.select({ id: tags.id }).from(tags)
+        const matchedTags = await db
+          .select({ id: tags.id })
+          .from(tags)
           .where(and(eq(tags.repoId, repoId), inArray(tags.name, tagNames)))
         const tagIds = matchedTags.map((t) => t.id)
 
         if (tagIds.length === 0) return c.json(paginatedResponse([], 0, pg))
 
-        const linked = await db.select({ issueId: issueTags.issueId }).from(issueTags)
+        const linked = await db
+          .select({ issueId: issueTags.issueId })
+          .from(issueTags)
           .where(inArray(issueTags.tagId, tagIds))
         const issueIdCounts = new Map<string, number>()
         for (const r of linked) {
           issueIdCounts.set(r.issueId, (issueIdCounts.get(r.issueId) ?? 0) + 1)
         }
-        const matchedIssueIds = [...issueIdCounts.entries()]
-          .filter(([, cnt]) => cnt >= tagIds.length)
-          .map(([id]) => id)
+        const matchedIssueIds = [...issueIdCounts.entries()].filter(([, cnt]) => cnt >= tagIds.length).map(([id]) => id)
 
         if (matchedIssueIds.length === 0) return c.json(paginatedResponse([], 0, pg))
 
@@ -71,7 +76,9 @@ export function registerCrudRoutes(app: Hono): void {
     }
 
     const [{ total }] = await db.select({ total: count() }).from(issues).where(where)
-    const rows = await db.select().from(issues)
+    const rows = await db
+      .select()
+      .from(issues)
       .where(where)
       .orderBy(desc(issues.updatedAt))
       .limit(pg.limit)
@@ -169,9 +176,14 @@ export function registerCrudRoutes(app: Hono): void {
         while (active < CONCURRENCY && queue.length > 0) {
           const row = queue.shift()!
           active++
-          client.listComments(row.number)
-            .then((comments) => { results.push({ issueNum: row.number, comments }) })
-            .catch((err) => { logger.warn({ err, repoId, issueNumber: row.number }, "failed to sync comments for issue") })
+          client
+            .listComments(row.number)
+            .then((comments) => {
+              results.push({ issueNum: row.number, comments })
+            })
+            .catch((err) => {
+              logger.warn({ err, repoId, issueNumber: row.number }, "failed to sync comments for issue")
+            })
             .finally(() => {
               active--
               finished++
@@ -184,7 +196,10 @@ export function registerCrudRoutes(app: Hono): void {
     })
 
     const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`comment sync timed out after ${COMMENT_SYNC_TIMEOUT_MS / 1000}s`)), COMMENT_SYNC_TIMEOUT_MS),
+      setTimeout(
+        () => reject(new Error(`comment sync timed out after ${COMMENT_SYNC_TIMEOUT_MS / 1000}s`)),
+        COMMENT_SYNC_TIMEOUT_MS,
+      ),
     )
 
     try {
@@ -204,7 +219,10 @@ export function registerCrudRoutes(app: Hono): void {
     }
 
     let totalTags = 0
-    const allDbIssues = await db.select({ id: issues.id, labels: issues.labels }).from(issues).where(eq(issues.repoId, repoId))
+    const allDbIssues = await db
+      .select({ id: issues.id, labels: issues.labels })
+      .from(issues)
+      .where(eq(issues.repoId, repoId))
     const seenTags = new Map<string, string>()
 
     for (const row of allDbIssues) {
@@ -212,14 +230,17 @@ export function registerCrudRoutes(app: Hono): void {
       for (const label of row.labels) {
         if (seenTags.has(label.name)) continue
         const tid = `${repoId}_tag_${label.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`
-        await db.insert(tags).values({
-          id: tid,
-          repoId,
-          name: label.name,
-          color: label.color || "6b7280",
-          description: null,
-          createdAt: Date.now(),
-        }).onConflictDoNothing()
+        await db
+          .insert(tags)
+          .values({
+            id: tid,
+            repoId,
+            name: label.name,
+            color: label.color || "6b7280",
+            description: null,
+            createdAt: Date.now(),
+          })
+          .onConflictDoNothing()
         seenTags.set(label.name, tid)
         totalTags++
       }
@@ -227,7 +248,10 @@ export function registerCrudRoutes(app: Hono): void {
       const tagIds = row.labels.map((l) => seenTags.get(l.name)!).filter(Boolean)
       if (tagIds.length > 0) {
         await db.delete(issueTags).where(eq(issueTags.issueId, row.id))
-        await db.insert(issueTags).values(tagIds.map((tid) => ({ issueId: row.id, tagId: tid }))).onConflictDoNothing()
+        await db
+          .insert(issueTags)
+          .values(tagIds.map((tid) => ({ issueId: row.id, tagId: tid })))
+          .onConflictDoNothing()
       }
     }
 
@@ -328,8 +352,7 @@ export function registerCrudRoutes(app: Hono): void {
     const repoId = c.req.param("repoId")!
     const number = Number(c.req.param("number"))
     const prNumber = Number(c.req.param("prNumber"))
-    if (!Number.isFinite(number) || !Number.isFinite(prNumber))
-      return c.json({ error: "invalid number" }, 400)
+    if (!Number.isFinite(number) || !Number.isFinite(prNumber)) return c.json({ error: "invalid number" }, 400)
 
     const ctx = await getRepoGitClient(repoId)
     if (!ctx) return c.json({ error: "Repo not found or git host not configured" }, 400)
@@ -339,7 +362,8 @@ export function registerCrudRoutes(app: Hono): void {
     } catch (err) {
       if (err instanceof GitApiError) {
         const msg = err.message
-        const isConflict = msg.includes("merge conflict") || msg.includes("not mergeable") || err.status === 405 || err.status === 409
+        const isConflict =
+          msg.includes("merge conflict") || msg.includes("not mergeable") || err.status === 405 || err.status === 409
         const status = isConflict ? 409 : err.status >= 400 && err.status < 600 ? err.status : 500
         const userMessage = isConflict
           ? "PR 存在合并冲突，请先解决冲突后再合入"

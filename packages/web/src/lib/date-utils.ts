@@ -29,7 +29,5 @@ export function prStateColor(state: string): string {
 }
 
 export function issueStateColor(state: string): string {
-  return state === "open"
-    ? "bg-emerald-500/15 text-emerald-400"
-    : "bg-purple-500/15 text-purple-400"
+  return state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400"
 }

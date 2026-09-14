@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import {
+  MAX_CONSOLIDATION_CONTENT_LENGTH,
+  normalizeCategory,
   sanitizeMemoryContent,
   validateMemoryContent,
-  normalizeCategory,
-  MAX_CONSOLIDATION_CONTENT_LENGTH,
 } from "../../../src/lib/memory-extractor"
 
 describe("sanitizeMemoryContent", () => {
@@ -52,10 +52,7 @@ describe("validateMemoryContent", () => {
   })
 
   test("accepts content with custom maxLength", () => {
-    const result = validateMemoryContent(
-      "a".repeat(500),
-      { maxLength: MAX_CONSOLIDATION_CONTENT_LENGTH },
-    )
+    const result = validateMemoryContent("a".repeat(500), { maxLength: MAX_CONSOLIDATION_CONTENT_LENGTH })
     expect(result).toEqual({ ok: true })
   })
 
@@ -84,10 +81,7 @@ describe("validateMemoryContent", () => {
   })
 
   test("skips forbidden patterns when option set", () => {
-    const result = validateMemoryContent(
-      "Fixed issue #123 in parser.ts",
-      { skipForbiddenPatterns: true },
-    )
+    const result = validateMemoryContent("Fixed issue #123 in parser.ts", { skipForbiddenPatterns: true })
     expect(result).toEqual({ ok: true })
   })
 })

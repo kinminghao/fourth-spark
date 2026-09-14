@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-"use strict"
 
-const { execSync } = require("child_process")
-const { createWriteStream, mkdirSync, chmodSync, existsSync, unlinkSync } = require("fs")
-const { join } = require("path")
+const { execSync } = require("node:child_process")
+const { createWriteStream, mkdirSync, chmodSync, existsSync, unlinkSync } = require("node:fs")
+const { join } = require("node:path")
 
 const REPO = "kinminghao/fourth-spark"
 
@@ -44,22 +43,22 @@ async function main() {
   await download(url, tmpFile)
 
   if (isWindows) {
-    execSync(
-      `powershell -Command "Expand-Archive -Path '${tmpFile}' -DestinationPath '${pkgDir}' -Force"`,
-    )
+    execSync(`powershell -Command "Expand-Archive -Path '${tmpFile}' -DestinationPath '${pkgDir}' -Force"`)
   } else {
     execSync(`tar xzf "${tmpFile}" -C "${pkgDir}" ./fourth-spark`, { stdio: "pipe" })
     chmodSync(binaryPath, 0o755)
   }
 
-  try { unlinkSync(tmpFile) } catch {}
+  try {
+    unlinkSync(tmpFile)
+  } catch {}
   console.log(`fourth-spark: ${version} installed successfully`)
 }
 
 function download(url, dest) {
   return new Promise((resolve, reject) => {
     const follow = (href) => {
-      const mod = href.startsWith("https") ? require("https") : require("http")
+      const mod = href.startsWith("https") ? require("node:https") : require("node:http")
       mod
         .get(href, { headers: { "User-Agent": "fourth-spark-npm" } }, (res) => {
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
@@ -72,7 +71,10 @@ function download(url, dest) {
           }
           const file = createWriteStream(dest)
           res.pipe(file)
-          file.on("finish", () => { file.close(); resolve() })
+          file.on("finish", () => {
+            file.close()
+            resolve()
+          })
           file.on("error", reject)
         })
         .on("error", reject)

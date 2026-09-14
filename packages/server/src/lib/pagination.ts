@@ -25,10 +25,7 @@ export interface PaginatedResponse<T> {
  * - `limit`  defaults to {@link DEFAULT_LIMIT}, clamped to [1, {@link MAX_LIMIT}].
  * - `offset` defaults to 0, clamped to ≥ 0.
  */
-export function parsePagination(query: {
-  limit?: string
-  offset?: string
-}): PaginationParams {
+export function parsePagination(query: { limit?: string; offset?: string }): PaginationParams {
   let limit = Number(query.limit)
   if (!Number.isFinite(limit) || limit < 1) limit = DEFAULT_LIMIT
   limit = Math.min(limit, MAX_LIMIT)
@@ -40,10 +37,6 @@ export function parsePagination(query: {
 }
 
 /** Build a {@link PaginatedResponse} from a full items array + total count. */
-export function paginatedResponse<T>(
-  items: T[],
-  total: number,
-  params: PaginationParams,
-): PaginatedResponse<T> {
+export function paginatedResponse<T>(items: T[], total: number, params: PaginationParams): PaginatedResponse<T> {
   return { items, total, limit: params.limit, offset: params.offset }
 }

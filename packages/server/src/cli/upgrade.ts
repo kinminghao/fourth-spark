@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process"
-import { existsSync, renameSync, unlinkSync, chmodSync, realpathSync } from "node:fs"
+import { chmodSync, existsSync, realpathSync, renameSync, unlinkSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { APP_VERSION } from "../lib/config"
 
@@ -30,9 +30,11 @@ export async function upgradeCommand(args: string[]): Promise<void> {
 
   const latest = canary ? await fetchLatestPreRelease() : await fetchLatestRelease()
   if (!latest) {
-    console.error(canary
-      ? "No canary release found. Check your network connection."
-      : "Failed to check for updates. Check your network connection.")
+    console.error(
+      canary
+        ? "No canary release found. Check your network connection."
+        : "Failed to check for updates. Check your network connection.",
+    )
     process.exit(1)
   }
 
@@ -52,7 +54,7 @@ export async function upgradeCommand(args: string[]): Promise<void> {
     console.log("")
     try {
       execSync("npm update -g fourth-spark", { stdio: "inherit" })
-    } catch (err) {
+    } catch (_err) {
       console.error("npm update failed. You may need to run with sudo:")
       console.error("")
       console.error("  sudo npm update -g fourth-spark")
@@ -103,11 +105,15 @@ export async function upgradeCommand(args: string[]): Promise<void> {
   } catch (err) {
     console.error("Upgrade failed, rolling back...")
     if (existsSync(backupPath)) {
-      try { renameSync(backupPath, binaryPath) } catch {}
+      try {
+        renameSync(backupPath, binaryPath)
+      } catch {}
     }
     throw err
   } finally {
-    try { unlinkSync(tmpFile) } catch {}
+    try {
+      unlinkSync(tmpFile)
+    } catch {}
   }
 
   console.log("Running database migrations...")
@@ -116,7 +122,7 @@ export async function upgradeCommand(args: string[]): Promise<void> {
     const ran = await runMigrations()
     if (ran) console.log("  Migrations applied")
     else console.log("  No pending migrations")
-  } catch (err) {
+  } catch (_err) {
     console.log("  Migration skipped (database may not be running)")
   }
 
@@ -171,7 +177,7 @@ function detectInstallMethod(): InstallMethod {
 function downloadFile(url: string, dest: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const follow = (href: string) => {
-      const mod = href.startsWith("https") ? require("https") : require("http")
+      const mod = href.startsWith("https") ? require("node:https") : require("node:http")
       mod
         .get(href, { headers: { "User-Agent": "fourth-spark-upgrade" } }, (res: any) => {
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
@@ -182,10 +188,13 @@ function downloadFile(url: string, dest: string): Promise<void> {
             reject(new Error(`HTTP ${res.statusCode}`))
             return
           }
-          const { createWriteStream } = require("fs")
+          const { createWriteStream } = require("node:fs")
           const file = createWriteStream(dest)
           res.pipe(file)
-          file.on("finish", () => { file.close(); resolve() })
+          file.on("finish", () => {
+            file.close()
+            resolve()
+          })
           file.on("error", reject)
         })
         .on("error", reject)
@@ -200,7 +209,9 @@ export async function checkForUpdates(): Promise<void> {
     if (!latest) return
     const latestVersion = latest.tag_name.replace(/^v/, "")
     if (isNewer(latestVersion, APP_VERSION)) {
-      console.log(`\x1b[33m→ New version available: ${latestVersion} (current: ${APP_VERSION}). Run 'fourth-spark upgrade' to update.\x1b[0m`)
+      console.log(
+        `\x1b[33m→ New version available: ${latestVersion} (current: ${APP_VERSION}). Run 'fourth-spark upgrade' to update.\x1b[0m`,
+      )
     }
   } catch {}
 }

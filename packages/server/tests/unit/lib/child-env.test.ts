@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { childEnv } from "../../../src/lib/child-env"
 
 describe("childEnv", () => {
@@ -63,10 +63,24 @@ describe("childEnv", () => {
 
   test("all blocklisted vars are stripped", () => {
     const blocklist = [
-      "DATABASE_URL", "HTTPS_PORT", "FRONTEND_ORIGIN", "EXTRA_ORIGINS",
-      "TLS_CERT", "TLS_KEY", "GITEA_TOKEN", "APP_VERSION", "STATIC_DIR",
-      "DEFAULT_VARIANT", "MASTER_URL", "WORKER_ID", "LOG_LEVEL", "LOG_PRETTY",
-      "CONSOLIDATION_DRY_RUN", "MEMORY_DEBUG", "SENSEVOICE_DIR", "HF_MIRROR",
+      "DATABASE_URL",
+      "HTTPS_PORT",
+      "FRONTEND_ORIGIN",
+      "EXTRA_ORIGINS",
+      "TLS_CERT",
+      "TLS_KEY",
+      "GITEA_TOKEN",
+      "APP_VERSION",
+      "STATIC_DIR",
+      "DEFAULT_VARIANT",
+      "MASTER_URL",
+      "WORKER_ID",
+      "LOG_LEVEL",
+      "LOG_PRETTY",
+      "CONSOLIDATION_DRY_RUN",
+      "MEMORY_DEBUG",
+      "SENSEVOICE_DIR",
+      "HF_MIRROR",
       "MIGRATIONS_DIR",
     ]
     // Set all blocklisted vars

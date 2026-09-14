@@ -1,12 +1,12 @@
 import { Hono } from "hono"
 import { z } from "zod"
-import { collectUsage, retagActiveInCache } from "../lib/claude-usage"
 import { switchToAccount } from "../lib/account-switcher"
-import { isWorkerMode, getWorkerConfig } from "../lib/config"
+import { authorize, exchange, removeAccount } from "../lib/claude-onboard"
+import { collectUsage, retagActiveInCache } from "../lib/claude-usage"
+import { getWorkerConfig, isWorkerMode } from "../lib/config"
 import { createLeaseClient } from "../lib/lease-client"
 import { writeLease } from "../lib/lease-writer"
 import { runtimeManager } from "../lib/process-manager"
-import { authorize, exchange, removeAccount } from "../lib/claude-onboard"
 import { parseBody } from "../lib/validation"
 
 const SwitchAccountBody = z.object({
@@ -40,9 +40,13 @@ usageRoutes.post("/switch", async (c) => {
     if (outcome.lease.expiresAt <= Date.now()) {
       return c.json({ error: "master returned stale lease" }, 502)
     }
-    await writeLease({ access: outcome.lease.access, expires: outcome.lease.expiresAt, accountId: outcome.lease.accountId })
+    await writeLease({
+      access: outcome.lease.access,
+      expires: outcome.lease.expiresAt,
+      accountId: outcome.lease.accountId,
+    })
     runtimeManager.adoptHeldAccount(outcome.lease.accountId)
-    const result = retagActiveInCache(outcome.lease.accountId) ?? await collectUsage()
+    const result = retagActiveInCache(outcome.lease.accountId) ?? (await collectUsage())
     return c.json(result)
   }
 
@@ -52,7 +56,7 @@ usageRoutes.post("/switch", async (c) => {
     const msg = err instanceof Error ? err.message : String(err)
     return c.json({ error: msg }, 400)
   }
-  const result = retagActiveInCache(body.accountId) ?? await collectUsage()
+  const result = retagActiveInCache(body.accountId) ?? (await collectUsage())
   return c.json(result)
 })
 

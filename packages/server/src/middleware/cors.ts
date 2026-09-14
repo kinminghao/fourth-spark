@@ -1,5 +1,5 @@
 import { cors } from "hono/cors"
-import { FRONTEND_ORIGIN, EXTRA_ORIGINS } from "../lib/config"
+import { EXTRA_ORIGINS, FRONTEND_ORIGIN } from "../lib/config"
 
 // All origins the server accepts: the primary frontend, Capacitor iOS, and
 // any extras from the EXTRA_ORIGINS env var.

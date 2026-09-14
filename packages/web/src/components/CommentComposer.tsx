@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react"
 import { Ellipsis, Send, Sparkles } from "lucide-react"
-import { createIssueComment, getDraft, polishComment, type IssueComment } from "../lib/api-client"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useAiPolish } from "../hooks/use-ai-polish"
+import { createIssueComment, getDraft, type IssueComment, polishComment } from "../lib/api-client"
 import { useToastStore } from "../stores/toast-store"
 
 export function CommentComposer({
@@ -17,22 +17,22 @@ export function CommentComposer({
   const [moreOpen, setMoreOpen] = useState(false)
   const moreRef = useRef<HTMLDivElement>(null)
 
-  const startPolish = useCallback(
-    () => polishComment(repoId, issueNumber, draft.trim()),
-    [repoId, issueNumber, draft],
-  )
-  const fetchResult = useCallback(
-    () => getDraft(repoId, issueNumber).then((r) => r.body),
-    [repoId, issueNumber],
-  )
+  const startPolish = useCallback(() => polishComment(repoId, issueNumber, draft.trim()), [repoId, issueNumber, draft])
+  const fetchResult = useCallback(() => getDraft(repoId, issueNumber).then((r) => r.body), [repoId, issueNumber])
   const loadExisting = useCallback(
     () => getDraft(repoId, issueNumber).then((r) => r.body || null),
     [repoId, issueNumber],
   )
 
   const {
-    phase, result: polishedBody, busy, setBusy,
-    polish, discard, escalate, setResult: setPolishedBody,
+    phase,
+    result: polishedBody,
+    busy,
+    setBusy,
+    polish,
+    discard,
+    escalate,
+    setResult: setPolishedBody,
   } = useAiPolish<string>({ repoId, startPolish, fetchResult, loadExisting })
 
   useEffect(() => {
@@ -121,7 +121,10 @@ export function CommentComposer({
               <div className="absolute right-0 bottom-full z-20 mb-1 min-w-[140px] overflow-hidden rounded-lg border border-line bg-elevated shadow-lg">
                 <button
                   type="button"
-                  onClick={() => { setMoreOpen(false); void polish() }}
+                  onClick={() => {
+                    setMoreOpen(false)
+                    void polish()
+                  }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-base/60"
                 >
                   <Sparkles className="h-3 w-3" />
@@ -129,7 +132,10 @@ export function CommentComposer({
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setMoreOpen(false); escalate() }}
+                  onClick={() => {
+                    setMoreOpen(false)
+                    escalate()
+                  }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-base/60"
                 >
                   转入深度对话
@@ -144,9 +150,7 @@ export function CommentComposer({
 
   return (
     <div className="mt-8 border-t border-line pt-6">
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-fg-4">
-        添加评论
-      </h3>
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-fg-4">添加评论</h3>
       <textarea
         value={draft}
         onChange={(e) => setDraft(e.target.value)}

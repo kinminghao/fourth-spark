@@ -1,8 +1,13 @@
-import { LEASE_CHECK_INTERVAL_MS, LEASE_RENEW_BUFFER_MS, LEASE_BACKOFF_BASE_MS, LEASE_BACKOFF_CAP_MS } from "./lease-constants"
-import { readAuthAnthropic, loadAccounts } from "./auth-files"
-import { writeLease } from "./lease-writer"
-import type { LeaseClient, LeaseFailure } from "./lease-client"
 import { logger } from "../middleware/logger"
+import { loadAccounts, readAuthAnthropic } from "./auth-files"
+import type { LeaseClient, LeaseFailure } from "./lease-client"
+import {
+  LEASE_BACKOFF_BASE_MS,
+  LEASE_BACKOFF_CAP_MS,
+  LEASE_CHECK_INTERVAL_MS,
+  LEASE_RENEW_BUFFER_MS,
+} from "./lease-constants"
+import { writeLease } from "./lease-writer"
 
 function backoffFor(priorFailures: number): number {
   return Math.min(LEASE_BACKOFF_BASE_MS * 2 ** priorFailures, LEASE_BACKOFF_CAP_MS)
@@ -20,10 +25,14 @@ function stillUsable(auth: { access?: string; expires?: number } | undefined): b
 
 function detailOf(failure: LeaseFailure): string {
   switch (failure.kind) {
-    case "no-account": return "no-account"
-    case "refused": return `refused:${failure.refused}`
-    case "unreachable": return failure.detail
-    case "bad-response": return failure.detail
+    case "no-account":
+      return "no-account"
+    case "refused":
+      return `refused:${failure.refused}`
+    case "unreachable":
+      return failure.detail
+    case "bad-response":
+      return failure.detail
   }
 }
 
@@ -42,7 +51,10 @@ export function createLeaseKeeper(client: LeaseClient) {
 
     const { lease } = outcome
     if (lease.expiresAt <= Date.now()) {
-      logger.warn({ accountId: lease.accountId, expiresAt: lease.expiresAt }, "lease-keeper: master returned stale lease, rejecting")
+      logger.warn(
+        { accountId: lease.accountId, expiresAt: lease.expiresAt },
+        "lease-keeper: master returned stale lease, rejecting",
+      )
       return { kind: "bad-response", detail: "stale expiresAt" }
     }
 
@@ -67,7 +79,10 @@ export function createLeaseKeeper(client: LeaseClient) {
       if (!failure) return
 
       if (!stillUsable(auth)) {
-        logger.error({ detail: detailOf(failure), expires: auth?.expires ?? 0 }, "lease-keeper: lease expired and renewal failed")
+        logger.error(
+          { detail: detailOf(failure), expires: auth?.expires ?? 0 },
+          "lease-keeper: lease expired and renewal failed",
+        )
       }
 
       failures += 1
@@ -78,7 +93,9 @@ export function createLeaseKeeper(client: LeaseClient) {
   }
 
   const interval = setInterval(() => {
-    void tickOnce().catch((err) => logger.warn({ error: err instanceof Error ? err.message : String(err) }, "lease-keeper: tick error"))
+    void tickOnce().catch((err) =>
+      logger.warn({ error: err instanceof Error ? err.message : String(err) }, "lease-keeper: tick error"),
+    )
   }, LEASE_CHECK_INTERVAL_MS)
   interval.unref?.()
 

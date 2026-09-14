@@ -1,9 +1,9 @@
 import { BarChart3 } from "lucide-react"
 import { useMemo } from "react"
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { useAnalyticsStore } from "../../stores/analytics-store"
-import { formatCost } from "../../lib/format"
 import type { AnalyticsGroup } from "../../lib/api-client"
+import { formatCost } from "../../lib/format"
+import { useAnalyticsStore } from "../../stores/analytics-store"
 
 interface AgentRow {
   label: string
@@ -30,7 +30,7 @@ function buildRows(groups: AnalyticsGroup[] | undefined): AgentRow[] {
   }
   return Array.from(byAgent.values())
     .filter((r) => r.userCost + r.systemCost > 0)
-    .sort((a, b) => (b.userCost + b.systemCost) - (a.userCost + a.systemCost))
+    .sort((a, b) => b.userCost + b.systemCost - (a.userCost + a.systemCost))
 }
 
 interface BarTooltipProps {
@@ -75,7 +75,15 @@ export function CostByAgentChart() {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="var(--t-line)" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="var(--t-fg-4)" interval={0} angle={-20} textAnchor="end" height={50} />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 10 }}
+                stroke="var(--t-fg-4)"
+                interval={0}
+                angle={-20}
+                textAnchor="end"
+                height={50}
+              />
               <YAxis tick={{ fontSize: 11 }} stroke="var(--t-fg-4)" tickFormatter={(v: number) => formatCost(v)} />
               <Tooltip content={<AgentTooltip />} cursor={{ fill: "var(--t-elevated)", opacity: 0.5 }} />
               <Bar dataKey="userCost" stackId="cost" fill="#3b82f6" radius={[0, 0, 0, 0]} />

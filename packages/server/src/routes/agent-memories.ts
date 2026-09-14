@@ -1,23 +1,30 @@
+import { unlink } from "node:fs/promises"
+import { and, desc, eq, inArray, isNull } from "drizzle-orm"
 import { Hono } from "hono"
 import { z } from "zod"
-import { eq, and, isNull, desc, inArray } from "drizzle-orm"
-import { db } from "../db/index"
-import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
-import type { MemoryVersion } from "../db/schema"
-import { runtimeManager } from "../lib/process-manager"
-import { getConsolidationStats, triggerManualConsolidation } from "../lib/memory-consolidation"
-import { buildExtractionData, buildFullExtractionPrompt, parseExtractionResult, executeActions, MAX_CONSOLIDATION_CONTENT_LENGTH } from "../lib/memory-extractor"
-import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "../lib/system-agents"
-import { resolveAgent } from "../lib/agent-validator"
-import { syncMessagesList } from "../db/sync"
-import { DEFAULT_VARIANT } from "../lib/config"
-import { logger } from "../middleware/logger"
-import { unlink } from "node:fs/promises"
 import type { RuntimeClient } from "../core/runtime-client"
+import { db } from "../db/index"
+import type { MemoryVersion } from "../db/schema"
+import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
+import { syncMessagesList } from "../db/sync"
+import { resolveAgent } from "../lib/agent-validator"
+import { DEFAULT_VARIANT } from "../lib/config"
+import { getConsolidationStats, triggerManualConsolidation } from "../lib/memory-consolidation"
+import {
+  buildExtractionData,
+  buildFullExtractionPrompt,
+  executeActions,
+  MAX_CONSOLIDATION_CONTENT_LENGTH,
+  parseExtractionResult,
+} from "../lib/memory-extractor"
+import { runtimeManager } from "../lib/process-manager"
+import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "../lib/system-agents"
 import { parseBody } from "../lib/validation"
+import { logger } from "../middleware/logger"
 
 async function requireMemoryEnabled(agentId: string): Promise<{ error?: string; status?: number }> {
-  const [agent] = await db.select({ id: customAgents.id, memoryEnabled: customAgents.memoryEnabled })
+  const [agent] = await db
+    .select({ id: customAgents.id, memoryEnabled: customAgents.memoryEnabled })
     .from(customAgents)
     .where(eq(customAgents.id, agentId))
   if (!agent) return { error: "Custom agent not found", status: 404 }
@@ -61,7 +68,9 @@ agentMemoryRoutes.get("/", async (c) => {
     conditions.push(eq(agentMemories.category, category))
   }
 
-  const rows = await db.select().from(agentMemories)
+  const rows = await db
+    .select()
+    .from(agentMemories)
     .where(and(...conditions))
     .orderBy(desc(agentMemories.importance), desc(agentMemories.updatedAt))
 
@@ -98,7 +107,8 @@ agentMemoryRoutes.post("/consolidate", async (c) => {
 
   try {
     triggerManualConsolidation(agentId, entries).catch((err) =>
-      logger.warn({ err, agentId }, "manual consolidation failed in background"))
+      logger.warn({ err, agentId }, "manual consolidation failed in background"),
+    )
     return c.json({ status: "started" })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -119,16 +129,19 @@ agentMemoryRoutes.post("/", async (c) => {
   const now = Date.now()
   const id = `mem_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`
 
-  const [row] = await db.insert(agentMemories).values({
-    id,
-    customAgentId: agentId,
-    sessionId: null,
-    content: body.content,
-    category: body.category ?? "general",
-    importance: body.importance ?? 0.5,
-    createdAt: now,
-    updatedAt: now,
-  }).returning()
+  const [row] = await db
+    .insert(agentMemories)
+    .values({
+      id,
+      customAgentId: agentId,
+      sessionId: null,
+      content: body.content,
+      category: body.category ?? "general",
+      importance: body.importance ?? 0.5,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning()
 
   return c.json(row, 201)
 })
@@ -144,7 +157,9 @@ agentMemoryRoutes.put("/:memId", async (c) => {
   const [body, err] = await parseBody(c, UpdateMemoryBody)
   if (err) return err
 
-  const [existing] = await db.select().from(agentMemories)
+  const [existing] = await db
+    .select()
+    .from(agentMemories)
     .where(and(eq(agentMemories.id, memId), eq(agentMemories.customAgentId, agentId)))
   if (!existing) return c.json({ error: "Memory not found" }, 404)
 
@@ -176,16 +191,21 @@ agentMemoryRoutes.delete("/:memId", async (c) => {
   const check = await requireMemoryEnabled(agentId)
   if (check.error) return c.json({ error: check.error }, check.status as 403 | 404)
 
-  const [existing] = await db.select().from(agentMemories)
+  const [existing] = await db
+    .select()
+    .from(agentMemories)
     .where(and(eq(agentMemories.id, memId), eq(agentMemories.customAgentId, agentId)))
   if (!existing) return c.json({ error: "Memory not found" }, 404)
 
-  await db.update(agentMemories).set({ supersededBy: "user-deleted", updatedAt: Date.now() }).where(eq(agentMemories.id, memId))
+  await db
+    .update(agentMemories)
+    .set({ supersededBy: "user-deleted", updatedAt: Date.now() })
+    .where(eq(agentMemories.id, memId))
   return c.json({ ok: true })
 })
 
 async function findClientForSession(sessionId: string): Promise<{ repoId: string; client: RuntimeClient } | null> {
-  const { repos: repoRows } = await import("../db/schema").then(s => ({ repos: s.repos }))
+  const { repos: repoRows } = await import("../db/schema").then((s) => ({ repos: s.repos }))
   const allRepoRows = await db.select({ id: repoRows.id }).from(repoRows)
   for (const repo of allRepoRows) {
     const client = runtimeManager.getClient(repo.id)
@@ -193,7 +213,7 @@ async function findClientForSession(sessionId: string): Promise<{ repoId: string
     try {
       await client.getSession(sessionId)
       return { repoId: repo.id, client }
-    } catch { continue }
+    } catch {}
   }
   return null
 }
@@ -208,12 +228,10 @@ agentMemoryRoutes.post("/extract", async (c) => {
   const [body, err] = await parseBody(c, ExtractMemoriesBody)
   if (err) return err
 
-  const validSessions = await db.select({ id: sessionsTable.id })
+  const validSessions = await db
+    .select({ id: sessionsTable.id })
     .from(sessionsTable)
-    .where(and(
-      inArray(sessionsTable.id, body.sessionIds),
-      eq(sessionsTable.customAgentId, agentId),
-    ))
+    .where(and(inArray(sessionsTable.id, body.sessionIds), eq(sessionsTable.customAgentId, agentId)))
 
   if (validSessions.length === 0) return c.json({ error: "No matching sessions found" }, 404)
 
@@ -227,17 +245,25 @@ agentMemoryRoutes.post("/extract", async (c) => {
     let client: RuntimeClient | null = null
     try {
       const found = await findClientForSession(session.id)
-      if (!found) { results.push({ sessionId: session.id, status: "error", error: "no running client found" }); continue }
+      if (!found) {
+        results.push({ sessionId: session.id, status: "error", error: "no running client found" })
+        continue
+      }
       client = found.client
 
       try {
         const msgs = await client.getMessages(session.id)
         syncMessagesList(session.id, msgs).catch(() => {})
-        await new Promise(r => setTimeout(r, 500))
-      } catch { /* best-effort */ }
+        await new Promise((r) => setTimeout(r, 500))
+      } catch {
+        /* best-effort */
+      }
 
       const data = await buildExtractionData(session.id, agentId)
-      if (!data) { results.push({ sessionId: session.id, status: "skipped", error: "no content to extract" }); continue }
+      if (!data) {
+        results.push({ sessionId: session.id, status: "skipped", error: "no content to extract" })
+        continue
+      }
 
       await Bun.write(inputPath, JSON.stringify(data))
       await Bun.write(outputPath, "[]")
@@ -246,11 +272,20 @@ agentMemoryRoutes.post("/extract", async (c) => {
       const extractionSession = await client.createSession({ agent, title: `[internal] memory extraction` })
       extractionSessionId = extractionSession.id
 
-      await db.insert(sessionsTable).values({
-        id: extractionSession.id, title: `[internal] memory extraction`,
-        customAgentId: MEMORY_EXTRACTOR_ID, agent: agent ?? null,
-        timeCreated: Date.now(), timeUpdated: Date.now(),
-      }).onConflictDoUpdate({ target: sessionsTable.id, set: { customAgentId: MEMORY_EXTRACTOR_ID, timeUpdated: Date.now() } })
+      await db
+        .insert(sessionsTable)
+        .values({
+          id: extractionSession.id,
+          title: `[internal] memory extraction`,
+          customAgentId: MEMORY_EXTRACTOR_ID,
+          agent: agent ?? null,
+          timeCreated: Date.now(),
+          timeUpdated: Date.now(),
+        })
+        .onConflictDoUpdate({
+          target: sessionsTable.id,
+          set: { customAgentId: MEMORY_EXTRACTOR_ID, timeUpdated: Date.now() },
+        })
 
       const fullPrompt = buildFullExtractionPrompt(MEMORY_EXTRACTOR_PROMPT, inputPath, outputPath)
       await client.prompt(extractionSession.id, fullPrompt, { agent, variant: DEFAULT_VARIANT })
@@ -258,12 +293,14 @@ agentMemoryRoutes.post("/extract", async (c) => {
       const startedAt = Date.now()
       const TIMEOUT = 120_000
       while (Date.now() - startedAt < TIMEOUT) {
-        await new Promise(r => setTimeout(r, 2_000))
+        await new Promise((r) => setTimeout(r, 2_000))
         try {
           const statuses = await client.getSessionStatus()
           const s = statuses[extractionSession.id]
           if (s && (s.type === "busy" || s.type === "retry")) continue
-        } catch { continue }
+        } catch {
+          continue
+        }
         break
       }
 
@@ -287,8 +324,12 @@ agentMemoryRoutes.post("/extract", async (c) => {
       results.push({ sessionId: session.id, status: "error", error: String(err) })
     } finally {
       if (extractionSessionId && client) client.deleteSession(extractionSessionId).catch(() => {})
-      try { await unlink(inputPath) } catch {}
-      try { await unlink(outputPath) } catch {}
+      try {
+        await unlink(inputPath)
+      } catch {}
+      try {
+        await unlink(outputPath)
+      } catch {}
     }
   }
 
@@ -301,17 +342,19 @@ agentSessionRoutes.get("/", async (c) => {
   const agentId = c.req.param("agentId")
   if (!agentId) return c.json({ error: "Missing agentId" }, 400)
 
-  const rows = await db.select({
-    id: sessionsTable.id,
-    title: sessionsTable.title,
-    agent: sessionsTable.agent,
-    cost: sessionsTable.cost,
-    tokensInput: sessionsTable.tokensInput,
-    tokensOutput: sessionsTable.tokensOutput,
-    timeCreated: sessionsTable.timeCreated,
-    timeUpdated: sessionsTable.timeUpdated,
-    completedAt: sessionsTable.completedAt,
-  }).from(sessionsTable)
+  const rows = await db
+    .select({
+      id: sessionsTable.id,
+      title: sessionsTable.title,
+      agent: sessionsTable.agent,
+      cost: sessionsTable.cost,
+      tokensInput: sessionsTable.tokensInput,
+      tokensOutput: sessionsTable.tokensOutput,
+      timeCreated: sessionsTable.timeCreated,
+      timeUpdated: sessionsTable.timeUpdated,
+      completedAt: sessionsTable.completedAt,
+    })
+    .from(sessionsTable)
     .where(eq(sessionsTable.customAgentId, agentId))
     .orderBy(desc(sessionsTable.timeCreated))
 

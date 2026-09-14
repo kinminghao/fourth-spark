@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm"
+import type { GitPlatformFactory } from "../core/types"
 import { db } from "../db/index"
 import { gitHosts } from "../db/schema"
-import type { GitPlatformFactory } from "../core/types"
 
 const ENV_TOKEN = process.env.GITEA_TOKEN ?? ""
 
@@ -39,7 +39,7 @@ export interface GitIssue {
 
 export interface GitMilestone {
   id: number
-  number: number    // GitHub field name; Gitea uses `id` for some endpoints
+  number: number // GitHub field name; Gitea uses `id` for some endpoints
   title: string
   description: string
   state: "open" | "closed"
@@ -129,7 +129,11 @@ export interface GitIssueClient {
   listComments(issueNumber: number): Promise<GitComment[]>
   listMilestones(opts?: { state?: "open" | "closed" | "all" }): Promise<GitMilestone[]>
   createPullRequest(input: CreatePullRequestInput): Promise<GitPullRequest>
-  listPullRequests(opts?: { state?: "open" | "closed" | "all"; page?: number; limit?: number }): Promise<GitPullRequest[]>
+  listPullRequests(opts?: {
+    state?: "open" | "closed" | "all"
+    page?: number
+    limit?: number
+  }): Promise<GitPullRequest[]>
   getPullRequest(number: number): Promise<GitPullRequest>
   listIssuePullRequests(issueNumber: number): Promise<GitPullRequest[]>
   mergePullRequest(prNumber: number): Promise<void>
@@ -156,7 +160,13 @@ function authHeader(token: string, platform: Platform): string {
   return `token ${token}`
 }
 
-export function createGitIssueClient(host: string, owner: string, repo: string, token: string, platform: Platform): GitIssueClient {
+export function createGitIssueClient(
+  host: string,
+  owner: string,
+  repo: string,
+  token: string,
+  platform: Platform,
+): GitIssueClient {
   const base = `${apiBase(host, platform)}/repos/${owner}/${repo}`
 
   async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -192,12 +202,8 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
       head: { ref: head.ref ?? "", label: head.label },
       base: { ref: baseBranch.ref ?? "", label: baseBranch.label },
       user: { login: user.login ?? "", avatar_url: user.avatar_url ?? "" },
-      assignees: Array.isArray(raw.assignees)
-        ? (raw.assignees as Array<{ login: string; avatar_url: string }>)
-        : [],
-      labels: Array.isArray(raw.labels)
-        ? (raw.labels as Array<{ id: number; name: string; color: string }>)
-        : [],
+      assignees: Array.isArray(raw.assignees) ? (raw.assignees as Array<{ login: string; avatar_url: string }>) : [],
+      labels: Array.isArray(raw.labels) ? (raw.labels as Array<{ id: number; name: string; color: string }>) : [],
       draft: typeof raw.draft === "boolean" ? raw.draft : false,
       comments: typeof raw.comments === "number" ? raw.comments : 0,
       created_at: (raw.created_at as string) ?? "",
@@ -323,7 +329,7 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
         additions: typeof f.additions === "number" ? f.additions : 0,
         deletions: typeof f.deletions === "number" ? f.deletions : 0,
         changes: typeof f.changes === "number" ? f.changes : 0,
-        previous_filename: (f.previous_filename as string | undefined),
+        previous_filename: f.previous_filename as string | undefined,
       }))
     },
 
@@ -347,7 +353,7 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
             email: (committer.email as string) ?? "",
             date: (committer.date as string) ?? "",
           },
-          html_url: (c.html_url as string | undefined),
+          html_url: c.html_url as string | undefined,
         }
       })
     },
@@ -355,17 +361,12 @@ export function createGitIssueClient(host: string, owner: string, repo: string, 
     async listIssuePullRequests(issueNumber) {
       try {
         // Use timeline API to find cross-referenced PR numbers
-        const events = await request<Record<string, unknown>[]>(
-          "GET",
-          `/issues/${issueNumber}/timeline`,
-        )
+        const events = await request<Record<string, unknown>[]>("GET", `/issues/${issueNumber}/timeline`)
         const prNumbers = new Set<number>()
         for (const event of events) {
           const ref =
             (event.ref_issue as Record<string, unknown> | undefined) ??
-            ((event.source as Record<string, unknown> | undefined)?.issue as
-              | Record<string, unknown>
-              | undefined)
+            ((event.source as Record<string, unknown> | undefined)?.issue as Record<string, unknown> | undefined)
           if (!ref?.pull_request) continue
           const num = ref.number as number
           prNumbers.add(num)

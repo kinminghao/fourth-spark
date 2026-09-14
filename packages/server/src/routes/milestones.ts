@@ -1,5 +1,5 @@
+import { and, desc, eq } from "drizzle-orm"
 import { Hono } from "hono"
-import { eq, and, desc } from "drizzle-orm"
 import { db } from "../db/index"
 import { milestones } from "../db/schema"
 
@@ -12,13 +12,13 @@ milestoneRoutes.get("/", async (c) => {
 
   let rows
   if (state && state !== "all") {
-    rows = await db.select().from(milestones)
+    rows = await db
+      .select()
+      .from(milestones)
       .where(and(eq(milestones.repoId, repoId), eq(milestones.state, state)))
       .orderBy(desc(milestones.updatedAt))
   } else {
-    rows = await db.select().from(milestones)
-      .where(eq(milestones.repoId, repoId))
-      .orderBy(desc(milestones.updatedAt))
+    rows = await db.select().from(milestones).where(eq(milestones.repoId, repoId)).orderBy(desc(milestones.updatedAt))
   }
   return c.json(rows)
 })

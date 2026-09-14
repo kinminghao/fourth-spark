@@ -1,7 +1,7 @@
-import { Hono } from "hono"
-import { resolve, dirname, basename } from "node:path"
-import { readdirSync, lstatSync, existsSync } from "node:fs"
+import { existsSync, lstatSync, readdirSync } from "node:fs"
 import { homedir } from "node:os"
+import { dirname, resolve } from "node:path"
+import { Hono } from "hono"
 import { z } from "zod"
 import { parseOptionalBody } from "../lib/validation"
 
@@ -28,12 +28,7 @@ const SENSITIVE_DIRS = new Set([
 ])
 
 /** Directories filtered by default (noise), shown only when showHidden is true. */
-const NOISE_DIRS = new Set([
-  "node_modules",
-  ".Trash",
-  ".Trashes",
-  "$RECYCLE.BIN",
-])
+const NOISE_DIRS = new Set(["node_modules", ".Trash", ".Trashes", "$RECYCLE.BIN"])
 
 function isHidden(name: string): boolean {
   return name.startsWith(".")
@@ -106,10 +101,7 @@ fsRoutes.post("/browse", async (c) => {
 
       const isGitRepo = existsSync(resolve(fullPath, ".git"))
       entries.push({ name, isGitRepo })
-    } catch {
-      // Permission denied or other fs error — skip silently
-      continue
-    }
+    } catch {}
   }
 
   // Sort: git repos first, then alphabetical

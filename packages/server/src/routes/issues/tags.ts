@@ -1,8 +1,8 @@
-import { Hono } from "hono"
-import { z } from "zod"
 import { eq } from "drizzle-orm"
+import type { Hono } from "hono"
+import { z } from "zod"
 import { db } from "../../db/index"
-import { tags, issueTags, issues } from "../../db/schema"
+import { issues, issueTags, tags } from "../../db/schema"
 import { parseBody } from "../../lib/validation"
 
 const SetIssueTagsBody = z.object({

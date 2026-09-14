@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, mock } from "bun:test"
+import { beforeEach, describe, expect, mock, test } from "bun:test"
 
 // Mock api-client before importing the store
 const mockListRepos = mock(() => Promise.resolve([]))
@@ -52,12 +52,17 @@ describe("repo-store", () => {
 
   test("loadRepos sets loading state", async () => {
     let resolveRepos: (v: any) => void
-    mockListRepos.mockImplementation(() => new Promise((r) => { resolveRepos = r }))
+    mockListRepos.mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolveRepos = r
+        }),
+    )
 
     const promise = useRepoStore.getState().loadRepos()
     expect(useRepoStore.getState().loading).toBe(true)
 
-    resolveRepos!([])
+    resolveRepos?.([])
     await promise
     expect(useRepoStore.getState().loading).toBe(false)
   })
@@ -112,9 +117,7 @@ describe("repo-store", () => {
 
   test("addRepo appends to repos and sets active", async () => {
     useRepoStore.setState({ repos: [{ id: "r1", name: "existing" } as any] })
-    mockCreateRepo.mockImplementation(() =>
-      Promise.resolve({ id: "r2", name: "new-repo" }),
-    )
+    mockCreateRepo.mockImplementation(() => Promise.resolve({ id: "r2", name: "new-repo" }))
 
     const result = await useRepoStore.getState().addRepo("new-repo", "url", "/path")
     expect(result).toEqual({ id: "r2", name: "new-repo" })
@@ -132,10 +135,7 @@ describe("repo-store", () => {
 
   test("removeRepo filters out the repo", async () => {
     useRepoStore.setState({
-      repos: [
-        { id: "r1", name: "repo-1" } as any,
-        { id: "r2", name: "repo-2" } as any,
-      ],
+      repos: [{ id: "r1", name: "repo-1" } as any, { id: "r2", name: "repo-2" } as any],
       activeRepoId: "r1",
     })
 

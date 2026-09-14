@@ -1,23 +1,16 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react"
-import { ArrowUp } from "lucide-react"
 import clsx from "clsx"
-import { useSessionStore, EMPTY_MESSAGES } from "../stores/session-store"
-import { useRepoStore } from "../stores/repo-store"
-import { useDraftStore } from "../stores/draft-store"
-import { classifyPart, isQuestionPending } from "../lib/message-parts"
+import { ArrowUp } from "lucide-react"
+import { type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useVoiceInput } from "../hooks/use-voice-input"
 import type { ModelInfo } from "../lib/api-client"
 import { getSettings, listModels } from "../lib/api-client"
+import { classifyPart, isQuestionPending } from "../lib/message-parts"
+import { useDraftStore } from "../stores/draft-store"
+import { useRepoStore } from "../stores/repo-store"
+import { EMPTY_MESSAGES, useSessionStore } from "../stores/session-store"
 import { AttachButton, AttachmentStrip, shouldFoldText, useAttachments } from "./Attachments"
 import { VoiceButton } from "./VoiceButton"
 import { VoiceOverlay, VoiceStatusBar } from "./VoiceOverlay"
-import { useVoiceInput } from "../hooks/use-voice-input"
 
 const MAX_HEIGHT_PX = 200
 
@@ -76,14 +69,14 @@ export function InputBar() {
   const voice = useVoiceInput(handleVoiceSubmit)
 
   useEffect(() => {
-    if (!activeRepoId) { setPinnedModels([]); return }
+    if (!activeRepoId) {
+      setPinnedModels([])
+      return
+    }
     let cancelled = false
     void (async () => {
       try {
-        const [settings, models] = await Promise.all([
-          getSettings(),
-          listModels(activeRepoId),
-        ])
+        const [settings, models] = await Promise.all([getSettings(), listModels(activeRepoId)])
         if (cancelled) return
         const raw = settings.pinned_models
         const pinnedIds: string[] = raw ? JSON.parse(raw) : []
@@ -93,7 +86,9 @@ export function InputBar() {
         if (!cancelled) setPinnedModels([])
       }
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [activeRepoId])
 
   useEffect(() => {
@@ -104,13 +99,21 @@ export function InputBar() {
         if (cancelled) return
         const raw = s.quick_inputs
         if (raw) {
-          try { setQuickInputs(JSON.parse(raw)) } catch { /* ignore bad JSON */ }
+          try {
+            setQuickInputs(JSON.parse(raw))
+          } catch {
+            /* ignore bad JSON */
+          }
         } else {
           setQuickInputs([{ label: "继续", text: "继续", autoSend: true }])
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const busy = status === "busy" && !hasPendingQuestion
@@ -123,14 +126,26 @@ export function InputBar() {
     }
     element.style.height = "auto"
     element.style.height = `${Math.min(element.scrollHeight, MAX_HEIGHT_PX)}px`
-  }, [value])
+  }, [])
 
   // Unknown model (default / unpinned) stays permissive; only a hard false blocks
   const imagesAllowed = pinnedModels.find((m) => m.id === selectedModel)?.supportsImage !== false
-  const { attachments, foldedTexts, promptFiles, error: attachError, addFiles, onPaste: imageOnPaste, addFoldedText, expandFoldedTexts, remove, removeFoldedText, clear } = useAttachments(imagesAllowed)
+  const {
+    attachments,
+    foldedTexts,
+    promptFiles,
+    error: attachError,
+    addFiles,
+    onPaste: imageOnPaste,
+    addFoldedText,
+    expandFoldedTexts,
+    remove,
+    removeFoldedText,
+    clear,
+  } = useAttachments(imagesAllowed)
 
   useEffect(() => {
-    setValue(activeSessionId ? useDraftStore.getState().drafts[activeSessionId] ?? "" : "")
+    setValue(activeSessionId ? (useDraftStore.getState().drafts[activeSessionId] ?? "") : "")
     clear()
     voice.stt.stop()
   }, [activeSessionId, clear, voice.stt.stop])
@@ -176,7 +191,13 @@ export function InputBar() {
     if (disabled || (!content && attachments.length === 0)) {
       return
     }
-    const ok = await sendMessage(activeRepoId!, content, selectedModel || undefined, selectedVariant || undefined, promptFiles.length > 0 ? promptFiles : undefined)
+    const ok = await sendMessage(
+      activeRepoId!,
+      content,
+      selectedModel || undefined,
+      selectedVariant || undefined,
+      promptFiles.length > 0 ? promptFiles : undefined,
+    )
     if (ok) {
       setValue("")
       clear()
@@ -238,7 +259,8 @@ export function InputBar() {
               disabled={disabled}
               onClick={() => {
                 if (qi.autoSend) {
-                  if (activeRepoId) void sendMessage(activeRepoId, qi.text, selectedModel || undefined, selectedVariant || undefined)
+                  if (activeRepoId)
+                    void sendMessage(activeRepoId, qi.text, selectedModel || undefined, selectedVariant || undefined)
                 } else {
                   setValue(qi.text)
                   if (activeSessionId) setDraft(activeSessionId, qi.text)
@@ -255,14 +277,10 @@ export function InputBar() {
       <div
         className={clsx(
           "mx-auto flex max-w-4xl items-start gap-2 rounded-lg border px-3 py-2 transition-colors duration-150",
-          disabled
-            ? "border-line"
-            : "border-fg-5 focus-within:border-fg-4",
+          disabled ? "border-line" : "border-fg-5 focus-within:border-fg-4",
         )}
       >
-        <span className={clsx("select-none pt-px font-mono text-sm leading-6", promptColor)}>
-          ❯
-        </span>
+        <span className={clsx("select-none pt-px font-mono text-sm leading-6", promptColor)}>❯</span>
         <textarea
           ref={textareaRef}
           rows={2}
@@ -278,11 +296,7 @@ export function InputBar() {
           placeholder={placeholder}
           className="flex-1 resize-none bg-transparent font-mono text-sm leading-6 text-fg placeholder:text-fg-6 focus:outline-none disabled:cursor-not-allowed"
         />
-        <AttachButton
-          onFiles={(files) => void addFiles(files)}
-          disabled={disabled}
-          allowed={imagesAllowed}
-        />
+        <AttachButton onFiles={(files) => void addFiles(files)} disabled={disabled} allowed={imagesAllowed} />
         <VoiceButton
           isListening={voice.stt.isListening}
           disabled={disabled}
@@ -302,14 +316,14 @@ export function InputBar() {
 
       {voice.stt.phase === "idle" ? (
         <div className="mx-auto mt-1.5 flex max-w-4xl items-center gap-3 pl-5">
-          {voice.stt.error && (
-            <span className="font-mono text-[10px] text-red-400">{voice.stt.error}</span>
-          )}
+          {voice.stt.error && <span className="font-mono text-[10px] text-red-400">{voice.stt.error}</span>}
           <span className="font-mono text-[10px] text-fg-6">⏎ to run · shift+⏎ for newline</span>
           <div className="ml-auto flex min-w-0 shrink items-center gap-1.5">
             <select
               value={selectedVariant}
-              onChange={(e) => { if (activeSessionId) setSessionVariant(activeSessionId, e.target.value) }}
+              onChange={(e) => {
+                if (activeSessionId) setSessionVariant(activeSessionId, e.target.value)
+              }}
               className="w-16 min-w-0 rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[11px] text-fg-4 focus:border-fg-5 focus:outline-none"
             >
               <option value="">默认</option>
@@ -319,12 +333,16 @@ export function InputBar() {
             {pinnedModels.length > 0 && (
               <select
                 value={selectedModel}
-                onChange={(e) => { if (activeSessionId) setSessionModel(activeSessionId, e.target.value) }}
+                onChange={(e) => {
+                  if (activeSessionId) setSessionModel(activeSessionId, e.target.value)
+                }}
                 className="w-24 min-w-0 rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[11px] text-fg-4 focus:border-fg-5 focus:outline-none"
               >
                 <option value="">默认模型</option>
                 {pinnedModels.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name || m.id}</option>
+                  <option key={m.id} value={m.id}>
+                    {m.name || m.id}
+                  </option>
                 ))}
               </select>
             )}

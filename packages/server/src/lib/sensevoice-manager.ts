@@ -1,6 +1,6 @@
-import { homedir, arch, platform } from "node:os"
+import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statfsSync, unlinkSync } from "node:fs"
+import { arch, homedir, platform } from "node:os"
 import { join } from "node:path"
-import { existsSync, mkdirSync, chmodSync, renameSync, unlinkSync, rmSync, statfsSync, readdirSync } from "node:fs"
 import { logger } from "../middleware/logger"
 
 const SENSEVOICE_VERSION = "runtime-llamacpp-v0.1.9"
@@ -83,7 +83,9 @@ async function downloadWithProgress(url: string, dest: string, label: string): P
   const total = Number(res.headers.get("content-length") || 0)
 
   if (total > 0 && !hasDiskSpace(join(dest, ".."), total, label)) {
-    for await (const _ of res.body) { /* drain */ }
+    for await (const _ of res.body) {
+      /* drain */
+    }
     return
   }
 
@@ -108,12 +110,16 @@ async function downloadWithProgress(url: string, dest: string, label: string): P
     }
     await file.end()
   } catch (err) {
-    try { unlinkSync(tmpDest) } catch {}
+    try {
+      unlinkSync(tmpDest)
+    } catch {}
     throw err
   }
 
   if (total > 0 && received !== total) {
-    try { unlinkSync(tmpDest) } catch {}
+    try {
+      unlinkSync(tmpDest)
+    } catch {}
     throw new Error(`${label} size mismatch: expected ${formatBytes(total)}, got ${formatBytes(received)}`)
   }
 
@@ -142,7 +148,9 @@ async function downloadBinary(platformKey: PlatformKey): Promise<void> {
   chmodSync(binaryPath, 0o755)
 
   rmSync(extractDir, { recursive: true, force: true })
-  try { unlinkSync(tarPath) } catch {}
+  try {
+    unlinkSync(tarPath)
+  } catch {}
   logger.info("sensevoice binary extracted")
 }
 

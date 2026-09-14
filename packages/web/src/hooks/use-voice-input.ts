@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react"
+import { type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useSpeechToText } from "./use-speech-to-text"
 
 const VOICE_TEXTAREA_MAX_HEIGHT_PX = 240
@@ -20,9 +13,7 @@ const TICK_INTERVAL_MS = 1000
  * `onSubmit` may return `false` to signal failure (transcript is kept);
  * any other return (including `void`) is treated as success.
  */
-export function useVoiceInput(
-  onSubmit: (text: string) => void | boolean | Promise<void | boolean>,
-) {
+export function useVoiceInput(onSubmit: (text: string) => undefined | boolean | Promise<undefined | boolean>) {
   const stt = useSpeechToText()
   const [editText, setEditText] = useState("")
   const [elapsed, setElapsed] = useState(0)
@@ -37,9 +28,7 @@ export function useVoiceInput(
       startTimeRef.current = Date.now()
       setElapsed(0)
       timerRef.current = setInterval(() => {
-        setElapsed(
-          Math.floor((Date.now() - startTimeRef.current) / 1000),
-        )
+        setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000))
       }, TICK_INTERVAL_MS)
     } else {
       if (timerRef.current) {
@@ -75,7 +64,7 @@ export function useVoiceInput(
     if (!el) return
     el.style.height = "auto"
     el.style.height = `${Math.min(el.scrollHeight, VOICE_TEXTAREA_MAX_HEIGHT_PX)}px`
-  }, [stt.phase, editText])
+  }, [stt.phase])
 
   // ── Cancel / Confirm ─────────────────────────────────────────────────
   const cancel = useCallback(() => {
@@ -86,7 +75,10 @@ export function useVoiceInput(
 
   const confirm = useCallback(async () => {
     const text = editText.trim()
-    if (!text) { cancel(); return }
+    if (!text) {
+      cancel()
+      return
+    }
     const result = await onSubmit(text)
     if (result === false) return
     stt.resetTranscript()
@@ -102,11 +94,7 @@ export function useVoiceInput(
         cancel()
         return
       }
-      if (
-        stt.phase === "done" &&
-        e.key === "Enter" &&
-        (e.metaKey || e.ctrlKey)
-      ) {
+      if (stt.phase === "done" && e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         if ((e as unknown as { isComposing?: boolean }).isComposing) return
         e.preventDefault()
         void confirm()

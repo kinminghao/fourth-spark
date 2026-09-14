@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from "bun:test"
+import { beforeEach, describe, expect, mock, test } from "bun:test"
 
 // Mock db module before importing routes
 const mockRows: Array<{ key: string; value: string }> = []
@@ -36,7 +36,7 @@ describe("settings routes", () => {
     mockRows.push({ key: "theme", value: "dark" }, { key: "lang", value: "en" })
 
     const res = await settingsRoutes.request("/")
-    const body = await res.json() as Record<string, string>
+    const body = (await res.json()) as Record<string, string>
 
     expect(res.status).toBe(200)
     expect(body.theme).toBe("dark")
@@ -45,7 +45,7 @@ describe("settings routes", () => {
 
   test("GET / returns empty object when no settings", async () => {
     const res = await settingsRoutes.request("/")
-    const body = await res.json() as Record<string, string>
+    const body = (await res.json()) as Record<string, string>
 
     expect(res.status).toBe(200)
     expect(Object.keys(body)).toHaveLength(0)
@@ -57,7 +57,7 @@ describe("settings routes", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ value: "dark" }),
     })
-    const body = await res.json() as { ok: boolean }
+    const body = (await res.json()) as { ok: boolean }
 
     expect(res.status).toBe(200)
     expect(body.ok).toBe(true)
@@ -88,7 +88,7 @@ describe("settings routes", () => {
     const res = await settingsRoutes.request("/theme", {
       method: "DELETE",
     })
-    const body = await res.json() as { ok: boolean }
+    const body = (await res.json()) as { ok: boolean }
 
     expect(res.status).toBe(200)
     expect(body.ok).toBe(true)

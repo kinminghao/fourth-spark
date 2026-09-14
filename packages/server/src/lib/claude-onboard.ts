@@ -13,12 +13,12 @@
 import { createHash, randomBytes } from "node:crypto"
 import { logger } from "../middleware/logger"
 import {
-  loadAccounts,
-  saveAccounts,
-  writeAuthAnthropic,
-  withAuthLock,
   applyToken,
+  loadAccounts,
   type StoredAccount,
+  saveAccounts,
+  withAuthLock,
+  writeAuthAnthropic,
 } from "./auth-files"
 
 // ---------------------------------------------------------------------------
@@ -73,7 +73,13 @@ export type AuthorizeResult = {
 
 export type ExchangeResult =
   | { ok: true; id: string; label: string; existing: boolean }
-  | { ok: false; reason: "unknown-pending" | "expired" | "exhausted" | "exchange-failed" | "profile-failed" | "throttled"; detail?: string; attemptsLeft?: number; retryAfterMs?: number }
+  | {
+      ok: false
+      reason: "unknown-pending" | "expired" | "exhausted" | "exchange-failed" | "profile-failed" | "throttled"
+      detail?: string
+      attemptsLeft?: number
+      retryAfterMs?: number
+    }
 
 type ProfileResult = {
   uuid: string
@@ -192,7 +198,12 @@ export async function exchange(pendingId: string, code: string): Promise<Exchang
       pendings.delete(pendingId)
       return { ok: false, reason: "exhausted" }
     }
-    return { ok: false, reason: "exchange-failed", detail: `HTTP ${tokenRes.status}: ${body.slice(0, 200)}`, attemptsLeft }
+    return {
+      ok: false,
+      reason: "exchange-failed",
+      detail: `HTTP ${tokenRes.status}: ${body.slice(0, 200)}`,
+      attemptsLeft,
+    }
   }
 
   const tokenJson = (await tokenRes.json()) as {
@@ -224,11 +235,16 @@ export async function exchange(pendingId: string, code: string): Promise<Exchang
   }
 
   // Upsert into account pool + write auth.json
-  const existing = await upsertAccount(profile.uuid, profile.email, {
-    refresh: refreshToken,
-    access: accessToken,
-    expires: expiresAt,
-  }, profile.subscription)
+  const existing = await upsertAccount(
+    profile.uuid,
+    profile.email,
+    {
+      refresh: refreshToken,
+      access: accessToken,
+      expires: expiresAt,
+    },
+    profile.subscription,
+  )
 
   // Write auth.json so the runtime picks it up immediately
   await writeAuthAnthropic({
@@ -243,12 +259,14 @@ export async function exchange(pendingId: string, code: string): Promise<Exchang
     const { getRegistry } = await import("../core/registry")
     for (const provider of getRegistry().providers.values()) {
       if (provider.id === "opencode") continue
-      await provider.credentialWriter.write({
-        kind: "full",
-        refresh: refreshToken,
-        access: accessToken,
-        expires: expiresAt,
-      }).catch(() => {})
+      await provider.credentialWriter
+        .write({
+          kind: "full",
+          refresh: refreshToken,
+          access: accessToken,
+          expires: expiresAt,
+        })
+        .catch(() => {})
     }
   } catch {}
 

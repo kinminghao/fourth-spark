@@ -1,10 +1,12 @@
-export const APP_VERSION = process.env.APP_VERSION ?? (() => {
-  try {
-    return require("child_process").execSync("git rev-parse --short HEAD", { stdio: "pipe" }).toString().trim()
-  } catch {
-    return "dev"
-  }
-})()
+export const APP_VERSION =
+  process.env.APP_VERSION ??
+  (() => {
+    try {
+      return require("node:child_process").execSync("git rev-parse --short HEAD", { stdio: "pipe" }).toString().trim()
+    } catch {
+      return "dev"
+    }
+  })()
 
 const DEFAULT_FRONTEND_ORIGIN = "http://localhost:5173"
 const DEFAULT_PORT = 3000
@@ -120,10 +122,19 @@ const DEFAULT_OPENCODE_READY_TIMEOUT_MS = 30_000
 const DEFAULT_OPENCODE_POLL_TIMEOUT_MS = 1000
 const DEFAULT_OPENCODE_POLL_INTERVAL_MS = 500
 
-export const OPENCODE_READY_TIMEOUT_MS = Number(process.env.OPENCODE_READY_TIMEOUT_MS ?? DEFAULT_OPENCODE_READY_TIMEOUT_MS)
+export const OPENCODE_READY_TIMEOUT_MS = Number(
+  process.env.OPENCODE_READY_TIMEOUT_MS ?? DEFAULT_OPENCODE_READY_TIMEOUT_MS,
+)
 export const OPENCODE_POLL_TIMEOUT_MS = Number(process.env.OPENCODE_POLL_TIMEOUT_MS ?? DEFAULT_OPENCODE_POLL_TIMEOUT_MS)
-export const OPENCODE_POLL_INTERVAL_MS = Number(process.env.OPENCODE_POLL_INTERVAL_MS ?? DEFAULT_OPENCODE_POLL_INTERVAL_MS)
+export const OPENCODE_POLL_INTERVAL_MS = Number(
+  process.env.OPENCODE_POLL_INTERVAL_MS ?? DEFAULT_OPENCODE_POLL_INTERVAL_MS,
+)
 
 export function getDefaultWorkerId(): string {
-  return hostname().replace(/\.local$/, "").replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 64) || "worker-1"
+  return (
+    hostname()
+      .replace(/\.local$/, "")
+      .replace(/[^A-Za-z0-9._-]/g, "-")
+      .slice(0, 64) || "worker-1"
+  )
 }

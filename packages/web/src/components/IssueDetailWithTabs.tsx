@@ -1,12 +1,19 @@
-import { useEffect, useState } from "react"
-import { AlertTriangle, ArrowLeft, CircleDot, GitPullRequest } from "lucide-react"
 import clsx from "clsx"
-import { type Issue, type Milestone, type PersistentPullRequest, type PullRequest, listIssuePullRequests, getPull } from "../lib/api-client"
-import { useRepoStore } from "../stores/repo-store"
+import { AlertTriangle, ArrowLeft, CircleDot, GitPullRequest } from "lucide-react"
+import { useEffect, useState } from "react"
+import {
+  getPull,
+  type Issue,
+  listIssuePullRequests,
+  type Milestone,
+  type PersistentPullRequest,
+  type PullRequest,
+} from "../lib/api-client"
 import { usePrStore } from "../stores/pr-store"
+import { useRepoStore } from "../stores/repo-store"
 import { IssueDetailPanel } from "./IssueDetailPanel"
-import { PrDetailPanel } from "./PrDetailPanel"
 import { LinkedPrList } from "./LinkedPrList"
+import { PrDetailPanel } from "./PrDetailPanel"
 
 export type DetailTab = "issue" | "pr"
 
@@ -57,10 +64,18 @@ export function IssueDetailWithTabs({
     let cancelled = false
     setLoadingPr(true)
     getPull(activeRepoId, prNumber)
-      .then((pr) => { if (!cancelled) setSelectedPr(pr) })
-      .catch(() => { if (!cancelled) setSelectedPr(null) })
-      .finally(() => { if (!cancelled) setLoadingPr(false) })
-    return () => { cancelled = true }
+      .then((pr) => {
+        if (!cancelled) setSelectedPr(pr)
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedPr(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPr(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [activeRepoId, prNumber])
 
   const hasConflict = linkedPRs.some((p) => p.mergeable === false)
@@ -74,9 +89,7 @@ export function IssueDetailWithTabs({
             onClick={() => onTabChange("issue")}
             className={clsx(
               "flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-medium transition-colors",
-              tab === "issue"
-                ? "border-blue-500 text-fg"
-                : "border-transparent text-fg-4 hover:text-fg-2",
+              tab === "issue" ? "border-blue-500 text-fg" : "border-transparent text-fg-4 hover:text-fg-2",
             )}
           >
             <CircleDot className="h-3.5 w-3.5" />
@@ -87,17 +100,17 @@ export function IssueDetailWithTabs({
             onClick={() => onTabChange("pr")}
             className={clsx(
               "flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-medium transition-colors",
-              tab === "pr"
-                ? "border-blue-500 text-fg"
-                : "border-transparent text-fg-4 hover:text-fg-2",
+              tab === "pr" ? "border-blue-500 text-fg" : "border-transparent text-fg-4 hover:text-fg-2",
             )}
           >
             <GitPullRequest className="h-3.5 w-3.5" />
             PR
-            <span className={clsx(
-              "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
-              tab === "pr" ? "bg-blue-500/10 text-blue-500" : "bg-elevated text-fg-5",
-            )}>
+            <span
+              className={clsx(
+                "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+                tab === "pr" ? "bg-blue-500/10 text-blue-500" : "bg-elevated text-fg-5",
+              )}
+            >
               {linkedPRs.length}
             </span>
             {hasConflict && (
@@ -130,11 +143,7 @@ export function IssueDetailWithTabs({
                 返回列表
               </button>
             </div>
-            <PrDetailPanel
-              pr={selectedPr}
-              onBack={onBackToPrList}
-              onEnterMatch={() => enterMatchMode(selectedPr.id)}
-            />
+            <PrDetailPanel pr={selectedPr} onBack={onBackToPrList} onEnterMatch={() => enterMatchMode(selectedPr.id)} />
           </div>
         ) : (
           <div className="flex flex-1 items-center justify-center">

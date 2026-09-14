@@ -1,21 +1,20 @@
-import { memo, useCallback, useEffect, useReducer, useRef, useState } from "react"
+import clsx from "clsx"
 import { CheckCircle2, ChevronLeft, ChevronRight, Copy, Pencil, Pin, Plus, Search, X } from "lucide-react"
+import { memo, useCallback, useEffect, useReducer, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import clsx from "clsx"
-import type { Session, Todo } from "../lib/api-client"
-import { useSessionStore, EMPTY_TODOS, EMPTY_MESSAGES } from "../stores/session-store"
-import { countCompletedTodos, normalizeTodoStatus } from "../lib/message-parts"
-import { useRepoStore } from "../stores/repo-store"
-import { useIssueStore } from "../stores/issue-store"
-import { useDraftStore } from "../stores/draft-store"
-import { useLayoutStore } from "../stores/layout-store"
 import { RunView } from "../components/RunView"
-import { SidePanel, type PreviewFileInfo } from "../components/SidePanel"
-import { useSwipeDrawer } from "../hooks/use-swipe-drawer"
+import { type PreviewFileInfo, SidePanel } from "../components/SidePanel"
 import { SwipeDrawer } from "../components/SwipeDrawer"
+import { useSwipeDrawer } from "../hooks/use-swipe-drawer"
+import type { Session, Todo } from "../lib/api-client"
 import { HIGHLIGHT_DURATION_MS, SCROLL_DELAY_MS } from "../lib/constants"
-
+import { countCompletedTodos, normalizeTodoStatus } from "../lib/message-parts"
+import { useDraftStore } from "../stores/draft-store"
+import { useIssueStore } from "../stores/issue-store"
+import { useLayoutStore } from "../stores/layout-store"
+import { useRepoStore } from "../stores/repo-store"
+import { EMPTY_MESSAGES, EMPTY_TODOS, useSessionStore } from "../stores/session-store"
 
 function sessionTime(session: Session): number {
   if (typeof session.time?.updated === "number") return session.time.updated
@@ -57,10 +56,15 @@ function fallbackCopy(text: string) {
 
 function statusDotClass(status: string | undefined): string {
   switch (status) {
-    case "idle": return "bg-emerald-500"
-    case "busy": case "retry": return "bg-amber-500 animate-pulse"
-    case "error": return "bg-red-500"
-    default: return "bg-fg-5"
+    case "idle":
+      return "bg-emerald-500"
+    case "busy":
+    case "retry":
+      return "bg-amber-500 animate-pulse"
+    case "error":
+      return "bg-red-500"
+    default:
+      return "bg-fg-5"
   }
 }
 
@@ -72,13 +76,25 @@ const PEEK_DELAY_MS = 600
 const PEEK_HOLD_MS = 800
 
 function SessionItemInner({
-  session, isActive, peekHint,
-  onSelect, onRename, onToggleComplete, onTogglePin,
-  status, issue, linkedItems, todos,
+  session,
+  isActive,
+  peekHint,
+  onSelect,
+  onRename,
+  onToggleComplete,
+  onTogglePin,
+  status,
+  issue,
+  linkedItems,
+  todos,
 }: {
-  session: Session; isActive: boolean; peekHint?: boolean
+  session: Session
+  isActive: boolean
+  peekHint?: boolean
   onSelect: () => void
-  onRename: (title: string) => void; onToggleComplete: () => void; onTogglePin: () => void
+  onRename: (title: string) => void
+  onToggleComplete: () => void
+  onTogglePin: () => void
   status: string | undefined
   issue?: { number: number; title: string; state: string }
   linkedItems?: Array<{ number: number; state: string; type: "issue" | "pr"; mergedAt?: number | null }>
@@ -112,7 +128,10 @@ function SessionItemInner({
   const longPressTriggered = useRef(false)
 
   const clearLongPress = () => {
-    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
   }
 
   /* ---- iOS-style swipe-to-reveal (mobile) ---- */
@@ -149,7 +168,10 @@ function SessionItemInner({
   }
   const onTM = (e: React.TouchEvent) => {
     const c = touch.current
-    if (!c.on) { clearLongPress(); return }
+    if (!c.on) {
+      clearLongPress()
+      return
+    }
     const dx = e.touches[0].clientX - c.x0
     const dy = e.touches[0].clientY - c.y0
     if (!c.dir) {
@@ -171,7 +193,10 @@ function SessionItemInner({
   }
   const onTE = () => {
     clearLongPress()
-    if (longPressTriggered.current) { longPressTriggered.current = false; return }
+    if (longPressTriggered.current) {
+      longPressTriggered.current = false
+      return
+    }
     touch.current.on = false
     snapTo(currentX.current < -REVEAL_W / 2 ? -REVEAL_W : 0)
   }
@@ -194,7 +219,7 @@ function SessionItemInner({
       return () => clearTimeout(hold)
     }, PEEK_DELAY_MS)
     return () => clearTimeout(delay)
-  }, [peekHint])
+  }, [peekHint, applyX])
 
   return (
     <li className="relative overflow-hidden rounded-md">
@@ -205,30 +230,45 @@ function SessionItemInner({
         style={{ width: 0 }}
       >
         <div className="absolute right-0 top-0 bottom-0 flex" style={{ width: REVEAL_W }}>
-            <button
-              type="button"
-              onClick={() => { onTogglePin(); closeSwipe() }}
-              className={clsx("flex w-12 flex-col items-center justify-center gap-0.5 text-white", isPinned ? "bg-amber-500 active:bg-amber-600" : "bg-blue-500 active:bg-blue-600")}
-            >
-              <Pin className="h-3.5 w-3.5" />
-              <span className="text-[9px] leading-none">{isPinned ? "取消" : "置顶"}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { onToggleComplete(); closeSwipe() }}
-              className={clsx("flex w-12 flex-col items-center justify-center gap-0.5 text-white", isCompleted ? "bg-neutral-500 active:bg-neutral-600" : "bg-emerald-500 active:bg-emerald-600")}
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              <span className="text-[9px] leading-none">{isCompleted ? "撤销" : "完成"}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { startEditing(); closeSwipe() }}
-              className="flex w-12 flex-col items-center justify-center gap-0.5 bg-amber-500 text-white active:bg-amber-600"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              <span className="text-[9px] leading-none">重命名</span>
-            </button>
+          <button
+            type="button"
+            onClick={() => {
+              onTogglePin()
+              closeSwipe()
+            }}
+            className={clsx(
+              "flex w-12 flex-col items-center justify-center gap-0.5 text-white",
+              isPinned ? "bg-amber-500 active:bg-amber-600" : "bg-blue-500 active:bg-blue-600",
+            )}
+          >
+            <Pin className="h-3.5 w-3.5" />
+            <span className="text-[9px] leading-none">{isPinned ? "取消" : "置顶"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onToggleComplete()
+              closeSwipe()
+            }}
+            className={clsx(
+              "flex w-12 flex-col items-center justify-center gap-0.5 text-white",
+              isCompleted ? "bg-neutral-500 active:bg-neutral-600" : "bg-emerald-500 active:bg-emerald-600",
+            )}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span className="text-[9px] leading-none">{isCompleted ? "撤销" : "完成"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              startEditing()
+              closeSwipe()
+            }}
+            className="flex w-12 flex-col items-center justify-center gap-0.5 bg-amber-500 text-white active:bg-amber-600"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            <span className="text-[9px] leading-none">重命名</span>
+          </button>
         </div>
       </div>
 
@@ -246,7 +286,12 @@ function SessionItemInner({
       >
         <button
           type="button"
-          onClick={() => { if (!editing) { onSelect(); closeSwipe() } }}
+          onClick={() => {
+            if (!editing) {
+              onSelect()
+              closeSwipe()
+            }
+          }}
           className={clsx("block w-full px-2.5 py-2 text-left", isCompleted && !isActive && "opacity-50")}
           style={{ pointerEvents: "auto" }}
         >
@@ -274,15 +319,22 @@ function SessionItemInner({
           ) : (
             <div
               className="mt-0.5 pl-3.5"
-              onDoubleClick={(e) => { e.stopPropagation(); startEditing() }}
+              onDoubleClick={(e) => {
+                e.stopPropagation()
+                startEditing()
+              }}
             >
               {(issue || linkedItems) && (
                 <div className="mb-0.5 flex flex-wrap gap-1">
                   {issue && (
-                    <span className={clsx(
-                      "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium leading-none",
-                      issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-                    )}>
+                    <span
+                      className={clsx(
+                        "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium leading-none",
+                        issue.state === "open"
+                          ? "bg-emerald-500/15 text-emerald-400"
+                          : "bg-purple-500/15 text-purple-400",
+                      )}
+                    >
                       #{issue.number}
                     </span>
                   )}
@@ -292,10 +344,14 @@ function SessionItemInner({
                       className={clsx(
                         "shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium leading-none",
                         item.type === "pr"
-                          ? item.state === "open" ? "bg-blue-500/15 text-blue-400"
-                            : item.mergedAt ? "bg-purple-500/15 text-purple-400"
-                            : "bg-red-500/15 text-red-400"
-                          : item.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
+                          ? item.state === "open"
+                            ? "bg-blue-500/15 text-blue-400"
+                            : item.mergedAt
+                              ? "bg-purple-500/15 text-purple-400"
+                              : "bg-red-500/15 text-red-400"
+                          : item.state === "open"
+                            ? "bg-emerald-500/15 text-emerald-400"
+                            : "bg-purple-500/15 text-purple-400",
                       )}
                     >
                       {item.type === "pr" ? `PR#${item.number}` : `#${item.number}`}
@@ -304,79 +360,82 @@ function SessionItemInner({
                 </div>
               )}
               <span className="block truncate text-sm text-fg-2">{session.title?.trim() || "未命名运行"}</span>
-              {draft && (
-                <span className="mt-0.5 block truncate text-xs text-amber-400/80">
-                  ✏️ {draft}
-                </span>
-              )}
-              {todos.length > 0 && (() => {
-                const total = todos.length
-                const completed = countCompletedTodos(todos)
-                return (
-                  <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px]">
-                    <span className="shrink-0 tracking-tight">
-                      {todos.map((todo) => {
-                        const s = normalizeTodoStatus(todo.status)
-                        return (
-                          <span
-                            key={todo.id}
-                            className={
-                              s === "completed" ? "text-emerald-400"
-                                : s === "in_progress" ? "text-amber-400"
-                                : s === "cancelled" ? "text-fg-6"
-                                : "text-fg-5"
-                            }
-                          >
-                            {s === "pending" ? "□" : "■"}
-                          </span>
-                        )
-                      })}
+              {draft && <span className="mt-0.5 block truncate text-xs text-amber-400/80">✏️ {draft}</span>}
+              {todos.length > 0 &&
+                (() => {
+                  const total = todos.length
+                  const completed = countCompletedTodos(todos)
+                  return (
+                    <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px]">
+                      <span className="shrink-0 tracking-tight">
+                        {todos.map((todo) => {
+                          const s = normalizeTodoStatus(todo.status)
+                          return (
+                            <span
+                              key={todo.id}
+                              className={
+                                s === "completed"
+                                  ? "text-emerald-400"
+                                  : s === "in_progress"
+                                    ? "text-amber-400"
+                                    : s === "cancelled"
+                                      ? "text-fg-6"
+                                      : "text-fg-5"
+                              }
+                            >
+                              {s === "pending" ? "□" : "■"}
+                            </span>
+                          )
+                        })}
+                      </span>
+                      <span className="tabular-nums text-fg-4">
+                        {completed}/{total}
+                      </span>
                     </span>
-                    <span className="tabular-nums text-fg-4">{completed}/{total}</span>
-                  </span>
-                )
-              })()}
+                  )
+                })()}
             </div>
           )}
         </button>
 
         {/* Desktop hover buttons */}
         <span className="absolute right-1.5 top-1.5 hidden items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 md:flex">
-            <button
-              type="button"
-              onClick={onTogglePin}
-              title={isPinned ? "取消置顶" : "置顶"}
-              className={clsx("rounded p-1", isPinned ? "text-amber-400 hover:text-amber-300" : "text-fg-5 hover:text-amber-400")}
-            >
-              <Pin className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={onToggleComplete}
-              title={isCompleted ? "取消完成" : "标记完成"}
-              className={clsx("rounded p-1", isCompleted ? "text-emerald-400 hover:text-emerald-300" : "text-fg-5 hover:text-emerald-400")}
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={startEditing}
-              title="重命名"
-              className="rounded p-1 text-fg-5 hover:text-fg-2"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                copyText(JSON.stringify({ id: session.id, name: session.title?.trim() || "" }, null, 2))
-              }}
-              title="复制 Session JSON"
-              className="rounded p-1 text-fg-5 hover:text-fg-2"
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </button>
-          </span>
+          <button
+            type="button"
+            onClick={onTogglePin}
+            title={isPinned ? "取消置顶" : "置顶"}
+            className={clsx(
+              "rounded p-1",
+              isPinned ? "text-amber-400 hover:text-amber-300" : "text-fg-5 hover:text-amber-400",
+            )}
+          >
+            <Pin className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onToggleComplete}
+            title={isCompleted ? "取消完成" : "标记完成"}
+            className={clsx(
+              "rounded p-1",
+              isCompleted ? "text-emerald-400 hover:text-emerald-300" : "text-fg-5 hover:text-emerald-400",
+            )}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          </button>
+          <button type="button" onClick={startEditing} title="重命名" className="rounded p-1 text-fg-5 hover:text-fg-2">
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              copyText(JSON.stringify({ id: session.id, name: session.title?.trim() || "" }, null, 2))
+            }}
+            title="复制 Session JSON"
+            className="rounded p-1 text-fg-5 hover:text-fg-2"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+        </span>
       </div>
 
       {/* Long-press context menu (mobile) */}
@@ -385,7 +444,11 @@ function SessionItemInner({
           <div className="fixed inset-0 z-50" onClick={() => setCtxMenu(null)} onTouchEnd={() => setCtxMenu(null)} />
           <div
             className="fixed z-50 min-w-[160px] rounded-lg border border-line bg-surface py-1 shadow-xl"
-            style={{ left: Math.min(ctxMenu.x, window.innerWidth - 176), top: ctxMenu.y, animation: "ctx-fade-in 150ms ease-out" }}
+            style={{
+              left: Math.min(ctxMenu.x, window.innerWidth - 176),
+              top: ctxMenu.y,
+              animation: "ctx-fade-in 150ms ease-out",
+            }}
           >
             <button
               type="button"
@@ -405,20 +468,22 @@ function SessionItemInner({
   )
 }
 
-const SessionItem = memo(SessionItemInner, (prev, next) =>
-  prev.session.id === next.session.id &&
-  prev.session.title === next.session.title &&
-  prev.session.agent === next.session.agent &&
-  prev.session.completedAt === next.session.completedAt &&
-  prev.session.pinnedAt === next.session.pinnedAt &&
-  prev.session.time?.updated === next.session.time?.updated &&
-  prev.isActive === next.isActive &&
-  prev.peekHint === next.peekHint &&
-  prev.status === next.status &&
-  prev.issue?.number === next.issue?.number &&
-  prev.issue?.state === next.issue?.state &&
-  (prev.linkedItems?.length ?? 0) === (next.linkedItems?.length ?? 0) &&
-  prev.todos === next.todos,
+const SessionItem = memo(
+  SessionItemInner,
+  (prev, next) =>
+    prev.session.id === next.session.id &&
+    prev.session.title === next.session.title &&
+    prev.session.agent === next.session.agent &&
+    prev.session.completedAt === next.session.completedAt &&
+    prev.session.pinnedAt === next.session.pinnedAt &&
+    prev.session.time?.updated === next.session.time?.updated &&
+    prev.isActive === next.isActive &&
+    prev.peekHint === next.peekHint &&
+    prev.status === next.status &&
+    prev.issue?.number === next.issue?.number &&
+    prev.issue?.state === next.issue?.state &&
+    (prev.linkedItems?.length ?? 0) === (next.linkedItems?.length ?? 0) &&
+    prev.todos === next.todos,
 )
 
 function SessionPanel({ onClose }: { onClose?: () => void }) {
@@ -476,23 +541,31 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
         const linkedItems: Array<{ number: number; state: string; type: "issue" | "pr"; mergedAt?: number | null }> = []
         if (sLinks) {
           for (const i of sLinks.issues) linkedItems.push({ number: i.number, state: i.state, type: "issue" })
-          for (const p of sLinks.pullRequests) linkedItems.push({ number: p.number, state: p.state, type: "pr", mergedAt: p.mergedAt })
+          for (const p of sLinks.pullRequests)
+            linkedItems.push({ number: p.number, state: p.state, type: "pr", mergedAt: p.mergedAt })
         }
         return (
-            <SessionItem
-              key={session.id}
-              session={session}
-              isActive={session.id === activeSessionId}
-              peekHint={showPeekHint && idx === 0}
-              status={statuses[session.id]}
-              issue={linkedIssue ? { number: linkedIssue.number, title: linkedIssue.title, state: linkedIssue.state } : undefined}
-              linkedItems={linkedItems.length > 0 ? linkedItems : undefined}
-              onSelect={() => { if (activeRepoId) void setActiveSession(activeRepoId, session.id); onClose?.() }}
-              onRename={(title) => activeRepoId && void renameSession(activeRepoId, session.id, title)}
-              onToggleComplete={() => activeRepoId && void toggleSessionComplete(activeRepoId, session.id)}
-              onTogglePin={() => activeRepoId && void toggleSessionPin(activeRepoId, session.id)}
-              todos={allTodos[session.id] ?? EMPTY_TODOS}
-            />
+          <SessionItem
+            key={session.id}
+            session={session}
+            isActive={session.id === activeSessionId}
+            peekHint={showPeekHint && idx === 0}
+            status={statuses[session.id]}
+            issue={
+              linkedIssue
+                ? { number: linkedIssue.number, title: linkedIssue.title, state: linkedIssue.state }
+                : undefined
+            }
+            linkedItems={linkedItems.length > 0 ? linkedItems : undefined}
+            onSelect={() => {
+              if (activeRepoId) void setActiveSession(activeRepoId, session.id)
+              onClose?.()
+            }}
+            onRename={(title) => activeRepoId && void renameSession(activeRepoId, session.id, title)}
+            onToggleComplete={() => activeRepoId && void toggleSessionComplete(activeRepoId, session.id)}
+            onTogglePin={() => activeRepoId && void toggleSessionPin(activeRepoId, session.id)}
+            todos={allTodos[session.id] ?? EMPTY_TODOS}
+          />
         )
       })}
     </ul>
@@ -506,7 +579,10 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
           {activeRepoId && (
             <button
               type="button"
-              onClick={() => { useSessionStore.setState({ activeSessionId: null }); onClose?.() }}
+              onClick={() => {
+                useSessionStore.setState({ activeSessionId: null })
+                onClose?.()
+              }}
               title="新建运行"
               className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white transition-colors hover:bg-blue-500"
             >
@@ -539,7 +615,12 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
         )}
         {activeRepoId && (
           <div className="flex gap-1 border-b border-line px-3 py-1.5">
-            {([["active", "进行中"], ["all", "全部"]] as const).map(([key, label]) => (
+            {(
+              [
+                ["active", "进行中"],
+                ["all", "全部"],
+              ] as const
+            ).map(([key, label]) => (
               <button
                 key={key}
                 type="button"
@@ -560,9 +641,7 @@ function SessionPanel({ onClose }: { onClose?: () => void }) {
           ) : topLevel.length === 0 ? (
             <p className="px-2 py-6 text-center font-mono text-xs text-fg-5">暂无运行记录</p>
           ) : (
-            <div>
-              {renderSessionList(topLevel)}
-            </div>
+            <div>{renderSessionList(topLevel)}</div>
           )}
         </div>
       </div>
@@ -661,10 +740,12 @@ function tabReducer(state: TabState, action: TabAction): TabState {
   }
 }
 
-function usePreviewTabs(activeSessionId: string | null) {
+function usePreviewTabs(_activeSessionId: string | null) {
   const [state, dispatch] = useReducer(tabReducer, { tabs: [], activeIdx: null })
 
-  useEffect(() => { dispatch({ type: "reset" }) }, [activeSessionId])
+  useEffect(() => {
+    dispatch({ type: "reset" })
+  }, [])
 
   const open = useCallback((info: PreviewFileInfo) => dispatch({ type: "open", info }), [])
   const close = useCallback((idx: number) => dispatch({ type: "close", idx }), [])
@@ -747,10 +828,7 @@ export function RunPage() {
               : "bg-surface/80 opacity-40 hover:opacity-100",
           )}
         >
-          {sessionPanelCollapsed
-            ? <ChevronRight className="h-3 w-3" />
-            : <ChevronLeft className="h-3 w-3" />
-          }
+          {sessionPanelCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
         </button>
       </div>
 
@@ -766,7 +844,10 @@ export function RunPage() {
           messages={messages}
           sessionLinks={sessionLinks}
           sessionId={activeSessionId}
-          onScrollToMessage={(id) => { setRightOpen(false); setTimeout(() => scrollToMessage(id), SCROLL_DELAY_MS) }}
+          onScrollToMessage={(id) => {
+            setRightOpen(false)
+            setTimeout(() => scrollToMessage(id), SCROLL_DELAY_MS)
+          }}
         />
       </SwipeDrawer>
 
@@ -806,7 +887,10 @@ export function RunPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); preview.close(i) }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    preview.close(i)
+                  }}
                   className="shrink-0 rounded p-0.5 text-fg-5 opacity-0 transition-opacity hover:bg-elevated hover:text-fg-2 group-hover:opacity-100"
                 >
                   <X className="h-3 w-3" />

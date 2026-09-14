@@ -1,62 +1,52 @@
-import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
-import { AlertTriangle, ArrowLeft, ArrowUp, Check, ChevronDown, Menu, PanelRight, Plus, RotateCcw, Square, X } from "lucide-react"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
 import clsx from "clsx"
-import { AttachButton, AttachmentStrip, shouldFoldText, useAttachments } from "./Attachments"
-import { VoiceButton } from "./VoiceButton"
-import { VoiceOverlay, VoiceStatusBar } from "./VoiceOverlay"
-import { useVoiceInput } from "../hooks/use-voice-input"
 import {
-  EMPTY_MESSAGES,
-  EMPTY_QUEUE,
-  EMPTY_TODOS,
-  useSessionStore,
-} from "../stores/session-store"
+  AlertTriangle,
+  ArrowLeft,
+  ArrowUp,
+  Check,
+  ChevronDown,
+  Menu,
+  PanelRight,
+  Plus,
+  RotateCcw,
+  Square,
+  X,
+} from "lucide-react"
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import ReactMarkdown from "react-markdown"
+import { useNavigate, useSearchParams } from "react-router-dom"
+import remarkGfm from "remark-gfm"
+import { useVoiceInput } from "../hooks/use-voice-input"
 import type { Message as ApiMessage, ModelInfo, Session } from "../lib/api-client"
 import { listModels } from "../lib/api-client"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
+import { agentAvatar } from "../lib/constants"
+import { orchestrator } from "../lib/session-orchestrator"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { useIssueStore } from "../stores/issue-store"
-import { orchestrator } from "../lib/session-orchestrator"
+import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
+import { EMPTY_MESSAGES, EMPTY_QUEUE, EMPTY_TODOS, useSessionStore } from "../stores/session-store"
+import { AttachButton, AttachmentStrip, shouldFoldText, useAttachments } from "./Attachments"
 import { ExecutionBlock } from "./ExecutionBlock"
-import { TodoProgressCompact } from "./TodoProgress"
 import { InputBar } from "./InputBar"
-import { agentAvatar } from "../lib/constants"
+import { TodoProgressCompact } from "./TodoProgress"
+import { VoiceButton } from "./VoiceButton"
+import { VoiceOverlay, VoiceStatusBar } from "./VoiceOverlay"
 
-const STATUS_META: Record<
-  string,
-  { glyph: string; label: string; color: string; spin: boolean }
-> = {
+const STATUS_META: Record<string, { glyph: string; label: string; color: string; spin: boolean }> = {
   idle: { glyph: "●", label: "ready", color: "text-emerald-400", spin: false },
   busy: { glyph: "◌", label: "running", color: "text-amber-400", spin: true },
   retry: { glyph: "◌", label: "retrying", color: "text-amber-400", spin: true },
   error: { glyph: "✗", label: "error", color: "text-red-400", spin: false },
 }
 
-
-
 function StatusBadge({ status, reason }: { status: string | undefined; reason?: string }) {
   const meta = STATUS_META[status ?? "idle"] ?? STATUS_META.idle
   return (
     <span
-      className={clsx(
-        "flex items-center gap-1.5 rounded border border-line px-2 py-0.5 font-mono text-xs",
-        meta.color,
-      )}
+      className={clsx("flex items-center gap-1.5 rounded border border-line px-2 py-0.5 font-mono text-xs", meta.color)}
       title={status === "error" && reason ? reason : undefined}
     >
-      <span className={clsx("leading-none", meta.spin && "fs-spin")}>
-        {meta.glyph}
-      </span>
+      <span className={clsx("leading-none", meta.spin && "fs-spin")}>{meta.glyph}</span>
       <span>{meta.label}</span>
     </span>
   )
@@ -64,7 +54,7 @@ function StatusBadge({ status, reason }: { status: string | undefined; reason?: 
 
 const DEFAULT_CONTEXT_LIMIT = 1_000_000
 
-import { formatTokens, formatCost } from "../lib/format"
+import { formatCost, formatTokens } from "../lib/format"
 
 function getLastAssistantTokens(messages: readonly ApiMessage[]) {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -78,7 +68,15 @@ function getLastAssistantTokens(messages: readonly ApiMessage[]) {
   return null
 }
 
-function ContextInfo({ session, messages, contextLimit }: { session: Session | null; messages: readonly ApiMessage[]; contextLimit: number }) {
+function ContextInfo({
+  session,
+  messages,
+  contextLimit,
+}: {
+  session: Session | null
+  messages: readonly ApiMessage[]
+  contextLimit: number
+}) {
   const lastTokens = getLastAssistantTokens(messages)
   const cost = session?.cost ?? 0
   if (!lastTokens && !cost) return null
@@ -88,12 +86,7 @@ function ContextInfo({ session, messages, contextLimit }: { session: Session | n
     : 0
   const percentage = contextLength > 0 ? Math.min(Math.round((contextLength / contextLimit) * 100), 999) : 0
 
-  const percentColor =
-    percentage >= 80
-      ? "text-red-400"
-      : percentage >= 50
-        ? "text-amber-400"
-        : "text-fg-5"
+  const percentColor = percentage >= 80 ? "text-red-400" : percentage >= 50 ? "text-amber-400" : "text-fg-5"
 
   return (
     <div className="flex items-center gap-2 font-mono text-[11px] text-fg-5">
@@ -144,14 +137,37 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   }, [visibleAgents, customAgentId])
 
   useEffect(() => {
-    if (!activeRepoId) { setModels([]); return }
+    if (!activeRepoId) {
+      setModels([])
+      return
+    }
     let cancelled = false
-    void listModels(activeRepoId).then((m) => { if (!cancelled) setModels(m) }).catch(() => { if (!cancelled) setModels([]) })
-    return () => { cancelled = true }
+    void listModels(activeRepoId)
+      .then((m) => {
+        if (!cancelled) setModels(m)
+      })
+      .catch(() => {
+        if (!cancelled) setModels([])
+      })
+    return () => {
+      cancelled = true
+    }
   }, [activeRepoId])
 
   const imagesAllowed = models.length === 0 || models.some((m) => m.supportsImage !== false)
-  const { attachments, foldedTexts, promptFiles, error: attachError, addFiles, onPaste: imageOnPaste, addFoldedText, expandFoldedTexts, remove, removeFoldedText, clear } = useAttachments(imagesAllowed)
+  const {
+    attachments,
+    foldedTexts,
+    promptFiles,
+    error: attachError,
+    addFiles,
+    onPaste: imageOnPaste,
+    addFoldedText,
+    expandFoldedTexts,
+    remove,
+    removeFoldedText,
+    clear,
+  } = useAttachments(imagesAllowed)
 
   useEffect(() => {
     if (selectedIssueId) {
@@ -173,7 +189,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     if (!el) return
     el.style.height = "auto"
     el.style.height = `${Math.min(el.scrollHeight, MAX_NEW_HEIGHT_PX)}px`
-  }, [draft])
+  }, [])
 
   const selectedAgentDesc = visibleAgents.find((a) => a.id === customAgentId)?.description
   const hasContext = Boolean(issueId)
@@ -210,7 +226,16 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     if (!activeRepoId || (!text && !hasContext && attachments.length === 0)) return
     setDraft("")
     clear()
-    void createSession(activeRepoId!, text, undefined, undefined, selectedVariant || undefined, issueId || undefined, customAgentId || undefined, promptFiles.length > 0 ? promptFiles : undefined)
+    void createSession(
+      activeRepoId!,
+      text,
+      undefined,
+      undefined,
+      selectedVariant || undefined,
+      issueId || undefined,
+      customAgentId || undefined,
+      promptFiles.length > 0 ? promptFiles : undefined,
+    )
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -231,9 +256,18 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   }
 
   const handleVoiceSubmit = useCallback(
-    (text: string) => {
-      if (!activeRepoId) return
-      void createSession(activeRepoId, text, undefined, undefined, selectedVariant || undefined, issueId || undefined, customAgentId || undefined)
+    (text: string): undefined => {
+      if (!activeRepoId) return undefined
+      createSession(
+        activeRepoId,
+        text,
+        undefined,
+        undefined,
+        selectedVariant || undefined,
+        issueId || undefined,
+        customAgentId || undefined,
+      )
+      return undefined
     },
     [activeRepoId, createSession, issueId, customAgentId, selectedVariant],
   )
@@ -259,12 +293,21 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
           </div>
         </div>
 
-        <AttachmentStrip attachments={attachments} foldedTexts={foldedTexts} error={attachError} onRemove={remove} onRemoveFoldedText={handleRemoveFoldedText} />
+        <AttachmentStrip
+          attachments={attachments}
+          foldedTexts={foldedTexts}
+          error={attachError}
+          onRemove={remove}
+          onRemoveFoldedText={handleRemoveFoldedText}
+        />
 
-        <div data-guide="run-new-input" className={clsx(
-          "relative rounded-xl border bg-base/80 shadow-sm transition-colors",
-          "border-line focus-within:border-fg-5",
-        )}>
+        <div
+          data-guide="run-new-input"
+          className={clsx(
+            "relative rounded-xl border bg-base/80 shadow-sm transition-colors",
+            "border-line focus-within:border-fg-5",
+          )}
+        >
           <VoiceOverlay
             phase={voice.stt.phase}
             transcript={voice.stt.transcript}
@@ -295,11 +338,13 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
                           : "text-fg-4 hover:bg-elevated hover:text-fg-3",
                       )}
                     >
-                      <span className={clsx(
-                        "inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold",
-                        avatar.bg,
-                        avatar.text,
-                      )}>
+                      <span
+                        className={clsx(
+                          "inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold",
+                          avatar.bg,
+                          avatar.text,
+                        )}
+                      >
                         {avatar.initial}
                       </span>
                       {a.name}
@@ -316,32 +361,22 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
             </>
           )}
 
-          <div
-            className="flex items-start gap-2 px-4 py-3"
-          >
-            <span className={clsx(
-              "select-none pt-px font-mono text-sm leading-6",
-              "text-emerald-400",
-            )}>
-              ❯
-            </span>
+          <div className="flex items-start gap-2 px-4 py-3">
+            <span className={clsx("select-none pt-px font-mono text-sm leading-6", "text-emerald-400")}>❯</span>
             <textarea
               ref={textareaRef}
               rows={1}
               value={draft}
-              autoFocus
               disabled={!activeRepoId}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              placeholder={!activeRepoId ? "请先选择一个仓库" : issueId ? "输入补充指令，或直接发送" : "让 Agent 做什么？"}
+              placeholder={
+                !activeRepoId ? "请先选择一个仓库" : issueId ? "输入补充指令，或直接发送" : "让 Agent 做什么？"
+              }
               className="flex-1 resize-none bg-transparent font-mono text-sm leading-6 text-fg placeholder:text-fg-6 focus:outline-none disabled:cursor-not-allowed"
             />
-            <AttachButton
-              onFiles={(files) => void addFiles(files)}
-              disabled={!activeRepoId}
-              allowed
-            />
+            <AttachButton onFiles={(files) => void addFiles(files)} disabled={!activeRepoId} allowed />
             <VoiceButton
               isListening={voice.stt.isListening}
               disabled={!activeRepoId}
@@ -351,7 +386,9 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
             <button
               type="button"
               onClick={submit}
-              disabled={!activeRepoId || (!draft.trim() && !hasContext && attachments.length === 0 && foldedTexts.length === 0)}
+              disabled={
+                !activeRepoId || (!draft.trim() && !hasContext && attachments.length === 0 && foldedTexts.length === 0)
+              }
               aria-label="Start run"
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white transition-colors duration-150 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6/30 disabled:text-fg-5"
             >
@@ -413,7 +450,6 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   )
 }
 
-
 function IssueBody({ body }: { body?: string }) {
   if (!body) return <p className="py-10 text-center font-mono text-xs text-fg-5">该 Issue 没有描述内容</p>
   return (
@@ -423,18 +459,28 @@ function IssueBody({ body }: { body?: string }) {
   )
 }
 
-function IssueHeader({ issue }: { issue: { number: number; title: string; state: string; labels?: Array<{ id: number; name: string; color: string }> } }) {
+function IssueHeader({
+  issue,
+}: {
+  issue: { number: number; title: string; state: string; labels?: Array<{ id: number; name: string; color: string }> }
+}) {
   return (
     <div>
       <div className="flex items-center gap-2">
-        <span className={clsx(
-          "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
-          issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-        )}>
+        <span
+          className={clsx(
+            "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
+            issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
+          )}
+        >
           #{issue.number} {issue.state}
         </span>
         {issue.labels?.map((l) => (
-          <span key={l.id} className="rounded px-1.5 py-0.5 text-[10px] font-medium" style={{ backgroundColor: `#${l.color}20`, color: `#${l.color}` }}>
+          <span
+            key={l.id}
+            className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+            style={{ backgroundColor: `#${l.color}20`, color: `#${l.color}` }}
+          >
             {l.name}
           </span>
         ))}
@@ -546,10 +592,7 @@ export function RunView({
   const navigate = useNavigate()
   const repoName = useRepoStore(selectActiveRepoName)
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
-  const session = useSessionStore(
-    (state) =>
-      state.sessions.find((item) => item.id === state.activeSessionId) ?? null,
-  )
+  const session = useSessionStore((state) => state.sessions.find((item) => item.id === state.activeSessionId) ?? null)
   const messages = useSessionStore((state) => {
     const id = state.activeSessionId
     return id ? (state.messages[id] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES
@@ -588,10 +631,21 @@ export function RunView({
   )
   const [models, setModels] = useState<ModelInfo[]>([])
   useEffect(() => {
-    if (!activeRepoId) { setModels([]); return }
+    if (!activeRepoId) {
+      setModels([])
+      return
+    }
     let cancelled = false
-    void listModels(activeRepoId).then((m) => { if (!cancelled) setModels(m) }).catch(() => { if (!cancelled) setModels([]) })
-    return () => { cancelled = true }
+    void listModels(activeRepoId)
+      .then((m) => {
+        if (!cancelled) setModels(m)
+      })
+      .catch(() => {
+        if (!cancelled) setModels([])
+      })
+    return () => {
+      cancelled = true
+    }
   }, [activeRepoId])
 
   const contextLimit = (() => {
@@ -615,23 +669,20 @@ export function RunView({
     if (element && stickToBottomRef.current) {
       element.scrollTop = element.scrollHeight
     }
-  }, [messages, todos])
+  }, [])
 
   useEffect(() => {
     stickToBottomRef.current = true
     setShowScrollToBottom(false)
-  }, [activeSessionId])
+  }, [])
 
   useEffect(() => {
     if (status !== "busy" && status !== "retry") return
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return
       const target = event.target as HTMLElement | null
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target?.isContentEditable
-      ) return
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable)
+        return
       if (activeRepoId) void abortSession(activeRepoId)
     }
     window.addEventListener("keydown", onKeyDown)
@@ -653,10 +704,7 @@ export function RunView({
     <div className="flex flex-1 flex-col overflow-hidden bg-term">
       {/* ── Mobile header (< md) ── */}
       <header className="border-b border-line bg-base md:hidden">
-        <div
-          className="flex items-center gap-2 px-3 py-2"
-          onClick={() => setHeaderExpanded((v) => !v)}
-        >
+        <div className="flex items-center gap-2 px-3 py-2" onClick={() => setHeaderExpanded((v) => !v)}>
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
@@ -681,24 +729,33 @@ export function RunView({
               <button
                 type="button"
                 aria-label="返回父会话"
-                onClick={(e) => { e.stopPropagation(); if (activeRepoId) void useSessionStore.getState().setActiveSession(activeRepoId, session.parentID!) }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (activeRepoId) void useSessionStore.getState().setActiveSession(activeRepoId, session.parentID!)
+                }}
                 className="mb-0.5 flex items-center gap-1 text-[11px] text-fg-4 transition-colors hover:text-blue-400"
               >
                 <ArrowLeft className="h-3 w-3" />
                 返回父会话
               </button>
             )}
-            <h2 className="text-sm font-medium leading-snug text-fg">
-              {session?.title?.trim() || "untitled run"}
-            </h2>
+            <h2 className="text-sm font-medium leading-snug text-fg">{session?.title?.trim() || "untitled run"}</h2>
           </div>
           {stoppable && (
-            <span className={clsx("h-2 w-2 shrink-0 rounded-full", retrying ? "bg-amber-400 animate-pulse" : "bg-amber-400 animate-pulse")} />
+            <span
+              className={clsx(
+                "h-2 w-2 shrink-0 rounded-full",
+                retrying ? "bg-amber-400 animate-pulse" : "bg-amber-400 animate-pulse",
+              )}
+            />
           )}
-          {!stoppable && status === "error" && (
-            <span className="h-2 w-2 shrink-0 rounded-full bg-red-400" />
-          )}
-          <ChevronDown className={clsx("h-4 w-4 shrink-0 text-fg-5 transition-transform duration-200", headerExpanded && "rotate-180")} />
+          {!stoppable && status === "error" && <span className="h-2 w-2 shrink-0 rounded-full bg-red-400" />}
+          <ChevronDown
+            className={clsx(
+              "h-4 w-4 shrink-0 text-fg-5 transition-transform duration-200",
+              headerExpanded && "rotate-180",
+            )}
+          />
         </div>
         <div
           className={clsx(
@@ -731,10 +788,14 @@ export function RunView({
                     onClick={() => navigate(`/${encodeURIComponent(repoName!)}/dev/issues?id=${linkedIssue.id}`)}
                     className="flex items-center gap-1.5 truncate font-mono text-xs text-fg-3 transition-colors hover:text-blue-400"
                   >
-                    <span className={clsx(
-                      "shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold",
-                      linkedIssue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-                    )}>
+                    <span
+                      className={clsx(
+                        "shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold",
+                        linkedIssue.state === "open"
+                          ? "bg-emerald-500/15 text-emerald-400"
+                          : "bg-purple-500/15 text-purple-400",
+                      )}
+                    >
                       #{linkedIssue.number}
                     </span>
                     <span className="truncate">{linkedIssue.title}</span>
@@ -764,21 +825,17 @@ export function RunView({
             <button
               type="button"
               aria-label="返回父会话"
-              onClick={() => activeRepoId && void useSessionStore.getState().setActiveSession(activeRepoId, session.parentID!)}
+              onClick={() =>
+                activeRepoId && void useSessionStore.getState().setActiveSession(activeRepoId, session.parentID!)
+              }
               className="mb-0.5 flex items-center gap-1 text-[11px] text-fg-4 transition-colors hover:text-blue-400"
             >
               <ArrowLeft className="h-3 w-3" />
               返回父会话
             </button>
           )}
-          <h2 className="truncate text-sm font-medium text-fg">
-            {session?.title?.trim() || "untitled run"}
-          </h2>
-          {session?.agent && (
-            <p className="truncate font-mono text-xs text-fg-4">
-              {session.agent}
-            </p>
-          )}
+          <h2 className="truncate text-sm font-medium text-fg">{session?.title?.trim() || "untitled run"}</h2>
+          {session?.agent && <p className="truncate font-mono text-xs text-fg-4">{session.agent}</p>}
           <ContextInfo session={session} messages={messages} contextLimit={contextLimit} />
         </div>
         {linkedIssue && (
@@ -788,10 +845,14 @@ export function RunView({
             onClick={() => navigate(`/${encodeURIComponent(repoName!)}/dev/issues?id=${linkedIssue.id}`)}
             className="flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-xs text-fg-3 transition-colors hover:border-fg-5 hover:text-fg"
           >
-            <span className={clsx(
-              "rounded px-1 py-0.5 text-[10px] font-semibold",
-              linkedIssue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-            )}>
+            <span
+              className={clsx(
+                "rounded px-1 py-0.5 text-[10px] font-semibold",
+                linkedIssue.state === "open"
+                  ? "bg-emerald-500/15 text-emerald-400"
+                  : "bg-purple-500/15 text-purple-400",
+              )}
+            >
               #{linkedIssue.number}
             </span>
             <span className="hidden max-w-[120px] truncate sm:inline">{linkedIssue.title}</span>
@@ -833,17 +894,11 @@ export function RunView({
             const element = scrollRef.current
             if (!element) return
             const atBottom =
-              element.scrollHeight - element.clientHeight - element.scrollTop <=
-              STICK_TO_BOTTOM_THRESHOLD_PX
+              element.scrollHeight - element.clientHeight - element.scrollTop <= STICK_TO_BOTTOM_THRESHOLD_PX
             stickToBottomRef.current = atBottom
             setShowScrollToBottom(!atBottom)
 
-            if (
-              element.scrollTop < 200 &&
-              activeSessionId &&
-              messagesMeta?.hasMore &&
-              !messagesMeta.loading
-            ) {
+            if (element.scrollTop < 200 && activeSessionId && messagesMeta?.hasMore && !messagesMeta.loading) {
               const prevHeight = element.scrollHeight
               loadMoreMessages(activeRepoId!, activeSessionId).then(() => {
                 requestAnimationFrame(() => {
@@ -889,7 +944,10 @@ export function RunView({
                           disabled={revertingId !== null}
                           onClick={async () => {
                             const count = messages.length - index
-                            if (!window.confirm(`回退到此处？将移除后续 ${count} 条对话记录（不影响已产生的代码改动）。`)) return
+                            if (
+                              !window.confirm(`回退到此处？将移除后续 ${count} 条对话记录（不影响已产生的代码改动）。`)
+                            )
+                              return
                             setRevertingId(message.id)
                             await revertToMessage(activeRepoId!, activeSessionId!, message.id)
                             setRevertingId(null)
@@ -907,17 +965,16 @@ export function RunView({
                     </div>
                   )}
                   <div data-message-id={message.id}>
-                    <ExecutionBlock message={message} isStreaming={busy && index === messages.length - 1} queued={queuedIds.includes(message.id)} />
+                    <ExecutionBlock
+                      message={message}
+                      isStreaming={busy && index === messages.length - 1}
+                      queued={queuedIds.includes(message.id)}
+                    />
                   </div>
                 </Fragment>
               ))
             )}
-            {todos.length > 0 && (
-              <TodoProgressCompact
-                todos={[...todos]}
-                onClick={onToggleRightPanel}
-              />
-            )}
+            {todos.length > 0 && <TodoProgressCompact todos={[...todos]} onClick={onToggleRightPanel} />}
           </div>
         </div>
 
@@ -933,9 +990,7 @@ export function RunView({
           className={clsx(
             "absolute bottom-4 right-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface/90 text-fg-4 shadow-lg backdrop-blur transition-all duration-200",
             "hover:bg-elevated hover:text-fg-2",
-            showScrollToBottom
-              ? "translate-y-0 opacity-100"
-              : "pointer-events-none translate-y-2 opacity-0",
+            showScrollToBottom ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0",
           )}
         >
           <ChevronDown className="h-4 w-4" />

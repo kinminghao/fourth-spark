@@ -1,19 +1,35 @@
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm"
 import type { Hono } from "hono"
-import { eq, and, asc, inArray, isNull, desc } from "drizzle-orm"
-import { parsePagination, paginatedResponse } from "../../lib/pagination"
-import { parseBody } from "../../lib/validation"
-import { runtimeManager } from "../../lib/process-manager"
-import { workspaceManager } from "../../lib/workspace-manager"
-import { DEFAULT_VARIANT } from "../../lib/config"
-import { resolveAgent } from "../../lib/agent-validator"
-import { syncSessionsList } from "../../db/sync"
-import { getRepoDirectory, listSessionsFromDB, getSessionFromDB, getTodosFromDB, getSessionLinksFromDB } from "../../db/query"
+import type { PromptFile, SessionStatus } from "../../core/runtime-types"
 import { db } from "../../db/index"
-import { sessions as sessionsTable, issues, customAgents, customAgentFragments, promptFragments, sessionLinks, pullRequests, repos, agentMemories } from "../../db/schema"
+import {
+  getRepoDirectory,
+  getSessionFromDB,
+  getSessionLinksFromDB,
+  getTodosFromDB,
+  listSessionsFromDB,
+} from "../../db/query"
+import {
+  agentMemories,
+  customAgentFragments,
+  customAgents,
+  issues,
+  promptFragments,
+  pullRequests,
+  repos,
+  sessionLinks,
+  sessions as sessionsTable,
+} from "../../db/schema"
+import { syncSessionsList } from "../../db/sync"
+import { resolveAgent } from "../../lib/agent-validator"
+import { DEFAULT_VARIANT } from "../../lib/config"
+import { paginatedResponse, parsePagination } from "../../lib/pagination"
+import { runtimeManager } from "../../lib/process-manager"
+import { parseBody } from "../../lib/validation"
+import { workspaceManager } from "../../lib/workspace-manager"
 import { logger } from "../../middleware/logger"
-import type { SessionStatus, PromptFile } from "../../core/runtime-types"
-import { CreateSessionBody, UpdateSessionBody, SessionLinkBody, validateFiles } from "./schemas"
-import { buildIssueContext, autoAssignIssue } from "./issue-context"
+import { autoAssignIssue, buildIssueContext } from "./issue-context"
+import { CreateSessionBody, SessionLinkBody, UpdateSessionBody, validateFiles } from "./schemas"
 
 export function registerCrudRoutes(app: Hono): void {
   app.post("/", async (c) => {
@@ -40,7 +56,10 @@ export function registerCrudRoutes(app: Hono): void {
 
     const hasFiles = files.length > 0
     if (!message && !hasContext && !hasFiles) {
-      return c.json({ error: "Either a non-empty 'message', an 'issueId', a 'customAgentId', or a file is required" }, 400)
+      return c.json(
+        { error: "Either a non-empty 'message', an 'issueId', a 'customAgentId', or a file is required" },
+        400,
+      )
     }
 
     let agent = body.agent
@@ -64,7 +83,8 @@ export function registerCrudRoutes(app: Hono): void {
 
     const parts: string[] = []
     if (customAgentId) {
-      const frags = await db.select({ content: promptFragments.content })
+      const frags = await db
+        .select({ content: promptFragments.content })
         .from(customAgentFragments)
         .innerJoin(promptFragments, eq(customAgentFragments.fragmentId, promptFragments.id))
         .where(eq(customAgentFragments.customAgentId, customAgentId))
@@ -74,22 +94,22 @@ export function registerCrudRoutes(app: Hono): void {
       }
     }
     if (systemPrompt) {
-      const insertAt = systemPromptPosition >= 0 && systemPromptPosition <= parts.length
-        ? systemPromptPosition
-        : parts.length
+      const insertAt =
+        systemPromptPosition >= 0 && systemPromptPosition <= parts.length ? systemPromptPosition : parts.length
       parts.splice(insertAt, 0, systemPrompt)
     }
     if (customAgentId && memoryEnabled) {
-      const memories = await db.select().from(agentMemories)
-        .where(and(
-          eq(agentMemories.customAgentId, customAgentId),
-          isNull(agentMemories.supersededBy),
-        ))
+      const memories = await db
+        .select()
+        .from(agentMemories)
+        .where(and(eq(agentMemories.customAgentId, customAgentId), isNull(agentMemories.supersededBy)))
         .orderBy(desc(agentMemories.importance), desc(agentMemories.updatedAt))
         .limit(15)
       if (memories.length > 0) {
-        const memBlock = memories.map(m => `[${m.category}] ${m.content}`).join("\n\n")
-        parts.push(`[AGENT MEMORY]\n以下是你从历史 session 中积累的经验。\n如果以下经验与当前任务要求冲突，以当前任务为准。\n\n${memBlock}\n[/AGENT MEMORY]`)
+        const memBlock = memories.map((m) => `[${m.category}] ${m.content}`).join("\n\n")
+        parts.push(
+          `[AGENT MEMORY]\n以下是你从历史 session 中积累的经验。\n如果以下经验与当前任务要求冲突，以当前任务为准。\n\n${memBlock}\n[/AGENT MEMORY]`,
+        )
       }
     }
     if (body.issueId) {
@@ -106,7 +126,9 @@ export function registerCrudRoutes(app: Hono): void {
     if (repo.worktreeEnabled) {
       const workspace = await workspaceManager.create(repoId, repo.localPath, undefined, repo.runtimeType)
       workspaceId = workspace.id
-      parts.unshift(`[WORKSPACE]\nYour working directory for this session is: ${workspace.localPath}\nYou are on branch: ${workspace.branch} (this is a temporary branch name).\nAll file operations (read, write, edit, grep, glob) must use this directory as the base path.\nWhen committing, work within this directory.\nWhen creating a pull request, you MUST use a descriptive semantic branch name for the head parameter (e.g. "feature/add-auth", "fix/login-bug"), NOT the current temporary branch name "${workspace.branch}". The system will automatically rename the branch for you.\n[/WORKSPACE]`)
+      parts.unshift(
+        `[WORKSPACE]\nYour working directory for this session is: ${workspace.localPath}\nYou are on branch: ${workspace.branch} (this is a temporary branch name).\nAll file operations (read, write, edit, grep, glob) must use this directory as the base path.\nWhen committing, work within this directory.\nWhen creating a pull request, you MUST use a descriptive semantic branch name for the head parameter (e.g. "feature/add-auth", "fix/login-bug"), NOT the current temporary branch name "${workspace.branch}". The system will automatically rename the branch for you.\n[/WORKSPACE]`,
+      )
     }
 
     const prompt = parts.join("\n\n---\n\n")
@@ -114,41 +136,51 @@ export function registerCrudRoutes(app: Hono): void {
     const session = await client.createSession({ agent, title: body.title })
 
     const now = Date.now()
-    await db.insert(sessionsTable).values({
-      id: session.id,
-      title: session.title ?? body.title ?? "",
-      repoId,
-      workspaceId,
-      issueId: body.issueId ?? null,
-      customAgentId,
-      agent: agent ?? null,
-      timeCreated: now,
-      timeUpdated: now,
-    }).onConflictDoUpdate({
-      target: sessionsTable.id,
-      set: { repoId, workspaceId, issueId: body.issueId ?? null, customAgentId, timeUpdated: now },
-    })
+    await db
+      .insert(sessionsTable)
+      .values({
+        id: session.id,
+        title: session.title ?? body.title ?? "",
+        repoId,
+        workspaceId,
+        issueId: body.issueId ?? null,
+        customAgentId,
+        agent: agent ?? null,
+        timeCreated: now,
+        timeUpdated: now,
+      })
+      .onConflictDoUpdate({
+        target: sessionsTable.id,
+        set: { repoId, workspaceId, issueId: body.issueId ?? null, customAgentId, timeUpdated: now },
+      })
     try {
       await client.prompt(session.id, prompt, { agent, model, variant: body.variant ?? DEFAULT_VARIANT, files })
     } catch (e) {
       logger.error({ err: e, sessionId: session.id, agent, model }, "prompt failed after session creation, cleaning up")
-      await client.deleteSession(session.id).catch((cleanupErr) =>
-        logger.error({ err: cleanupErr, sessionId: session.id }, "failed to delete runtime session during cleanup"),
-      )
-      await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id)).catch((cleanupErr) =>
-        logger.error({ err: cleanupErr, sessionId: session.id }, "failed to delete DB session during cleanup"),
-      )
-      if (workspaceId) {
-        await workspaceManager.remove(workspaceId).catch((cleanupErr) =>
-          logger.error({ err: cleanupErr, workspaceId }, "failed to remove workspace during cleanup"),
+      await client
+        .deleteSession(session.id)
+        .catch((cleanupErr) =>
+          logger.error({ err: cleanupErr, sessionId: session.id }, "failed to delete runtime session during cleanup"),
         )
+      await db
+        .delete(sessionsTable)
+        .where(eq(sessionsTable.id, session.id))
+        .catch((cleanupErr) =>
+          logger.error({ err: cleanupErr, sessionId: session.id }, "failed to delete DB session during cleanup"),
+        )
+      if (workspaceId) {
+        await workspaceManager
+          .remove(workspaceId)
+          .catch((cleanupErr) =>
+            logger.error({ err: cleanupErr, workspaceId }, "failed to remove workspace during cleanup"),
+          )
       }
       throw e
     }
 
     if (body.issueId) {
       autoAssignIssue(repo, body.issueId).catch((err) =>
-        logger.warn({ err, issueId: body!.issueId }, "auto-assign issue failed"),
+        logger.warn({ err, issueId: body?.issueId }, "auto-assign issue failed"),
       )
     }
 
@@ -173,9 +205,20 @@ export function registerCrudRoutes(app: Hono): void {
         })
         const ids = list.map((s) => s.id)
         liveIds = new Set(ids)
-        const dbRows = ids.length > 0
-          ? await db.select({ id: sessionsTable.id, issueId: sessionsTable.issueId, title: sessionsTable.title, parentId: sessionsTable.parentId, completedAt: sessionsTable.completedAt, pinnedAt: sessionsTable.pinnedAt }).from(sessionsTable).where(inArray(sessionsTable.id, ids))
-          : []
+        const dbRows =
+          ids.length > 0
+            ? await db
+                .select({
+                  id: sessionsTable.id,
+                  issueId: sessionsTable.issueId,
+                  title: sessionsTable.title,
+                  parentId: sessionsTable.parentId,
+                  completedAt: sessionsTable.completedAt,
+                  pinnedAt: sessionsTable.pinnedAt,
+                })
+                .from(sessionsTable)
+                .where(inArray(sessionsTable.id, ids))
+            : []
         const dbMap = new Map(dbRows.map((r) => [r.id, r]))
         liveResult = list
           .filter((s) => {
@@ -200,7 +243,7 @@ export function registerCrudRoutes(app: Hono): void {
 
     const dbSessions = await listSessionsFromDB(directory)
     const dbOnly = liveIds
-      ? dbSessions.filter((s) => !liveIds!.has(s.id) && !s.title?.startsWith("[internal]"))
+      ? dbSessions.filter((s) => !liveIds?.has(s.id) && !s.title?.startsWith("[internal]"))
       : dbSessions.filter((s) => !s.title?.startsWith("[internal]"))
 
     const merged = [...(liveResult ?? []), ...dbOnly]
@@ -210,8 +253,14 @@ export function registerCrudRoutes(app: Hono): void {
       if (pa && !pb) return -1
       if (!pa && pb) return 1
       if (pa && pb) return pb - pa
-      const ta = a.time != null && typeof a.time === "object" && "updated" in a.time && typeof a.time.updated === "number" ? a.time.updated : 0
-      const tb = b.time != null && typeof b.time === "object" && "updated" in b.time && typeof b.time.updated === "number" ? b.time.updated : 0
+      const ta =
+        a.time != null && typeof a.time === "object" && "updated" in a.time && typeof a.time.updated === "number"
+          ? a.time.updated
+          : 0
+      const tb =
+        b.time != null && typeof b.time === "object" && "updated" in b.time && typeof b.time.updated === "number"
+          ? b.time.updated
+          : 0
       return tb - ta
     })
 
@@ -227,12 +276,26 @@ export function registerCrudRoutes(app: Hono): void {
     const issueIds = [...new Set(allLinks.filter((l) => l.type === "issue").map((l) => l.targetId))]
     const prIds = [...new Set(allLinks.filter((l) => l.type === "pr").map((l) => l.targetId))]
 
-    const issueRows = issueIds.length > 0
-      ? await db.select({ id: issues.id, number: issues.number, title: issues.title, state: issues.state }).from(issues).where(inArray(issues.id, issueIds))
-      : []
-    const prRows = prIds.length > 0
-      ? await db.select({ id: pullRequests.id, number: pullRequests.number, title: pullRequests.title, state: pullRequests.state, mergedAt: pullRequests.mergedAt }).from(pullRequests).where(inArray(pullRequests.id, prIds))
-      : []
+    const issueRows =
+      issueIds.length > 0
+        ? await db
+            .select({ id: issues.id, number: issues.number, title: issues.title, state: issues.state })
+            .from(issues)
+            .where(inArray(issues.id, issueIds))
+        : []
+    const prRows =
+      prIds.length > 0
+        ? await db
+            .select({
+              id: pullRequests.id,
+              number: pullRequests.number,
+              title: pullRequests.title,
+              state: pullRequests.state,
+              mergedAt: pullRequests.mergedAt,
+            })
+            .from(pullRequests)
+            .where(inArray(pullRequests.id, prIds))
+        : []
 
     const issueMap = new Map(issueRows.map((r) => [r.id, r]))
     const prMap = new Map(prRows.map((r) => [r.id, r]))
@@ -257,15 +320,14 @@ export function registerCrudRoutes(app: Hono): void {
 
     const client = runtimeManager.getClient(repoId)
 
-    const liveSessionPromise = client
-      ? client.getSession(sessionId).catch(() => null)
-      : Promise.resolve(null)
+    const liveSessionPromise = client ? client.getSession(sessionId).catch(() => null) : Promise.resolve(null)
     const statusPromise = client
-      ? client.getSessionStatus().then((all) => all[sessionId] ?? { type: "idle" }).catch(() => ({ type: "idle" as const }))
+      ? client
+          .getSessionStatus()
+          .then((all) => all[sessionId] ?? { type: "idle" })
+          .catch(() => ({ type: "idle" as const }))
       : Promise.resolve({ type: "idle" as const })
-    const liveTodosPromise = client
-      ? client.getTodos(sessionId).catch(() => null)
-      : Promise.resolve(null)
+    const liveTodosPromise = client ? client.getTodos(sessionId).catch(() => null) : Promise.resolve(null)
 
     const [dbSession, liveSession, liveTodos, status, links] = await Promise.all([
       getSessionFromDB(sessionId),
@@ -276,9 +338,19 @@ export function registerCrudRoutes(app: Hono): void {
     ])
 
     const session = liveSession
-      ? { ...liveSession, ...(dbSession ? { cost: dbSession.cost, tokens: dbSession.tokens, model: dbSession.model, ...(dbSession.title ? { title: dbSession.title } : {}) } : {}) }
+      ? {
+          ...liveSession,
+          ...(dbSession
+            ? {
+                cost: dbSession.cost,
+                tokens: dbSession.tokens,
+                model: dbSession.model,
+                ...(dbSession.title ? { title: dbSession.title } : {}),
+              }
+            : {}),
+        }
       : dbSession
-    const todos = liveTodos ?? await getTodosFromDB(sessionId)
+    const todos = liveTodos ?? (await getTodosFromDB(sessionId))
 
     return c.json({ session, todos, status, links })
   })
@@ -353,12 +425,9 @@ export function registerCrudRoutes(app: Hono): void {
     const issueIds = links.filter((l) => l.type === "issue").map((l) => l.targetId)
     const prIds = links.filter((l) => l.type === "pr").map((l) => l.targetId)
 
-    const linkedIssues = issueIds.length > 0
-      ? await db.select().from(issues).where(inArray(issues.id, issueIds))
-      : []
-    const linkedPrs = prIds.length > 0
-      ? await db.select().from(pullRequests).where(inArray(pullRequests.id, prIds))
-      : []
+    const linkedIssues = issueIds.length > 0 ? await db.select().from(issues).where(inArray(issues.id, issueIds)) : []
+    const linkedPrs =
+      prIds.length > 0 ? await db.select().from(pullRequests).where(inArray(pullRequests.id, prIds)) : []
 
     return c.json({ issues: linkedIssues, pullRequests: linkedPrs })
   })
@@ -367,12 +436,15 @@ export function registerCrudRoutes(app: Hono): void {
     const sessionId = c.req.param("id")
     const [body, err] = await parseBody(c, SessionLinkBody)
     if (err) return err
-    await db.insert(sessionLinks).values({
-      sessionId,
-      type: body.type,
-      targetId: body.targetId,
-      createdAt: Date.now(),
-    }).onConflictDoNothing()
+    await db
+      .insert(sessionLinks)
+      .values({
+        sessionId,
+        type: body.type,
+        targetId: body.targetId,
+        createdAt: Date.now(),
+      })
+      .onConflictDoNothing()
     return c.json({ ok: true }, 201)
   })
 
@@ -380,12 +452,15 @@ export function registerCrudRoutes(app: Hono): void {
     const sessionId = c.req.param("id")
     const [body, err] = await parseBody(c, SessionLinkBody)
     if (err) return err
-    await db.delete(sessionLinks)
-      .where(and(
-        eq(sessionLinks.sessionId, sessionId),
-        eq(sessionLinks.type, body.type),
-        eq(sessionLinks.targetId, body.targetId),
-      ))
+    await db
+      .delete(sessionLinks)
+      .where(
+        and(
+          eq(sessionLinks.sessionId, sessionId),
+          eq(sessionLinks.type, body.type),
+          eq(sessionLinks.targetId, body.targetId),
+        ),
+      )
     return c.json({ ok: true })
   })
 

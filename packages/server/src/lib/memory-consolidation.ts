@@ -1,17 +1,22 @@
-import { eq, and, isNull, isNotNull, lt, gte, desc, sql } from "drizzle-orm"
-import { db } from "../db/index"
-import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
-import type { MemoryVersion } from "../db/schema"
-import { type ExtractionAction, parseExtractionResult, executeActions, MAX_CONSOLIDATION_CONTENT_LENGTH } from "./memory-extractor"
-import { MEMORY_CONSOLIDATOR_ID, MEMORY_CONSOLIDATOR_PROMPT } from "./system-agents"
-import { resolveAgent } from "./agent-validator"
-import { DEFAULT_VARIANT } from "./config"
-import { logger } from "../middleware/logger"
-import { unlink, mkdir, appendFile, readFile, readdir } from "node:fs/promises"
+import { appendFile, mkdir, readdir, readFile, unlink } from "node:fs/promises"
 import { join } from "node:path"
+import { and, desc, eq, gte, isNotNull, isNull, lt, sql } from "drizzle-orm"
 import { DATA_DIR } from "../cli/paths"
 import type { RuntimeClient } from "../core/runtime-client"
+import { db } from "../db/index"
+import type { MemoryVersion } from "../db/schema"
+import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
+import { logger } from "../middleware/logger"
 import { HttpRuntimeClient } from "../runtimes/opencode/client"
+import { resolveAgent } from "./agent-validator"
+import { DEFAULT_VARIANT } from "./config"
+import {
+  type ExtractionAction,
+  executeActions,
+  MAX_CONSOLIDATION_CONTENT_LENGTH,
+  parseExtractionResult,
+} from "./memory-extractor"
+import { MEMORY_CONSOLIDATOR_PROMPT } from "./system-agents"
 
 // ---------------------------------------------------------------------------
 // Public change/stats types
@@ -69,10 +74,10 @@ function resolveClientForAgent(
   entries: Array<{ repoId: string; client: RuntimeClient }>,
 ): RuntimeClient | null {
   if (agentRepoId) {
-    const match = entries.find(e => e.repoId === agentRepoId)
+    const match = entries.find((e) => e.repoId === agentRepoId)
     if (match) return match.client
   }
-  const openCode = entries.find(e => e.client instanceof HttpRuntimeClient)
+  const openCode = entries.find((e) => e.client instanceof HttpRuntimeClient)
   return openCode?.client ?? null
 }
 
@@ -83,16 +88,23 @@ async function resolvePrompt(filename: string, fallback: string): Promise<string
       logger.info({ filename }, "using prompt override from file")
       return content.trim()
     }
-  } catch { /* file not found or unreadable, use fallback */ }
+  } catch {
+    /* file not found or unreadable, use fallback */
+  }
   return fallback
 }
-const lastRunSummaries = new Map<string, { update: number; merge: number; delete: number; skip: number; decayed: number }>()
+const lastRunSummaries = new Map<
+  string,
+  { update: number; merge: number; delete: number; skip: number; decayed: number }
+>()
 const lastRecentChanges = new Map<string, Record<string, MemoryChange>>()
 
 function extractReferencedIds(action: ExtractionAction): string[] {
   switch (action.action) {
-    case "add": return []
-    case "merge": return action.targetIds
+    case "add":
+      return []
+    case "merge":
+      return action.targetIds
     case "update":
     case "reinforce":
     case "skip":
@@ -119,8 +131,16 @@ function validateConsolidationActions(actions: ExtractionAction[], activeIds: Se
       continue
     }
 
-    if ((action.action === "merge" || action.action === "update") && action.category && FORBIDDEN_CATEGORY_NAMES.has(action.category)) {
-      logger.warn({ action: action.action, category: action.category }, "consolidation dropped action with forbidden category name")
+    if (
+      (action.action === "merge" || action.action === "update") &&
+      "category" in action &&
+      action.category &&
+      FORBIDDEN_CATEGORY_NAMES.has(action.category)
+    ) {
+      logger.warn(
+        { action: action.action, category: action.category },
+        "consolidation dropped action with forbidden category name",
+      )
       continue
     }
 
@@ -154,7 +174,7 @@ async function writeMemoryLog(agentId: string, entry: Record<string, unknown>): 
     const dir = join(MEMORY_LOG_ROOT, agentId)
     await mkdir(dir, { recursive: true })
     const filename = `consolidation-${new Date().toISOString().slice(0, 10)}.jsonl`
-    const line = JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n"
+    const line = `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`
     await appendFile(join(dir, filename), line)
   } catch (err) {
     logger.warn({ err, agentId }, "failed to write memory consolidation log")
@@ -172,24 +192,25 @@ async function applyImportanceDecay(customAgentId: string): Promise<{
 }> {
   const cutoff = Date.now() - DECAY_STALE_DAYS * 86_400_000
 
-  const staleRows = await db.select({
-    id: agentMemories.id,
-    importance: agentMemories.importance,
-  })
+  const staleRows = await db
+    .select({
+      id: agentMemories.id,
+      importance: agentMemories.importance,
+    })
     .from(agentMemories)
-    .where(and(
-      eq(agentMemories.customAgentId, customAgentId),
-      isNull(agentMemories.supersededBy),
-      lt(agentMemories.updatedAt, cutoff),
-    ))
+    .where(
+      and(
+        eq(agentMemories.customAgentId, customAgentId),
+        isNull(agentMemories.supersededBy),
+        lt(agentMemories.updatedAt, cutoff),
+      ),
+    )
   const decayed = staleRows.length
 
-  const totalRow = await db.select({ n: sql<number>`count(*)::int` })
+  const totalRow = await db
+    .select({ n: sql<number>`count(*)::int` })
     .from(agentMemories)
-    .where(and(
-      eq(agentMemories.customAgentId, customAgentId),
-      isNull(agentMemories.supersededBy),
-    ))
+    .where(and(eq(agentMemories.customAgentId, customAgentId), isNull(agentMemories.supersededBy)))
   const totalActive = totalRow[0]?.n ?? 0
   const unchanged = Math.max(0, totalActive - decayed)
 
@@ -211,11 +232,14 @@ async function applyImportanceDecay(customAgentId: string): Promise<{
     // still stale (otherwise every decay would refresh timestamps and no
     // memory would ever decay a second time).
     for (const row of staleRows) {
-      const [full] = await db.select({
-        content: agentMemories.content,
-        category: agentMemories.category,
-        history: agentMemories.history,
-      }).from(agentMemories).where(eq(agentMemories.id, row.id))
+      const [full] = await db
+        .select({
+          content: agentMemories.content,
+          category: agentMemories.category,
+          history: agentMemories.history,
+        })
+        .from(agentMemories)
+        .where(eq(agentMemories.id, row.id))
       if (!full) continue
       const prev: MemoryVersion = {
         content: full.content,
@@ -226,8 +250,7 @@ async function applyImportanceDecay(customAgentId: string): Promise<{
       }
       const history = [...(full.history ?? []), prev]
       const newImp = Math.max(DECAY_FLOOR, row.importance * DECAY_FACTOR)
-      await db.update(agentMemories).set({ importance: newImp, history })
-        .where(eq(agentMemories.id, row.id))
+      await db.update(agentMemories).set({ importance: newImp, history }).where(eq(agentMemories.id, row.id))
     }
   }
 
@@ -346,17 +369,20 @@ async function processConsolidationBatch(
     const session = await client.createSession({ agent, title: CONSOLIDATION_SESSION_TITLE })
     consolidationSessionId = session.id
 
-    await db.insert(sessionsTable).values({
-      id: session.id,
-      title: CONSOLIDATION_SESSION_TITLE,
-      customAgentId,
-      agent: agent ?? null,
-      timeCreated: Date.now(),
-      timeUpdated: Date.now(),
-    }).onConflictDoUpdate({
-      target: sessionsTable.id,
-      set: { customAgentId, timeUpdated: Date.now() },
-    })
+    await db
+      .insert(sessionsTable)
+      .values({
+        id: session.id,
+        title: CONSOLIDATION_SESSION_TITLE,
+        customAgentId,
+        agent: agent ?? null,
+        timeCreated: Date.now(),
+        timeUpdated: Date.now(),
+      })
+      .onConflictDoUpdate({
+        target: sessionsTable.id,
+        set: { customAgentId, timeUpdated: Date.now() },
+      })
 
     const payload = batch.map((m) => ({
       id: m.id,
@@ -366,8 +392,7 @@ async function processConsolidationBatch(
     }))
 
     const prompt = await resolvePrompt("memory-consolidator.md", MEMORY_CONSOLIDATOR_PROMPT)
-    const fullPrompt =
-      `${prompt}\n\n输出文件路径：${outputPath}\n请用 Write 工具将 JSON 结果写入上述文件，完全替换原内容。\n\n---\n\n## 当前活跃记忆\n\n${JSON.stringify(payload, null, 2)}`
+    const fullPrompt = `${prompt}\n\n输出文件路径：${outputPath}\n请用 Write 工具将 JSON 结果写入上述文件，完全替换原内容。\n\n---\n\n## 当前活跃记忆\n\n${JSON.stringify(payload, null, 2)}`
 
     await client.prompt(session.id, fullPrompt, { agent, variant: DEFAULT_VARIANT, model: memoryModel ?? undefined })
     logger.info(
@@ -382,7 +407,9 @@ async function processConsolidationBatch(
         const statuses = await client.getSessionStatus()
         const s = statuses[session.id]
         if (s && (s.type === "busy" || s.type === "retry")) continue
-      } catch { continue }
+      } catch {
+        continue
+      }
       break
     }
 
@@ -491,17 +518,20 @@ async function processConsolidationBatch(
         (a): a is Extract<ExtractionAction, { action: "merge" }> => a.action === "merge",
       )
       if (mergeActions.length > 0) {
-        const newlyMerged = await db.select({
-          id: agentMemories.id,
-          mergedFrom: agentMemories.mergedFrom,
-          importance: agentMemories.importance,
-        })
+        const newlyMerged = await db
+          .select({
+            id: agentMemories.id,
+            mergedFrom: agentMemories.mergedFrom,
+            importance: agentMemories.importance,
+          })
           .from(agentMemories)
-          .where(and(
-            eq(agentMemories.customAgentId, customAgentId),
-            isNotNull(agentMemories.mergedFrom),
-            gte(agentMemories.createdAt, batchStartTs),
-          ))
+          .where(
+            and(
+              eq(agentMemories.customAgentId, customAgentId),
+              isNotNull(agentMemories.mergedFrom),
+              gte(agentMemories.createdAt, batchStartTs),
+            ),
+          )
         for (const nm of newlyMerged) {
           const srcIds = nm.mergedFrom ?? []
           if (srcIds.length === 0) continue
@@ -517,7 +547,13 @@ async function processConsolidationBatch(
     }
 
     logger.info(
-      { customAgentId, batchIdx, actionCount: finalActions.length, byAction: countByAction(finalActions), dryRun: DRY_RUN },
+      {
+        customAgentId,
+        batchIdx,
+        actionCount: finalActions.length,
+        byAction: countByAction(finalActions),
+        dryRun: DRY_RUN,
+      },
       "memory consolidation batch completed",
     )
     return { actions: finalActions, changes }
@@ -529,17 +565,18 @@ async function processConsolidationBatch(
       client.deleteSession(consolidationSessionId).catch(() => {})
     }
     if (!DEBUG_KEEP_SESSIONS) {
-      try { await unlink(outputPath) } catch {}
+      try {
+        await unlink(outputPath)
+      } catch {}
     }
   }
 }
 
 async function consolidateAgent(customAgentId: string, client: RuntimeClient): Promise<void> {
-  const memories = await db.select().from(agentMemories)
-    .where(and(
-      eq(agentMemories.customAgentId, customAgentId),
-      isNull(agentMemories.supersededBy),
-    ))
+  const memories = await db
+    .select()
+    .from(agentMemories)
+    .where(and(eq(agentMemories.customAgentId, customAgentId), isNull(agentMemories.supersededBy)))
     .orderBy(desc(agentMemories.importance))
 
   if (memories.length < CONSOLIDATION_MIN_MEMORIES) {
@@ -550,7 +587,8 @@ async function consolidateAgent(customAgentId: string, client: RuntimeClient): P
     return
   }
 
-  const [agentConfig] = await db.select({ memoryModel: customAgents.memoryModel })
+  const [agentConfig] = await db
+    .select({ memoryModel: customAgents.memoryModel })
     .from(customAgents)
     .where(eq(customAgents.id, customAgentId))
   const memoryModel = agentConfig?.memoryModel ?? undefined
@@ -575,7 +613,14 @@ async function consolidateAgent(customAgentId: string, client: RuntimeClient): P
   const accumulated = { update: 0, merge: 0, delete: 0, skip: 0 }
   const allChanges: Record<string, MemoryChange> = {}
   for (let i = 0; i < batches.length; i++) {
-    const result = await processConsolidationBatch(customAgentId, client, batches[i], i + 1, batches.length, memoryModel)
+    const result = await processConsolidationBatch(
+      customAgentId,
+      client,
+      batches[i],
+      i + 1,
+      batches.length,
+      memoryModel,
+    )
     for (const a of result.actions) {
       const key = a.action as keyof typeof accumulated
       if (key in accumulated) accumulated[key]++
@@ -590,9 +635,7 @@ async function consolidateAgent(customAgentId: string, client: RuntimeClient): P
 // Public entrypoint
 // ---------------------------------------------------------------------------
 
-export async function runMemoryConsolidation(
-  entries: Array<{ repoId: string; client: RuntimeClient }>,
-): Promise<void> {
+export async function runMemoryConsolidation(entries: Array<{ repoId: string; client: RuntimeClient }>): Promise<void> {
   if (entries.length === 0) {
     logger.debug("runMemoryConsolidation: no runtime clients registered, skipping")
     return
@@ -600,7 +643,8 @@ export async function runMemoryConsolidation(
 
   let agents: Array<{ id: string; repoId: string | null }>
   try {
-    agents = await db.select({ id: customAgents.id, repoId: customAgents.repoId })
+    agents = await db
+      .select({ id: customAgents.id, repoId: customAgents.repoId })
       .from(customAgents)
       .where(eq(customAgents.memoryEnabled, 1))
   } catch (err) {
@@ -657,7 +701,10 @@ async function readLastRunFromLog(agentId: string): Promise<{
   try {
     const dir = join(MEMORY_LOG_ROOT, agentId)
     const files = await readdir(dir).catch(() => [] as string[])
-    const logFiles = files.filter(f => f.startsWith("consolidation-") && f.endsWith(".jsonl")).sort().reverse()
+    const logFiles = files
+      .filter((f) => f.startsWith("consolidation-") && f.endsWith(".jsonl"))
+      .sort()
+      .reverse()
     if (logFiles.length === 0) return empty
 
     const content = await readFile(join(dir, logFiles[0]), "utf-8")
@@ -686,7 +733,8 @@ async function readLastRunFromLog(agentId: string): Promise<{
           const action = entry.action as MemoryChange["action"]
           if (action === "update" && targetId) {
             recentChanges[targetId] = {
-              action: "update", ts,
+              action: "update",
+              ts,
               oldContent: entry.oldContent as string | undefined,
               oldImportance: entry.importance as number | undefined,
               newImportance: entry.importance as number | undefined,
@@ -697,7 +745,8 @@ async function readLastRunFromLog(agentId: string): Promise<{
             if (sourceIds) {
               for (const srcId of sourceIds) {
                 recentChanges[srcId] = {
-                  action: "merge", ts,
+                  action: "merge",
+                  ts,
                   sourceContents: sourceContents ?? [],
                   sourceIds,
                   oldContent: sourceContents?.find((_, idx) => sourceIds[idx] === srcId),
@@ -706,18 +755,20 @@ async function readLastRunFromLog(agentId: string): Promise<{
             }
           } else if (action === "delete" && targetId) {
             recentChanges[targetId] = {
-              action: "delete", ts,
+              action: "delete",
+              ts,
               oldContent: entry.oldContent as string | undefined,
               reason: entry.reason as string | undefined,
             }
           } else if (action === "reinforce" && targetId) {
             recentChanges[targetId] = {
-              action: "reinforce", ts,
+              action: "reinforce",
+              ts,
               reason: entry.reason as string | undefined,
             }
           }
         }
-      } catch { continue }
+      } catch {}
     }
 
     if (!lastSummary && !lastDecay && Object.keys(recentChanges).length === 0) {
@@ -744,12 +795,10 @@ async function readLastRunFromLog(agentId: string): Promise<{
 }
 
 export async function getConsolidationStats(agentId: string): Promise<ConsolidationStats> {
-  const memories = await db.select({ content: agentMemories.content, updatedAt: agentMemories.updatedAt })
+  const memories = await db
+    .select({ content: agentMemories.content, updatedAt: agentMemories.updatedAt })
     .from(agentMemories)
-    .where(and(
-      eq(agentMemories.customAgentId, agentId),
-      isNull(agentMemories.supersededBy),
-    ))
+    .where(and(eq(agentMemories.customAgentId, agentId), isNull(agentMemories.supersededBy)))
 
   const cutoff = Date.now() - DECAY_STALE_DAYS * 86_400_000
   let stale = 0
@@ -788,8 +837,10 @@ export async function triggerManualConsolidation(
   if (entries.length === 0) throw new Error("No runtime clients available")
   if (consolidatingAgents.has(agentId)) throw new Error("Consolidation already in progress")
 
-  const [agentRow] = await db.select({ repoId: customAgents.repoId })
-    .from(customAgents).where(eq(customAgents.id, agentId))
+  const [agentRow] = await db
+    .select({ repoId: customAgents.repoId })
+    .from(customAgents)
+    .where(eq(customAgents.id, agentId))
   const client = resolveClientForAgent(agentRow?.repoId ?? null, entries)
   if (!client) throw new Error("No suitable runtime client found")
   consolidatingAgents.add(agentId)

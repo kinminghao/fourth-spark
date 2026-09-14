@@ -1,29 +1,26 @@
 import { OpenAPIRegistry, OpenApiGeneratorV31 } from "@asteasolutions/zod-to-openapi"
-import { z } from "zod"
 import type { ZodType } from "zod"
-import * as S from "./schemas"
+import { z } from "zod"
+import {
+  AddChildBody,
+  CreateCommentBody,
+  CreateIssueBody,
+  MergeCloseBody,
+  PolishCreateBody,
+  PolishDraftBody,
+  SyncIssuesBody,
+  UpdateIssueBody,
+} from "../routes/issues/helpers"
+import { LinkIssueBody, SyncPullsBody } from "../routes/pulls/helpers"
 import {
   CreateSessionBody,
+  QuestionReplyBody,
+  SessionLinkBody,
   SessionPromptBody,
   SessionRevertBody,
-  QuestionReplyBody,
   UpdateSessionBody,
-  SessionLinkBody,
 } from "../routes/sessions/schemas"
-import {
-  SyncIssuesBody,
-  CreateIssueBody,
-  AddChildBody,
-  MergeCloseBody,
-  UpdateIssueBody,
-  PolishDraftBody,
-  CreateCommentBody,
-  PolishCreateBody,
-} from "../routes/issues/helpers"
-import {
-  SyncPullsBody,
-  LinkIssueBody,
-} from "../routes/pulls/helpers"
+import * as S from "./schemas"
 
 // ---------------------------------------------------------------------------
 // Registry — collect schemas + routes
@@ -57,9 +54,7 @@ const routeBodySchemas: ReadonlyArray<[string, ZodType]> = [
   ["LinkIssueBody", LinkIssueBody],
 ]
 
-const namedRouteBodies = new Map<string, ZodType>(
-  routeBodySchemas.map(([id, s]) => [id, s.meta({ id })]),
-)
+const namedRouteBodies = new Map<string, ZodType>(routeBodySchemas.map(([id, s]) => [id, s.meta({ id })]))
 
 const CreateSessionBodyR = namedRouteBodies.get("CreateSessionBody")!
 const SessionPromptBodyR = namedRouteBodies.get("SessionPromptBody")!
@@ -624,10 +619,7 @@ registry.registerPath({
   summary: "List messages for a session",
   request: { params: RepoIdWithIdParam, query: MessagesQuery },
   responses: {
-    200: jsonResp(
-      z.union([z.array(z.unknown()), S.MessagesPageResponse]),
-      "All messages OR paginated page",
-    ),
+    200: jsonResp(z.union([z.array(z.unknown()), S.MessagesPageResponse]), "All messages OR paginated page"),
   },
 })
 
@@ -1684,15 +1676,14 @@ for (const method of ["get", "post", "put", "delete", "patch"] as const) {
 // Public generator
 // ---------------------------------------------------------------------------
 
-export function generateOpenApiSpec() {
+export function generateOpenApiSpec(): import("openapi3-ts/oas31").OpenAPIObject {
   const generator = new OpenApiGeneratorV31([...allNamedSchemas, ...registry.definitions])
   return generator.generateDocument({
     openapi: "3.1.0",
     info: {
       title: "Fourth Spark API",
       version: "1.0.0",
-      description:
-        "AI coding agent management platform — manage repos, sessions, issues, and more",
+      description: "AI coding agent management platform — manage repos, sessions, issues, and more",
     },
     tags: [
       { name: "Health", description: "Server and repo health checks" },

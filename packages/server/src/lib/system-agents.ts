@@ -293,21 +293,22 @@ const SYSTEM_AGENTS: Array<{
 
 async function seedOnce(): Promise<void> {
   for (const agent of SYSTEM_AGENTS) {
-    const [existing] = await db.select({ id: customAgents.id })
-      .from(customAgents)
-      .where(eq(customAgents.id, agent.id))
+    const [existing] = await db.select({ id: customAgents.id }).from(customAgents).where(eq(customAgents.id, agent.id))
 
     if (existing) {
-      await db.update(customAgents).set({
-        description: agent.description,
-        baseAgent: agent.baseAgent,
-        systemPrompt: agent.systemPrompt,
-        isSystem: agent.isSystem,
-        memoryEnabled: agent.memoryEnabled,
-        memoryModel: agent.memoryModel,
-        sortOrder: agent.sortOrder,
-        updatedAt: Date.now(),
-      }).where(eq(customAgents.id, agent.id))
+      await db
+        .update(customAgents)
+        .set({
+          description: agent.description,
+          baseAgent: agent.baseAgent,
+          systemPrompt: agent.systemPrompt,
+          isSystem: agent.isSystem,
+          memoryEnabled: agent.memoryEnabled,
+          memoryModel: agent.memoryModel,
+          sortOrder: agent.sortOrder,
+          updatedAt: Date.now(),
+        })
+        .where(eq(customAgents.id, agent.id))
       continue
     }
 
@@ -356,4 +357,12 @@ export async function seedSystemAgents(): Promise<void> {
   }
 }
 
-export { DEFAULT_AGENT_ID, COMMENT_POLISHER_ID, ISSUE_POLISHER_ID, MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT, MEMORY_CONSOLIDATOR_ID, MEMORY_CONSOLIDATOR_PROMPT }
+export {
+  COMMENT_POLISHER_ID,
+  DEFAULT_AGENT_ID,
+  ISSUE_POLISHER_ID,
+  MEMORY_CONSOLIDATOR_ID,
+  MEMORY_CONSOLIDATOR_PROMPT,
+  MEMORY_EXTRACTOR_ID,
+  MEMORY_EXTRACTOR_PROMPT,
+}

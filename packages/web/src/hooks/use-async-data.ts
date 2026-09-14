@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from "react"
-import { useToastStore } from "../stores/toast-store"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { ApiError } from "../lib/api-client"
+import { useToastStore } from "../stores/toast-store"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -70,12 +70,7 @@ export function useAsyncData<T>(
   deps: React.DependencyList,
   options?: UseAsyncDataOptions<T>,
 ): AsyncDataResult<T> {
-  const {
-    initialData,
-    showErrorToast = true,
-    errorMessage = "加载失败",
-    skip = false,
-  } = options ?? {}
+  const { initialData, showErrorToast = true, errorMessage = "加载失败", skip = false } = options ?? {}
 
   const [data, setData] = useState<T | null>(initialData ?? null)
   const [loading, setLoading] = useState(!skip)
@@ -126,7 +121,7 @@ export function useAsyncData<T>(
       versionRef.current++
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, skip])
+  }, [...deps, skip, execute])
 
   return { data, loading, error, reload: execute }
 }

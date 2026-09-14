@@ -1,15 +1,9 @@
-import { AlertTriangle, GitPullRequest } from "lucide-react"
 import clsx from "clsx"
+import { AlertTriangle, GitPullRequest } from "lucide-react"
 import type { PullRequest } from "../lib/api-client"
 import { prStateColor } from "../lib/date-utils"
 
-export function LinkedPrList({
-  prs,
-  onSelect,
-}: {
-  prs: PullRequest[]
-  onSelect: (prNumber: number) => void
-}) {
+export function LinkedPrList({ prs, onSelect }: { prs: PullRequest[]; onSelect: (prNumber: number) => void }) {
   if (prs.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-16 text-fg-5">
@@ -29,7 +23,12 @@ export function LinkedPrList({
             className="group flex w-full flex-col gap-1.5 rounded-lg border border-line bg-elevated/30 px-4 py-3 text-left transition-colors hover:border-blue-500/40 hover:bg-elevated/60"
           >
             <div className="flex items-center gap-2">
-              <span className={clsx("shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold", prStateColor(pr.state))}>
+              <span
+                className={clsx(
+                  "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
+                  prStateColor(pr.state),
+                )}
+              >
                 #{pr.number} {pr.state}
               </span>
               {pr.mergeable === false && (
@@ -44,9 +43,7 @@ export function LinkedPrList({
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-fg-5">
               {pr.user?.login && (
                 <span className="flex items-center gap-1">
-                  {pr.user.avatar_url && (
-                    <img src={pr.user.avatar_url} alt="" className="h-3.5 w-3.5 rounded-full" />
-                  )}
+                  {pr.user.avatar_url && <img src={pr.user.avatar_url} alt="" className="h-3.5 w-3.5 rounded-full" />}
                   {pr.user.login}
                 </span>
               )}

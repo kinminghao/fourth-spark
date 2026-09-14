@@ -105,8 +105,9 @@ export class RuntimeError extends Error {
 
 export interface CredentialWriter {
   read(): Promise<{ access?: string; refresh?: string; expires?: number } | undefined>
-  write(token:
-    | { kind: "full"; refresh: string; access?: string; expires?: number }
-    | { kind: "lease"; access: string; expires: number }
+  write(
+    token:
+      | { kind: "full"; refresh: string; access?: string; expires?: number }
+      | { kind: "lease"; access: string; expires: number },
   ): Promise<void>
 }

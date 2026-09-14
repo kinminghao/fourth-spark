@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parseGitUrl, normalizeGitUrl } from "../../../src/lib/git-url"
+import { normalizeGitUrl, parseGitUrl } from "../../../src/lib/git-url"
 
 describe("parseGitUrl", () => {
   test("SSH format", () => {
@@ -77,23 +77,19 @@ describe("parseGitUrl", () => {
 
 describe("normalizeGitUrl", () => {
   test("SSH → HTTPS", () => {
-    expect(normalizeGitUrl("git@github.com:owner/repo.git"))
-      .toBe("https://github.com/owner/repo.git")
+    expect(normalizeGitUrl("git@github.com:owner/repo.git")).toBe("https://github.com/owner/repo.git")
   })
 
   test("SSH protocol → HTTPS", () => {
-    expect(normalizeGitUrl("ssh://git@github.com/owner/repo.git"))
-      .toBe("https://github.com/owner/repo.git")
+    expect(normalizeGitUrl("ssh://git@github.com/owner/repo.git")).toBe("https://github.com/owner/repo.git")
   })
 
   test("HTTPS passthrough (already normalized)", () => {
-    expect(normalizeGitUrl("https://github.com/owner/repo.git"))
-      .toBe("https://github.com/owner/repo.git")
+    expect(normalizeGitUrl("https://github.com/owner/repo.git")).toBe("https://github.com/owner/repo.git")
   })
 
   test("adds .git suffix when missing", () => {
-    expect(normalizeGitUrl("https://github.com/owner/repo"))
-      .toBe("https://github.com/owner/repo.git")
+    expect(normalizeGitUrl("https://github.com/owner/repo")).toBe("https://github.com/owner/repo.git")
   })
 
   test("returns original for unparseable URL", () => {

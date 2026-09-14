@@ -1,6 +1,6 @@
-import { memo } from "react"
-import { Flag, MessageCircle } from "lucide-react"
 import clsx from "clsx"
+import { Flag, MessageCircle } from "lucide-react"
+import { memo } from "react"
 import type { Issue, Milestone } from "../lib/api-client"
 import { relativeTime } from "../lib/date-utils"
 
@@ -26,9 +26,7 @@ function IssueRowInner({
         onClick={onSelect}
         className={clsx(
           "group flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors",
-          isActive
-            ? "border-l-2 border-blue-500 bg-elevated/80"
-            : "border-l-2 border-transparent hover:bg-elevated/50",
+          isActive ? "border-l-2 border-blue-500 bg-elevated/80" : "border-l-2 border-transparent hover:bg-elevated/50",
         )}
       >
         <span
@@ -49,9 +47,7 @@ function IssueRowInner({
                 EPIC
               </span>
             )}
-            <span className="min-w-0 text-xs font-medium text-fg-2 group-hover:text-fg">
-              {issue.title}
-            </span>
+            <span className="min-w-0 text-xs font-medium text-fg-2 group-hover:text-fg">{issue.title}</span>
           </div>
 
           {issue.labels && issue.labels.length > 0 && (
@@ -89,14 +85,16 @@ function IssueRowInner({
   )
 }
 
-export const IssueRow = memo(IssueRowInner, (prev, next) =>
-  prev.issue.id === next.issue.id &&
-  prev.issue.state === next.issue.state &&
-  prev.issue.title === next.issue.title &&
-  prev.sessionCount === next.sessionCount &&
-  prev.isActive === next.isActive &&
-  prev.isEpic === next.isEpic &&
-  prev.milestone?.id === next.milestone?.id,
+export const IssueRow = memo(
+  IssueRowInner,
+  (prev, next) =>
+    prev.issue.id === next.issue.id &&
+    prev.issue.state === next.issue.state &&
+    prev.issue.title === next.issue.title &&
+    prev.sessionCount === next.sessionCount &&
+    prev.isActive === next.isActive &&
+    prev.isEpic === next.isEpic &&
+    prev.milestone?.id === next.milestone?.id,
 )
 
 function FullWidthIssueRowInner({
@@ -153,7 +151,13 @@ function FullWidthIssueRowInner({
             {issue.assignees && issue.assignees.length > 0 && (
               <div className="hidden shrink-0 items-center -space-x-1.5 sm:flex">
                 {issue.assignees.slice(0, 3).map((a) => (
-                  <img key={a.login} src={a.avatar_url} alt={a.login} title={a.login} className="h-5 w-5 rounded-full ring-2 ring-surface" />
+                  <img
+                    key={a.login}
+                    src={a.avatar_url}
+                    alt={a.login}
+                    title={a.login}
+                    className="h-5 w-5 rounded-full ring-2 ring-surface"
+                  />
                 ))}
                 {issue.assignees.length > 3 && (
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-elevated text-[9px] font-medium text-fg-4 ring-2 ring-surface">
@@ -166,7 +170,13 @@ function FullWidthIssueRowInner({
           <div className="mt-1 flex flex-wrap items-center gap-1">
             {issue.authorLogin && (
               <span className="shrink-0 text-[11px] text-fg-5" title={issue.authorLogin}>
-                {issue.authorAvatar && <img src={issue.authorAvatar} alt="" className="mr-1 inline-block h-3.5 w-3.5 rounded-full align-text-bottom" />}
+                {issue.authorAvatar && (
+                  <img
+                    src={issue.authorAvatar}
+                    alt=""
+                    className="mr-1 inline-block h-3.5 w-3.5 rounded-full align-text-bottom"
+                  />
+                )}
                 {issue.authorLogin}
               </span>
             )}
@@ -179,9 +189,9 @@ function FullWidthIssueRowInner({
                 {issue.commentCount}
               </span>
             )}
-            {((issue.labels && issue.labels.length > 0) || (issue.commentCount ?? 0) > 0 || issue.authorLogin) && issue.labels && issue.labels.length > 0 && (
-              <span className="text-fg-6">·</span>
-            )}
+            {((issue.labels && issue.labels.length > 0) || (issue.commentCount ?? 0) > 0 || issue.authorLogin) &&
+              issue.labels &&
+              issue.labels.length > 0 && <span className="text-fg-6">·</span>}
             {issue.labels && issue.labels.length > 0 ? (
               issue.labels.map((l) => (
                 <span
@@ -205,11 +215,13 @@ function FullWidthIssueRowInner({
   )
 }
 
-export const FullWidthIssueRow = memo(FullWidthIssueRowInner, (prev, next) =>
-  prev.issue.id === next.issue.id &&
-  prev.issue.state === next.issue.state &&
-  prev.issue.title === next.issue.title &&
-  prev.sessionCount === next.sessionCount &&
-  prev.isEpic === next.isEpic &&
-  prev.milestone?.id === next.milestone?.id,
+export const FullWidthIssueRow = memo(
+  FullWidthIssueRowInner,
+  (prev, next) =>
+    prev.issue.id === next.issue.id &&
+    prev.issue.state === next.issue.state &&
+    prev.issue.title === next.issue.title &&
+    prev.sessionCount === next.sessionCount &&
+    prev.isEpic === next.isEpic &&
+    prev.milestone?.id === next.milestone?.id,
 )

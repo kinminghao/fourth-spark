@@ -1,5 +1,5 @@
-import { CLOUD_ROUTES, LEASE_BACKOFF_BASE_MS, LEASE_BACKOFF_CAP_MS, NETWORK_TIMEOUT_MS } from "./lease-constants"
 import { logger } from "../middleware/logger"
+import { CLOUD_ROUTES, LEASE_BACKOFF_BASE_MS, LEASE_BACKOFF_CAP_MS, NETWORK_TIMEOUT_MS } from "./lease-constants"
 
 // --- Wire types (aligned with claude-accounts-pool/src/cloud/protocol.ts) ---
 
@@ -33,9 +33,7 @@ export type LeaseFailure =
   | { kind: "unreachable"; detail: string }
   | { kind: "bad-response"; detail: string }
 
-export type LeaseOutcome =
-  | { ok: true; lease: LeaseResponse }
-  | { ok: false; failure: LeaseFailure }
+export type LeaseOutcome = { ok: true; lease: LeaseResponse } | { ok: false; failure: LeaseFailure }
 
 // --- Helpers ---
 
@@ -57,9 +55,11 @@ function redact(text: string, max = 200): string {
 
 function parseRefusal(body: string): LeaseRefusal | undefined {
   try {
-    const val = (JSON.parse(body) as Record<string, unknown>)?.["refused"]
+    const val = (JSON.parse(body) as Record<string, unknown>)?.refused
     if (typeof val === "string" && Object.hasOwn(REFUSALS, val)) return val as LeaseRefusal
-  } catch { /* not json */ }
+  } catch {
+    /* not json */
+  }
   return undefined
 }
 
@@ -72,9 +72,7 @@ function parseLease(raw: unknown): LeaseResponse | undefined {
   return { accountId: r.accountId, access: r.access, expiresAt: r.expiresAt }
 }
 
-type Attempt =
-  | { retry: false; outcome: LeaseOutcome }
-  | { retry: true; detail: string }
+type Attempt = { retry: false; outcome: LeaseOutcome } | { retry: true; detail: string }
 
 // --- Client ---
 
@@ -108,7 +106,10 @@ export function createLeaseClient(masterUrl: string, workerId: string) {
     if (res.status === 409) {
       const refused = parseRefusal(text)
       if (!refused) {
-        return { retry: false, outcome: { ok: false, failure: { kind: "bad-response", detail: `409: ${redact(text)}` } } }
+        return {
+          retry: false,
+          outcome: { ok: false, failure: { kind: "bad-response", detail: `409: ${redact(text)}` } },
+        }
       }
       logger.warn({ refused }, "lease: master refused named account")
       return { retry: false, outcome: { ok: false, failure: { kind: "refused", refused } } }
@@ -119,17 +120,28 @@ export function createLeaseClient(masterUrl: string, workerId: string) {
     }
 
     if (!res.ok) {
-      return { retry: false, outcome: { ok: false, failure: { kind: "bad-response", detail: `HTTP ${res.status}: ${redact(text)}` } } }
+      return {
+        retry: false,
+        outcome: { ok: false, failure: { kind: "bad-response", detail: `HTTP ${res.status}: ${redact(text)}` } },
+      }
     }
 
     let raw: unknown
-    try { raw = JSON.parse(text) } catch {
-      return { retry: false, outcome: { ok: false, failure: { kind: "bad-response", detail: `unparseable: ${redact(text)}` } } }
+    try {
+      raw = JSON.parse(text)
+    } catch {
+      return {
+        retry: false,
+        outcome: { ok: false, failure: { kind: "bad-response", detail: `unparseable: ${redact(text)}` } },
+      }
     }
 
     const lease = parseLease(raw)
     if (!lease) {
-      return { retry: false, outcome: { ok: false, failure: { kind: "bad-response", detail: `schema-invalid: ${redact(text)}` } } }
+      return {
+        retry: false,
+        outcome: { ok: false, failure: { kind: "bad-response", detail: `schema-invalid: ${redact(text)}` } },
+      }
     }
 
     logger.info({ accountId: lease.accountId, expiresAt: lease.expiresAt }, "lease: granted")
@@ -165,7 +177,11 @@ export function createLeaseClient(masterUrl: string, workerId: string) {
       return { ok: false, failure: { kind: "unreachable", detail } }
     },
 
-    async reportRateLimit(input: { accountId: string; headers: Record<string, string>; resetsAt?: number }): Promise<boolean> {
+    async reportRateLimit(input: {
+      accountId: string
+      headers: Record<string, string>
+      resetsAt?: number
+    }): Promise<boolean> {
       const payload: RateLimitReport = {
         workerId,
         accountId: input.accountId,

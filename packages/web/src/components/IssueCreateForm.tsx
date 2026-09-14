@@ -1,13 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { Ellipsis, Plus, Sparkles } from "lucide-react"
-import {
-  deleteIssueCreateDraft,
-  getIssueCreateDraft,
-  polishIssueCreate,
-} from "../lib/api-client"
+import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react"
+import { useAiPolish } from "../hooks/use-ai-polish"
+import { deleteIssueCreateDraft, getIssueCreateDraft, polishIssueCreate } from "../lib/api-client"
 import { useIssueStore } from "../stores/issue-store"
 import { useRepoStore } from "../stores/repo-store"
-import { useAiPolish } from "../hooks/use-ai-polish"
 
 interface CreateDraft {
   title: string
@@ -26,22 +22,22 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
     () => polishIssueCreate(activeRepoId!, title.trim(), body.trim() || undefined),
     [activeRepoId, title, body],
   )
-  const fetchResult = useCallback(
-    () => getIssueCreateDraft(activeRepoId!),
-    [activeRepoId],
-  )
+  const fetchResult = useCallback(() => getIssueCreateDraft(activeRepoId!), [activeRepoId])
   const loadExisting = useCallback(
-    () => getIssueCreateDraft(activeRepoId!).then((r) => r.title ? r : null),
+    () => getIssueCreateDraft(activeRepoId!).then((r) => (r.title ? r : null)),
     [activeRepoId],
   )
-  const cleanup = useCallback(
-    () => deleteIssueCreateDraft(activeRepoId!),
-    [activeRepoId],
-  )
+  const cleanup = useCallback(() => deleteIssueCreateDraft(activeRepoId!), [activeRepoId])
 
   const {
-    phase, result: polished, busy, setBusy,
-    polish, discard, escalate, setResult: setPolished,
+    phase,
+    result: polished,
+    busy,
+    setBusy,
+    polish,
+    discard,
+    escalate,
+    setResult: setPolished,
   } = useAiPolish<CreateDraft>({ repoId: activeRepoId, startPolish, fetchResult, loadExisting, cleanup })
 
   useEffect(() => {
@@ -131,7 +127,10 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
               <div className="absolute right-0 bottom-full z-20 mb-1 min-w-[140px] overflow-hidden rounded-lg border border-line bg-elevated shadow-lg">
                 <button
                   type="button"
-                  onClick={() => { setMoreOpen(false); void polish() }}
+                  onClick={() => {
+                    setMoreOpen(false)
+                    void polish()
+                  }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-base/60"
                 >
                   <Sparkles className="h-3 w-3" />
@@ -139,7 +138,10 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setMoreOpen(false); escalate() }}
+                  onClick={() => {
+                    setMoreOpen(false)
+                    escalate()
+                  }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-base/60"
                 >
                   转入深度对话
@@ -160,7 +162,6 @@ export function IssueCreateForm({ onDone }: { onDone: () => void }) {
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={onKeyDown}
         placeholder="Issue 标题"
-        autoFocus
         disabled={phase === "polishing"}
         className="w-full rounded-md border border-line bg-base px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-6 focus:border-fg-5 focus:outline-none disabled:opacity-50"
       />

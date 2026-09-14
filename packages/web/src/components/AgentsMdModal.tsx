@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react"
 import { AlertTriangle, Loader2, Save, X } from "lucide-react"
+import { useEffect, useState } from "react"
 import * as api from "../lib/api-client"
 
 interface Props {
@@ -16,9 +16,17 @@ export function AgentsMdModal({ repoId, repoName, onClose }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api.getRepoAgentsMd(repoId)
-      .then((r) => { setContent(r.content); setSaved(r.content); setLoading(false) })
-      .catch((e) => { setError(e instanceof Error ? e.message : String(e)); setLoading(false) })
+    api
+      .getRepoAgentsMd(repoId)
+      .then((r) => {
+        setContent(r.content)
+        setSaved(r.content)
+        setLoading(false)
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : String(e))
+        setLoading(false)
+      })
   }, [repoId])
 
   const handleSave = async () => {
@@ -46,7 +54,11 @@ export function AgentsMdModal({ repoId, repoName, onClose }: Props) {
             <h2 className="text-base font-semibold text-fg">{repoName} — AGENTS.md</h2>
             <p className="mt-0.5 text-xs text-fg-4">仅对此仓库生效，修改后 opencode 热加载即时生效。</p>
           </div>
-          <button type="button" onClick={onClose} className="shrink-0 rounded-md p-1 text-fg-4 hover:bg-elevated hover:text-fg-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded-md p-1 text-fg-4 hover:bg-elevated hover:text-fg-2"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>

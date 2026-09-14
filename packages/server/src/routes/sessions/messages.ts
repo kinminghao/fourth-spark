@@ -1,16 +1,16 @@
+import { and, eq, isNotNull } from "drizzle-orm"
 import type { Hono } from "hono"
-import { eq, and, isNotNull } from "drizzle-orm"
-import { parseBody } from "../../lib/validation"
+import type { PromptFile } from "../../core/runtime-types"
+import { db } from "../../db/index"
+import { getMessagesFromDB, getMessagesPaginated } from "../../db/query"
+import { sessions as sessionsTable } from "../../db/schema"
+import { syncMessagesList } from "../../db/sync"
+import { DEFAULT_VARIANT } from "../../lib/config"
 import { runtimeManager } from "../../lib/process-manager"
 import { sessionMonitor } from "../../lib/session-monitor"
-import { DEFAULT_VARIANT } from "../../lib/config"
-import { syncMessagesList } from "../../db/sync"
-import { getMessagesFromDB, getMessagesPaginated } from "../../db/query"
-import { db } from "../../db/index"
-import { sessions as sessionsTable } from "../../db/schema"
+import { parseBody } from "../../lib/validation"
 import { logger } from "../../middleware/logger"
-import type { PromptFile } from "../../core/runtime-types"
-import { SessionPromptBody, SessionRevertBody, QuestionReplyBody, validateFiles } from "./schemas"
+import { QuestionReplyBody, SessionPromptBody, SessionRevertBody, validateFiles } from "./schemas"
 
 export function registerMessageRoutes(app: Hono): void {
   app.post("/:id/actions/prompt", async (c) => {
@@ -29,9 +29,17 @@ export function registerMessageRoutes(app: Hono): void {
       return c.json({ error: "Body must include a non-empty 'content' string or at least one file" }, 400)
     }
     const sessionId = c.req.param("id")
-    await client.prompt(sessionId, body.content, { agent: body.agent, model: body.model, variant: body.variant ?? DEFAULT_VARIANT, files })
+    await client.prompt(sessionId, body.content, {
+      agent: body.agent,
+      model: body.model,
+      variant: body.variant ?? DEFAULT_VARIANT,
+      files,
+    })
     // Auto-clear completedAt when sending a new message to a completed session
-    await db.update(sessionsTable).set({ completedAt: null }).where(and(eq(sessionsTable.id, sessionId), isNotNull(sessionsTable.completedAt)))
+    await db
+      .update(sessionsTable)
+      .set({ completedAt: null })
+      .where(and(eq(sessionsTable.id, sessionId), isNotNull(sessionsTable.completedAt)))
     return c.json({ ok: true })
   })
 

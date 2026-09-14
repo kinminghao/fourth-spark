@@ -1,5 +1,5 @@
-import * as api from "./api-client"
 import { useSessionStore } from "../stores/session-store"
+import * as api from "./api-client"
 
 const POLL_MS = 60_000
 

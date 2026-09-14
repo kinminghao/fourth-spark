@@ -1,17 +1,10 @@
-import { Hono } from "hono"
-import { eq, asc } from "drizzle-orm"
 import { unlink } from "node:fs/promises"
+import { asc, eq } from "drizzle-orm"
+import type { Hono } from "hono"
 import { db } from "../../db/index"
-import { issues, issueComments } from "../../db/schema"
+import { issueComments, issues } from "../../db/schema"
 import { parseBody } from "../../lib/validation"
-import {
-  CreateCommentBody,
-  draftPath,
-  rewriteAttachmentUrls,
-  issueId,
-  commentToDb,
-  getRepoGitClient,
-} from "./helpers"
+import { CreateCommentBody, commentToDb, draftPath, getRepoGitClient, issueId, rewriteAttachmentUrls } from "./helpers"
 
 export function registerCommentRoutes(app: Hono): void {
   app.get("/:number/comments", async (c) => {
@@ -20,7 +13,11 @@ export function registerCommentRoutes(app: Hono): void {
     if (!Number.isFinite(number)) return c.json({ error: "invalid issue number" }, 400)
 
     const iid = issueId(repoId, number)
-    const rows = await db.select().from(issueComments).where(eq(issueComments.issueId, iid)).orderBy(asc(issueComments.createdAt))
+    const rows = await db
+      .select()
+      .from(issueComments)
+      .where(eq(issueComments.issueId, iid))
+      .orderBy(asc(issueComments.createdAt))
 
     if (rows.length > 0) {
       const mapped = rows.map((r) => ({
@@ -64,18 +61,24 @@ export function registerCommentRoutes(app: Hono): void {
     await db.insert(issueComments).values(values).onConflictDoUpdate({ target: issueComments.id, set: updateSet })
 
     const iid = issueId(repoId, number)
-    const commentRows = await db.select({ id: issueComments.id }).from(issueComments).where(eq(issueComments.issueId, iid))
+    const commentRows = await db
+      .select({ id: issueComments.id })
+      .from(issueComments)
+      .where(eq(issueComments.issueId, iid))
     await db.update(issues).set({ commentCount: commentRows.length }).where(eq(issues.id, iid))
 
     const filePath = draftPath(repoId, number)
     await unlink(filePath).catch(() => {})
 
-    return c.json({
-      id: gc.id,
-      body: gc.body,
-      user: gc.user,
-      created_at: gc.created_at,
-      updated_at: gc.updated_at,
-    }, 201)
+    return c.json(
+      {
+        id: gc.id,
+        body: gc.body,
+        user: gc.user,
+        created_at: gc.created_at,
+        updated_at: gc.updated_at,
+      },
+      201,
+    )
   })
 }

@@ -1,11 +1,7 @@
-import { useState } from "react"
 import clsx from "clsx"
+import { useState } from "react"
 import type { Todo } from "../lib/api-client"
-import {
-  countCompletedTodos,
-  normalizeTodoStatus,
-  type TodoStatus,
-} from "../lib/message-parts"
+import { countCompletedTodos, normalizeTodoStatus, type TodoStatus } from "../lib/message-parts"
 
 const SQUARE: Record<TodoStatus, { glyph: string; color: string }> = {
   completed: { glyph: "■", color: "text-emerald-400" },
@@ -22,28 +18,18 @@ const MARK: Record<TodoStatus, { glyph: string; color: string; spin: boolean }> 
 }
 
 function activeLabel(todos: Todo[]): string {
-  const active = todos.find(
-    (todo) => normalizeTodoStatus(todo.status) === "in_progress",
-  )
+  const active = todos.find((todo) => normalizeTodoStatus(todo.status) === "in_progress")
   if (active) {
     return active.content
   }
-  const pending = todos.find(
-    (todo) => normalizeTodoStatus(todo.status) === "pending",
-  )
+  const pending = todos.find((todo) => normalizeTodoStatus(todo.status) === "pending")
   if (pending) {
     return pending.content
   }
   return "all steps complete"
 }
 
-export function TodoProgressCompact({
-  todos,
-  onClick,
-}: {
-  todos: Todo[]
-  onClick?: () => void
-}) {
+export function TodoProgressCompact({ todos, onClick }: { todos: Todo[]; onClick?: () => void }) {
   if (todos.length === 0) return null
 
   const total = todos.length
@@ -51,11 +37,7 @@ export function TodoProgressCompact({
 
   return (
     <div className="rounded-md border border-line bg-term/60 px-3 py-2">
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex w-full items-center gap-2 text-left font-mono text-xs"
-      >
+      <button type="button" onClick={onClick} className="flex w-full items-center gap-2 text-left font-mono text-xs">
         <span className="shrink-0 tabular-nums text-fg-4">
           [{completed}/{total}]
         </span>
@@ -69,9 +51,7 @@ export function TodoProgressCompact({
             )
           })}
         </span>
-        <span className="min-w-0 flex-1 truncate text-fg-2">
-          {activeLabel(todos)}
-        </span>
+        <span className="min-w-0 flex-1 truncate text-fg-2">{activeLabel(todos)}</span>
         <span className="shrink-0 text-[10px] text-fg-5">详情 →</span>
       </button>
     </div>
@@ -108,9 +88,7 @@ export function TodoProgress({ todos }: { todos: Todo[] }) {
             )
           })}
         </span>
-        <span className="min-w-0 flex-1 truncate text-fg-2">
-          {activeLabel(todos)}
-        </span>
+        <span className="min-w-0 flex-1 truncate text-fg-2">{activeLabel(todos)}</span>
         <span className="shrink-0 text-fg-5">{expanded ? "▾" : "▸"}</span>
       </button>
 
@@ -121,21 +99,9 @@ export function TodoProgress({ todos }: { todos: Todo[] }) {
             const mark = MARK[status]
             const done = status === "completed" || status === "cancelled"
             return (
-              <li
-                key={todo.id}
-                className="flex items-start gap-2 font-mono text-xs"
-              >
-                <span className={clsx("shrink-0 leading-5", mark.color, mark.spin && "fs-spin")}>
-                  {mark.glyph}
-                </span>
-                <span
-                  className={clsx(
-                    "leading-5",
-                    done ? "text-fg-5 line-through" : "text-fg-2",
-                  )}
-                >
-                  {todo.content}
-                </span>
+              <li key={todo.id} className="flex items-start gap-2 font-mono text-xs">
+                <span className={clsx("shrink-0 leading-5", mark.color, mark.spin && "fs-spin")}>{mark.glyph}</span>
+                <span className={clsx("leading-5", done ? "text-fg-5 line-through" : "text-fg-2")}>{todo.content}</span>
               </li>
             )
           })}

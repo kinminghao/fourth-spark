@@ -1,21 +1,28 @@
-import { isUsageLimit } from "./account-switcher"
-import type { RuntimeClient } from "../core/runtime-client"
-import type { SessionStatus, Message, Todo } from "../core/runtime-types"
-import { isValidAgent } from "./agent-validator"
-import { getRegistry } from "../core/registry"
-import { logger } from "../middleware/logger"
-import { DEFAULT_VARIANT } from "./config"
-import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "./system-agents"
-import { buildExtractionData, buildFullExtractionPrompt, parseExtractionResult, executeActions, getSessionCustomAgentId, listExtractableSessions, MAX_CONSOLIDATION_CONTENT_LENGTH } from "./memory-extractor"
-import { runMemoryConsolidation } from "./memory-consolidation"
-import { unlink, readFile } from "node:fs/promises"
+import { readFile, unlink } from "node:fs/promises"
 import { join } from "node:path"
-import { DATA_DIR } from "../cli/paths"
-import { resolveAgent } from "./agent-validator"
-import { db } from "../db/index"
-import { sessions as sessionsTable, customAgents } from "../db/schema"
-import { syncMessagesList } from "../db/sync"
 import { eq } from "drizzle-orm"
+import { DATA_DIR } from "../cli/paths"
+import { getRegistry } from "../core/registry"
+import type { RuntimeClient } from "../core/runtime-client"
+import type { Message, SessionStatus, Todo } from "../core/runtime-types"
+import { db } from "../db/index"
+import { customAgents, sessions as sessionsTable } from "../db/schema"
+import { syncMessagesList } from "../db/sync"
+import { logger } from "../middleware/logger"
+import { isUsageLimit } from "./account-switcher"
+import { isValidAgent, resolveAgent } from "./agent-validator"
+import { DEFAULT_VARIANT } from "./config"
+import { runMemoryConsolidation } from "./memory-consolidation"
+import {
+  buildExtractionData,
+  buildFullExtractionPrompt,
+  executeActions,
+  getSessionCustomAgentId,
+  listExtractableSessions,
+  MAX_CONSOLIDATION_CONTENT_LENGTH,
+  parseExtractionResult,
+} from "./memory-extractor"
+import { MEMORY_EXTRACTOR_PROMPT } from "./system-agents"
 
 const POLL_INTERVAL_MS = 3_000
 const RECENT_SWITCH_GUARD_MS = 5_000
@@ -25,7 +32,6 @@ const MAX_EMPTY_RETRIES = 2
 const MAX_IDLE_RESPONSES = 2
 const MAX_STAGNATION = 3
 const DEDUP_COOLDOWN_MS = 30_000
-
 
 type ManagedEntry = {
   repoId: string
@@ -46,8 +52,6 @@ let lastSwitchAt = 0
 let timer: ReturnType<typeof setInterval> | undefined
 const entries: ManagedEntry[] = []
 
-
-
 // ---------------------------------------------------------------------------
 // Memory extraction state
 // ---------------------------------------------------------------------------
@@ -61,15 +65,15 @@ async function resolvePrompt(filename: string, fallback: string): Promise<string
       logger.info({ filename }, "using prompt override from file")
       return content.trim()
     }
-  } catch { /* file not found, use fallback */ }
+  } catch {
+    /* file not found, use fallback */
+  }
   return fallback
 }
 const EXTRACTION_SCAN_INTERVAL_MS = 4 * 60 * 60 * 1_000
 let extractionScanTimer: ReturnType<typeof setInterval> | undefined
 const pendingExtractions = new Map<string, Array<{ sourceSessionId: string; customAgentId: string }>>()
 const extractingRepos = new Set<string>()
-
-
 
 function dedup(key: string): boolean {
   const ts = handled.get(key)
@@ -94,11 +98,14 @@ async function getLastUserPrompt(
       const msg = messages[i]
       if (msg.role !== "user") continue
       const textParts = (msg.parts ?? []).filter((p) => p.type === "text")
-      const text = textParts.map((p) => p.content ?? "").join("\n").trim()
+      const text = textParts
+        .map((p) => p.content ?? "")
+        .join("\n")
+        .trim()
       if (text.length > 0) {
         const assistantAfter = messages.slice(i + 1).find((m) => m.role === "assistant")
         const rawAgent = assistantAfter?.info?.agent
-        const agent = await isValidAgent(client, rawAgent) ? rawAgent : undefined
+        const agent = (await isValidAgent(client, rawAgent)) ? rawAgent : undefined
         return {
           content: text,
           agent,
@@ -138,7 +145,7 @@ async function detectEmptyResponse(client: RuntimeClient, sessionId: string): Pr
 async function autoRetryEmptyResponse(client: RuntimeClient, sessionId: string): Promise<void> {
   const count = (emptyRetryCounts.get(sessionId) ?? 0) + 1
   emptyRetryCounts.set(sessionId, count)
-  const sid = sessionId.slice(-8)
+  const _sid = sessionId.slice(-8)
   try {
     const last = await getLastUserPrompt(client, sessionId)
     await client.prompt(sessionId, "continue", {
@@ -168,12 +175,18 @@ async function handleEmptyResponse(client: RuntimeClient, sessionId: string): Pr
   const pool = getRegistry().accountPool
   if (pool && Date.now() - lastSwitchAt >= RECENT_SWITCH_GUARD_MS) {
     const activeId = await pool.getActiveId()
-    await pool.reportLimit({ accountId: activeId ?? "", message: "empty response after retries (suspected rate limit)" })
+    await pool.reportLimit({
+      accountId: activeId ?? "",
+      message: "empty response after retries (suspected rate limit)",
+    })
     const result = await pool.acquire({ reason: "ratelimit", currentAccountId: activeId ?? "" })
     if (result.ok) {
       lastSwitchAt = Date.now()
       emptyRetryCounts.delete(sessionId)
-      logger.info({ from: activeId, to: result.accountId, sessionId }, "account switched after empty-response retries exhausted")
+      logger.info(
+        { from: activeId, to: result.accountId, sessionId },
+        "account switched after empty-response retries exhausted",
+      )
       await repromptSession(client, sessionId)
       return true
     }
@@ -184,7 +197,7 @@ async function handleEmptyResponse(client: RuntimeClient, sessionId: string): Pr
   return false
 }
 
-async function hasIncompleteTodos(client: RuntimeClient, sessionId: string): Promise<boolean> {
+async function _hasIncompleteTodos(client: RuntimeClient, sessionId: string): Promise<boolean> {
   try {
     const todos = await client.getTodos(sessionId)
     return todos.some((t) => t.status === "in_progress" || t.status === "pending")
@@ -222,7 +235,10 @@ function isIdleResponse(msg: Message): boolean {
   if (hasToolCall) return false
   const textParts = parts.filter((p) => p.type === "text")
   if (textParts.length === 0) return false
-  const text = textParts.map((p) => p.content ?? "").join("").trim()
+  const text = textParts
+    .map((p) => p.content ?? "")
+    .join("")
+    .trim()
   return text.length > 0 && text.length < 200
 }
 
@@ -235,7 +251,10 @@ function detectAgentIdle(sessionId: string, messages: Message[]): boolean {
   const count = (idleResponseCounts.get(sessionId) ?? 0) + 1
   idleResponseCounts.set(sessionId, count)
   if (count >= MAX_IDLE_RESPONSES) {
-    logger.info({ sessionId, count, max: MAX_IDLE_RESPONSES }, "agent idle detected (short text-only responses), stopping auto-continue")
+    logger.info(
+      { sessionId, count, max: MAX_IDLE_RESPONSES },
+      "agent idle detected (short text-only responses), stopping auto-continue",
+    )
     return true
   }
   return false
@@ -318,7 +337,7 @@ async function detectTruncation(client: RuntimeClient, sessionId: string): Promi
 async function autoContinueSession(client: RuntimeClient, sessionId: string): Promise<void> {
   const count = (autoContinueCounts.get(sessionId) ?? 0) + 1
   autoContinueCounts.set(sessionId, count)
-  const sid = sessionId.slice(-8)
+  const _sid = sessionId.slice(-8)
   try {
     const last = await getLastUserPrompt(client, sessionId)
     await client.prompt(sessionId, "continue", {
@@ -326,7 +345,10 @@ async function autoContinueSession(client: RuntimeClient, sessionId: string): Pr
       model: last?.model,
       variant: DEFAULT_VARIANT,
     })
-    logger.info({ sessionId, count, max: MAX_AUTO_CONTINUES }, "auto-continued truncated session (notification suppressed)")
+    logger.info(
+      { sessionId, count, max: MAX_AUTO_CONTINUES },
+      "auto-continued truncated session (notification suppressed)",
+    )
   } catch (err) {
     logger.warn({ err, sessionId }, "auto-continue prompt failed")
   }
@@ -413,7 +435,12 @@ async function triggerMemoryExtraction(repoId: string, client: RuntimeClient, so
   await startExtraction(repoId, client, sourceSessionId, customAgentId)
 }
 
-async function startExtraction(repoId: string, client: RuntimeClient, sourceSessionId: string, customAgentId: string): Promise<void> {
+async function startExtraction(
+  repoId: string,
+  client: RuntimeClient,
+  sourceSessionId: string,
+  customAgentId: string,
+): Promise<void> {
   let extractionSessionId: string | undefined
   const uuid = crypto.randomUUID()
   const inputPath = `/tmp/memory-extract-${uuid}-input.json`
@@ -422,7 +449,9 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
     try {
       const msgs = await client.getMessages(sourceSessionId)
       syncMessagesList(sourceSessionId, msgs).catch(() => {})
-    } catch { /* best-effort sync */ }
+    } catch {
+      /* best-effort sync */
+    }
 
     const data = await buildExtractionData(sourceSessionId, customAgentId)
     if (!data) {
@@ -437,19 +466,23 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
     const session = await client.createSession({ agent, title: `[internal] memory extraction` })
     extractionSessionId = session.id
 
-    await db.insert(sessionsTable).values({
-      id: session.id,
-      title: `[internal] memory extraction`,
-      customAgentId,
-      agent: agent ?? null,
-      timeCreated: Date.now(),
-      timeUpdated: Date.now(),
-    }).onConflictDoUpdate({
-      target: sessionsTable.id,
-      set: { customAgentId, timeUpdated: Date.now() },
-    })
+    await db
+      .insert(sessionsTable)
+      .values({
+        id: session.id,
+        title: `[internal] memory extraction`,
+        customAgentId,
+        agent: agent ?? null,
+        timeCreated: Date.now(),
+        timeUpdated: Date.now(),
+      })
+      .onConflictDoUpdate({
+        target: sessionsTable.id,
+        set: { customAgentId, timeUpdated: Date.now() },
+      })
 
-    const [agentConfig] = await db.select({ memoryModel: customAgents.memoryModel })
+    const [agentConfig] = await db
+      .select({ memoryModel: customAgents.memoryModel })
       .from(customAgents)
       .where(eq(customAgents.id, customAgentId))
     const memoryModel = agentConfig?.memoryModel ?? null
@@ -457,16 +490,21 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
     const extractorPrompt = await resolvePrompt("memory-extractor.md", MEMORY_EXTRACTOR_PROMPT)
     const fullPrompt = buildFullExtractionPrompt(extractorPrompt, inputPath, outputPath)
     await client.prompt(session.id, fullPrompt, { agent, variant: DEFAULT_VARIANT, model: memoryModel ?? undefined })
-    logger.info({ sessionId: session.id, sourceSessionId, inputPath, outputPath }, "memory extraction started, waiting for result")
+    logger.info(
+      { sessionId: session.id, sourceSessionId, inputPath, outputPath },
+      "memory extraction started, waiting for result",
+    )
 
     const startedAt = Date.now()
     while (Date.now() - startedAt < EXTRACTION_TIMEOUT_MS) {
-      await new Promise(r => setTimeout(r, 2_000))
+      await new Promise((r) => setTimeout(r, 2_000))
       try {
         const statuses = await client.getSessionStatus()
         const s = statuses[session.id]
         if (s && (s.type === "busy" || s.type === "retry")) continue
-      } catch { continue }
+      } catch {
+        continue
+      }
       break
     }
 
@@ -480,7 +518,10 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
       })
       if (actions.length > 0) {
         await executeActions(customAgentId, sourceSessionId, actions)
-        logger.info({ sessionId: session.id, actionCount: actions.length, sourceSessionId }, "memory extraction completed")
+        logger.info(
+          { sessionId: session.id, actionCount: actions.length, sourceSessionId },
+          "memory extraction completed",
+        )
       }
     }
   } catch (err) {
@@ -489,8 +530,12 @@ async function startExtraction(repoId: string, client: RuntimeClient, sourceSess
     const debugKeep = process.env.MEMORY_DEBUG === "true"
     if (extractionSessionId && !debugKeep) client.deleteSession(extractionSessionId).catch(() => {})
     if (!debugKeep) {
-      try { await unlink(inputPath) } catch {}
-      try { await unlink(outputPath) } catch {}
+      try {
+        await unlink(inputPath)
+      } catch {}
+      try {
+        await unlink(outputPath)
+      } catch {}
     }
     processNextExtraction(repoId)
   }
@@ -505,9 +550,9 @@ function processNextExtraction(repoId: string): void {
   const next = queue.shift()!
   if (queue.length === 0) pendingExtractions.delete(repoId)
 
-  const repoEntry = entries.find(e => e.repoId === repoId)
+  const repoEntry = entries.find((e) => e.repoId === repoId)
   if (repoEntry) {
-    startExtraction(repoId, repoEntry.client, next.sourceSessionId, next.customAgentId).catch(err => {
+    startExtraction(repoId, repoEntry.client, next.sourceSessionId, next.customAgentId).catch((err) => {
       logger.warn({ err, sourceSessionId: next.sourceSessionId }, "failed to start queued extraction")
       processNextExtraction(repoId)
     })
@@ -558,7 +603,6 @@ async function pollOnce(): Promise<void> {
             }
 
             if (await handleEmptyResponse(client, sessionId)) {
-              continue
             }
           }
         }
@@ -646,10 +690,11 @@ async function runExtractionScan(): Promise<void> {
     for (const { repoId, client } of entries) {
       try {
         await client.getSession(sessionId)
-        triggerMemoryExtraction(repoId, client, sessionId).catch(err =>
-          logger.warn({ err, sessionId }, "scheduled memory extraction failed"))
+        triggerMemoryExtraction(repoId, client, sessionId).catch((err) =>
+          logger.warn({ err, sessionId }, "scheduled memory extraction failed"),
+        )
         break
-      } catch { continue }
+      } catch {}
     }
   }
 }
@@ -667,11 +712,11 @@ export const sessionMonitor = {
           await client.getSession(sourceSessionId)
           await triggerMemoryExtraction(repoId, client, sourceSessionId)
           return
-        } catch { continue }
+        } catch {}
       }
       logger.warn({ sourceSessionId }, "no running process found for session")
     }
-    tryAll().catch(err => logger.warn({ err, sourceSessionId }, "manual memory extraction failed"))
+    tryAll().catch((err) => logger.warn({ err, sourceSessionId }, "manual memory extraction failed"))
   },
 
   register(repoId: string, client: RuntimeClient): void {
@@ -697,10 +742,14 @@ export const sessionMonitor = {
         await runMemoryConsolidation(entries)
       }
       extractionScanTimer = setInterval(() => {
-        runExtractionAndConsolidation().catch((err) => logger.error({ err }, "memory extraction/consolidation scan error"))
+        runExtractionAndConsolidation().catch((err) =>
+          logger.error({ err }, "memory extraction/consolidation scan error"),
+        )
       }, EXTRACTION_SCAN_INTERVAL_MS)
       setTimeout(() => {
-        runExtractionAndConsolidation().catch((err) => logger.error({ err }, "initial memory extraction/consolidation scan error"))
+        runExtractionAndConsolidation().catch((err) =>
+          logger.error({ err }, "initial memory extraction/consolidation scan error"),
+        )
       }, 60_000)
     }
 

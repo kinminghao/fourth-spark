@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type ClipboardEvent } from "react"
 import clsx from "clsx"
 import { FileText, ImagePlus, X } from "lucide-react"
+import { type ClipboardEvent, useCallback, useEffect, useRef, useState } from "react"
 import type { PromptFile } from "../lib/api-client"
-import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, TEXT_FOLD_LINE_THRESHOLD, TEXT_FOLD_CHAR_THRESHOLD } from "../lib/constants"
+import {
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS,
+  TEXT_FOLD_CHAR_THRESHOLD,
+  TEXT_FOLD_LINE_THRESHOLD,
+} from "../lib/constants"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 
@@ -114,7 +119,12 @@ export function useAttachments(imagesAllowed = true) {
         errors.push(`${file.name}：超过 5MB`)
         continue
       }
-      accepted.push({ _id: `att-${++attachmentSeq}`, mime: file.type, url: await readAsDataUrl(file), filename: file.name })
+      accepted.push({
+        _id: `att-${++attachmentSeq}`,
+        mime: file.type,
+        url: await readAsDataUrl(file),
+        filename: file.name,
+      })
       remaining--
     }
     if (accepted.length > 0) {
@@ -163,7 +173,20 @@ export function useAttachments(imagesAllowed = true) {
 
   const promptFiles: PromptFile[] = attachments.map(({ mime, url, filename }) => ({ mime, url, filename }))
 
-  return { attachments, foldedTexts, promptFiles, error, setError, addFiles, onPaste, addFoldedText, expandFoldedTexts, remove, removeFoldedText, clear }
+  return {
+    attachments,
+    foldedTexts,
+    promptFiles,
+    error,
+    setError,
+    addFiles,
+    onPaste,
+    addFoldedText,
+    expandFoldedTexts,
+    remove,
+    removeFoldedText,
+    clear,
+  }
 }
 
 function TextPreviewLightbox({ text, label, onClose }: { text: string; label: string; onClose: () => void }) {
@@ -323,12 +346,7 @@ export function AttachmentStrip({
             </div>
           ))}
           {(foldedTexts ?? []).map((fold, i) => (
-            <TextChip
-              key={fold._id}
-              fold={fold}
-              index={i + 1}
-              onRemove={() => onRemoveFoldedText?.(fold._id)}
-            />
+            <TextChip key={fold._id} fold={fold} index={i + 1} onRemove={() => onRemoveFoldedText?.(fold._id)} />
           ))}
         </div>
       )}

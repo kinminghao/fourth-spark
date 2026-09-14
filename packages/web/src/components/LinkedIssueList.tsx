@@ -1,16 +1,10 @@
-import { CircleDot } from "lucide-react"
 import clsx from "clsx"
+import { CircleDot } from "lucide-react"
 import type { Issue } from "../lib/api-client"
-import { useSessionStore } from "../stores/session-store"
 import { issueStateColor } from "../lib/date-utils"
+import { useSessionStore } from "../stores/session-store"
 
-export function LinkedIssueList({
-  issues,
-  onSelect,
-}: {
-  issues: Issue[]
-  onSelect: (issueId: string) => void
-}) {
+export function LinkedIssueList({ issues, onSelect }: { issues: Issue[]; onSelect: (issueId: string) => void }) {
   const sessions = useSessionStore((s) => s.sessions)
 
   const sessionCounts = new Map<string, number>()
@@ -41,7 +35,12 @@ export function LinkedIssueList({
               className="group flex w-full flex-col gap-1.5 rounded-lg border border-line bg-elevated/30 px-4 py-3 text-left transition-colors hover:border-blue-500/40 hover:bg-elevated/60"
             >
               <div className="flex items-center gap-2">
-                <span className={clsx("shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold", issueStateColor(issue.state))}>
+                <span
+                  className={clsx(
+                    "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
+                    issueStateColor(issue.state),
+                  )}
+                >
                   #{issue.number} {issue.state}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg-2 group-hover:text-fg">
@@ -56,21 +55,21 @@ export function LinkedIssueList({
               <div className="flex flex-wrap items-center gap-2 text-[11px] text-fg-5">
                 {issue.authorLogin && (
                   <span className="flex items-center gap-1">
-                    {issue.authorAvatar && (
-                      <img src={issue.authorAvatar} alt="" className="h-3.5 w-3.5 rounded-full" />
-                    )}
+                    {issue.authorAvatar && <img src={issue.authorAvatar} alt="" className="h-3.5 w-3.5 rounded-full" />}
                     {issue.authorLogin}
                   </span>
                 )}
-                {issue.labels && issue.labels.length > 0 && issue.labels.map((l) => (
-                  <span
-                    key={l.id}
-                    className="rounded px-1.5 py-0.5 text-[10px] font-medium"
-                    style={{ backgroundColor: `#${l.color}20`, color: `#${l.color}` }}
-                  >
-                    {l.name}
-                  </span>
-                ))}
+                {issue.labels &&
+                  issue.labels.length > 0 &&
+                  issue.labels.map((l) => (
+                    <span
+                      key={l.id}
+                      className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                      style={{ backgroundColor: `#${l.color}20`, color: `#${l.color}` }}
+                    >
+                      {l.name}
+                    </span>
+                  ))}
               </div>
             </button>
           </li>

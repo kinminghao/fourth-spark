@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { prStateColor, issueStateColor } from "../../src/lib/date-utils"
+import { issueStateColor, prStateColor } from "../../src/lib/date-utils"
 
 describe("prStateColor", () => {
   test("merged → purple", () => {

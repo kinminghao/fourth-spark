@@ -1,14 +1,41 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Activity, AlertTriangle, Ban, Box, Check, ChevronDown, ChevronUp, Clock, Cloud, Cpu, Eye, EyeOff, FileText, Gauge, GitBranch, Keyboard, Loader2, Plus, RefreshCw, Save, Search, Trash2, User, Users, Wifi, X, Zap } from "lucide-react"
 import clsx from "clsx"
+import {
+  Activity,
+  AlertTriangle,
+  Ban,
+  Box,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Cloud,
+  Cpu,
+  Eye,
+  EyeOff,
+  FileText,
+  Gauge,
+  GitBranch,
+  Keyboard,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Save,
+  Search,
+  Trash2,
+  User,
+  Users,
+  Wifi,
+  X,
+  Zap,
+} from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { InlineConfirm } from "../components/InlineConfirm"
-import * as api from "../lib/api-client"
 import type { AccountUsage, GitHost, ModelInfo, UsageResult, UsageWindow } from "../lib/api-client"
-import { useRepoStore } from "../stores/repo-store"
-import { isNativePlatform, getServerUrl, setServerUrl } from "../lib/config"
+import * as api from "../lib/api-client"
+import { getServerUrl, isNativePlatform, setServerUrl } from "../lib/config"
 import { freezeMonitor } from "../lib/freeze-monitor"
+import { useRepoStore } from "../stores/repo-store"
 import { RepoListContent } from "./ReposPage"
-
 
 let usageCache: { data: UsageResult; fetchedAt: number } | null = null
 
@@ -33,7 +60,9 @@ const BASE_TABS: { id: Tab; label: string; icon: typeof Zap }[] = [
 ]
 
 const SERVER_TAB: { id: Tab; label: string; icon: typeof Zap } = {
-  id: "server", label: "服务器", icon: Wifi,
+  id: "server",
+  label: "服务器",
+  icon: Wifi,
 }
 
 function formatReset(resetsAt: string | undefined): string | null {
@@ -93,7 +122,15 @@ function UsageBar({ label, window: w }: { label: string; window: UsageWindow | n
   )
 }
 
-function AccountCard({ account, onSwitch, switching }: { account: AccountUsage; onSwitch?: (id: string) => void; switching?: boolean }) {
+function AccountCard({
+  account,
+  onSwitch,
+  switching,
+}: {
+  account: AccountUsage
+  onSwitch?: (id: string) => void
+  switching?: boolean
+}) {
   const active = account.active
   return (
     <div
@@ -227,17 +264,24 @@ function ClaudeLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucce
 
   useEffect(() => {
     startAuth()
-  }, [])
+  }, [startAuth])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center"
+      onClick={onClose}
+    >
       <div
         className="flex w-full max-w-lg flex-col rounded-t-2xl border border-line bg-surface p-5 shadow-2xl sm:rounded-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-fg">登录 Claude 账号</h2>
-          <button type="button" onClick={onClose} className="rounded-md p-1 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -274,10 +318,11 @@ function ClaudeLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                   type="text"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") void submitCode() }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void submitCode()
+                  }}
                   placeholder="粘贴授权码…"
                   className="min-w-0 flex-1 rounded-md border border-line bg-base px-3 py-2 font-mono text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
-                  autoFocus
                 />
                 <button
                   type="button"
@@ -312,9 +357,7 @@ function ClaudeLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucce
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10">
                 <Check className="h-5 w-5 text-green-500" />
               </div>
-              <p className="text-sm font-medium text-fg">
-                {existing ? "账号已更新" : "账号添加成功"}
-              </p>
+              <p className="text-sm font-medium text-fg">{existing ? "账号已更新" : "账号添加成功"}</p>
               <p className="text-xs text-fg-4">{resultLabel}</p>
             </div>
             <button
@@ -338,7 +381,10 @@ function ClaudeLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucce
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => { setCode(""); void startAuth() }}
+                onClick={() => {
+                  setCode("")
+                  void startAuth()
+                }}
                 className="flex-1 rounded-md border border-line py-2 text-xs font-medium text-fg-3 transition-colors hover:bg-elevated"
               >
                 重试
@@ -377,9 +423,16 @@ function UsageSection() {
   const load = useCallback(() => {
     setLoading(true)
     setError(null)
-    api.fetchUsage()
-      .then((r) => { applyResult(r); setLoading(false) })
-      .catch((e) => { setError(e instanceof Error ? e.message : String(e)); setLoading(false) })
+    api
+      .fetchUsage()
+      .then((r) => {
+        applyResult(r)
+        setLoading(false)
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : String(e))
+        setLoading(false)
+      })
   }, [applyResult])
 
   useEffect(() => {
@@ -392,18 +445,27 @@ function UsageSection() {
   }, [])
 
   const switchRef = useRef(false)
-  const handleSwitch = useCallback((accountId: string) => {
-    if (switchRef.current) return
-    switchRef.current = true
-    setSwitchingId(accountId)
-    api.switchUsageAccount(accountId)
-      .then((r) => { applyResult(r); setSwitchingId(null) })
-      .catch((e) => {
-        setError(e instanceof Error ? e.message : String(e))
-        setSwitchingId(null)
-      })
-      .finally(() => { switchRef.current = false })
-  }, [applyResult])
+  const handleSwitch = useCallback(
+    (accountId: string) => {
+      if (switchRef.current) return
+      switchRef.current = true
+      setSwitchingId(accountId)
+      api
+        .switchUsageAccount(accountId)
+        .then((r) => {
+          applyResult(r)
+          setSwitchingId(null)
+        })
+        .catch((e) => {
+          setError(e instanceof Error ? e.message : String(e))
+          setSwitchingId(null)
+        })
+        .finally(() => {
+          switchRef.current = false
+        })
+    },
+    [applyResult],
+  )
 
   return (
     <section className="rounded-xl border border-line bg-surface p-5">
@@ -418,9 +480,7 @@ function UsageSection() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {cachedAt && (
-            <span className="text-[10px] tabular-nums text-fg-5">{formatElapsed(cachedAt)}</span>
-          )}
+          {cachedAt && <span className="text-[10px] tabular-nums text-fg-5">{formatElapsed(cachedAt)}</span>}
           <button
             type="button"
             onClick={load}
@@ -450,9 +510,7 @@ function UsageSection() {
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-elevated text-fg-4">
               <Users className="h-5 w-5" />
             </div>
-            <p className="max-w-xs text-center text-xs leading-relaxed">
-              暂无账号，点击下方按钮登录 Claude 账号。
-            </p>
+            <p className="max-w-xs text-center text-xs leading-relaxed">暂无账号，点击下方按钮登录 Claude 账号。</p>
           </div>
         ) : data ? (
           data.accounts.map((a) => (
@@ -472,7 +530,10 @@ function UsageSection() {
       {showLogin && (
         <ClaudeLoginModal
           onClose={() => setShowLogin(false)}
-          onSuccess={() => { setShowLogin(false); load() }}
+          onSuccess={() => {
+            setShowLogin(false)
+            load()
+          }}
         />
       )}
     </section>
@@ -509,11 +570,11 @@ const TOKEN_GUIDANCE: Record<string, { scope: string; linkFn: (host: string) => 
   },
   gitlab: {
     scope: "api",
-    linkFn: (h) => h ? `https://${h}/-/user_settings/personal_access_tokens` : null,
+    linkFn: (h) => (h ? `https://${h}/-/user_settings/personal_access_tokens` : null),
   },
   gitea: {
     scope: "issue 和 pull request 读写",
-    linkFn: (h) => h ? `https://${h}/user/settings/applications` : null,
+    linkFn: (h) => (h ? `https://${h}/user/settings/applications` : null),
   },
 }
 
@@ -544,7 +605,13 @@ function AddHostForm({ onAdded }: { onAdded: () => void }) {
   const [saving, setSaving] = useState(false)
   const [visible, setVisible] = useState(false)
 
-  const reset = () => { setHost(""); setName(""); setToken(""); setPlatform("gitea"); setOpen(false) }
+  const reset = () => {
+    setHost("")
+    setName("")
+    setToken("")
+    setPlatform("gitea")
+    setOpen(false)
+  }
 
   const submit = async () => {
     if (!host.trim() || !name.trim() || !token.trim()) return
@@ -651,9 +718,17 @@ function AgentsMdSection() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api.getGlobalAgentsMd()
-      .then((r) => { setContent(r.content); setSaved(r.content); setLoading(false) })
-      .catch((e) => { setError(e instanceof Error ? e.message : String(e)); setLoading(false) })
+    api
+      .getGlobalAgentsMd()
+      .then((r) => {
+        setContent(r.content)
+        setSaved(r.content)
+        setLoading(false)
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : String(e))
+        setLoading(false)
+      })
   }, [])
 
   const handleSave = async () => {
@@ -714,9 +789,7 @@ function AgentsMdSection() {
         )}
       </div>
 
-      <p className="mt-3 text-[11px] text-fg-5">
-        文件路径：~/.config/opencode/AGENTS.md
-      </p>
+      <p className="mt-3 text-[11px] text-fg-5">文件路径：~/.config/opencode/AGENTS.md</p>
     </section>
   )
 }
@@ -726,7 +799,13 @@ function GitHostSection() {
   const [loading, setLoading] = useState(true)
 
   const load = () => {
-    api.listGitHosts().then((h) => { setHosts(h); setLoading(false) }).catch(() => setLoading(false))
+    api
+      .listGitHosts()
+      .then((h) => {
+        setHosts(h)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
   }
 
   useEffect(load, [])
@@ -830,7 +909,9 @@ function ModelManagementSection() {
       if (!cancelled) setLoading(false)
     }
     void load()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [activeRepoId])
 
   const toggleModel = async (modelId: string) => {
@@ -848,13 +929,13 @@ function ModelManagementSection() {
   const grouped = useMemo(() => groupModelsByProvider(models), [models])
   const pinnedCount = models.filter((m) => pinnedIds.has(m.id)).length
 
-  const selectedGroup = activeProvider
-    ? grouped.find((g) => g.provider === activeProvider)
-    : grouped[0]
+  const selectedGroup = activeProvider ? grouped.find((g) => g.provider === activeProvider) : grouped[0]
 
   const q = query.trim().toLowerCase()
   const visibleModels = selectedGroup
-    ? (q ? selectedGroup.models.filter((m) => (m.name || m.id).toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : selectedGroup.models)
+    ? q
+      ? selectedGroup.models.filter((m) => (m.name || m.id).toLowerCase().includes(q) || m.id.toLowerCase().includes(q))
+      : selectedGroup.models
     : []
 
   return (
@@ -905,7 +986,10 @@ function ModelManagementSection() {
                   <button
                     key={g.provider}
                     type="button"
-                    onClick={() => { setActiveProvider(g.provider); setQuery("") }}
+                    onClick={() => {
+                      setActiveProvider(g.provider)
+                      setQuery("")
+                    }}
                     className={clsx(
                       "flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
                       isActive ? "bg-surface text-fg shadow-sm" : "text-fg-4 hover:text-fg-3",
@@ -961,9 +1045,7 @@ function ModelManagementSection() {
                           onChange={() => void toggleModel(m.id)}
                           className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-line accent-blue-500"
                         />
-                        <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">
-                          {m.name || m.id}
-                        </span>
+                        <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">{m.name || m.id}</span>
                         <span className="flex shrink-0 items-center gap-2">
                           {ctx && <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-fg-5">{ctx}</span>}
                           {cost && <span className="text-[10px] text-fg-6">{cost}</span>}
@@ -1028,7 +1110,10 @@ function ServerSection() {
           <input
             type="url"
             value={url}
-            onChange={(e) => { setUrl(e.target.value); setResult(null) }}
+            onChange={(e) => {
+              setUrl(e.target.value)
+              setResult(null)
+            }}
             placeholder="http://192.168.1.100:3000"
             className="mt-1 w-full rounded-md border border-line bg-base px-3 py-2 font-mono text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
           />
@@ -1066,9 +1151,7 @@ function ServerSection() {
         </div>
       </div>
 
-      <p className="mt-4 text-[11px] text-fg-5">
-        保存后需重新打开 App 生效。确保手机与开发机在同一局域网。
-      </p>
+      <p className="mt-4 text-[11px] text-fg-5">保存后需重新打开 App 生效。确保手机与开发机在同一局域网。</p>
     </section>
   )
 }
@@ -1081,7 +1164,8 @@ function AccountSection() {
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    api.getCloudStatus()
+    api
+      .getCloudStatus()
       .then((s) => {
         const worker = s.mode === "worker"
         setIsWorker(worker)
@@ -1102,7 +1186,9 @@ function AccountSection() {
       <div className="flex gap-1 rounded-lg border border-line bg-base p-1">
         <button
           type="button"
-          onClick={() => { if (!isWorker) setMode("local") }}
+          onClick={() => {
+            if (!isWorker) setMode("local")
+          }}
           disabled={isWorker}
           className={clsx(
             "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
@@ -1139,7 +1225,8 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api.fetchUsage()
+    api
+      .fetchUsage()
       .then((r) => setAccounts(r.accounts))
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -1163,11 +1250,21 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
   const sevenDay = (a: api.AccountUsage) => a.usage?.seven_day
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center" onClick={onClose}>
-      <div className="flex max-h-[85vh] w-full flex-col rounded-t-2xl border border-line bg-surface p-4 shadow-2xl sm:mx-4 sm:max-w-lg sm:rounded-xl sm:p-5" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[85vh] w-full flex-col rounded-t-2xl border border-line bg-surface p-4 shadow-2xl sm:mx-4 sm:max-w-lg sm:rounded-xl sm:p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex shrink-0 items-center justify-between">
           <h2 className="text-sm font-semibold text-fg">切换账号</h2>
-          <button type="button" onClick={onClose} className="rounded-md p-1 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -1185,19 +1282,23 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
                 key={a.id}
                 type="button"
                 disabled={switching !== null}
-                onClick={() => { if (!a.active) void handleSwitch(a.id) }}
+                onClick={() => {
+                  if (!a.active) void handleSwitch(a.id)
+                }}
                 className={clsx(
                   "flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors sm:gap-3",
-                  a.active
-                    ? "border-blue-500/40 bg-blue-500/5"
-                    : "border-line hover:bg-elevated",
+                  a.active ? "border-blue-500/40 bg-blue-500/5" : "border-line hover:bg-elevated",
                   switching === a.id && "opacity-60",
                 )}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-xs font-medium text-fg">{a.label}</span>
-                    {a.active && <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-blue-500">当前</span>}
+                    {a.active && (
+                      <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-blue-500">
+                        当前
+                      </span>
+                    )}
                     {switching === a.id && <Loader2 className="h-3 w-3 fs-spin text-blue-500" />}
                   </div>
                 </div>
@@ -1206,8 +1307,17 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
                     <div className="text-[10px] text-fg-5">5h</div>
                     {fiveHour(a) ? (
                       <>
-                        <div className={clsx("text-xs font-medium", (fiveHour(a)!.utilization) > 80 ? "text-red-400" : "text-fg-3")}>{Math.round(fiveHour(a)!.utilization)}%</div>
-                        <div className="hidden text-[9px] text-fg-5 sm:block">{fiveHour(a)!.resets_at ? formatReset(fiveHour(a)!.resets_at) : ""}</div>
+                        <div
+                          className={clsx(
+                            "text-xs font-medium",
+                            (fiveHour(a)?.utilization ?? 0) > 80 ? "text-red-400" : "text-fg-3",
+                          )}
+                        >
+                          {Math.round(fiveHour(a)?.utilization ?? 0)}%
+                        </div>
+                        <div className="hidden text-[9px] text-fg-5 sm:block">
+                          {fiveHour(a)?.resets_at ? formatReset(fiveHour(a)?.resets_at) : ""}
+                        </div>
                       </>
                     ) : (
                       <div className="text-[10px] text-fg-5">—</div>
@@ -1217,8 +1327,17 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
                     <div className="text-[10px] text-fg-5">7d</div>
                     {sevenDay(a) ? (
                       <>
-                        <div className={clsx("text-xs font-medium", (sevenDay(a)!.utilization) > 80 ? "text-red-400" : "text-fg-3")}>{Math.round(sevenDay(a)!.utilization)}%</div>
-                        <div className="hidden text-[9px] text-fg-5 sm:block">{sevenDay(a)!.resets_at ? formatReset(sevenDay(a)!.resets_at) : ""}</div>
+                        <div
+                          className={clsx(
+                            "text-xs font-medium",
+                            (sevenDay(a)?.utilization ?? 0) > 80 ? "text-red-400" : "text-fg-3",
+                          )}
+                        >
+                          {Math.round(sevenDay(a)?.utilization ?? 0)}%
+                        </div>
+                        <div className="hidden text-[9px] text-fg-5 sm:block">
+                          {sevenDay(a)?.resets_at ? formatReset(sevenDay(a)?.resets_at) : ""}
+                        </div>
                       </>
                     ) : (
                       <div className="text-[10px] text-fg-5">—</div>
@@ -1268,7 +1387,9 @@ function CloudPoolSection({ onStatusChange }: { onStatusChange?: (s: api.CloudSt
       setSavedWorkerId(settings.cloud_worker_id ?? "")
       setStatus(cloudStatus)
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const mode = status?.mode ?? (savedUrl ? "worker" : "local")
@@ -1333,10 +1454,7 @@ function CloudPoolSection({ onStatusChange }: { onStatusChange?: (s: api.CloudSt
           )}
           {isWorker && status?.connected != null && (
             <span
-              className={clsx(
-                "ml-auto text-[10px] font-medium",
-                status.connected ? "text-green-500" : "text-red-400",
-              )}
+              className={clsx("ml-auto text-[10px] font-medium", status.connected ? "text-green-500" : "text-red-400")}
             >
               {status.connected ? "已连接" : "未连接"}
             </span>
@@ -1364,7 +1482,10 @@ function CloudPoolSection({ onStatusChange }: { onStatusChange?: (s: api.CloudSt
           <input
             type="url"
             value={url}
-            onChange={(e) => { setUrl(e.target.value); setResult(null) }}
+            onChange={(e) => {
+              setUrl(e.target.value)
+              setResult(null)
+            }}
             placeholder="http://100.64.0.36:8787"
             className="mt-1 w-full rounded-md border border-line bg-base px-3 py-2 font-mono text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
           />
@@ -1379,7 +1500,9 @@ function CloudPoolSection({ onStatusChange }: { onStatusChange?: (s: api.CloudSt
             placeholder="fourth-spark-1"
             className="mt-1 w-full rounded-md border border-line bg-base px-3 py-2 font-mono text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
           />
-          <span className="mt-1 block text-[11px] text-fg-5">此 Worker 在账号池中的唯一标识，建议用小写字母、数字和连字符。</span>
+          <span className="mt-1 block text-[11px] text-fg-5">
+            此 Worker 在账号池中的唯一标识，建议用小写字母、数字和连字符。
+          </span>
         </label>
 
         <div className="flex items-center gap-2">
@@ -1414,9 +1537,7 @@ function CloudPoolSection({ onStatusChange }: { onStatusChange?: (s: api.CloudSt
         </div>
       </div>
 
-      <p className="mt-4 text-[11px] text-fg-5">
-        清空 Master URL 可切回本地模式。
-      </p>
+      <p className="mt-4 text-[11px] text-fg-5">清空 Master URL 可切回本地模式。</p>
 
       {showSwitchModal && (
         <AccountSwitchModal
@@ -1453,18 +1574,26 @@ function QuickInputSection() {
         if (cancelled) return
         const raw = settings.quick_inputs
         if (raw) {
-          try { setItems(JSON.parse(raw)) } catch { /* ignore bad JSON */ }
+          try {
+            setItems(JSON.parse(raw))
+          } catch {
+            /* ignore bad JSON */
+          }
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       if (!cancelled) setLoaded(true)
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      const valid = items.filter(i => i.label.trim() && i.text.trim())
+      const valid = items.filter((i) => i.label.trim() && i.text.trim())
       await api.updateSetting("quick_inputs", JSON.stringify(valid))
       setItems(valid)
     } finally {
@@ -1477,7 +1606,7 @@ function QuickInputSection() {
   }
 
   const updateItem = (index: number, updates: Partial<QuickInput>) => {
-    setItems(items.map((item, i) => i === index ? { ...item, ...updates } : item))
+    setItems(items.map((item, i) => (i === index ? { ...item, ...updates } : item)))
   }
 
   const removeItem = (index: number) => {
@@ -1510,10 +1639,20 @@ function QuickInputSection() {
         {items.map((item, i) => (
           <div key={i} className="flex items-center gap-2 rounded-lg border border-line bg-base px-3 py-2">
             <div className="flex shrink-0 flex-col gap-0.5">
-              <button type="button" onClick={() => moveItem(i, -1)} disabled={i === 0} className="text-fg-5 hover:text-fg-3 disabled:opacity-20">
+              <button
+                type="button"
+                onClick={() => moveItem(i, -1)}
+                disabled={i === 0}
+                className="text-fg-5 hover:text-fg-3 disabled:opacity-20"
+              >
                 <ChevronUp className="h-3 w-3" />
               </button>
-              <button type="button" onClick={() => moveItem(i, 1)} disabled={i === items.length - 1} className="text-fg-5 hover:text-fg-3 disabled:opacity-20">
+              <button
+                type="button"
+                onClick={() => moveItem(i, 1)}
+                disabled={i === items.length - 1}
+                className="text-fg-5 hover:text-fg-3 disabled:opacity-20"
+              >
                 <ChevronDown className="h-3 w-3" />
               </button>
             </div>
@@ -1540,7 +1679,11 @@ function QuickInputSection() {
               />
               直接发送
             </label>
-            <button type="button" onClick={() => removeItem(i)} className="shrink-0 text-fg-5 transition-colors hover:text-red-400">
+            <button
+              type="button"
+              onClick={() => removeItem(i)}
+              className="shrink-0 text-fg-5 transition-colors hover:text-red-400"
+            >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -1567,9 +1710,7 @@ function QuickInputSection() {
         </button>
       </div>
 
-      <p className="mt-3 text-[11px] text-fg-5">
-        「直接发送」开启后，点击按钮将直接发送消息；关闭则填入输入框供编辑。
-      </p>
+      <p className="mt-3 text-[11px] text-fg-5">「直接发送」开启后，点击按钮将直接发送消息；关闭则填入输入框供编辑。</p>
     </section>
   )
 }
@@ -1608,7 +1749,7 @@ function DiagnosticsSection() {
 
 export function SettingsPage() {
   const [tab, setTab] = useState<Tab>("usage")
-  const tabs = useMemo(() => (isNativePlatform() || getServerUrl()) ? [...BASE_TABS, SERVER_TAB] : BASE_TABS, [])
+  const tabs = useMemo(() => (isNativePlatform() || getServerUrl() ? [...BASE_TABS, SERVER_TAB] : BASE_TABS), [])
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -1624,9 +1765,7 @@ export function SettingsPage() {
               onClick={() => setTab(t.id)}
               className={clsx(
                 "flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                tab === t.id
-                  ? "bg-base text-fg shadow-sm"
-                  : "text-fg-4 hover:text-fg-3",
+                tab === t.id ? "bg-base text-fg shadow-sm" : "text-fg-4 hover:text-fg-3",
               )}
             >
               <t.icon className="h-3.5 w-3.5" />

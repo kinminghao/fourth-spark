@@ -1,6 +1,6 @@
 import { useSessionStore } from "../stores/session-store"
-import { dispatchSseEvent, extractPartDelta } from "./sse-events"
 import { freezeMonitor } from "./freeze-monitor"
+import { dispatchSseEvent, extractPartDelta } from "./sse-events"
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000
 const FLUSH_INTERVAL_MS = 200

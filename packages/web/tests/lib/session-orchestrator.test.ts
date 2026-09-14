@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, mock } from "bun:test"
+import { beforeEach, describe, expect, mock, test } from "bun:test"
 
 const mockWorkerStop = mock()
 const mockWorkerActivate = mock()
@@ -8,7 +8,9 @@ const mockWorkerDispatch = mock()
 mock.module("../../src/lib/session-worker", () => ({
   SessionWorker: class {
     sessionId: string
-    constructor(sessionId: string) { this.sessionId = sessionId }
+    constructor(sessionId: string) {
+      this.sessionId = sessionId
+    }
     dispatch = mockWorkerDispatch
     stop = mockWorkerStop
     activate = mockWorkerActivate

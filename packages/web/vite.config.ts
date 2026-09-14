@@ -1,7 +1,7 @@
-import { defineConfig } from "vite"
-import react from "@vitejs/plugin-react"
-import tailwindcss from "@tailwindcss/vite"
 import { execSync } from "node:child_process"
+import tailwindcss from "@tailwindcss/vite"
+import react from "@vitejs/plugin-react"
+import { defineConfig } from "vite"
 
 const apiTarget = process.env.VITE_API_TARGET ?? "http://localhost:3000"
 

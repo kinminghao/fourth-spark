@@ -43,7 +43,11 @@ class FreezeMonitor {
 
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
-      try { this.ring = JSON.parse(saved) } catch { this.ring = [] }
+      try {
+        this.ring = JSON.parse(saved)
+      } catch {
+        this.ring = []
+      }
     }
 
     this.sampleTimer = window.setInterval(() => this.sample(), SAMPLE_INTERVAL_MS)
@@ -91,7 +95,9 @@ class FreezeMonitor {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.ring))
     } catch {
       this.ring.splice(0, Math.floor(this.ring.length / 2))
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(this.ring)) } catch {}
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.ring))
+      } catch {}
     }
   }
 }
