@@ -1310,10 +1310,10 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
                         <div
                           className={clsx(
                             "text-xs font-medium",
-                            fiveHour(a)?.utilization > 80 ? "text-red-400" : "text-fg-3",
+                            (fiveHour(a)?.utilization ?? 0) > 80 ? "text-red-400" : "text-fg-3",
                           )}
                         >
-                          {Math.round(fiveHour(a)?.utilization)}%
+                          {Math.round(fiveHour(a)?.utilization ?? 0)}%
                         </div>
                         <div className="hidden text-[9px] text-fg-5 sm:block">
                           {fiveHour(a)?.resets_at ? formatReset(fiveHour(a)?.resets_at) : ""}
@@ -1330,10 +1330,10 @@ function AccountSwitchModal({ onClose, onSwitched }: { onClose: () => void; onSw
                         <div
                           className={clsx(
                             "text-xs font-medium",
-                            sevenDay(a)?.utilization > 80 ? "text-red-400" : "text-fg-3",
+                            (sevenDay(a)?.utilization ?? 0) > 80 ? "text-red-400" : "text-fg-3",
                           )}
                         >
-                          {Math.round(sevenDay(a)?.utilization)}%
+                          {Math.round(sevenDay(a)?.utilization ?? 0)}%
                         </div>
                         <div className="hidden text-[9px] text-fg-5 sm:block">
                           {sevenDay(a)?.resets_at ? formatReset(sevenDay(a)?.resets_at) : ""}

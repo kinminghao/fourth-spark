@@ -114,21 +114,13 @@ let usageCache: { result: UsageResult; fetchedAt: number } | null = null
 
 function snapshotToUsageResult(view: UsageSnapshotView, activeId?: string): UsageResult {
   const accounts: AccountUsage[] = view.accounts.map((a) => {
+    const fhWindow = a.windows.find((w) => w.label === "5 小时" || w.label === "five_hour")
+    const sdWindow = a.windows.find((w) => w.label === "7 天" || w.label === "seven_day")
     const usage: UsageResponse | undefined =
       a.hasUsage && a.windows.length > 0
         ? {
-            five_hour: a.windows.find((w) => w.label === "5 小时" || w.label === "five_hour")
-              ? {
-                  utilization: a.windows.find((w) => w.label === "5 小时" || w.label === "five_hour")?.utilization,
-                  resets_at: a.windows.find((w) => w.label === "5 小时" || w.label === "five_hour")?.resetsAt,
-                }
-              : undefined,
-            seven_day: a.windows.find((w) => w.label === "7 天" || w.label === "seven_day")
-              ? {
-                  utilization: a.windows.find((w) => w.label === "7 天" || w.label === "seven_day")?.utilization,
-                  resets_at: a.windows.find((w) => w.label === "7 天" || w.label === "seven_day")?.resetsAt,
-                }
-              : undefined,
+            five_hour: fhWindow ? { utilization: fhWindow.utilization, resets_at: fhWindow.resetsAt } : undefined,
+            seven_day: sdWindow ? { utilization: sdWindow.utilization, resets_at: sdWindow.resetsAt } : undefined,
             scoped: a.windows
               .filter(
                 (w) => w.label !== "5 小时" && w.label !== "five_hour" && w.label !== "7 天" && w.label !== "seven_day",

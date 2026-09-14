@@ -75,7 +75,7 @@ export async function buildIssueContext(issueId: string): Promise<string | null>
     arr.push(c)
     map.set(c.issueId, arr)
     return map
-  }, new Map<number, typeof allComments>())
+  }, new Map<string, typeof allComments>())
 
   const sections = chain.map((issue, i) => {
     const isLeaf = i === chain.length - 1

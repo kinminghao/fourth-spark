@@ -102,9 +102,9 @@ const MOCK_PRS: PersistentPullRequest[] = [
 ]
 
 const MOCK_TAGS: Tag[] = [
-  { id: "guide-tag-1", repoId: REPO_ID, name: "bug", color: "d73a4a" },
-  { id: "guide-tag-2", repoId: REPO_ID, name: "feature", color: "0075ca" },
-  { id: "guide-tag-3", repoId: REPO_ID, name: "priority", color: "e4e669" },
+  { id: "guide-tag-1", repoId: REPO_ID, name: "bug", color: "d73a4a", description: null, createdAt: NOW },
+  { id: "guide-tag-2", repoId: REPO_ID, name: "feature", color: "0075ca", description: null, createdAt: NOW },
+  { id: "guide-tag-3", repoId: REPO_ID, name: "priority", color: "e4e669", description: null, createdAt: NOW },
 ]
 
 // ---------------------------------------------------------------------------

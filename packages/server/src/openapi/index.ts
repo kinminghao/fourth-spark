@@ -1676,7 +1676,7 @@ for (const method of ["get", "post", "put", "delete", "patch"] as const) {
 // Public generator
 // ---------------------------------------------------------------------------
 
-export function generateOpenApiSpec() {
+export function generateOpenApiSpec(): import("openapi3-ts/oas31").OpenAPIObject {
   const generator = new OpenApiGeneratorV31([...allNamedSchemas, ...registry.definitions])
   return generator.generateDocument({
     openapi: "3.1.0",

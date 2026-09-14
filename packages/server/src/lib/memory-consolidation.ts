@@ -133,6 +133,7 @@ function validateConsolidationActions(actions: ExtractionAction[], activeIds: Se
 
     if (
       (action.action === "merge" || action.action === "update") &&
+      "category" in action &&
       action.category &&
       FORBIDDEN_CATEGORY_NAMES.has(action.category)
     ) {

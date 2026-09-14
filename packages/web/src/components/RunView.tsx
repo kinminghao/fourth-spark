@@ -256,9 +256,9 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   }
 
   const handleVoiceSubmit = useCallback(
-    (text: string) => {
-      if (!activeRepoId) return
-      void createSession(
+    (text: string): undefined => {
+      if (!activeRepoId) return undefined
+      createSession(
         activeRepoId,
         text,
         undefined,
@@ -267,6 +267,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
         issueId || undefined,
         customAgentId || undefined,
       )
+      return undefined
     },
     [activeRepoId, createSession, issueId, customAgentId, selectedVariant],
   )
