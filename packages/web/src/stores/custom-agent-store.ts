@@ -1,7 +1,7 @@
 import { create } from "zustand"
+import type { CustomAgent } from "../lib/api-client"
 import * as api from "../lib/api-client"
 import { ApiError } from "../lib/api-client"
-import type { CustomAgent } from "../lib/api-client"
 import { notify } from "./notifications"
 
 /** Monotonic version counter for stale-response discarding. */
@@ -20,9 +20,7 @@ export const useCustomAgentStore = create<CustomAgentState>((set) => ({
   loadAgents: async (repoId) => {
     const version = ++_loadVersion
     try {
-      const agents = repoId
-        ? await api.listRepoCustomAgents(repoId)
-        : await api.listGlobalCustomAgents()
+      const agents = repoId ? await api.listRepoCustomAgents(repoId) : await api.listGlobalCustomAgents()
       if (_loadVersion !== version) return
       set({ agents, loaded: true })
     } catch (err) {

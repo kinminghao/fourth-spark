@@ -1,11 +1,19 @@
+import { ChevronLeft, ChevronRight, X } from "lucide-react"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { useNavigate, useLocation } from "react-router-dom"
-import { ChevronLeft, ChevronRight, X } from "lucide-react"
+import { useLocation, useNavigate } from "react-router-dom"
 import { useLayoutStore } from "../stores/layout-store"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
-import { GUIDE_STEPS, stepsForSection, type GuideStep, type TooltipPosition } from "./guide-steps"
-import { injectMockData, restoreMockData, selectMockIssue, selectMockPr, selectMockSession, clearActiveSession, getMockAgentId } from "./guide-mock-data"
+import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
+import {
+  clearActiveSession,
+  getMockAgentId,
+  injectMockData,
+  restoreMockData,
+  selectMockIssue,
+  selectMockPr,
+  selectMockSession,
+} from "./guide-mock-data"
+import { GUIDE_STEPS, type GuideStep, stepsForSection, type TooltipPosition } from "./guide-steps"
 
 const HIGHLIGHT_PAD = 6
 const TOOLTIP_GAP = 12
@@ -46,19 +54,14 @@ function clipPathWithHole(rect: Rect): string {
   )`
 }
 
-function tooltipStyle(
-  targetRect: Rect,
-  position: TooltipPosition,
-): React.CSSProperties {
+function tooltipStyle(targetRect: Rect, position: TooltipPosition): React.CSSProperties {
   const style: React.CSSProperties = { position: "fixed" }
   const vw = window.innerWidth
   const vh = window.innerHeight
   const below = targetRect.top + targetRect.height + TOOLTIP_GAP
   const above = targetRect.top - TOOLTIP_GAP
 
-  let left = position === "bottom-right"
-    ? targetRect.left + targetRect.width - TOOLTIP_WIDTH
-    : targetRect.left
+  let left = position === "bottom-right" ? targetRect.left + targetRect.width - TOOLTIP_WIDTH : targetRect.left
   left = Math.max(VIEWPORT_MARGIN, Math.min(left, vw - TOOLTIP_WIDTH - VIEWPORT_MARGIN))
   style.left = left
 
@@ -142,11 +145,19 @@ function SwipeTooltip({
           </span>
           <div className="flex items-center gap-2">
             {!isFirst && (
-              <button type="button" onClick={onPrev} className="rounded-md px-3 py-1 text-xs text-fg-3 transition-colors hover:bg-elevated hover:text-fg">
+              <button
+                type="button"
+                onClick={onPrev}
+                className="rounded-md px-3 py-1 text-xs text-fg-3 transition-colors hover:bg-elevated hover:text-fg"
+              >
                 上一步
               </button>
             )}
-            <button type="button" onClick={onNext} className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-500">
+            <button
+              type="button"
+              onClick={onNext}
+              className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-500"
+            >
               {isLast ? "完成" : "下一步"}
             </button>
           </div>
@@ -169,7 +180,7 @@ export function GuideTour() {
   const prevStepRef = useRef(-1)
   const activeMockRef = useRef<string | null>(null)
 
-  const steps = useMemo(() => open ? stepsForSection(section) : GUIDE_STEPS, [open, section])
+  const steps = useMemo(() => (open ? stepsForSection(section) : GUIDE_STEPS), [open, section])
   const current = step < steps.length ? steps[step] : undefined
   const total = steps.length
   const isFirst = step === 0
@@ -181,18 +192,21 @@ export function GuideTour() {
     setRect(getTargetRect(current.target, pad))
   }, [open, current])
 
-  const resolveRoute = useCallback((route: string) => {
-    const resolved = route.replace("__MOCK_AGENT__", getMockAgentId())
-    if (resolved.startsWith("/")) return resolved
-    return repoName ? `/${encodeURIComponent(repoName)}/${resolved}` : `/${resolved}`
-  }, [repoName])
+  const resolveRoute = useCallback(
+    (route: string) => {
+      const resolved = route.replace("__MOCK_AGENT__", getMockAgentId())
+      if (resolved.startsWith("/")) return resolved
+      return repoName ? `/${encodeURIComponent(repoName)}/${resolved}` : `/${resolved}`
+    },
+    [repoName],
+  )
 
   useEffect(() => {
     if (open) {
       setStep(0)
       prevStepRef.current = -1
     }
-  }, [open, section])
+  }, [open])
 
   useEffect(() => {
     if (!open || !current) return
@@ -223,19 +237,24 @@ export function GuideTour() {
         SETUP_FNS[current.setupFn]()
       }
 
-      setTimeout(() => {
-        if (current.triggerClick && !document.querySelector(current.target)) {
-          clickSelector(current.triggerClick)
-        }
-        setTimeout(measure, TRIGGER_SETTLE_MS)
-      }, current.setupFn ? ROUTE_SETTLE_MS : 0)
+      setTimeout(
+        () => {
+          if (current.triggerClick && !document.querySelector(current.target)) {
+            clickSelector(current.triggerClick)
+          }
+          setTimeout(measure, TRIGGER_SETTLE_MS)
+        },
+        current.setupFn ? ROUTE_SETTLE_MS : 0,
+      )
     }, delay)
 
     prevStepRef.current = step
     return () => clearTimeout(t1)
-  }, [open, step, current, navigate, location.pathname, measure, resolveRoute])
+  }, [open, step, current, navigate, location.pathname, measure, resolveRoute, steps])
 
-  useLayoutEffect(() => { measure() }, [measure])
+  useLayoutEffect(() => {
+    measure()
+  }, [measure])
 
   useEffect(() => {
     if (!open) return
@@ -266,7 +285,9 @@ export function GuideTour() {
 
   useEffect(() => {
     if (!open) return
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") closeTour() }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeTour()
+    }
     document.addEventListener("keydown", handler)
     return () => document.removeEventListener("keydown", handler)
   }, [open, closeTour])
@@ -276,8 +297,13 @@ export function GuideTour() {
   const showSwipeHint = isMobile() && current.mobileSwipeHint && !rect
   if (!rect && !showSwipeHint) return null
 
-  const prev = () => { if (!isFirst) setStep((s) => s - 1) }
-  const next = () => { if (isLast) closeTour(); else setStep((s) => s + 1) }
+  const prev = () => {
+    if (!isFirst) setStep((s) => s - 1)
+  }
+  const next = () => {
+    if (isLast) closeTour()
+    else setStep((s) => s + 1)
+  }
 
   if (showSwipeHint) {
     return createPortal(
@@ -310,10 +336,10 @@ export function GuideTour() {
       <div
         className="pointer-events-none absolute rounded-lg ring-2 ring-blue-500 ring-offset-2 ring-offset-transparent transition-all duration-200"
         style={{
-          top: rect!.top,
-          left: rect!.left,
-          width: rect!.width,
-          height: rect!.height,
+          top: rect?.top,
+          left: rect?.left,
+          width: rect?.width,
+          height: rect?.height,
         }}
       />
 

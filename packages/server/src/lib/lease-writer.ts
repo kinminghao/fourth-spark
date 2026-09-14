@@ -1,5 +1,5 @@
-import { writeAuthAnthropic, recordLeasedActiveId } from "./auth-files"
 import { logger } from "../middleware/logger"
+import { recordLeasedActiveId, writeAuthAnthropic } from "./auth-files"
 
 async function broadcastLeaseToOtherRuntimes(access: string, expires: number): Promise<void> {
   try {

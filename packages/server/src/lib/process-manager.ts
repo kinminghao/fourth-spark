@@ -16,8 +16,8 @@
 // ---------------------------------------------------------------------------
 
 import { createDefaultRuntimeManager } from "../core/runtime-manager"
-import { createOpenCodeProvider } from "../runtimes/opencode/provider"
 import { createClaudeCodeProvider } from "../runtimes/claude-code/provider"
+import { createOpenCodeProvider } from "../runtimes/opencode/provider"
 import { PORT } from "./config"
 
 const manager = createDefaultRuntimeManager()

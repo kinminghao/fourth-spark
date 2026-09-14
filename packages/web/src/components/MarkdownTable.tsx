@@ -1,5 +1,5 @@
-import { useState, type ComponentPropsWithoutRef } from "react"
 import { Maximize2, Minimize2 } from "lucide-react"
+import { type ComponentPropsWithoutRef, useState } from "react"
 
 type Mode = "fit" | "wide"
 

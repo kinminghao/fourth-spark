@@ -1,6 +1,6 @@
 import { repoEventsUrl } from "./api-client"
-import { parseEventData } from "./sse-events"
 import { freezeMonitor } from "./freeze-monitor"
+import { parseEventData } from "./sse-events"
 
 type EventHandler = (sessionId: string, eventName: string, data: unknown) => void
 
@@ -49,9 +49,15 @@ export class GlobalEventDispatcher {
     }
 
     const knownEvents = [
-      "message.updated", "message.part.updated", "message.part.delta",
-      "message.removed", "todo.updated", "session.status",
-      "session.idle", "session.error", "session.updated",
+      "message.updated",
+      "message.part.updated",
+      "message.part.delta",
+      "message.removed",
+      "todo.updated",
+      "session.status",
+      "session.idle",
+      "session.error",
+      "session.updated",
     ]
     for (const name of knownEvents) {
       source.addEventListener(name, (event) => {

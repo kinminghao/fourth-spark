@@ -1,6 +1,6 @@
 import { useMemo } from "react"
-import type { Issue, Milestone, Tag } from "../lib/api-client"
 import type { StateFilter, TypeFilter } from "../components/IssueFilters"
+import type { Issue, Milestone, Tag } from "../lib/api-client"
 
 export type IssueType = "epic" | "task" | "stray"
 
@@ -55,50 +55,56 @@ export function useIssueFilters({
     }
   }, [childIssueIds])
 
-  const milestoneMap = useMemo(
-    () => new Map(milestones.map((m) => [m.id, m])),
-    [milestones],
-  )
+  const milestoneMap = useMemo(() => new Map(milestones.map((m) => [m.id, m])), [milestones])
 
   const { afterState, finalFiltered } = useMemo(() => {
     const afterSt = stateFilter === "all" ? issues : issues.filter((i) => i.state === stateFilter)
     const afterTy = typeFilter === "all" ? afterSt : afterSt.filter((i) => issueType(i) === typeFilter)
-    const afterTg = tagFilterMode.size === 0
-      ? afterTy
-      : afterTy.filter((i) => {
-          const issueTagNames = new Set((i.labels ?? []).map((l) => l.name))
-          for (const [tagId, mode] of tagFilterMode) {
-            const tagName = tags.find((t) => t.id === tagId)?.name
-            if (!tagName) continue
-            if (mode === "include" && !issueTagNames.has(tagName)) return false
-            if (mode === "exclude" && issueTagNames.has(tagName)) return false
-          }
-          return true
-        })
+    const afterTg =
+      tagFilterMode.size === 0
+        ? afterTy
+        : afterTy.filter((i) => {
+            const issueTagNames = new Set((i.labels ?? []).map((l) => l.name))
+            for (const [tagId, mode] of tagFilterMode) {
+              const tagName = tags.find((t) => t.id === tagId)?.name
+              if (!tagName) continue
+              if (mode === "include" && !issueTagNames.has(tagName)) return false
+              if (mode === "exclude" && issueTagNames.has(tagName)) return false
+            }
+            return true
+          })
     const sq = searchQuery.trim().toLowerCase()
-    const afterSearch = !sq
-      ? afterTg
-      : afterTg.filter((i) => `#${i.number} ${i.title}`.toLowerCase().includes(sq))
-    const afterMs = selectedMilestoneId
-      ? afterSearch.filter((i) => i.milestoneId === selectedMilestoneId)
-      : afterSearch
-    const afterAuth = !selectedAuthor
-      ? afterMs
-      : afterMs.filter((i) => i.authorLogin === selectedAuthor)
+    const afterSearch = !sq ? afterTg : afterTg.filter((i) => `#${i.number} ${i.title}`.toLowerCase().includes(sq))
+    const afterMs = selectedMilestoneId ? afterSearch.filter((i) => i.milestoneId === selectedMilestoneId) : afterSearch
+    const afterAuth = !selectedAuthor ? afterMs : afterMs.filter((i) => i.authorLogin === selectedAuthor)
     const final = !selectedAssignee
       ? afterAuth
       : afterAuth.filter((i) => (i.assignees ?? []).some((a) => a.login === selectedAssignee))
     return { afterState: afterSt, finalFiltered: final }
-  }, [issues, stateFilter, typeFilter, tagFilterMode, tags, searchQuery, selectedMilestoneId, selectedAuthor, selectedAssignee, issueType])
+  }, [
+    issues,
+    stateFilter,
+    typeFilter,
+    tagFilterMode,
+    tags,
+    searchQuery,
+    selectedMilestoneId,
+    selectedAuthor,
+    selectedAssignee,
+    issueType,
+  ])
 
-  const counts = useMemo(() => ({
-    open: issues.filter((i) => i.state === "open").length,
-    closed: issues.filter((i) => i.state === "closed").length,
-    epic: afterState.filter((i) => issueType(i) === "epic").length,
-    task: afterState.filter((i) => issueType(i) === "task").length,
-    stray: afterState.filter((i) => issueType(i) === "stray").length,
-    afterState: afterState.length,
-  }), [issues, afterState, issueType])
+  const counts = useMemo(
+    () => ({
+      open: issues.filter((i) => i.state === "open").length,
+      closed: issues.filter((i) => i.state === "closed").length,
+      epic: afterState.filter((i) => issueType(i) === "epic").length,
+      task: afterState.filter((i) => issueType(i) === "task").length,
+      stray: afterState.filter((i) => issueType(i) === "stray").length,
+      afterState: afterState.length,
+    }),
+    [issues, afterState, issueType],
+  )
 
   const uniqueAuthors = useMemo((): UserOption[] => {
     const m = new Map<string, UserOption>()

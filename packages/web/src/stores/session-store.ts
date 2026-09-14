@@ -8,12 +8,21 @@
  */
 
 import { create } from "zustand"
+import type {
+  Message,
+  MessagePart,
+  PromptFile,
+  Session,
+  SessionLinkSummary,
+  SessionLinks,
+  Todo,
+} from "../lib/api-client"
 import * as api from "../lib/api-client"
-import type { Message, MessagePart, PromptFile, Session, Todo, SessionLinks, SessionLinkSummary } from "../lib/api-client"
 import { MESSAGES_PAGE_SIZE, SESSIONS_LOAD_LIMIT } from "../lib/constants"
 
 type SessionFilter = "active" | "all"
-import { isQuestionTool, isQuestionPending } from "../lib/message-parts"
+
+import { isQuestionPending, isQuestionTool } from "../lib/message-parts"
 import { notify, removeNotification } from "./notifications"
 
 /** Monotonic version counter for stale-response discarding on loadSessions. */
@@ -26,12 +35,7 @@ function questionToastId(sessionId: string): string {
 function fireQuestionToast(sessionId: string, sessions: Session[]): void {
   const session = sessions.find((s) => s.id === sessionId)
   const label = session?.title || sessionId.slice(-8)
-  notify(
-    `${label} — 等待回复`,
-    "warning",
-    sessionId,
-    { id: questionToastId(sessionId), persistent: true },
-  )
+  notify(`${label} — 等待回复`, "warning", sessionId, { id: questionToastId(sessionId), persistent: true })
 }
 
 function hasAnyPendingQuestion(msgs: Message[]): boolean {
@@ -52,7 +56,11 @@ function partKey(part: MessagePart): string | undefined {
   return part.id ?? part.callID
 }
 
-async function refreshSessionLinks(repoId: string, id: string, set: (fn: (s: SessionState) => Partial<SessionState>) => void): Promise<void> {
+async function refreshSessionLinks(
+  repoId: string,
+  id: string,
+  set: (fn: (s: SessionState) => Partial<SessionState>) => void,
+): Promise<void> {
   try {
     const [links, allLinks] = await Promise.all([
       api.getSessionLinks(repoId, id),
@@ -67,7 +75,6 @@ async function refreshSessionLinks(repoId: string, id: string, set: (fn: (s: Ses
     // best-effort
   }
 }
-
 
 interface MessagesMeta {
   total: number
@@ -101,29 +108,35 @@ interface SessionState {
   toggleSessionComplete: (repoId: string, id: string) => Promise<void>
   toggleSessionPin: (repoId: string, id: string) => Promise<void>
   loadSessions: (repoId: string) => Promise<void>
-  createSession: (repoId: string, message: string, agent?: string, model?: string, variant?: string, issueId?: string, customAgentId?: string, files?: PromptFile[]) => Promise<Session | null>
+  createSession: (
+    repoId: string,
+    message: string,
+    agent?: string,
+    model?: string,
+    variant?: string,
+    issueId?: string,
+    customAgentId?: string,
+    files?: PromptFile[],
+  ) => Promise<Session | null>
   setActiveSession: (repoId: string, id: string) => Promise<void>
   refreshSessionData: (repoId: string, id: string) => Promise<void>
   loadMoreMessages: (repoId: string, sessionId: string) => Promise<void>
   addLink: (repoId: string, sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
   removeLink: (repoId: string, sessionId: string, type: "issue" | "pr", targetId: string) => Promise<boolean>
-  sendMessage: (repoId: string, content: string, model?: string, variant?: string, files?: PromptFile[]) => Promise<boolean>
+  sendMessage: (
+    repoId: string,
+    content: string,
+    model?: string,
+    variant?: string,
+    files?: PromptFile[],
+  ) => Promise<boolean>
   replyQuestion: (repoId: string, answers: string[][]) => Promise<void>
   rejectQuestion: (repoId: string) => Promise<void>
   abortSession: (repoId: string) => Promise<void>
   clearSessions: () => void
   updateMessage: (sessionId: string, message: Message) => void
-  updateMessagePart: (
-    sessionId: string,
-    messageId: string,
-    part: MessagePart,
-  ) => void
-  appendMessagePartDelta: (
-    sessionId: string,
-    messageId: string,
-    partId: string,
-    delta: string,
-  ) => void
+  updateMessagePart: (sessionId: string, messageId: string, part: MessagePart) => void
+  appendMessagePartDelta: (sessionId: string, messageId: string, partId: string, delta: string) => void
   updateTodos: (sessionId: string, todos: Todo[]) => void
   setSessionStatus: (sessionId: string, status: string, reason?: string) => void
   bulkSetStatuses: (statuses: Record<string, string>) => void
@@ -151,12 +164,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   loadError: null,
   sendError: null,
 
-  setSessionModel: (sessionId, model) => set((state) => ({
-    sessionModels: { ...state.sessionModels, [sessionId]: model },
-  })),
-  setSessionVariant: (sessionId, variant) => set((state) => ({
-    sessionVariants: { ...state.sessionVariants, [sessionId]: variant },
-  })),
+  setSessionModel: (sessionId, model) =>
+    set((state) => ({
+      sessionModels: { ...state.sessionModels, [sessionId]: model },
+    })),
+  setSessionVariant: (sessionId, variant) =>
+    set((state) => ({
+      sessionVariants: { ...state.sessionVariants, [sessionId]: variant },
+    })),
   setSessionFilter: (filter) => set({ sessionFilter: filter }),
   setSessionSearch: (search) => set({ sessionSearch: search }),
 
@@ -165,9 +180,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (!session) return
     const pinnedAt = session.pinnedAt ? null : Date.now()
     set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === id ? { ...s, pinnedAt: pinnedAt ?? undefined } : s,
-      ),
+      sessions: state.sessions.map((s) => (s.id === id ? { ...s, pinnedAt: pinnedAt ?? undefined } : s)),
     }))
     try {
       await api.updateSessionPinned(repoId, id, pinnedAt)
@@ -181,9 +194,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (!session) return
     const completedAt = session.completedAt ? null : Date.now()
     set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === id ? { ...s, completedAt: completedAt ?? undefined } : s,
-      ),
+      sessions: state.sessions.map((s) => (s.id === id ? { ...s, completedAt: completedAt ?? undefined } : s)),
     }))
     try {
       await api.updateSessionCompleted(repoId, id, completedAt)
@@ -208,8 +219,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (_loadVersion !== version) return
       set({
         loadingSessions: false,
-        loadError:
-          error instanceof Error ? error.message : "Failed to load sessions",
+        loadError: error instanceof Error ? error.message : "Failed to load sessions",
       })
     }
   },
@@ -219,10 +229,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       const session = await api.createSession(repoId, message, agent, model, variant, issueId, customAgentId, files)
       set((state) => ({
-        sessions: [
-          session,
-          ...state.sessions.filter((s) => s.id !== session.id),
-        ],
+        sessions: [session, ...state.sessions.filter((s) => s.id !== session.id)],
         activeSessionId: session.id,
         messages: { ...state.messages, [session.id]: [] },
       }))
@@ -233,8 +240,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       return session
     } catch (error) {
       set({
-        sendError:
-          error instanceof Error ? error.message : "Failed to create session",
+        sendError: error instanceof Error ? error.message : "Failed to create session",
       })
       return null
     }
@@ -270,9 +276,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           next.sessionLinks = { ...state.sessionLinks, [id]: snap.links }
         }
         if (snap.session) {
-          next.sessions = state.sessions.map((s) =>
-            s.id === id ? { ...s, ...snap.session } : s,
-          )
+          next.sessions = state.sessions.map((s) => (s.id === id ? { ...s, ...snap.session } : s))
         }
       }
       if (msgsResult.status === "fulfilled") {
@@ -287,7 +291,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         }
         next.messagesMeta = {
           ...state.messagesMeta,
-          [id]: { total: Math.max(msgsResult.value.total, current.length), hasMore: msgsResult.value.hasMore, loading: false },
+          [id]: {
+            total: Math.max(msgsResult.value.total, current.length),
+            hasMore: msgsResult.value.hasMore,
+            loading: false,
+          },
         }
       }
       return next
@@ -364,9 +372,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ sendError: null })
     if (session?.completedAt) {
       set((state) => ({
-        sessions: state.sessions.map((s) =>
-          s.id === sessionId ? { ...s, completedAt: undefined } : s,
-        ),
+        sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, completedAt: undefined } : s)),
       }))
     }
     if (!wasBusy) {
@@ -380,8 +386,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       return true
     } catch (error) {
       set({
-        sendError:
-          error instanceof Error ? error.message : "Failed to send message",
+        sendError: error instanceof Error ? error.message : "Failed to send message",
       })
       if (!wasBusy) {
         get().setSessionStatus(sessionId, "idle")
@@ -397,8 +402,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       await api.replyQuestion(repoId, sessionId, answers)
     } catch (error) {
       set({
-        sendError:
-          error instanceof Error ? error.message : "Failed to reply to question",
+        sendError: error instanceof Error ? error.message : "Failed to reply to question",
       })
     }
   },
@@ -456,10 +460,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       let messagesMeta = state.messagesMeta
       if (idx >= 0) {
         const merged: Message = { ...list[idx], ...message }
-        if (
-          (!message.parts || message.parts.length === 0) &&
-          list[idx].parts
-        ) {
+        if ((!message.parts || message.parts.length === 0) && list[idx].parts) {
           merged.parts = list[idx].parts
         }
         next = [...list]
@@ -500,12 +501,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set((state) => {
       const list = state.messages[sessionId] ?? []
       const idx = list.findIndex((m) => m.id === messageId)
-      const base: Message =
-        idx >= 0 ? list[idx] : { id: messageId, role: "assistant" }
+      const base: Message = idx >= 0 ? list[idx] : { id: messageId, role: "assistant" }
       const parts = base.parts ? [...base.parts] : []
       const key = partKey(part)
-      const existingIdx =
-        key != null ? parts.findIndex((p) => partKey(p) === key) : -1
+      const existingIdx = key != null ? parts.findIndex((p) => partKey(p) === key) : -1
 
       if (existingIdx >= 0) {
         parts[existingIdx] = { ...parts[existingIdx], ...part }
@@ -529,17 +528,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set((state) => {
       const list = state.messages[sessionId] ?? []
       const idx = list.findIndex((m) => m.id === messageId)
-      const base: Message =
-        idx >= 0 ? list[idx] : { id: messageId, role: "assistant" }
+      const base: Message = idx >= 0 ? list[idx] : { id: messageId, role: "assistant" }
       const parts = base.parts ? [...base.parts] : []
       const partIdx = parts.findIndex((p) => p.id === partId)
       if (partIdx >= 0) {
         const existing = parts[partIdx]
         const nextText = (existing.content ?? existing.text ?? "") + delta
-        parts[partIdx] =
-          existing.content != null
-            ? { ...existing, content: nextText }
-            : { ...existing, text: nextText }
+        parts[partIdx] = existing.content != null ? { ...existing, content: nextText } : { ...existing, text: nextText }
       } else {
         parts.push({ id: partId, type: "text", text: delta })
       }
@@ -597,7 +592,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const errorReasons = reason
         ? { ...state.errorReasons, [sessionId]: reason }
         : status !== "error"
-          ? (() => { const { [sessionId]: _, ...rest } = state.errorReasons; return rest })()
+          ? (() => {
+              const { [sessionId]: _, ...rest } = state.errorReasons
+              return rest
+            })()
           : state.errorReasons
       return {
         sessionStatuses: { ...state.sessionStatuses, [sessionId]: status },
@@ -613,9 +611,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   renameSession: async (repoId, id, title) => {
     _manualTitles.add(id)
     set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === id ? { ...s, title } : s,
-      ),
+      sessions: state.sessions.map((s) => (s.id === id ? { ...s, title } : s)),
     }))
     try {
       await api.renameSession(repoId, id, title)

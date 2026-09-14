@@ -1,6 +1,6 @@
-import { networkInterfaces, homedir } from "node:os"
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
+import { homedir, networkInterfaces } from "node:os"
 import { join } from "node:path"
-import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync } from "node:fs"
 import { logger } from "../middleware/logger"
 
 const TLS_DIR = join(homedir(), ".fourth-spark", "tls")
@@ -61,11 +61,7 @@ export async function ensureTlsCert(localIPs: Set<string>): Promise<boolean> {
     logger.info("local IPs changed, regenerating TLS certificate")
   }
 
-  const sans = [
-    "DNS:localhost",
-    "IP:127.0.0.1",
-    ...[...localIPs].map((ip) => `IP:${ip}`),
-  ]
+  const sans = ["DNS:localhost", "IP:127.0.0.1", ...[...localIPs].map((ip) => `IP:${ip}`)]
 
   const opensslConfig = `[req]
 distinguished_name = req_dn
@@ -85,19 +81,31 @@ keyUsage = digitalSignature, keyEncipherment
   writeFileSync(configPath, opensslConfig)
 
   try {
-    const result = Bun.spawnSync([
-      "openssl", "req", "-x509",
-      "-newkey", "rsa:2048",
-      "-keyout", KEY_PATH,
-      "-out", CERT_PATH,
-      "-days", "3650",
-      "-nodes",
-      "-config", configPath,
-    ], { stderr: "pipe" })
+    const result = Bun.spawnSync(
+      [
+        "openssl",
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-keyout",
+        KEY_PATH,
+        "-out",
+        CERT_PATH,
+        "-days",
+        "3650",
+        "-nodes",
+        "-config",
+        configPath,
+      ],
+      { stderr: "pipe" },
+    )
 
     if (result.exitCode !== 0) {
-      logger.warn({ stderr: result.stderr.toString().slice(0, 200) },
-        "openssl not available or failed — HTTPS disabled. Install openssl to enable LAN HTTPS.")
+      logger.warn(
+        { stderr: result.stderr.toString().slice(0, 200) },
+        "openssl not available or failed — HTTPS disabled. Install openssl to enable LAN HTTPS.",
+      )
       return false
     }
 
@@ -105,6 +113,8 @@ keyUsage = digitalSignature, keyEncipherment
     logger.info({ ips: [...localIPs], sans }, "TLS certificate generated (self-signed, 10 year)")
     return true
   } finally {
-    try { unlinkSync(configPath) } catch {}
+    try {
+      unlinkSync(configPath)
+    } catch {}
   }
 }

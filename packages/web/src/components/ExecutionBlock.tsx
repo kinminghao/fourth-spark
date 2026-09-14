@@ -1,9 +1,9 @@
+import clsx from "clsx"
+import { AlertTriangle, Brain, ChevronDown, ChevronRight, Paperclip } from "lucide-react"
 import { useEffect, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import remarkGfm from "remark-gfm"
-import clsx from "clsx"
-import { AlertTriangle, Brain, ChevronDown, ChevronRight, Paperclip } from "lucide-react"
 import type { Message, MessagePart } from "../lib/api-client"
 import { classifyPart, getPartText, isQuestionTool } from "../lib/message-parts"
 import { PreviewableImage } from "./Attachments"
@@ -20,11 +20,7 @@ function ThinkingBlock({ text }: { text: string }) {
         onClick={() => setOpen((value) => !value)}
         className="flex items-center gap-1.5 font-mono text-xs text-fg-5 transition-colors hover:text-fg-3"
       >
-        {open ? (
-          <ChevronDown className="h-3 w-3 shrink-0" />
-        ) : (
-          <ChevronRight className="h-3 w-3 shrink-0" />
-        )}
+        {open ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
         <Brain className="h-3 w-3 shrink-0" />
         <span>thinking</span>
       </button>
@@ -87,7 +83,13 @@ function PartView({ part, isStreaming }: { part: MessagePart; isStreaming?: bool
       }
       return (
         <div className="markdown-body leading-relaxed">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={{ table: MarkdownTable }}>{text}</ReactMarkdown>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeHighlight]}
+            components={{ table: MarkdownTable }}
+          >
+            {text}
+          </ReactMarkdown>
         </div>
       )
     }
@@ -108,7 +110,15 @@ function PartView({ part, isStreaming }: { part: MessagePart; isStreaming?: bool
   }
 }
 
-export function ExecutionBlock({ message, isStreaming, queued }: { message: Message; isStreaming?: boolean; queued?: boolean }) {
+export function ExecutionBlock({
+  message,
+  isStreaming,
+  queued,
+}: {
+  message: Message
+  isStreaming?: boolean
+  queued?: boolean
+}) {
   const isUser = message.role === "user"
   const parts = message.parts ?? []
   const renderable = parts.filter((part) => classifyPart(part) !== "other")
@@ -139,9 +149,7 @@ export function ExecutionBlock({ message, isStreaming, queued }: { message: Mess
         </div>
         <div className="flex items-start gap-2 text-sm">
           <span className="shrink-0 select-none text-emerald-400">❯</span>
-          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-fg">
-            {prompt || "…"}
-          </span>
+          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-fg">{prompt || "…"}</span>
         </div>
         {attachments.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2 pl-5">
@@ -173,30 +181,25 @@ export function ExecutionBlock({ message, isStreaming, queued }: { message: Mess
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <div className="min-w-0">
             <span className="font-semibold">{msgError.name ?? "Error"}</span>
-            {msgError.data?.message && (
-              <p className="mt-0.5 text-red-400/80">{msgError.data.message}</p>
-            )}
-            {msgFinish && msgFinish !== "end" && (
-              <p className="mt-0.5 text-red-400/60">finish: {msgFinish}</p>
-            )}
+            {msgError.data?.message && <p className="mt-0.5 text-red-400/80">{msgError.data.message}</p>}
+            {msgFinish && msgFinish !== "end" && <p className="mt-0.5 text-red-400/60">finish: {msgFinish}</p>}
           </div>
         </div>
       )}
       <div className="space-y-2 text-sm text-fg">
-        {renderable.length > 0 ? (
-          renderable.map((part, index) => (
-            <PartView key={part.id ?? part.callID ?? index} part={part} isStreaming={isStreaming} />
-          ))
-        ) : (
-          !msgError && (
-            isStreaming
-              ? <span className="text-fg-5">…</span>
-              : <div className="flex items-center gap-1.5 text-xs text-amber-400/80">
-                  <AlertTriangle className="h-3 w-3 shrink-0" />
-                  <span>空响应 — Agent 未产出任何内容</span>
-                </div>
-          )
-        )}
+        {renderable.length > 0
+          ? renderable.map((part, index) => (
+              <PartView key={part.id ?? part.callID ?? index} part={part} isStreaming={isStreaming} />
+            ))
+          : !msgError &&
+            (isStreaming ? (
+              <span className="text-fg-5">…</span>
+            ) : (
+              <div className="flex items-center gap-1.5 text-xs text-amber-400/80">
+                <AlertTriangle className="h-3 w-3 shrink-0" />
+                <span>空响应 — Agent 未产出任何内容</span>
+              </div>
+            ))}
       </div>
     </div>
   )

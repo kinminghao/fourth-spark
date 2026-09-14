@@ -1,7 +1,7 @@
 import { create } from "zustand"
+import type { PersistentPullRequest } from "../lib/api-client"
 import * as api from "../lib/api-client"
 import { ApiError } from "../lib/api-client"
-import type { PersistentPullRequest } from "../lib/api-client"
 
 /** Monotonic version counter for stale-response discarding. */
 let _loadVersion = 0

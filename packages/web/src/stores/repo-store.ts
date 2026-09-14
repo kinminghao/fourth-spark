@@ -1,6 +1,6 @@
 import { create } from "zustand"
-import * as api from "../lib/api-client"
 import type { Repo } from "../lib/api-client"
+import * as api from "../lib/api-client"
 
 const STORAGE_KEY = "fs-active-repo"
 
@@ -78,9 +78,7 @@ export const useRepoStore = create<RepoState>((set, get) => ({
     }
     set((state) => {
       const repos = state.repos.filter((r) => r.id !== id)
-      const activeRepoId = state.activeRepoId === id
-        ? (repos.length > 0 ? repos[0].id : null)
-        : state.activeRepoId
+      const activeRepoId = state.activeRepoId === id ? (repos.length > 0 ? repos[0].id : null) : state.activeRepoId
       if (activeRepoId) localStorage.setItem(STORAGE_KEY, activeRepoId)
       else localStorage.removeItem(STORAGE_KEY)
       return { repos, activeRepoId }

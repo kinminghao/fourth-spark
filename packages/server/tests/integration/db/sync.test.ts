@@ -1,10 +1,10 @@
-import { describe, test, expect, beforeAll, beforeEach } from "bun:test"
+import { beforeAll, beforeEach, describe, expect, test } from "bun:test"
+import { execSync } from "node:child_process"
 import { eq } from "drizzle-orm"
 import { db } from "../../../src/db/index"
-import { sessions, messages, parts, todos } from "../../../src/db/schema"
-import { syncSessionsList, syncMessagesList, syncSseEvent } from "../../../src/db/sync"
+import { messages, parts, sessions, todos } from "../../../src/db/schema"
+import { syncMessagesList, syncSessionsList, syncSseEvent } from "../../../src/db/sync"
 import { truncateAll } from "../../helpers/db"
-import { execSync } from "node:child_process"
 
 beforeAll(() => {
   execSync("bunx drizzle-kit push --force", {
@@ -33,9 +33,7 @@ describe("syncSessionsList", () => {
   })
 
   test("upsert is idempotent — re-inserting same id updates non-title fields", async () => {
-    await syncSessionsList([
-      { id: "ses-1", title: "Original", agent: "build", time: { created: now, updated: now } },
-    ])
+    await syncSessionsList([{ id: "ses-1", title: "Original", agent: "build", time: { created: now, updated: now } }])
     await syncSessionsList([
       { id: "ses-1", title: "Renamed", agent: "oracle", time: { created: now, updated: now + 1000 } },
     ])
@@ -59,9 +57,7 @@ describe("syncSessionsList", () => {
 
 describe("syncMessagesList", () => {
   test("inserts messages and ensures session exists", async () => {
-    await syncMessagesList("ses-new", [
-      { id: "msg-1", role: "user", time: { created: now, updated: now } },
-    ])
+    await syncMessagesList("ses-new", [{ id: "msg-1", role: "user", time: { created: now, updated: now } }])
 
     const sessionRows = await db.select().from(sessions).where(eq(sessions.id, "ses-new"))
     expect(sessionRows).toHaveLength(1)
@@ -77,9 +73,7 @@ describe("syncMessagesList", () => {
         id: "msg-1",
         role: "assistant",
         time: { created: now, updated: now },
-        parts: [
-          { id: "p-1", type: "text", content: "hello", time: { created: now, updated: now } },
-        ],
+        parts: [{ id: "p-1", type: "text", content: "hello", time: { created: now, updated: now } }],
       },
     ])
 
@@ -90,9 +84,7 @@ describe("syncMessagesList", () => {
   })
 
   test("upsert message is idempotent", async () => {
-    await syncMessagesList("ses-1", [
-      { id: "msg-1", role: "user", time: { created: now, updated: now } },
-    ])
+    await syncMessagesList("ses-1", [{ id: "msg-1", role: "user", time: { created: now, updated: now } }])
     await syncMessagesList("ses-1", [
       { id: "msg-1", role: "user", agent: "build", time: { created: now, updated: now + 1 } },
     ])

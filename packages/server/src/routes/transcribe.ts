@@ -1,9 +1,9 @@
-import { Hono } from "hono"
+import { randomUUID } from "node:crypto"
+import { unlinkSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { unlinkSync } from "node:fs"
-import { randomUUID } from "node:crypto"
-import { transcribe, getSenseVoicePaths } from "../lib/sensevoice-manager"
+import { Hono } from "hono"
+import { getSenseVoicePaths, transcribe } from "../lib/sensevoice-manager"
 
 export const transcribeRoute = new Hono()
 
@@ -21,7 +21,7 @@ transcribeRoute.post("/", async (c) => {
   const MAX_AUDIO_SIZE = 50 * 1024 * 1024 // 50MB
 
   const body = await c.req.parseBody()
-  const audio = body["audio"]
+  const audio = body.audio
   if (!(audio instanceof File)) {
     return c.json({ error: "missing audio file" }, 400)
   }
@@ -38,6 +38,8 @@ transcribeRoute.post("/", async (c) => {
     const text = await transcribe(tmpPath)
     return c.json({ text })
   } finally {
-    try { unlinkSync(tmpPath) } catch {}
+    try {
+      unlinkSync(tmpPath)
+    } catch {}
   }
 })

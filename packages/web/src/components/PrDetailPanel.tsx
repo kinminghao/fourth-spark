@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import clsx from "clsx"
 import {
   ChevronDown,
   ChevronLeft,
@@ -17,26 +16,27 @@ import {
   X,
   XCircle,
 } from "lucide-react"
+import { useEffect, useState } from "react"
 import ReactMarkdown from "react-markdown"
+import { useNavigate } from "react-router-dom"
 import rehypeRaw from "rehype-raw"
 import remarkGfm from "remark-gfm"
-import clsx from "clsx"
 import {
   ApiError,
+  type Issue,
+  type IssueComment,
   listPrLinkedIssues,
   listPullComments,
   mergePull,
-  updateIssue,
-  type Issue,
-  type IssueComment,
   type PersistentPullRequest,
+  updateIssue,
 } from "../lib/api-client"
+import { fmtDate, prStateColor, relativeTime } from "../lib/date-utils"
 import { useIssueStore } from "../stores/issue-store"
 import { usePrStore } from "../stores/pr-store"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
+import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
 import { useToastStore } from "../stores/toast-store"
-import { fmtDate, prStateColor, relativeTime } from "../lib/date-utils"
 
 export function PrDetailPanel({
   pr,
@@ -85,7 +85,7 @@ export function PrDetailPanel({
       if (closeLinkedIssues && linkedIssues.length > 0) {
         const openIssues = linkedIssues.filter((i) => i.state === "open")
         await Promise.all(openIssues.map((i) => updateIssue(activeRepoId, i.number, { state: "closed" })))
-        setLinkedIssues((prev) => prev.map((i) => i.state === "open" ? { ...i, state: "closed" as const } : i))
+        setLinkedIssues((prev) => prev.map((i) => (i.state === "open" ? { ...i, state: "closed" as const } : i)))
         void useIssueStore.getState().loadIssues(activeRepoId)
         useToastStore.getState().addToast(`PR #${pr.number} 合入成功，已关闭 ${openIssues.length} 个 Issue`, "success")
       } else {
@@ -134,14 +134,21 @@ export function PrDetailPanel({
           </button>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className={clsx("shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold", prStateColor(pr.state))}>
+              <span
+                className={clsx(
+                  "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
+                  prStateColor(pr.state),
+                )}
+              >
                 #{pr.number} {pr.state}
               </span>
               {pr.draft === 1 && (
                 <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold bg-fg-6/15 text-fg-4">DRAFT</span>
               )}
               {pr.mergeable === "false" && pr.state === "open" && (
-                <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-500/15 text-red-400">Conflict</span>
+                <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-500/15 text-red-400">
+                  Conflict
+                </span>
               )}
               {pr.labels?.map((l) => (
                 <span
@@ -157,7 +164,9 @@ export function PrDetailPanel({
             <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-fg-4">
               <span className="flex min-w-0 items-center gap-1 font-mono text-[11px] text-fg-5">
                 <GitPullRequest className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{pr.headBranch} → {pr.baseBranch}</span>
+                <span className="truncate">
+                  {pr.headBranch} → {pr.baseBranch}
+                </span>
               </span>
               {pr.authorLogin && (
                 <span className="flex items-center gap-1.5">
@@ -165,9 +174,7 @@ export function PrDetailPanel({
                   {pr.authorLogin}
                 </span>
               )}
-              {pr.mergedAt && (
-                <span className="text-purple-400">合并于 {relativeTime(pr.mergedAt)}</span>
-              )}
+              {pr.mergedAt && <span className="text-purple-400">合并于 {relativeTime(pr.mergedAt)}</span>}
             </div>
           </div>
         </div>
@@ -258,7 +265,9 @@ export function PrDetailPanel({
                       <span
                         className={clsx(
                           "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium",
-                          issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
+                          issue.state === "open"
+                            ? "bg-emerald-500/15 text-emerald-400"
+                            : "bg-purple-500/15 text-purple-400",
                         )}
                       >
                         #{issue.number}
@@ -321,16 +330,31 @@ export function PrDetailPanel({
                   {filesExpanded && (
                     <div className="mt-2 space-y-0.5">
                       {pr.diffStats.map((f) => (
-                        <div key={f.filename} className="flex items-center gap-2 rounded px-2 py-1 text-xs hover:bg-elevated/50">
-                          <span className={clsx(
-                            "w-14 shrink-0 rounded px-1 py-0.5 text-center font-mono text-[10px] font-medium",
-                            f.status === "added" ? "bg-emerald-500/15 text-emerald-400"
-                              : f.status === "removed" ? "bg-red-500/15 text-red-400"
-                              : "bg-blue-500/15 text-blue-400",
-                          )}>
-                            {f.status === "added" ? "新增" : f.status === "removed" ? "删除" : f.status === "renamed" ? "重命名" : "修改"}
+                        <div
+                          key={f.filename}
+                          className="flex items-center gap-2 rounded px-2 py-1 text-xs hover:bg-elevated/50"
+                        >
+                          <span
+                            className={clsx(
+                              "w-14 shrink-0 rounded px-1 py-0.5 text-center font-mono text-[10px] font-medium",
+                              f.status === "added"
+                                ? "bg-emerald-500/15 text-emerald-400"
+                                : f.status === "removed"
+                                  ? "bg-red-500/15 text-red-400"
+                                  : "bg-blue-500/15 text-blue-400",
+                            )}
+                          >
+                            {f.status === "added"
+                              ? "新增"
+                              : f.status === "removed"
+                                ? "删除"
+                                : f.status === "renamed"
+                                  ? "重命名"
+                                  : "修改"}
                           </span>
-                          <span className="min-w-0 flex-1 truncate font-mono text-fg-3" title={f.filename}>{f.filename}</span>
+                          <span className="min-w-0 flex-1 truncate font-mono text-fg-3" title={f.filename}>
+                            {f.filename}
+                          </span>
                           <span className="shrink-0 font-mono text-[11px] text-emerald-400">+{f.additions}</span>
                           <span className="shrink-0 font-mono text-[11px] text-red-400">-{f.deletions}</span>
                         </div>
@@ -354,28 +378,30 @@ export function PrDetailPanel({
 
           {loadingComments ? (
             <p className="mt-8 text-center font-mono text-xs text-fg-6">加载评论…</p>
-          ) : comments.length > 0 && (
-            <div className="mt-8 border-t border-line pt-6">
-              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-fg-4">
-                评论 ({comments.length})
-              </h3>
-              <div className="space-y-4">
-                {comments.map((c) => (
-                  <div key={c.id} className="rounded-lg border border-line bg-elevated/40 px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <img src={c.user.avatar_url} alt={c.user.login} className="h-5 w-5 rounded-full" />
-                      <span className="text-xs font-semibold text-fg-2">{c.user.login}</span>
-                      <span className="text-[10px] text-fg-6">{fmtDate(c.created_at)}</span>
+          ) : (
+            comments.length > 0 && (
+              <div className="mt-8 border-t border-line pt-6">
+                <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-fg-4">
+                  评论 ({comments.length})
+                </h3>
+                <div className="space-y-4">
+                  {comments.map((c) => (
+                    <div key={c.id} className="rounded-lg border border-line bg-elevated/40 px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <img src={c.user.avatar_url} alt={c.user.login} className="h-5 w-5 rounded-full" />
+                        <span className="text-xs font-semibold text-fg-2">{c.user.login}</span>
+                        <span className="text-[10px] text-fg-6">{fmtDate(c.created_at)}</span>
+                      </div>
+                      <div className="markdown-body mt-2 text-sm leading-relaxed text-fg-3">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                          {c.body}
+                        </ReactMarkdown>
+                      </div>
                     </div>
-                    <div className="markdown-body mt-2 text-sm leading-relaxed text-fg-3">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                        {c.body}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )
           )}
         </div>
       </div>

@@ -1,13 +1,12 @@
 import { eq } from "drizzle-orm"
 import { db } from "../../db/index"
 import { sessionLinks, sessions as sessionsTable, workspaces } from "../../db/schema"
-import type { GitIssueClient } from "../../lib/git-provider"
 import { getRepoGitClient } from "../../lib/git-utils"
 import { runtimeManager } from "../../lib/process-manager"
 import { logger } from "../../middleware/logger"
 
 // Re-export shared helpers so tool files import from one place
-export { issueToDb, commentToDb, prToDb } from "../../lib/git-utils"
+export { commentToDb, issueToDb, prToDb } from "../../lib/git-utils"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -40,14 +39,15 @@ export async function resolveSessionId(repoId: string, knownSessionId?: string):
     const client = runtimeManager.getClient(repoId)
     if (!client) return null
     const statuses = await client.getSessionStatus()
-    const busySessions = Object.entries(statuses)
-      .filter(([_, status]) => status.type === "busy")
+    const busySessions = Object.entries(statuses).filter(([_, status]) => status.type === "busy")
 
     if (busySessions.length === 1) return busySessions[0][0]
 
     if (busySessions.length > 1) {
-      logger.warn({ repoId, count: busySessions.length },
-        "multiple busy sessions — skipping auto-link to avoid mis-association")
+      logger.warn(
+        { repoId, count: busySessions.length },
+        "multiple busy sessions — skipping auto-link to avoid mis-association",
+      )
     }
   } catch (err) {
     logger.warn({ err, repoId }, "failed to resolve session for auto-link")
@@ -59,12 +59,14 @@ export async function renameWorkspaceBranch(repoId: string, head: string, knownS
   const sessionId = await resolveSessionId(repoId, knownSessionId)
   if (!sessionId) return
 
-  const [session] = await db.select({ workspaceId: sessionsTable.workspaceId })
-    .from(sessionsTable).where(eq(sessionsTable.id, sessionId))
+  const [session] = await db
+    .select({ workspaceId: sessionsTable.workspaceId })
+    .from(sessionsTable)
+    .where(eq(sessionsTable.id, sessionId))
   if (!session?.workspaceId) return
 
   const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, session.workspaceId))
-  if (!workspace || !workspace.branch.startsWith("ws/")) return
+  if (!workspace?.branch.startsWith("ws/")) return
   if (workspace.branch === head) return
 
   const cwd = workspace.localPath
@@ -72,7 +74,10 @@ export async function renameWorkspaceBranch(repoId: string, head: string, knownS
   const renameResult = Bun.spawnSync(["git", "branch", "-m", workspace.branch, head], { cwd })
   if (renameResult.exitCode !== 0) {
     const stderr = renameResult.stderr.toString().trim()
-    logger.warn({ repoId, from: workspace.branch, to: head, stderr }, "MCP: branch rename failed, continuing with original name")
+    logger.warn(
+      { repoId, from: workspace.branch, to: head, stderr },
+      "MCP: branch rename failed, continuing with original name",
+    )
     return
   }
 
@@ -86,16 +91,24 @@ export async function renameWorkspaceBranch(repoId: string, head: string, knownS
   logger.info({ repoId, from: workspace.branch, to: head }, "MCP: renamed workspace branch for PR")
 }
 
-export async function linkSessionTarget(repoId: string, type: "issue" | "pr", targetId: string, knownSessionId?: string): Promise<void> {
+export async function linkSessionTarget(
+  repoId: string,
+  type: "issue" | "pr",
+  targetId: string,
+  knownSessionId?: string,
+): Promise<void> {
   const sessionId = await resolveSessionId(repoId, knownSessionId)
   if (!sessionId) return
   try {
-    await db.insert(sessionLinks).values({
-      sessionId,
-      type,
-      targetId,
-      createdAt: Date.now(),
-    }).onConflictDoNothing()
+    await db
+      .insert(sessionLinks)
+      .values({
+        sessionId,
+        type,
+        targetId,
+        createdAt: Date.now(),
+      })
+      .onConflictDoNothing()
     logger.info({ sessionId, type, targetId }, "auto-linked session to target")
   } catch (err) {
     logger.warn({ err, sessionId, type, targetId }, "failed to auto-link session")

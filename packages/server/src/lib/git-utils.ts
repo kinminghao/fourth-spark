@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm"
 import { db } from "../db/index"
 import { repos } from "../db/schema"
+import { createGitIssueClient, type GitComment, type GitIssue, type GitPullRequest, getHostInfo } from "./git-provider"
 import { parseGitUrl } from "./git-url"
-import { createGitIssueClient, getHostInfo, type GitIssue, type GitComment, type GitPullRequest } from "./git-provider"
 
 // ---------------------------------------------------------------------------
 // ID helpers

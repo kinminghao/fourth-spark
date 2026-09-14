@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react"
 import { Capacitor } from "@capacitor/core"
 import { SpeechRecognition } from "@capacitor-community/speech-recognition"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 export type SpeechPhase = "idle" | "recording" | "recognizing" | "done"
 
@@ -95,9 +95,7 @@ function encodeWAV(samples: Float32Array, sampleRate: number): Blob {
 const isNative = Capacitor.isNativePlatform()
 
 const WebRecognitionAPI: SpeechRecognitionCtor | undefined =
-  !isNative && typeof window !== "undefined"
-    ? window.SpeechRecognition ?? window.webkitSpeechRecognition
-    : undefined
+  !isNative && typeof window !== "undefined" ? (window.SpeechRecognition ?? window.webkitSpeechRecognition) : undefined
 
 // ── Hook ─────────────────────────────────────────────────────────────────
 
@@ -189,7 +187,10 @@ export function useSpeechToText(lang = "zh-CN") {
 
   const stop = useCallback(async () => {
     manualStopRef.current = true
-    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
     if (isNative) {
       await SpeechRecognition.stop().catch(() => {})
       for (const l of nativeListenersRef.current) await l.remove().catch(() => {})
@@ -253,7 +254,7 @@ export function useSpeechToText(lang = "zh-CN") {
         maxResults: 1,
       })
       if (result.matches?.length) {
-        setTranscript((prev) => prev + result.matches!.join(""))
+        setTranscript((prev) => prev + result.matches?.join(""))
       }
     } catch (err) {
       setError(`语音识别错误：${err instanceof Error ? err.message : String(err)}`)
@@ -297,7 +298,10 @@ export function useSpeechToText(lang = "zh-CN") {
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       gotResultRef.current = true
-      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
       let finalChunk = ""
       let interim = ""
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -341,7 +345,12 @@ export function useSpeechToText(lang = "zh-CN") {
       setInterimTranscript("")
       interimTextRef.current = ""
       if (!manualStopRef.current) {
-        try { recognition.start(); return } catch { /* fall through */ }
+        try {
+          recognition.start()
+          return
+        } catch {
+          /* fall through */
+        }
       }
       setIsListening(false)
       webRecognitionRef.current = null
@@ -441,7 +450,10 @@ export function useSpeechToText(lang = "zh-CN") {
     void (async () => {
       try {
         monitorStream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        if (cancelled) { monitorStream.getTracks().forEach((t) => t.stop()); return }
+        if (cancelled) {
+          monitorStream.getTracks().forEach((t) => t.stop())
+          return
+        }
 
         monitorCtx = new AudioContext()
         const source = monitorCtx.createMediaStreamSource(monitorStream)

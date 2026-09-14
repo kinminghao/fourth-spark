@@ -1,6 +1,6 @@
 import { Hono } from "hono"
-import { runtimeManager } from "../lib/process-manager"
 import type { Provider, ProviderModel } from "../core/runtime-types"
+import { runtimeManager } from "../lib/process-manager"
 
 export const modelRoutes = new Hono()
 

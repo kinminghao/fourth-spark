@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from "react"
-import { Folder, GitBranch, ChevronRight, Eye, EyeOff, Loader2 } from "lucide-react"
-import { browseDir } from "../lib/api-client"
+import { ChevronRight, Eye, EyeOff, Folder, GitBranch, Loader2 } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
 import type { DirEntry } from "../lib/api-client"
+import { browseDir } from "../lib/api-client"
 
 interface DirectoryBrowserProps {
   onSelect: (path: string) => void
@@ -15,32 +15,35 @@ export function DirectoryBrowser({ onSelect }: DirectoryBrowserProps) {
   const [error, setError] = useState("")
   const [showHidden, setShowHidden] = useState(false)
 
-  const loadDir = useCallback(async (path?: string) => {
-    setLoading(true)
-    setError("")
-    try {
-      const result = await browseDir(path, showHidden)
-      setCurrentPath(result.path)
-      setParent(result.parent)
-      setEntries(result.entries)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "无法读取目录"
+  const loadDir = useCallback(
+    async (path?: string) => {
+      setLoading(true)
+      setError("")
       try {
-        const parsed = JSON.parse(msg)
-        setError(parsed.error ?? msg)
-      } catch {
-        setError(msg)
+        const result = await browseDir(path, showHidden)
+        setCurrentPath(result.path)
+        setParent(result.parent)
+        setEntries(result.entries)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "无法读取目录"
+        try {
+          const parsed = JSON.parse(msg)
+          setError(parsed.error ?? msg)
+        } catch {
+          setError(msg)
+        }
       }
-    }
-    setLoading(false)
-  }, [showHidden])
+      setLoading(false)
+    },
+    [showHidden],
+  )
 
   useEffect(() => {
     void loadDir()
   }, [loadDir])
 
   const navigateTo = (dirName: string) => {
-    void loadDir(currentPath + "/" + dirName)
+    void loadDir(`${currentPath}/${dirName}`)
   }
 
   const navigateUp = () => {
@@ -49,12 +52,12 @@ export function DirectoryBrowser({ onSelect }: DirectoryBrowserProps) {
 
   const navigateToBreadcrumb = (index: number) => {
     const segments = currentPath.split("/").filter(Boolean)
-    const target = "/" + segments.slice(0, index + 1).join("/")
+    const target = `/${segments.slice(0, index + 1).join("/")}`
     void loadDir(target)
   }
 
   const selectGitRepo = (dirName: string) => {
-    onSelect(currentPath + "/" + dirName)
+    onSelect(`${currentPath}/${dirName}`)
   }
 
   const pathSegments = currentPath.split("/").filter(Boolean)
@@ -77,9 +80,7 @@ export function DirectoryBrowser({ onSelect }: DirectoryBrowserProps) {
                 type="button"
                 onClick={() => navigateToBreadcrumb(i)}
                 className={`rounded px-1 py-0.5 ${
-                  i === pathSegments.length - 1
-                    ? "font-medium text-fg"
-                    : "text-fg-4 hover:bg-elevated hover:text-fg-2"
+                  i === pathSegments.length - 1 ? "font-medium text-fg" : "text-fg-4 hover:bg-elevated hover:text-fg-2"
                 }`}
               >
                 {seg}
@@ -116,17 +117,12 @@ export function DirectoryBrowser({ onSelect }: DirectoryBrowserProps) {
                 <span>..</span>
               </button>
             )}
-            {entries.length === 0 && (
-              <div className="px-3 py-4 text-center text-xs text-fg-5">空目录</div>
-            )}
+            {entries.length === 0 && <div className="px-3 py-4 text-center text-xs text-fg-5">空目录</div>}
             {entries.map((entry) => (
-              <div
-                key={entry.name}
-                className="flex items-center border-b border-line last:border-0"
-              >
+              <div key={entry.name} className="flex items-center border-b border-line last:border-0">
                 <button
                   type="button"
-                  onClick={() => entry.isGitRepo ? selectGitRepo(entry.name) : navigateTo(entry.name)}
+                  onClick={() => (entry.isGitRepo ? selectGitRepo(entry.name) : navigateTo(entry.name))}
                   className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm hover:bg-elevated"
                 >
                   {entry.isGitRepo ? (

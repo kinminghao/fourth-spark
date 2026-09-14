@@ -13,11 +13,15 @@ export const CreateSessionBody = z.object({
   title: z.string().optional(),
   issueId: z.string().optional(),
   customAgentId: z.string().optional(),
-  files: z.array(z.object({
-    mime: z.string(),
-    url: z.string(),
-    filename: z.string().optional(),
-  })).optional(),
+  files: z
+    .array(
+      z.object({
+        mime: z.string(),
+        url: z.string(),
+        filename: z.string().optional(),
+      }),
+    )
+    .optional(),
 })
 
 export const SessionPromptBody = z.object({
@@ -25,11 +29,15 @@ export const SessionPromptBody = z.object({
   agent: z.string().optional(),
   model: z.string().optional(),
   variant: z.string().optional(),
-  files: z.array(z.object({
-    mime: z.string(),
-    url: z.string(),
-    filename: z.string().optional(),
-  })).optional(),
+  files: z
+    .array(
+      z.object({
+        mime: z.string(),
+        url: z.string(),
+        filename: z.string().optional(),
+      }),
+    )
+    .optional(),
 })
 
 export const SessionRevertBody = z.object({

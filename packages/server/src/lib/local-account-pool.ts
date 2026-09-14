@@ -1,11 +1,5 @@
-import {
-  autoSwitch,
-  getActiveId,
-  clearCooldown,
-  markCooldown,
-  parseResetMsFromMessage,
-} from "./account-switcher"
 import type { AccountPool, AcquireResult } from "../core/types"
+import { autoSwitch, clearCooldown, getActiveId, markCooldown, parseResetMsFromMessage } from "./account-switcher"
 
 export const localAccountPool: AccountPool = {
   async acquire(ctx): Promise<AcquireResult> {

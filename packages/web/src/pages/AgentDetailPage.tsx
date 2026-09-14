@@ -1,21 +1,19 @@
+import clsx from "clsx"
+import { ArrowLeft, Brain, Check, Clipboard, Clock, Download, Edit3, Loader2, X, Zap } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { ArrowLeft, Brain, Check, Clipboard, Clock, Download, Edit3, Loader2, X, Zap } from "lucide-react"
-import clsx from "clsx"
-import { InlineConfirm } from "../components/InlineConfirm"
-import * as api from "../lib/api-client"
-import type { AgentMemory, ConsolidationStats, CustomAgent, ModelInfo, PromptFragment } from "../lib/api-client"
-import { useCustomAgentStore } from "../stores/custom-agent-store"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
-import { agentAvatar, COPY_FEEDBACK_MS } from "../lib/constants"
 import { GUIDE_AGENT_PREFIX, MOCK_MEMORIES } from "../components/guide-mock-data"
+import { InlineConfirm } from "../components/InlineConfirm"
 import { useAsyncData } from "../hooks/use-async-data"
+import type { AgentMemory, ConsolidationStats, CustomAgent, ModelInfo, PromptFragment } from "../lib/api-client"
+import * as api from "../lib/api-client"
+import { agentAvatar, COPY_FEEDBACK_MS } from "../lib/constants"
+import { useCustomAgentStore } from "../stores/custom-agent-store"
+import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 
 const BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atlas - Plan Executor"]
 const PINNED_MODELS_KEY = "pinned_models"
 const SP_KEY = "__system_prompt__"
-
-
 
 // Static class strings so Tailwind can pick them up.
 const CATEGORY_PALETTE = [
@@ -63,10 +61,7 @@ const VERSION_ACTION_LABELS: Record<string, { label: string; color: string }> = 
   manual: { label: "手动编辑", color: "text-fg-3" },
 }
 
-function VersionHistoryModal({ memory, onClose }: {
-  memory: AgentMemory
-  onClose: () => void
-}) {
+function VersionHistoryModal({ memory, onClose }: { memory: AgentMemory; onClose: () => void }) {
   const versions = [...(memory.history ?? [])].reverse()
 
   return (
@@ -107,9 +102,7 @@ function VersionHistoryModal({ memory, onClose }: {
             )
           })}
 
-          {versions.length === 0 && (
-            <div className="py-4 text-center text-xs text-fg-5">暂无历史版本</div>
-          )}
+          {versions.length === 0 && <div className="py-4 text-center text-xs text-fg-5">暂无历史版本</div>}
         </div>
       </div>
     </div>
@@ -120,7 +113,12 @@ function VersionHistoryModal({ memory, onClose }: {
 // MemoryItem
 // ---------------------------------------------------------------------------
 
-function MemoryItem({ memory, categories, onUpdate, onDelete }: {
+function MemoryItem({
+  memory,
+  categories,
+  onUpdate,
+  onDelete,
+}: {
   memory: AgentMemory
   categories: string[]
   onUpdate: (memId: string, data: { content?: string; category?: string; importance?: number }) => Promise<void>
@@ -146,22 +144,45 @@ function MemoryItem({ memory, categories, onUpdate, onDelete }: {
     }
   }
 
-
   if (editing) {
     return (
       <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 space-y-2">
-        <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3}
-          className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+        <textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          rows={3}
+          className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
+        />
         <div className="flex items-center gap-3">
-          <select value={category} onChange={(e) => setCategory(e.target.value)}
-            className="rounded-md border border-line bg-surface px-2 py-1 text-xs text-fg focus:border-blue-500 focus:outline-none">
-            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="rounded-md border border-line bg-surface px-2 py-1 text-xs text-fg focus:border-blue-500 focus:outline-none"
+          >
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
           </select>
           <div className="flex-1" />
-          <button type="button" onClick={() => { setEditing(false); setContent(memory.content); setCategory(memory.category) }}
-            className="rounded-md px-3 py-1 text-xs text-fg-4 hover:bg-elevated">取消</button>
-          <button type="button" onClick={() => void handleSave()} disabled={saving || !content.trim()}
-            className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-40">
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(false)
+              setContent(memory.content)
+              setCategory(memory.category)
+            }}
+            className="rounded-md px-3 py-1 text-xs text-fg-4 hover:bg-elevated"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={saving || !content.trim()}
+            className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-40"
+          >
             {saving ? "保存中…" : "保存"}
           </button>
         </div>
@@ -189,27 +210,44 @@ function MemoryItem({ memory, categories, onUpdate, onDelete }: {
         {memory.supersededBy && (
           <>
             <span>·</span>
-            <span className="text-amber-400">{memory.supersededBy === "user-deleted" ? "已删除" : memory.supersededBy === "consolidated-out" ? "已整理" : "已合并"}</span>
+            <span className="text-amber-400">
+              {memory.supersededBy === "user-deleted"
+                ? "已删除"
+                : memory.supersededBy === "consolidated-out"
+                  ? "已整理"
+                  : "已合并"}
+            </span>
           </>
         )}
-        {memory.history && memory.history.length > 0 && (() => {
-          const latest = memory.history[memory.history.length - 1]
-          const versionStyle = VERSION_ACTION_LABELS[latest.action]
-          return (
-            <button type="button" onClick={() => setShowHistory(true)}
-              data-guide={memory.id === "guide-mem-1" ? "agent-memory-version" : undefined}
-              className={clsx("rounded px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-80",
-                latest.action === "update" ? "bg-blue-500/10 text-blue-400" :
-                latest.action === "merge" ? "bg-purple-500/10 text-purple-400" :
-                latest.action === "decay" ? "bg-amber-500/10 text-amber-400" :
-                latest.action === "reinforce" ? "bg-emerald-500/10 text-emerald-400" :
-                latest.action === "manual" ? "bg-fg/10 text-fg-3" :
-                "bg-green-500/10 text-green-400"
-              )}>
-              {versionStyle?.label ?? latest.action} · {memory.history.length}版
-            </button>
-          )
-        })()}
+        {memory.history &&
+          memory.history.length > 0 &&
+          (() => {
+            const latest = memory.history[memory.history.length - 1]
+            const versionStyle = VERSION_ACTION_LABELS[latest.action]
+            return (
+              <button
+                type="button"
+                onClick={() => setShowHistory(true)}
+                data-guide={memory.id === "guide-mem-1" ? "agent-memory-version" : undefined}
+                className={clsx(
+                  "rounded px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-80",
+                  latest.action === "update"
+                    ? "bg-blue-500/10 text-blue-400"
+                    : latest.action === "merge"
+                      ? "bg-purple-500/10 text-purple-400"
+                      : latest.action === "decay"
+                        ? "bg-amber-500/10 text-amber-400"
+                        : latest.action === "reinforce"
+                          ? "bg-emerald-500/10 text-emerald-400"
+                          : latest.action === "manual"
+                            ? "bg-fg/10 text-fg-3"
+                            : "bg-green-500/10 text-green-400",
+                )}
+              >
+                {versionStyle?.label ?? latest.action} · {memory.history.length}版
+              </button>
+            )
+          })()}
         <div className="flex-1" />
         {!memory.supersededBy && (
           <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/mem:opacity-100">
@@ -245,7 +283,11 @@ function formatNextRun(lastConsolidatedAt: number | null): string {
   return `下次：约 ${Math.floor(hours / 24)} 天后`
 }
 
-function ConsolidationStatsBar({ stats, running, onTrigger }: {
+function ConsolidationStatsBar({
+  stats,
+  running,
+  onTrigger,
+}: {
   stats: ConsolidationStats | null
   running: boolean
   onTrigger: () => void
@@ -258,9 +300,7 @@ function ConsolidationStatsBar({ stats, running, onTrigger }: {
     <div className="rounded-lg bg-elevated px-3 py-2 text-[11px] tabular-nums text-fg-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span>
-          {stats.lastConsolidatedAt
-            ? `上次整理：${formatRelativeTime(stats.lastConsolidatedAt)}`
-            : "尚未整理"}
+          {stats.lastConsolidatedAt ? `上次整理：${formatRelativeTime(stats.lastConsolidatedAt)}` : "尚未整理"}
         </span>
         <span className="text-fg-6">·</span>
         <span>{formatNextRun(stats.lastConsolidatedAt)}</span>
@@ -277,7 +317,9 @@ function ConsolidationStatsBar({ stats, running, onTrigger }: {
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
         {a && (
           <>
-            <span>{a.update} 更新 {a.merge} 合并 {a.delete} 清理 {a.decayed} 降权</span>
+            <span>
+              {a.update} 更新 {a.merge} 合并 {a.delete} 清理 {a.decayed} 降权
+            </span>
             <span className="text-fg-6">·</span>
           </>
         )}
@@ -301,10 +343,15 @@ function MemorySection({ agentId }: { agentId: string }) {
   const [consolidationRunning, setConsolidationRunning] = useState(false)
 
   // --- memories ---
-  const { data: memoriesData, loading, reload: load } = useAsyncData(
-    () => isMockAgent
-      ? Promise.resolve(MOCK_MEMORIES)
-      : api.listAgentMemories(agentId, { includeSuperseded: showSuperseded }),
+  const {
+    data: memoriesData,
+    loading,
+    reload: load,
+  } = useAsyncData(
+    () =>
+      isMockAgent
+        ? Promise.resolve(MOCK_MEMORIES)
+        : api.listAgentMemories(agentId, { includeSuperseded: showSuperseded }),
     [agentId, showSuperseded, isMockAgent],
     { showErrorToast: !isMockAgent, errorMessage: "加载记忆失败" },
   )
@@ -313,12 +360,15 @@ function MemorySection({ agentId }: { agentId: string }) {
   // --- consolidation stats ---
   const loadStats = useCallback(() => {
     if (isMockAgent) return
-    api.getMemoryConsolidationStats(agentId)
+    api
+      .getMemoryConsolidationStats(agentId)
       .then(setConsolidationStats)
       .catch(() => setConsolidationStats(null))
   }, [agentId, isMockAgent])
 
-  useEffect(() => { loadStats() }, [loadStats])
+  useEffect(() => {
+    loadStats()
+  }, [loadStats])
 
   const handleTriggerConsolidation = async () => {
     setConsolidationRunning(true)
@@ -329,16 +379,25 @@ function MemorySection({ agentId }: { agentId: string }) {
       return
     }
     const pollInterval = setInterval(() => {
-      api.getMemoryConsolidationStats(agentId).then((s) => {
-        setConsolidationStats(s)
-        if (s.lastConsolidatedAt && (!consolidationStats?.lastConsolidatedAt || s.lastConsolidatedAt > consolidationStats.lastConsolidatedAt)) {
-          clearInterval(pollInterval)
-          setConsolidationRunning(false)
-          void load()
-        }
-      }).catch(() => {})
+      api
+        .getMemoryConsolidationStats(agentId)
+        .then((s) => {
+          setConsolidationStats(s)
+          if (
+            s.lastConsolidatedAt &&
+            (!consolidationStats?.lastConsolidatedAt || s.lastConsolidatedAt > consolidationStats.lastConsolidatedAt)
+          ) {
+            clearInterval(pollInterval)
+            setConsolidationRunning(false)
+            void load()
+          }
+        })
+        .catch(() => {})
     }, 5_000)
-    setTimeout(() => { clearInterval(pollInterval); setConsolidationRunning(false) }, 300_000)
+    setTimeout(() => {
+      clearInterval(pollInterval)
+      setConsolidationRunning(false)
+    }, 300_000)
   }
 
   // --- sessions (loaded on demand) ---
@@ -349,10 +408,10 @@ function MemorySection({ agentId }: { agentId: string }) {
   )
   const sessions = sessionsData ?? []
 
-  const allActive = memories.filter(m => !m.supersededBy)
-  const active = filter ? allActive.filter(m => m.category === filter) : allActive
-  const superseded = memories.filter(m => m.supersededBy)
-  const extractedSessionIds = useMemo(() => new Set(memories.map(m => m.sessionId).filter(Boolean)), [memories])
+  const allActive = memories.filter((m) => !m.supersededBy)
+  const active = filter ? allActive.filter((m) => m.category === filter) : allActive
+  const superseded = memories.filter((m) => m.supersededBy)
+  const extractedSessionIds = useMemo(() => new Set(memories.map((m) => m.sessionId).filter(Boolean)), [memories])
 
   const handleUpdate = async (memId: string, data: { content?: string; category?: string; importance?: number }) => {
     await api.updateAgentMemory(agentId, memId, data)
@@ -365,9 +424,10 @@ function MemorySection({ agentId }: { agentId: string }) {
   }
 
   const toggleSession = (id: string) => {
-    setSelected(prev => {
+    setSelected((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }
@@ -381,10 +441,11 @@ function MemorySection({ agentId }: { agentId: string }) {
       const r = res as Record<string, unknown>
       const results = r.results as Array<{ sessionId: string; status: string; actions?: number; error?: string }>
       if (results) {
-        const ok = results.filter(x => x.status === "ok")
-        const failed = results.filter(x => x.status !== "ok")
+        const ok = results.filter((x) => x.status === "ok")
+        const failed = results.filter((x) => x.status !== "ok")
         if (ok.length > 0) setExtractResult(`提取成功 ${ok.reduce((s, x) => s + (x.actions ?? 0), 0)} 条记忆`)
-        if (failed.length > 0) setExtractResult(prev => (prev ? prev + "；" : "") + failed.map(x => x.error ?? x.status).join("；"))
+        if (failed.length > 0)
+          setExtractResult((prev) => (prev ? `${prev}；` : "") + failed.map((x) => x.error ?? x.status).join("；"))
         if (ok.length > 0) await load()
       }
       setSelected(new Set())
@@ -395,7 +456,7 @@ function MemorySection({ agentId }: { agentId: string }) {
   }
 
   const categories = useMemo(() => {
-    const cats = new Set(allActive.map(m => m.category))
+    const cats = new Set(allActive.map((m) => m.category))
     return [...cats].sort()
   }, [allActive])
 
@@ -405,7 +466,11 @@ function MemorySection({ agentId }: { agentId: string }) {
         <div className="flex items-center gap-2">
           <Brain className="h-4 w-4 text-purple-400" />
           <h2 className="text-sm font-semibold text-fg">记忆</h2>
-          {!loading && <span className="rounded-full bg-elevated px-1.5 py-0.5 text-[10px] tabular-nums text-fg-4">{active.length}</span>}
+          {!loading && (
+            <span className="rounded-full bg-elevated px-1.5 py-0.5 text-[10px] tabular-nums text-fg-4">
+              {active.length}
+            </span>
+          )}
         </div>
       </div>
 
@@ -416,17 +481,28 @@ function MemorySection({ agentId }: { agentId: string }) {
       />
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <button type="button" onClick={() => setFilter(null)}
-          className={clsx("rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-            filter === null ? "bg-fg/10 text-fg" : "text-fg-4 hover:text-fg-3")}>
+        <button
+          type="button"
+          onClick={() => setFilter(null)}
+          className={clsx(
+            "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+            filter === null ? "bg-fg/10 text-fg" : "text-fg-4 hover:text-fg-3",
+          )}
+        >
           全部
         </button>
-        {categories.map(cat => {
+        {categories.map((cat) => {
           const s = getCategoryStyle(cat)
           return (
-            <button key={cat} type="button" onClick={() => setFilter(filter === cat ? null : cat)}
-              className={clsx("rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-                filter === cat ? clsx(s.bg, s.text) : "text-fg-4 hover:text-fg-3")}>
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setFilter(filter === cat ? null : cat)}
+              className={clsx(
+                "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                filter === cat ? clsx(s.bg, s.text) : "text-fg-4 hover:text-fg-3",
+              )}
+            >
               {cat}
             </button>
           )
@@ -438,30 +514,25 @@ function MemorySection({ agentId }: { agentId: string }) {
           <Loader2 className="h-4 w-4 fs-spin text-fg-5" />
         </div>
       ) : active.length === 0 && superseded.length === 0 ? (
-        <div className="py-8 text-center text-xs text-fg-5">
-          暂无记忆。使用此 Agent 完成 Session 后将自动提取。
-        </div>
+        <div className="py-8 text-center text-xs text-fg-5">暂无记忆。使用此 Agent 完成 Session 后将自动提取。</div>
       ) : (
         <div className="space-y-1.5">
-          {active.map(m => (
-            <MemoryItem
-              key={m.id}
-              memory={m}
-              categories={categories}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-            />
+          {active.map((m) => (
+            <MemoryItem key={m.id} memory={m} categories={categories} onUpdate={handleUpdate} onDelete={handleDelete} />
           ))}
           {superseded.length > 0 && (
             <div className="pt-1">
-              <button type="button" onClick={() => setShowSuperseded(!showSuperseded)}
-                className="flex items-center gap-1 text-[11px] text-fg-5 hover:text-fg-3">
+              <button
+                type="button"
+                onClick={() => setShowSuperseded(!showSuperseded)}
+                className="flex items-center gap-1 text-[11px] text-fg-5 hover:text-fg-3"
+              >
                 <span>{showSuperseded ? "▾" : "▸"}</span>
                 已合并/已删除 ({superseded.length})
               </button>
               {showSuperseded && (
                 <div className="mt-1.5 space-y-1.5 opacity-60">
-                  {superseded.map(m => (
+                  {superseded.map((m) => (
                     <MemoryItem
                       key={m.id}
                       memory={m}
@@ -478,8 +549,11 @@ function MemorySection({ agentId }: { agentId: string }) {
       )}
 
       <div className="border-t border-line pt-3">
-        <button type="button" onClick={() => setShowSessions(!showSessions)}
-          className="flex items-center gap-1.5 text-xs font-medium text-fg-4 hover:text-fg-3">
+        <button
+          type="button"
+          onClick={() => setShowSessions(!showSessions)}
+          className="flex items-center gap-1.5 text-xs font-medium text-fg-4 hover:text-fg-3"
+        >
           <Clock className="h-3.5 w-3.5" />
           <span>{showSessions ? "▾" : "▸"} 从 Session 提取记忆</span>
         </button>
@@ -495,20 +569,34 @@ function MemorySection({ agentId }: { agentId: string }) {
             ) : (
               <>
                 <div className="max-h-64 space-y-1 overflow-y-auto">
-                  {sessions.map(s => {
+                  {sessions.map((s) => {
                     const extracted = extractedSessionIds.has(s.id)
                     return (
-                      <label key={s.id}
-                        className={clsx("flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 transition-colors",
-                          selected.has(s.id) ? "border-purple-500/30 bg-purple-500/5" : "border-line bg-base hover:bg-elevated/60")}>
-                        <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSession(s.id)}
-                          className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-line accent-purple-500" />
+                      <label
+                        key={s.id}
+                        className={clsx(
+                          "flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 transition-colors",
+                          selected.has(s.id)
+                            ? "border-purple-500/30 bg-purple-500/5"
+                            : "border-line bg-base hover:bg-elevated/60",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected.has(s.id)}
+                          onChange={() => toggleSession(s.id)}
+                          className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-line accent-purple-500"
+                        />
                         <div className="min-w-0 flex-1">
                           <span className="block truncate text-xs text-fg">{s.title || s.id.slice(-8)}</span>
                           <span className="text-[11px] text-fg-5">{formatRelativeTime(s.timeCreated)}</span>
                         </div>
-                        <span className={clsx("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                          extracted ? "bg-green-500/10 text-green-400" : "bg-elevated text-fg-5")}>
+                        <span
+                          className={clsx(
+                            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                            extracted ? "bg-green-500/10 text-green-400" : "bg-elevated text-fg-5",
+                          )}
+                        >
                           {extracted ? "已提取" : "未提取"}
                         </span>
                       </label>
@@ -516,15 +604,23 @@ function MemorySection({ agentId }: { agentId: string }) {
                   })}
                 </div>
                 {selected.size > 0 && (
-                  <button type="button" onClick={() => void handleExtract()} disabled={extracting}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-purple-600 py-2 text-xs font-medium text-white transition-colors hover:bg-purple-500 disabled:opacity-40">
+                  <button
+                    type="button"
+                    onClick={() => void handleExtract()}
+                    disabled={extracting}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-purple-600 py-2 text-xs font-medium text-white transition-colors hover:bg-purple-500 disabled:opacity-40"
+                  >
                     {extracting ? <Loader2 className="h-3.5 w-3.5 fs-spin" /> : <Brain className="h-3.5 w-3.5" />}
                     {extracting ? "提取中…" : `提取选中 Session 的记忆 (${selected.size})`}
                   </button>
                 )}
                 {extractResult && (
-                  <p className={clsx("mt-1.5 rounded-md px-3 py-1.5 text-xs",
-                    extractResult.includes("成功") ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400")}>
+                  <p
+                    className={clsx(
+                      "mt-1.5 rounded-md px-3 py-1.5 text-xs",
+                      extractResult.includes("成功") ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400",
+                    )}
+                  >
                     {extractResult}
                   </p>
                 )}
@@ -542,11 +638,9 @@ function MemorySection({ agentId }: { agentId: string }) {
 // ---------------------------------------------------------------------------
 
 function SessionList({ agentId }: { agentId: string }) {
-  const { data, loading } = useAsyncData(
-    () => api.listAgentSessions(agentId),
-    [agentId],
-    { errorMessage: "加载 Session 历史失败" },
-  )
+  const { data, loading } = useAsyncData(() => api.listAgentSessions(agentId), [agentId], {
+    errorMessage: "加载 Session 历史失败",
+  })
   const sessions = data ?? []
 
   return (
@@ -554,7 +648,11 @@ function SessionList({ agentId }: { agentId: string }) {
       <div className="flex items-center gap-2">
         <Clock className="h-4 w-4 text-fg-4" />
         <h2 className="text-sm font-semibold text-fg">Session 历史</h2>
-        {!loading && <span className="rounded-full bg-elevated px-1.5 py-0.5 text-[10px] tabular-nums text-fg-4">{sessions.length}</span>}
+        {!loading && (
+          <span className="rounded-full bg-elevated px-1.5 py-0.5 text-[10px] tabular-nums text-fg-4">
+            {sessions.length}
+          </span>
+        )}
       </div>
 
       <div className="mt-3">
@@ -566,7 +664,7 @@ function SessionList({ agentId }: { agentId: string }) {
           <p className="py-8 text-center text-xs text-fg-5">暂无 Session 记录。</p>
         ) : (
           <div className="space-y-1">
-            {sessions.map(s => (
+            {sessions.map((s) => (
               <div key={s.id} className="flex items-center gap-3 rounded-lg border border-line bg-base px-4 py-2.5">
                 <div className="min-w-0 flex-1">
                   <span className="block truncate text-xs font-medium text-fg">{s.title || s.id.slice(-8)}</span>
@@ -587,9 +685,13 @@ function SessionList({ agentId }: { agentId: string }) {
                   </div>
                 </div>
                 {s.completedAt ? (
-                  <span className="shrink-0 rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-400">完成</span>
+                  <span className="shrink-0 rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-400">
+                    完成
+                  </span>
                 ) : (
-                  <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-[10px] font-medium text-fg-5">进行中</span>
+                  <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-[10px] font-medium text-fg-5">
+                    进行中
+                  </span>
                 )}
               </div>
             ))}
@@ -604,10 +706,24 @@ function SessionList({ agentId }: { agentId: string }) {
 // ConfigSection — edit agent configuration
 // ---------------------------------------------------------------------------
 
-function ConfigSection({ agent, fragments, onSave }: {
+function ConfigSection({
+  agent,
+  fragments,
+  onSave,
+}: {
   agent: CustomAgent
   fragments: PromptFragment[]
-  onSave: (data: { name: string; description?: string; baseAgent: string; model?: string; variant?: string; memoryModel?: string | null; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => Promise<void>
+  onSave: (data: {
+    name: string
+    description?: string
+    baseAgent: string
+    model?: string
+    variant?: string
+    memoryModel?: string | null
+    systemPrompt?: string
+    systemPromptPosition?: number
+    fragmentIds?: string[]
+  }) => Promise<void>
 }) {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const [editing, setEditing] = useState(false)
@@ -623,7 +739,10 @@ function ConfigSection({ agent, fragments, onSave }: {
   const [pinnedModels, setPinnedModels] = useState<ModelInfo[]>([])
 
   useEffect(() => {
-    if (!activeRepoId) { setPinnedModels([]); return }
+    if (!activeRepoId) {
+      setPinnedModels([])
+      return
+    }
     let cancelled = false
     void (async () => {
       try {
@@ -637,7 +756,9 @@ function ConfigSection({ agent, fragments, onSave }: {
         if (!cancelled) setPinnedModels([])
       }
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [activeRepoId])
 
   const [orderedItems, setOrderedItems] = useState<string[]>(() => {
@@ -677,7 +798,7 @@ function ConfigSection({ agent, fragments, onSave }: {
   })()
 
   const preview = orderedItems
-    .map((id) => id === SP_KEY ? systemPrompt : fragments.find((f) => f.id === id)?.content)
+    .map((id) => (id === SP_KEY ? systemPrompt : fragments.find((f) => f.id === id)?.content))
     .filter(Boolean)
     .join("\n\n---\n\n")
 
@@ -685,7 +806,17 @@ function ConfigSection({ agent, fragments, onSave }: {
     if (!name.trim() || !baseAgent) return
     setSaving(true)
     try {
-      await onSave({ name: name.trim(), description: description.trim() || undefined, baseAgent, model: model.trim() || undefined, variant: variant.trim() || undefined, memoryModel: memoryModel.trim() || null, systemPrompt, systemPromptPosition: spPosition, fragmentIds: selectedIds })
+      await onSave({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        baseAgent,
+        model: model.trim() || undefined,
+        variant: variant.trim() || undefined,
+        memoryModel: memoryModel.trim() || null,
+        systemPrompt,
+        systemPromptPosition: spPosition,
+        fragmentIds: selectedIds,
+      })
       setEditing(false)
     } finally {
       setSaving(false)
@@ -699,8 +830,11 @@ function ConfigSection({ agent, fragments, onSave }: {
       <section className="rounded-xl border border-line bg-surface p-5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-fg">配置</h2>
-          <button type="button" onClick={() => setEditing(true)}
-            className="flex items-center gap-1 rounded-md border border-line px-2.5 py-1 text-xs text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="flex items-center gap-1 rounded-md border border-line px-2.5 py-1 text-xs text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3"
+          >
             <Edit3 className="h-3 w-3" /> 编辑
           </button>
         </div>
@@ -725,8 +859,13 @@ function ConfigSection({ agent, fragments, onSave }: {
             <div className="flex items-start gap-2 text-xs">
               <span className="w-20 shrink-0 pt-0.5 text-fg-5">片段</span>
               <div className="flex flex-wrap gap-1">
-                {agent.fragments.map(f => (
-                  <span key={f.id} className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">{f.name}</span>
+                {agent.fragments.map((f) => (
+                  <span
+                    key={f.id}
+                    className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400"
+                  >
+                    {f.name}
+                  </span>
                 ))}
               </div>
             </div>
@@ -750,37 +889,63 @@ function ConfigSection({ agent, fragments, onSave }: {
           <div className="flex gap-3">
             <label className="flex-1">
               <span className="text-xs font-medium text-fg-3">名称</span>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-                className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg focus:border-blue-500 focus:outline-none" />
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg focus:border-blue-500 focus:outline-none"
+              />
             </label>
             <label className="w-36">
               <span className="text-xs font-medium text-fg-3">Base Agent</span>
-              <select value={baseAgent} onChange={(e) => setBaseAgent(e.target.value)}
-                className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg focus:border-blue-500 focus:outline-none">
-                {BASE_AGENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+              <select
+                value={baseAgent}
+                onChange={(e) => setBaseAgent(e.target.value)}
+                className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg focus:border-blue-500 focus:outline-none"
+              >
+                {BASE_AGENTS.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
               </select>
             </label>
           </div>
           <label className="block">
             <span className="text-xs font-medium text-fg-3">描述（可选）</span>
-            <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="一句话描述这个 Agent 的用途"
-              className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="一句话描述这个 Agent 的用途"
+              className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
+            />
           </label>
         </>
       )}
       <div className="flex gap-3">
         <div className="flex-1">
           <span className="text-xs font-medium text-fg-3">模型（可选）</span>
-          <select value={model} onChange={(e) => setModel(e.target.value)}
-            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none">
+          <select
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none"
+          >
             <option value="">默认模型</option>
-            {pinnedModels.map((m) => <option key={m.id} value={m.id}>{m.name || m.id}</option>)}
+            {pinnedModels.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name || m.id}
+              </option>
+            ))}
           </select>
         </div>
         <div className="w-28">
           <span className="text-xs font-medium text-fg-3">Variant</span>
-          <select value={variant} onChange={(e) => setVariant(e.target.value)}
-            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none">
+          <select
+            value={variant}
+            onChange={(e) => setVariant(e.target.value)}
+            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none"
+          >
             <option value="">默认</option>
             <option value="max">max</option>
             <option value="high">high</option>
@@ -789,10 +954,17 @@ function ConfigSection({ agent, fragments, onSave }: {
       </div>
       <div>
         <span className="text-xs font-medium text-fg-3">记忆提取/整理模型</span>
-        <select value={memoryModel} onChange={(e) => setMemoryModel(e.target.value)}
-          className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none">
+        <select
+          value={memoryModel}
+          onChange={(e) => setMemoryModel(e.target.value)}
+          className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 font-mono text-sm text-fg focus:border-blue-500 focus:outline-none"
+        >
           <option value="">跟随主模型</option>
-          {pinnedModels.map((m) => <option key={m.id} value={m.id}>{m.name || m.id}</option>)}
+          {pinnedModels.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name || m.id}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -804,10 +976,27 @@ function ConfigSection({ agent, fragments, onSave }: {
               {orderedItems.map((id, idx) => {
                 if (id === SP_KEY) {
                   return (
-                    <div key={id} className="flex items-center gap-2 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1">
+                    <div
+                      key={id}
+                      className="flex items-center gap-2 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1"
+                    >
                       <div className="flex flex-col">
-                        <button type="button" onClick={() => moveItem(idx, -1)} disabled={idx === 0} className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▲</button>
-                        <button type="button" onClick={() => moveItem(idx, 1)} disabled={idx === orderedItems.length - 1} className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▼</button>
+                        <button
+                          type="button"
+                          onClick={() => moveItem(idx, -1)}
+                          disabled={idx === 0}
+                          className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveItem(idx, 1)}
+                          disabled={idx === orderedItems.length - 1}
+                          className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30"
+                        >
+                          ▼
+                        </button>
                       </div>
                       <span className="flex-1 truncate text-xs font-medium text-amber-400">✎ 补充指令</span>
                     </div>
@@ -816,21 +1005,51 @@ function ConfigSection({ agent, fragments, onSave }: {
                 const frag = fragments.find((f) => f.id === id)
                 if (!frag) return null
                 return (
-                  <div key={id} className="flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1">
+                  <div
+                    key={id}
+                    className="flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1"
+                  >
                     <div className="flex flex-col">
-                      <button type="button" onClick={() => moveItem(idx, -1)} disabled={idx === 0} className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▲</button>
-                      <button type="button" onClick={() => moveItem(idx, 1)} disabled={idx === orderedItems.length - 1} className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▼</button>
+                      <button
+                        type="button"
+                        onClick={() => moveItem(idx, -1)}
+                        disabled={idx === 0}
+                        className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30"
+                      >
+                        ▲
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveItem(idx, 1)}
+                        disabled={idx === orderedItems.length - 1}
+                        className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30"
+                      >
+                        ▼
+                      </button>
                     </div>
                     <span className="flex-1 truncate text-xs text-fg">{frag.name}</span>
-                    <button type="button" onClick={() => toggleFragment(id)} className="text-fg-5 hover:text-red-400"><X className="h-3 w-3" /></button>
+                    <button type="button" onClick={() => toggleFragment(id)} className="text-fg-5 hover:text-red-400">
+                      <X className="h-3 w-3" />
+                    </button>
                   </div>
                 )
               })}
               {fragments.filter((f) => !selectedIds.includes(f.id)).length > 0 && (
-                <select value="" onChange={(e) => { if (e.target.value) toggleFragment(e.target.value) }}
-                  className="w-full rounded border border-dashed border-line bg-base px-2 py-1 text-xs text-fg-4 focus:border-blue-500 focus:outline-none">
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) toggleFragment(e.target.value)
+                  }}
+                  className="w-full rounded border border-dashed border-line bg-base px-2 py-1 text-xs text-fg-4 focus:border-blue-500 focus:outline-none"
+                >
                   <option value="">+ 添加片段…</option>
-                  {fragments.filter((f) => !selectedIds.includes(f.id)).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  {fragments
+                    .filter((f) => !selectedIds.includes(f.id))
+                    .map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
                 </select>
               )}
             </div>
@@ -838,14 +1057,21 @@ function ConfigSection({ agent, fragments, onSave }: {
 
           <label className="block">
             <span className="text-xs font-medium text-fg-3">补充指令内容</span>
-            <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={4}
-              className="mt-1 w-full resize-y rounded-md border border-line bg-base px-3 py-2 font-mono text-sm leading-relaxed text-fg focus:border-blue-500 focus:outline-none" />
+            <textarea
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              rows={4}
+              className="mt-1 w-full resize-y rounded-md border border-line bg-base px-3 py-2 font-mono text-sm leading-relaxed text-fg focus:border-blue-500 focus:outline-none"
+            />
           </label>
 
           {(selectedIds.length > 0 || systemPrompt) && (
             <div>
-              <button type="button" onClick={() => setShowPreview(!showPreview)}
-                className="flex items-center gap-1 text-xs font-medium text-fg-4 hover:text-fg-3">
+              <button
+                type="button"
+                onClick={() => setShowPreview(!showPreview)}
+                className="flex items-center gap-1 text-xs font-medium text-fg-4 hover:text-fg-3"
+              >
                 <span>{showPreview ? "▾" : "▸"}</span> 预览最终提示词
               </button>
               {showPreview && (
@@ -859,9 +1085,19 @@ function ConfigSection({ agent, fragments, onSave }: {
       )}
 
       <div className="flex justify-end gap-2 pt-1">
-        <button type="button" onClick={() => setEditing(false)} className="rounded-md px-3 py-1.5 text-xs text-fg-4 hover:bg-elevated">取消</button>
-        <button type="button" onClick={() => void submit()} disabled={saving || !name.trim()}
-          className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-40">
+        <button
+          type="button"
+          onClick={() => setEditing(false)}
+          className="rounded-md px-3 py-1.5 text-xs text-fg-4 hover:bg-elevated"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={saving || !name.trim()}
+          className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-40"
+        >
           {saving ? "保存中…" : "保存"}
         </button>
       </div>
@@ -879,12 +1115,10 @@ export function AgentDetailPage() {
   const repoName = useRepoStore(selectActiveRepoName)
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const agents = useCustomAgentStore((s) => s.agents)
-  const agent = agents.find(a => a.id === agentId)
-  const { data: fragmentsData } = useAsyncData(
-    () => api.listGlobalFragments(),
-    [agentId],
-    { errorMessage: "加载提示词片段失败" },
-  )
+  const agent = agents.find((a) => a.id === agentId)
+  const { data: fragmentsData } = useAsyncData(() => api.listGlobalFragments(), [agentId], {
+    errorMessage: "加载提示词片段失败",
+  })
   const fragments = fragmentsData ?? []
   const [copied, setCopied] = useState(false)
 
@@ -894,7 +1128,16 @@ export function AgentDetailPage() {
     }
   }, [agents, agent, navigate, repoName])
 
-  const handleSave = async (data: { name: string; baseAgent: string; model?: string; variant?: string; memoryModel?: string | null; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
+  const handleSave = async (data: {
+    name: string
+    baseAgent: string
+    model?: string
+    variant?: string
+    memoryModel?: string | null
+    systemPrompt?: string
+    systemPromptPosition?: number
+    fragmentIds?: string[]
+  }) => {
     if (!agentId) return
     await api.updateCustomAgent(agentId, data)
     void useCustomAgentStore.getState().loadAgents(activeRepoId)
@@ -950,38 +1193,50 @@ export function AgentDetailPage() {
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <div className={clsx(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold",
-            avatar.bg,
-            avatar.text,
-          )}>
+          <div
+            className={clsx(
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold",
+              avatar.bg,
+              avatar.text,
+            )}
+          >
             {avatar.initial}
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h1 className="truncate text-lg font-bold text-fg">{agent.name}</h1>
               {isSystem && (
-                <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">系统</span>
+                <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+                  系统
+                </span>
               )}
               {agent.repoId && (
-                <span className="shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">repo</span>
+                <span className="shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
+                  repo
+                </span>
               )}
             </div>
             <p className="mt-0.5 text-xs text-fg-4">
               <span className="font-mono">{agent.baseAgent}</span>
               {agent.model && <span className="ml-1.5 text-fg-5">· {agent.model}</span>}
             </p>
-            {agent.description && (
-              <p className="mt-1 text-xs text-fg-4">{agent.description}</p>
-            )}
+            {agent.description && <p className="mt-1 text-xs text-fg-4">{agent.description}</p>}
           </div>
           <div data-guide="agent-detail-actions" className="flex shrink-0 items-center gap-1.5">
-            <button type="button" onClick={() => void handleExportDownload()} title="导出 JSON"
-              className="rounded-md border border-line p-1.5 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3">
+            <button
+              type="button"
+              onClick={() => void handleExportDownload()}
+              title="导出 JSON"
+              className="rounded-md border border-line p-1.5 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3"
+            >
               <Download className="h-4 w-4" />
             </button>
-            <button type="button" onClick={() => void handleExportCopy()} title="复制 JSON"
-              className="rounded-md border border-line p-1.5 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3">
+            <button
+              type="button"
+              onClick={() => void handleExportCopy()}
+              title="复制 JSON"
+              className="rounded-md border border-line p-1.5 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3"
+            >
               {copied ? <Check className="h-4 w-4 text-green-500" /> : <Clipboard className="h-4 w-4" />}
             </button>
             {!isSystem && (

@@ -1,18 +1,19 @@
-import React, { useEffect, useRef, useState } from "react"
-import { useNavigate } from "react-router-dom"
-import { AlertTriangle, Brain, Clock, ChevronDown, Edit3, GripVertical, Loader2, Plus, Upload, X } from "lucide-react"
-import clsx from "clsx"
-import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from "@dnd-kit/core"
 import type { DragEndEvent } from "@dnd-kit/core"
-import { SortableContext, useSortable, arrayMove, rectSortingStrategy } from "@dnd-kit/sortable"
+import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core"
+import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
+import clsx from "clsx"
+import { AlertTriangle, Brain, ChevronDown, Clock, Edit3, GripVertical, Loader2, Plus, Upload, X } from "lucide-react"
+import type React from "react"
+import { useEffect, useRef, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { InlineConfirm } from "../components/InlineConfirm"
-import * as api from "../lib/api-client"
-import type { CustomAgent, CustomAgentExport, ModelInfo, PromptFragment } from "../lib/api-client"
-import { useCustomAgentStore } from "../stores/custom-agent-store"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import { useAsyncData } from "../hooks/use-async-data"
+import type { CustomAgent, CustomAgentExport, ModelInfo, PromptFragment } from "../lib/api-client"
+import * as api from "../lib/api-client"
 import { agentAvatar } from "../lib/constants"
+import { useCustomAgentStore } from "../stores/custom-agent-store"
+import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -22,13 +23,17 @@ const BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atl
 const PINNED_MODELS_KEY = "pinned_models"
 const SP_KEY = "__system_prompt__"
 
-
-
 // ---------------------------------------------------------------------------
 // AgentCard — card grid item
 // ---------------------------------------------------------------------------
 
-function SortableAgentCard({ agent, memoryCount, sessionCount, onClick, onDelete }: {
+function SortableAgentCard({
+  agent,
+  memoryCount,
+  sessionCount,
+  onClick,
+  onDelete,
+}: {
   agent: CustomAgent
   memoryCount: number
   sessionCount: number
@@ -46,11 +51,7 @@ function SortableAgentCard({ agent, memoryCount, sessionCount, onClick, onDelete
   }
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="group"
-    >
+    <div ref={setNodeRef} style={style} className="group">
       <div
         className="flex cursor-pointer flex-col rounded-xl border border-line bg-surface transition-colors hover:border-fg-6/60"
         onClick={onClick}
@@ -65,30 +66,34 @@ function SortableAgentCard({ agent, memoryCount, sessionCount, onClick, onDelete
           >
             <GripVertical className="h-4 w-4" />
           </button>
-          <div className={clsx(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold",
-            avatar.bg,
-            avatar.text,
-          )}>
+          <div
+            className={clsx(
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold",
+              avatar.bg,
+              avatar.text,
+            )}
+          >
             {avatar.initial}
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="truncate text-sm font-semibold text-fg">{agent.name}</span>
               {isSystem && (
-                <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">系统</span>
+                <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+                  系统
+                </span>
               )}
               {agent.repoId && (
-                <span className="shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">repo</span>
+                <span className="shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
+                  repo
+                </span>
               )}
             </div>
             <p className="mt-0.5 text-[11px] text-fg-4">
               <span className="font-mono">{agent.baseAgent}</span>
               {agent.model && <span className="ml-1.5 text-fg-5">· {agent.model}</span>}
             </p>
-            {agent.description && (
-              <p className="mt-1 text-xs text-fg-5 line-clamp-2">{agent.description}</p>
-            )}
+            {agent.description && <p className="mt-1 text-xs text-fg-5 line-clamp-2">{agent.description}</p>}
           </div>
         </div>
 
@@ -119,10 +124,24 @@ function SortableAgentCard({ agent, memoryCount, sessionCount, onClick, onDelete
 // CustomAgentForm
 // ---------------------------------------------------------------------------
 
-function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
+function CustomAgentForm({
+  initial,
+  availableFragments,
+  onSave,
+  onCancel,
+}: {
   initial?: CustomAgent
   availableFragments: PromptFragment[]
-  onSave: (data: { name: string; description?: string; baseAgent: string; model?: string; variant?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => Promise<void>
+  onSave: (data: {
+    name: string
+    description?: string
+    baseAgent: string
+    model?: string
+    variant?: string
+    systemPrompt?: string
+    systemPromptPosition?: number
+    fragmentIds?: string[]
+  }) => Promise<void>
   onCancel: () => void
 }) {
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
@@ -137,14 +156,14 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
   const [pinnedModels, setPinnedModels] = useState<ModelInfo[]>([])
 
   useEffect(() => {
-    if (!activeRepoId) { setPinnedModels([]); return }
+    if (!activeRepoId) {
+      setPinnedModels([])
+      return
+    }
     let cancelled = false
     void (async () => {
       try {
-        const [settings, models] = await Promise.all([
-          api.getSettings(),
-          api.listModels(activeRepoId),
-        ])
+        const [settings, models] = await Promise.all([api.getSettings(), api.listModels(activeRepoId)])
         if (cancelled) return
         const raw = settings[PINNED_MODELS_KEY]
         const pinnedIds: string[] = raw ? JSON.parse(raw) : []
@@ -153,7 +172,9 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
         if (!cancelled) setPinnedModels([])
       }
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [activeRepoId])
 
   const [orderedItems, setOrderedItems] = useState<string[]>(() => {
@@ -193,7 +214,7 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
   })()
 
   const preview = orderedItems
-    .map((id) => id === SP_KEY ? systemPrompt : availableFragments.find((f) => f.id === id)?.content)
+    .map((id) => (id === SP_KEY ? systemPrompt : availableFragments.find((f) => f.id === id)?.content))
     .filter(Boolean)
     .join("\n\n---\n\n")
 
@@ -201,7 +222,16 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
     if (!name.trim() || !baseAgent) return
     setSaving(true)
     try {
-      await onSave({ name: name.trim(), description: description.trim() || undefined, baseAgent, model: model.trim() || undefined, variant: variant.trim() || undefined, systemPrompt, systemPromptPosition: spPosition, fragmentIds: selectedIds })
+      await onSave({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        baseAgent,
+        model: model.trim() || undefined,
+        variant: variant.trim() || undefined,
+        systemPrompt,
+        systemPromptPosition: spPosition,
+        fragmentIds: selectedIds,
+      })
     } finally {
       setSaving(false)
     }
@@ -212,21 +242,38 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
       <div className="flex gap-3">
         <label className="flex-1">
           <span className="text-xs font-medium text-fg-3">名称</span>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="代码审查员"
-            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="代码审查员"
+            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
+          />
         </label>
         <label className="w-36">
           <span className="text-xs font-medium text-fg-3">Base Agent</span>
-          <select value={baseAgent} onChange={(e) => setBaseAgent(e.target.value)}
-            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg focus:border-blue-500 focus:outline-none">
-            {BASE_AGENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+          <select
+            value={baseAgent}
+            onChange={(e) => setBaseAgent(e.target.value)}
+            className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg focus:border-blue-500 focus:outline-none"
+          >
+            {BASE_AGENTS.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
           </select>
         </label>
       </div>
       <label className="block">
         <span className="text-xs font-medium text-fg-3">描述（可选）</span>
-        <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="一句话描述这个 Agent 的用途"
-          className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+        <input
+          type="text"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="一句话描述这个 Agent 的用途"
+          className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
+        />
       </label>
       <div className="flex gap-3">
         <div className="flex-1">
@@ -238,7 +285,9 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
           >
             <option value="">默认模型</option>
             {pinnedModels.map((m) => (
-              <option key={m.id} value={m.id}>{m.name || m.id}</option>
+              <option key={m.id} value={m.id}>
+                {m.name || m.id}
+              </option>
             ))}
           </select>
           {pinnedModels.length === 0 && (
@@ -266,12 +315,27 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
           {orderedItems.map((id, idx) => {
             if (id === SP_KEY) {
               return (
-                <div key={id} className="flex items-center gap-2 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1">
+                <div
+                  key={id}
+                  className="flex items-center gap-2 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1"
+                >
                   <div className="flex flex-col">
-                    <button type="button" onClick={() => moveItem(idx, -1)} disabled={idx === 0}
-                      className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▲</button>
-                    <button type="button" onClick={() => moveItem(idx, 1)} disabled={idx === orderedItems.length - 1}
-                      className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▼</button>
+                    <button
+                      type="button"
+                      onClick={() => moveItem(idx, -1)}
+                      disabled={idx === 0}
+                      className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveItem(idx, 1)}
+                      disabled={idx === orderedItems.length - 1}
+                      className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30"
+                    >
+                      ▼
+                    </button>
                   </div>
                   <span className="flex-1 truncate text-xs font-medium text-amber-400">✎ 补充指令</span>
                 </div>
@@ -280,12 +344,27 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
             const frag = availableFragments.find((f) => f.id === id)
             if (!frag) return null
             return (
-              <div key={id} className="flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1">
+              <div
+                key={id}
+                className="flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1"
+              >
                 <div className="flex flex-col">
-                  <button type="button" onClick={() => moveItem(idx, -1)} disabled={idx === 0}
-                    className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▲</button>
-                  <button type="button" onClick={() => moveItem(idx, 1)} disabled={idx === orderedItems.length - 1}
-                    className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30">▼</button>
+                  <button
+                    type="button"
+                    onClick={() => moveItem(idx, -1)}
+                    disabled={idx === 0}
+                    className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveItem(idx, 1)}
+                    disabled={idx === orderedItems.length - 1}
+                    className="text-[10px] leading-none text-fg-5 hover:text-fg-2 disabled:opacity-30"
+                  >
+                    ▼
+                  </button>
                 </div>
                 <span className="flex-1 truncate text-xs text-fg">{frag.name}</span>
                 <button type="button" onClick={() => toggleFragment(id)} className="text-fg-5 hover:text-red-400">
@@ -297,13 +376,19 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
           {availableFragments.filter((f) => !selectedIds.includes(f.id)).length > 0 && (
             <select
               value=""
-              onChange={(e) => { if (e.target.value) toggleFragment(e.target.value) }}
+              onChange={(e) => {
+                if (e.target.value) toggleFragment(e.target.value)
+              }}
               className="w-full rounded border border-dashed border-line bg-base px-2 py-1 text-xs text-fg-4 focus:border-blue-500 focus:outline-none"
             >
               <option value="">+ 添加片段…</option>
-              {availableFragments.filter((f) => !selectedIds.includes(f.id)).map((f) => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
+              {availableFragments
+                .filter((f) => !selectedIds.includes(f.id))
+                .map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
             </select>
           )}
         </div>
@@ -311,15 +396,22 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
 
       <label className="block">
         <span className="text-xs font-medium text-fg-3">补充指令内容</span>
-        <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={3}
+        <textarea
+          value={systemPrompt}
+          onChange={(e) => setSystemPrompt(e.target.value)}
+          rows={3}
           placeholder="agent 级别的补充指令…"
-          className="mt-1 w-full resize-y rounded-md border border-line bg-base px-3 py-2 font-mono text-sm leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+          className="mt-1 w-full resize-y rounded-md border border-line bg-base px-3 py-2 font-mono text-sm leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
+        />
       </label>
 
       {(selectedIds.length > 0 || systemPrompt) && (
         <div>
-          <button type="button" onClick={() => setShowPreview(!showPreview)}
-            className="flex items-center gap-1 text-xs font-medium text-fg-4 hover:text-fg-3">
+          <button
+            type="button"
+            onClick={() => setShowPreview(!showPreview)}
+            className="flex items-center gap-1 text-xs font-medium text-fg-4 hover:text-fg-3"
+          >
             <span>{showPreview ? "▾" : "▸"}</span> 预览最终提示词
           </button>
           {showPreview && (
@@ -331,9 +423,15 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
       )}
 
       <div className="flex justify-end gap-2 pt-1">
-        <button type="button" onClick={onCancel} className="rounded-md px-3 py-1.5 text-xs text-fg-4 hover:bg-elevated">取消</button>
-        <button type="button" onClick={() => void submit()} disabled={saving || !name.trim()}
-          className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40">
+        <button type="button" onClick={onCancel} className="rounded-md px-3 py-1.5 text-xs text-fg-4 hover:bg-elevated">
+          取消
+        </button>
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={saving || !name.trim()}
+          className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
+        >
           {saving ? "保存中…" : initial ? "更新" : "创建"}
         </button>
       </div>
@@ -345,7 +443,15 @@ function CustomAgentForm({ initial, availableFragments, onSave, onCancel }: {
 // FragmentRow / FragmentForm
 // ---------------------------------------------------------------------------
 
-function FragmentRow({ fragment, onEdit, onDelete }: { fragment: PromptFragment; onEdit: () => void; onDelete: () => void }) {
+function FragmentRow({
+  fragment,
+  onEdit,
+  onDelete,
+}: {
+  fragment: PromptFragment
+  onEdit: () => void
+  onDelete: () => void
+}) {
   return (
     <div className="group flex items-center gap-3 rounded-lg border border-line bg-base px-3 py-2">
       <div className="min-w-0 flex-1">
@@ -353,15 +459,28 @@ function FragmentRow({ fragment, onEdit, onDelete }: { fragment: PromptFragment;
         {fragment.content && <p className="mt-0.5 truncate font-mono text-[11px] text-fg-5">{fragment.content}</p>}
       </div>
       <div className="flex items-center gap-1">
-        <InlineConfirm onConfirm={onDelete} triggerClassName="text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100">
-          <button type="button" onClick={onEdit} className="rounded p-1 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100"><Edit3 className="h-3.5 w-3.5" /></button>
+        <InlineConfirm
+          onConfirm={onDelete}
+          triggerClassName="text-fg-5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+        >
+          <button
+            type="button"
+            onClick={onEdit}
+            className="rounded p-1 text-fg-5 opacity-0 transition-opacity hover:text-fg-3 group-hover:opacity-100"
+          >
+            <Edit3 className="h-3.5 w-3.5" />
+          </button>
         </InlineConfirm>
       </div>
     </div>
   )
 }
 
-function FragmentForm({ initial, onSave, onCancel }: {
+function FragmentForm({
+  initial,
+  onSave,
+  onCancel,
+}: {
   initial?: PromptFragment
   onSave: (data: { name: string; content: string }) => Promise<void>
   onCancel: () => void
@@ -373,19 +492,39 @@ function FragmentForm({ initial, onSave, onCancel }: {
   const submit = async () => {
     if (!name.trim()) return
     setSaving(true)
-    try { await onSave({ name: name.trim(), content }) } finally { setSaving(false) }
+    try {
+      await onSave({ name: name.trim(), content })
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <div className="space-y-2 rounded-lg border border-line bg-base p-3">
-      <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="片段名称"
-        className="w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
-      <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3} placeholder="提示词内容…"
-        className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="片段名称"
+        className="w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
+      />
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        rows={3}
+        placeholder="提示词内容…"
+        className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
+      />
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded-md px-3 py-1 text-xs text-fg-4 hover:bg-elevated">取消</button>
-        <button type="button" onClick={() => void submit()} disabled={saving || !name.trim()}
-          className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-40">
+        <button type="button" onClick={onCancel} className="rounded-md px-3 py-1 text-xs text-fg-4 hover:bg-elevated">
+          取消
+        </button>
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={saving || !name.trim()}
+          className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-40"
+        >
           {saving ? "保存中…" : initial ? "更新" : "创建"}
         </button>
       </div>
@@ -449,14 +588,21 @@ function ImportAgentForm({ onImported, onCancel }: { onImported: () => void; onC
       </div>
 
       <input ref={fileRef} type="file" accept=".json" onChange={handleFile} className="hidden" />
-      <button type="button" onClick={() => fileRef.current?.click()}
-        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3">
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3"
+      >
         <Upload className="h-3.5 w-3.5" /> 上传 JSON 文件
       </button>
 
-      <textarea value={jsonText} onChange={(e) => setJsonText(e.target.value)} rows={4}
+      <textarea
+        value={jsonText}
+        onChange={(e) => setJsonText(e.target.value)}
+        rows={4}
         placeholder="或粘贴 JSON 内容…"
-        className="w-full resize-y rounded-md border border-line bg-base px-3 py-2 font-mono text-xs leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none" />
+        className="w-full resize-y rounded-md border border-line bg-base px-3 py-2 font-mono text-xs leading-relaxed text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
+      />
 
       {error && (
         <div className="flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
@@ -466,9 +612,15 @@ function ImportAgentForm({ onImported, onCancel }: { onImported: () => void; onC
       )}
 
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded-md px-3 py-1.5 text-xs text-fg-4 hover:bg-elevated">取消</button>
-        <button type="button" onClick={() => void doImport(jsonText)} disabled={importing || !jsonText.trim()}
-          className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40">
+        <button type="button" onClick={onCancel} className="rounded-md px-3 py-1.5 text-xs text-fg-4 hover:bg-elevated">
+          取消
+        </button>
+        <button
+          type="button"
+          onClick={() => void doImport(jsonText)}
+          disabled={importing || !jsonText.trim()}
+          className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
+        >
           {importing ? "导入中…" : "导入"}
         </button>
       </div>
@@ -494,11 +646,13 @@ export function AgentsPage() {
   const [memoryCounts, setMemoryCounts] = useState<Record<string, number>>({})
   const [sessionCounts, setSessionCounts] = useState<Record<string, number>>({})
 
-  const { data: agentsData, loading, reload: load } = useAsyncData(
+  const {
+    data: agentsData,
+    loading,
+    reload: load,
+  } = useAsyncData(
     async () => {
-      const agentsP = activeRepoId
-        ? api.listRepoCustomAgents(activeRepoId)
-        : api.listGlobalCustomAgents()
+      const agentsP = activeRepoId ? api.listRepoCustomAgents(activeRepoId) : api.listGlobalCustomAgents()
       const [a, f] = await Promise.all([agentsP, api.listGlobalFragments()])
       return { agents: a, fragments: f }
     },
@@ -512,20 +666,26 @@ export function AgentsPage() {
   // Load stats for each agent
   useEffect(() => {
     if (agents.length === 0) return
-    const visible = agents.filter(a => {
+    const visible = agents.filter((a) => {
       return a.isSystem < 2
     })
     for (const a of visible) {
-      api.listAgentMemories(a.id).then(mems => {
-        setMemoryCounts(prev => ({ ...prev, [a.id]: mems.filter(m => !m.supersededBy).length }))
-      }).catch(() => {})
-      api.listAgentSessions(a.id).then(sess => {
-        setSessionCounts(prev => ({ ...prev, [a.id]: sess.length }))
-      }).catch(() => {})
+      api
+        .listAgentMemories(a.id)
+        .then((mems) => {
+          setMemoryCounts((prev) => ({ ...prev, [a.id]: mems.filter((m) => !m.supersededBy).length }))
+        })
+        .catch(() => {})
+      api
+        .listAgentSessions(a.id)
+        .then((sess) => {
+          setSessionCounts((prev) => ({ ...prev, [a.id]: sess.length }))
+        })
+        .catch(() => {})
     }
   }, [agents])
 
-  const visibleAgents = agents.filter(a => {
+  const visibleAgents = agents.filter((a) => {
     return a.isSystem < 2
   })
 
@@ -558,7 +718,15 @@ export function AgentsPage() {
     }
   }
 
-  const handleCreateAgent = async (data: { name: string; baseAgent: string; model?: string; variant?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }) => {
+  const handleCreateAgent = async (data: {
+    name: string
+    baseAgent: string
+    model?: string
+    variant?: string
+    systemPrompt?: string
+    systemPromptPosition?: number
+    fragmentIds?: string[]
+  }) => {
     if (activeRepoId) {
       await api.createRepoCustomAgent(activeRepoId, data)
     } else {
@@ -611,12 +779,24 @@ export function AgentsPage() {
             <p className="mt-0.5 text-xs text-fg-4">组合 base agent + 模型 + 提示词片段，创建 Session 时选择。</p>
           </div>
           <div data-guide="agents-header" className="flex items-center gap-2">
-            <button type="button" onClick={() => { setShowImport(true); setShowAgentForm(false) }}
-              className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-fg-3 transition-colors hover:bg-elevated">
+            <button
+              type="button"
+              onClick={() => {
+                setShowImport(true)
+                setShowAgentForm(false)
+              }}
+              className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-fg-3 transition-colors hover:bg-elevated"
+            >
               <Upload className="h-3.5 w-3.5" /> 导入
             </button>
-            <button type="button" onClick={() => { setShowAgentForm(true); setShowImport(false) }}
-              className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500">
+            <button
+              type="button"
+              onClick={() => {
+                setShowAgentForm(true)
+                setShowImport(false)
+              }}
+              className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500"
+            >
               <Plus className="h-3.5 w-3.5" /> 创建
             </button>
           </div>
@@ -624,10 +804,21 @@ export function AgentsPage() {
 
         {/* Create / Import forms */}
         {showAgentForm && (
-          <CustomAgentForm availableFragments={fragments} onSave={handleCreateAgent} onCancel={() => setShowAgentForm(false)} />
+          <CustomAgentForm
+            availableFragments={fragments}
+            onSave={handleCreateAgent}
+            onCancel={() => setShowAgentForm(false)}
+          />
         )}
         {showImport && (
-          <ImportAgentForm onImported={() => { setShowImport(false); load(); void useCustomAgentStore.getState().loadAgents(activeRepoId) }} onCancel={() => setShowImport(false)} />
+          <ImportAgentForm
+            onImported={() => {
+              setShowImport(false)
+              load()
+              void useCustomAgentStore.getState().loadAgents(activeRepoId)
+            }}
+            onCancel={() => setShowImport(false)}
+          />
         )}
 
         {/* Agent cards grid */}
@@ -646,7 +837,7 @@ export function AgentsPage() {
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={visibleAgents.map((a) => a.id)} strategy={rectSortingStrategy}>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {visibleAgents.map(a => (
+                {visibleAgents.map((a) => (
                   <SortableAgentCard
                     key={a.id}
                     agent={a}
@@ -672,24 +863,39 @@ export function AgentsPage() {
               <h2 className="text-sm font-semibold text-fg">提示词片段</h2>
               <p className="mt-0.5 text-xs text-fg-4">可复用的提示词模块，可在多个 Agent 间共享。</p>
             </div>
-            <ChevronDown className={clsx("h-4 w-4 shrink-0 text-fg-4 transition-transform", fragsOpen && "rotate-180")} />
+            <ChevronDown
+              className={clsx("h-4 w-4 shrink-0 text-fg-4 transition-transform", fragsOpen && "rotate-180")}
+            />
           </button>
 
           {fragsOpen && (
             <div className="border-t border-line px-5 pb-5 pt-3">
               <div className="space-y-1.5">
-                {fragments.map(f =>
+                {fragments.map((f) =>
                   editingFrag?.id === f.id ? (
-                    <FragmentForm key={f.id} initial={f} onSave={handleUpdateFrag} onCancel={() => setEditingFrag(null)} />
+                    <FragmentForm
+                      key={f.id}
+                      initial={f}
+                      onSave={handleUpdateFrag}
+                      onCancel={() => setEditingFrag(null)}
+                    />
                   ) : (
-                    <FragmentRow key={f.id} fragment={f} onEdit={() => setEditingFrag(f)} onDelete={() => void handleDeleteFrag(f.id)} />
+                    <FragmentRow
+                      key={f.id}
+                      fragment={f}
+                      onEdit={() => setEditingFrag(f)}
+                      onDelete={() => void handleDeleteFrag(f.id)}
+                    />
                   ),
                 )}
                 {showFragForm ? (
                   <FragmentForm onSave={handleCreateFrag} onCancel={() => setShowFragForm(false)} />
                 ) : (
-                  <button type="button" onClick={() => setShowFragForm(true)}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowFragForm(true)}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3"
+                  >
                     <Plus className="h-3.5 w-3.5" /> 添加片段
                   </button>
                 )}

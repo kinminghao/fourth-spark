@@ -6,9 +6,7 @@ type Resolved = "light" | "dark"
 const STORAGE_KEY = "fs-theme"
 
 function getSystemTheme(): Resolved {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light"
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
 }
 
 function resolve(preference: Preference): Resolved {
@@ -37,9 +35,7 @@ interface ThemeState {
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
   preference: (localStorage.getItem(STORAGE_KEY) as Preference) ?? "system",
-  resolved: resolve(
-    (localStorage.getItem(STORAGE_KEY) as Preference) ?? "system",
-  ),
+  resolved: resolve((localStorage.getItem(STORAGE_KEY) as Preference) ?? "system"),
 
   cycle() {
     const order: Preference[] = ["system", "light", "dark"]

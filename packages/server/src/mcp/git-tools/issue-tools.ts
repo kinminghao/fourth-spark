@@ -1,16 +1,9 @@
-import { McpServer } from "@modelcontextprotocol/server"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { db } from "../../db/index"
-import { issues, issueComments } from "../../db/schema"
+import { issueComments, issues } from "../../db/schema"
 import { logger } from "../../middleware/logger"
-import {
-  getClientForRepo,
-  textResult,
-  errorResult,
-  issueToDb,
-  commentToDb,
-  linkSessionTarget,
-} from "./helpers"
+import { commentToDb, errorResult, getClientForRepo, issueToDb, linkSessionTarget, textResult } from "./helpers"
 
 export function registerIssueTools(server: McpServer, repoId: string, sessionId?: string): void {
   // ── get_repo_info ────────────────────────────────────────────────────────

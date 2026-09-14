@@ -58,26 +58,23 @@ export function useSwipeDrawer({
     [disabled],
   )
 
-  const onTouchMove = useCallback(
-    (e: React.TouchEvent) => {
-      const c = touch.current
-      if (!c.on) return
-      const dx = e.touches[0].clientX - c.x0
-      const dy = e.touches[0].clientY - c.y0
-      if (!c.dir) {
-        if (Math.abs(dx) > DIR_LOCK_PX || Math.abs(dy) > DIR_LOCK_PX) {
-          c.dir = Math.abs(dx) > Math.abs(dy) ? "h" : "v"
-        }
-        return
+  const onTouchMove = useCallback((e: React.TouchEvent) => {
+    const c = touch.current
+    if (!c.on) return
+    const dx = e.touches[0].clientX - c.x0
+    const dy = e.touches[0].clientY - c.y0
+    if (!c.dir) {
+      if (Math.abs(dx) > DIR_LOCK_PX || Math.abs(dy) > DIR_LOCK_PX) {
+        c.dir = Math.abs(dx) > Math.abs(dy) ? "h" : "v"
       }
-      if (c.dir === "v") {
-        c.on = false
-        return
-      }
-      dxRef.current = dx
-    },
-    [],
-  )
+      return
+    }
+    if (c.dir === "v") {
+      c.on = false
+      return
+    }
+    dxRef.current = dx
+  }, [])
 
   const onTouchEnd = useCallback(() => {
     const c = touch.current

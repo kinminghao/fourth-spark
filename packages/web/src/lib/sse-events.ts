@@ -10,17 +10,8 @@ import type { Message, MessagePart, Session, Todo } from "./api-client"
 
 interface SseDispatchTarget {
   updateMessage: (sessionId: string, message: Message) => void
-  updateMessagePart: (
-    sessionId: string,
-    messageId: string,
-    part: MessagePart,
-  ) => void
-  appendMessagePartDelta: (
-    sessionId: string,
-    messageId: string,
-    partId: string,
-    delta: string,
-  ) => void
+  updateMessagePart: (sessionId: string, messageId: string, part: MessagePart) => void
+  appendMessagePartDelta: (sessionId: string, messageId: string, partId: string, delta: string) => void
   updateTodos: (sessionId: string, todos: Todo[]) => void
   setSessionStatus: (sessionId: string, status: string, reason?: string) => void
   updateSessionInfo: (info: Partial<Session> & { id: string }) => void
@@ -42,9 +33,7 @@ export function parseEventData(raw: unknown): unknown {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : null
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null
 }
 
 /** Unwrap an OpenCode `{ type, properties }` envelope to its payload. */
@@ -81,9 +70,7 @@ function extractMessage(data: unknown): Message | null {
   return null
 }
 
-function extractPart(
-  data: unknown,
-): { messageId?: string; part?: MessagePart } {
+function extractPart(data: unknown): { messageId?: string; part?: MessagePart } {
   const props = asRecord(getProps(data))
   if (!props) {
     return {}
@@ -101,9 +88,7 @@ function extractPart(
   return { messageId, part: candidate as unknown as MessagePart }
 }
 
-export function extractPartDelta(
-  data: unknown,
-): { messageId: string; partId: string; delta: string } | null {
+export function extractPartDelta(data: unknown): { messageId: string; partId: string; delta: string } | null {
   const props = asRecord(getProps(data))
   if (!props) return null
   if (props.field !== "text") return null
@@ -138,9 +123,12 @@ function extractSessionInfo(data: unknown): (Partial<Session> & { id: string }) 
   if (typeof props.title === "string") info.title = props.title
   if (typeof props.agent === "string") info.agent = props.agent
   if (typeof props.cost === "number") info.cost = props.cost
-  const parentID = typeof props.parentID === "string" ? props.parentID
-    : typeof props.parent_id === "string" ? props.parent_id
-    : undefined
+  const parentID =
+    typeof props.parentID === "string"
+      ? props.parentID
+      : typeof props.parent_id === "string"
+        ? props.parent_id
+        : undefined
   if (parentID) info.parentID = parentID
 
   const tokensNested = asRecord(props.tokens)
@@ -205,13 +193,8 @@ function extractStatus(data: unknown): string | null {
   return null
 }
 
-export function dispatchSseEvent(
-  name: string,
-  data: unknown,
-  sessionId: string,
-  target: SseDispatchTarget,
-): void {
-  const resolved = name === "message" || name === "" ? readType(data) ?? name : name
+export function dispatchSseEvent(name: string, data: unknown, sessionId: string, target: SseDispatchTarget): void {
+  const resolved = name === "message" || name === "" ? (readType(data) ?? name) : name
   switch (resolved) {
     case "message.updated": {
       const message = extractMessage(data)

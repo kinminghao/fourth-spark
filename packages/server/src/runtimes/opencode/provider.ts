@@ -13,31 +13,28 @@
 //   * cloud lease keeper lifecycle (RuntimeManager owns the pool switch)
 // ---------------------------------------------------------------------------
 
-import type { Subprocess } from "bun"
-import { eq, inArray } from "drizzle-orm"
-import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-
-import type { RuntimeProvider, RuntimeHealth } from "../../core/runtime-provider"
+import { eq, inArray } from "drizzle-orm"
 import type { RuntimeClient } from "../../core/runtime-client"
+import type { RuntimeHealth, RuntimeProvider } from "../../core/runtime-provider"
 import { db } from "../../db/index"
 import { repos, sessions } from "../../db/schema"
-import { syncSessionsList, syncMessagesList } from "../../db/sync"
-import { logger } from "../../middleware/logger"
-
-import { injectMcpConfig, removeMcpConfig } from "./mcp"
+import { syncMessagesList, syncSessionsList } from "../../db/sync"
 import { childEnv } from "../../lib/child-env"
-import { HttpRuntimeClient } from "./client"
-import { openCodeCredentialWriter } from "./credential"
-import { getRotatingLogFd } from "../../lib/log-rotate"
 import {
-  TMP_BASE_DIR,
+  OPENCODE_POLL_INTERVAL_MS,
+  OPENCODE_POLL_TIMEOUT_MS,
   OPENCODE_PORT_BASE,
   OPENCODE_PORT_MAX,
   OPENCODE_READY_TIMEOUT_MS,
-  OPENCODE_POLL_TIMEOUT_MS,
-  OPENCODE_POLL_INTERVAL_MS,
+  TMP_BASE_DIR,
 } from "../../lib/config"
+import { getRotatingLogFd } from "../../lib/log-rotate"
+import { logger } from "../../middleware/logger"
+import { HttpRuntimeClient } from "./client"
+import { openCodeCredentialWriter } from "./credential"
+import { injectMcpConfig, removeMcpConfig } from "./mcp"
 
 const RUNTIME_ID = "opencode"
 
@@ -252,7 +249,7 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
   async function initialSync(client: RuntimeClient, repoId: string): Promise<void> {
     const sessionList = await client.listSessions()
     const remoteIds = sessionList
-      .map((s: Record<string, unknown>) => typeof s.id === "string" ? s.id : "")
+      .map((s: Record<string, unknown>) => (typeof s.id === "string" ? s.id : ""))
       .filter(Boolean)
 
     if (remoteIds.length === 0) {
@@ -261,10 +258,7 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
     }
 
     // Query DB for existing session IDs to avoid redundant writes
-    const existing = await db
-      .select({ id: sessions.id })
-      .from(sessions)
-      .where(inArray(sessions.id, remoteIds))
+    const existing = await db.select({ id: sessions.id }).from(sessions).where(inArray(sessions.id, remoteIds))
     const existingIds = new Set(existing.map((r) => r.id))
 
     const newSessions = sessionList.filter(
@@ -305,19 +299,16 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
     mkdirSync(PID_DIR, { recursive: true })
     const logFd = getRotatingLogFd()
 
-    const proc = Bun.spawn([
-      "opencode", "serve",
-      "--port", String(port),
-      "--hostname", "127.0.0.1",
-      "--print-logs",
-      "--log-level", "DEBUG",
-    ], {
-      cwd: localPath,
-      stdout: logFd,
-      stderr: logFd,
-      detached: true,
-      env: childEnv({ PORT: String(port) }),
-    })
+    const proc = Bun.spawn(
+      ["opencode", "serve", "--port", String(port), "--hostname", "127.0.0.1", "--print-logs", "--log-level", "DEBUG"],
+      {
+        cwd: localPath,
+        stdout: logFd,
+        stderr: logFd,
+        detached: true,
+        env: childEnv({ PORT: String(port) }),
+      },
+    )
     proc.unref()
     persistPidEarly(proc.pid, port, repoId)
 

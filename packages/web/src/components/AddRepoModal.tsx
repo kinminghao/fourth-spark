@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from "react"
+import { AlertTriangle, ChevronDown, FolderSearch, GitBranch, Loader2, X } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { AlertTriangle, X, FolderSearch, GitBranch, Loader2, ChevronDown } from "lucide-react"
-import { useRepoStore } from "../stores/repo-store"
-import { resolveRepo, cloneRepo, listGitHosts } from "../lib/api-client"
+import { cloneRepo, listGitHosts, resolveRepo } from "../lib/api-client"
+import { DEBOUNCE_MS, DEBOUNCE_SLOW_MS } from "../lib/constants"
 import { extractHostFromGitUrl } from "../lib/git-url"
+import { useRepoStore } from "../stores/repo-store"
 import { DirectoryBrowser } from "./DirectoryBrowser"
-import { DEBOUNCE_SLOW_MS, DEBOUNCE_MS } from "../lib/constants"
 
 type Mode = "browse" | "clone"
 
@@ -67,9 +67,15 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     const trimmed = gitUrl.trim()
-    if (!trimmed) { setHostWarning(null); return }
+    if (!trimmed) {
+      setHostWarning(null)
+      return
+    }
     const host = extractHostFromGitUrl(trimmed)
-    if (!host) { setHostWarning(null); return }
+    if (!host) {
+      setHostWarning(null)
+      return
+    }
 
     let cancelled = false
     const timer = setTimeout(() => {
@@ -79,9 +85,14 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
           const found = hosts.some((h) => h.host.toLowerCase() === host.toLowerCase())
           setHostWarning(found ? null : host)
         })
-        .catch(() => { if (!cancelled) setHostWarning(null) })
+        .catch(() => {
+          if (!cancelled) setHostWarning(null)
+        })
     }, DEBOUNCE_MS)
-    return () => { cancelled = true; clearTimeout(timer) }
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [gitUrl])
 
   const handleBrowseSelect = (path: string) => {
@@ -141,7 +152,11 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
       >
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-base font-semibold text-fg">添加仓库</h2>
-          <button type="button" onClick={onClose} className="rounded-md p-1 text-fg-4 hover:bg-elevated hover:text-fg-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-fg-4 hover:bg-elevated hover:text-fg-2"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -151,9 +166,7 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
             type="button"
             onClick={() => switchMode("browse")}
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              mode === "browse"
-                ? "bg-elevated text-fg shadow-sm"
-                : "text-fg-4 hover:text-fg-2"
+              mode === "browse" ? "bg-elevated text-fg shadow-sm" : "text-fg-4 hover:text-fg-2"
             }`}
           >
             <FolderSearch className="h-3.5 w-3.5" />
@@ -163,9 +176,7 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
             type="button"
             onClick={() => switchMode("clone")}
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              mode === "clone"
-                ? "bg-elevated text-fg shadow-sm"
-                : "text-fg-4 hover:text-fg-2"
+              mode === "clone" ? "bg-elevated text-fg shadow-sm" : "text-fg-4 hover:text-fg-2"
             }`}
           >
             <GitBranch className="h-3.5 w-3.5" />
@@ -178,7 +189,9 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
             <>
               <DirectoryBrowser onSelect={handleBrowseSelect} />
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="m-path" className="text-xs font-medium text-fg-3">本地路径</label>
+                <label htmlFor="m-path" className="text-xs font-medium text-fg-3">
+                  本地路径
+                </label>
                 <input
                   id="m-path"
                   value={localPath}
@@ -195,13 +208,14 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
           ) : (
             <>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="m-clone-url" className="text-xs font-medium text-fg-3">Git 仓库地址</label>
+                <label htmlFor="m-clone-url" className="text-xs font-medium text-fg-3">
+                  Git 仓库地址
+                </label>
                 <input
                   id="m-clone-url"
                   value={gitUrl}
                   onChange={(e) => setGitUrl(e.target.value)}
                   placeholder="https://github.com/org/repo.git"
-                  autoFocus
                   className="w-full rounded-lg border border-line bg-base px-3 py-2 font-mono text-xs text-fg placeholder:text-fg-5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
               </div>
@@ -224,15 +238,13 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
                         : "border-line bg-base text-fg-4 hover:bg-elevated hover:text-fg-2"
                     }`}
                   >
-                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showCloneDirPicker ? "rotate-180" : ""}`} />
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 transition-transform ${showCloneDirPicker ? "rotate-180" : ""}`}
+                    />
                   </button>
                 </div>
-                {showCloneDirPicker && (
-                  <DirectoryBrowser onSelect={handleCloneTargetSelect} />
-                )}
-                <span className="text-[11px] text-fg-5">
-                  留空则克隆到默认目录，选择目录后仓库将克隆到该目录下
-                </span>
+                {showCloneDirPicker && <DirectoryBrowser onSelect={handleCloneTargetSelect} />}
+                <span className="text-[11px] text-fg-5">留空则克隆到默认目录，选择目录后仓库将克隆到该目录下</span>
               </div>
 
               <button
@@ -260,7 +272,9 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
           )}
 
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="m-name" className="text-xs font-medium text-fg-3">名称</label>
+            <label htmlFor="m-name" className="text-xs font-medium text-fg-3">
+              名称
+            </label>
             <input
               id="m-name"
               value={name}
@@ -272,7 +286,9 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
 
           {mode === "browse" && (
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="m-git" className="text-xs font-medium text-fg-3">Git 远程地址</label>
+              <label htmlFor="m-git" className="text-xs font-medium text-fg-3">
+                Git 远程地址
+              </label>
               <input
                 id="m-git"
                 value={gitUrl}
@@ -290,7 +306,10 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
                 源站 <strong>{hostWarning}</strong> 尚未配置访问凭证，Issue/PR 同步将不可用。
                 <button
                   type="button"
-                  onClick={() => { onClose(); navigate("/settings") }}
+                  onClick={() => {
+                    onClose()
+                    navigate("/settings")
+                  }}
                   className="ml-1 font-medium underline hover:text-amber-700"
                 >
                   去配置
@@ -325,9 +344,7 @@ export function AddRepoModal({ onClose }: { onClose: () => void }) {
             </span>
           </div>
 
-          {error && (
-            <p className="rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-500">{error}</p>
-          )}
+          {error && <p className="rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-500">{error}</p>}
 
           <div className="mt-1 flex items-center justify-end gap-2">
             <button

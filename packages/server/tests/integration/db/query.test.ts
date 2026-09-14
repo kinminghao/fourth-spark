@@ -1,17 +1,17 @@
-import { describe, test, expect, beforeAll, beforeEach } from "bun:test"
+import { beforeAll, beforeEach, describe, expect, test } from "bun:test"
+import { execSync } from "node:child_process"
 import { db } from "../../../src/db/index"
-import { repos, sessions, messages, parts, todos } from "../../../src/db/schema"
 import {
-  getRepoDirectory,
-  listSessionsFromDB,
-  getSessionFromDB,
+  getMessageCount,
   getMessagesFromDB,
   getMessagesPaginated,
-  getMessageCount,
+  getRepoDirectory,
+  getSessionFromDB,
   getTodosFromDB,
+  listSessionsFromDB,
 } from "../../../src/db/query"
+import { messages, parts, repos, sessions, todos } from "../../../src/db/schema"
 import { truncateAll } from "../../helpers/db"
-import { execSync } from "node:child_process"
 
 beforeAll(() => {
   execSync("bunx drizzle-kit push --force", {
@@ -58,7 +58,14 @@ async function seedMessage(id: string, sessionId: string, role: string, timeCrea
   })
 }
 
-async function seedPart(id: string, messageId: string, sessionId: string, type: string, data: Record<string, unknown>, timeCreated: number) {
+async function seedPart(
+  id: string,
+  messageId: string,
+  sessionId: string,
+  type: string,
+  data: Record<string, unknown>,
+  timeCreated: number,
+) {
   await db.insert(parts).values({
     id,
     messageId,
@@ -114,8 +121,8 @@ describe("getSessionFromDB", () => {
     await seedSession("ses-1", "/dir")
     const result = await getSessionFromDB("ses-1")
     expect(result).not.toBeNull()
-    expect(result!.id).toBe("ses-1")
-    expect(result!.title).toBe("Session ses-1")
+    expect(result?.id).toBe("ses-1")
+    expect(result?.title).toBe("Session ses-1")
   })
 
   test("returns null for non-existent session", async () => {

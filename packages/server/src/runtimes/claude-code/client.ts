@@ -11,30 +11,26 @@
 //     flight (or waiting for the next user message on stream-json stdin).
 // ---------------------------------------------------------------------------
 
-import { type Subprocess } from "bun"
+import type { Subprocess } from "bun"
 
 import type { RuntimeClient } from "../../core/runtime-client"
 import {
-  RuntimeError,
   type Agent,
   type Message,
   type MessagePart,
   type PendingQuestion,
-  type ProviderListResponse,
   type PromptFile,
   type PromptOpts,
+  type ProviderListResponse,
+  RuntimeError,
   type Session,
   type SessionStatus,
   type Todo,
 } from "../../core/runtime-types"
-import { logger } from "../../middleware/logger"
 import { childEnv } from "../../lib/child-env"
+import { logger } from "../../middleware/logger"
 
-import {
-  type ClaudeSessionState,
-  claudeEventToSseBlocks,
-  createSessionState,
-} from "./event-adapter"
+import { type ClaudeSessionState, claudeEventToSseBlocks, createSessionState } from "./event-adapter"
 
 const RUNTIME_ID = "claude-code"
 const EVENT_BUFFER_CAP = 1000
@@ -80,7 +76,7 @@ function streamJsonUserMessage(content: string, files: PromptFile[]): string {
       })),
     ],
   }
-  return JSON.stringify({ type: "user", message }) + "\n"
+  return `${JSON.stringify({ type: "user", message })}\n`
 }
 
 function extractClaudeModelId(model: string): string {
@@ -89,9 +85,7 @@ function extractClaudeModelId(model: string): string {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 }
 
 function asString(value: unknown): string | undefined {
@@ -124,7 +118,17 @@ export class StdioRuntimeClient implements RuntimeClient {
   private readonly managed = new Map<string, ManagedSession>()
   private readonly spawnedOnce = new Set<string>()
   private readonly clientListeners = new Set<(block: string) => void>()
-  private readonly persistentMessages = new Map<string, { messages: Message[]; messageIndex: Map<string, number>; todos: Todo[]; userCounter: number; lastMessageCounter: number; lastPartCounter: number }>()
+  private readonly persistentMessages = new Map<
+    string,
+    {
+      messages: Message[]
+      messageIndex: Map<string, number>
+      todos: Todo[]
+      userCounter: number
+      lastMessageCounter: number
+      lastPartCounter: number
+    }
+  >()
   private readonly dbSync: DbSyncCallbacks
 
   constructor(directory: string, dbSync?: DbSyncCallbacks) {
@@ -230,7 +234,14 @@ export class StdioRuntimeClient implements RuntimeClient {
   private ensurePersistent(sessionId: string) {
     let p = this.persistentMessages.get(sessionId)
     if (!p) {
-      p = { messages: [], messageIndex: new Map(), todos: [], userCounter: 0, lastMessageCounter: 0, lastPartCounter: 0 }
+      p = {
+        messages: [],
+        messageIndex: new Map(),
+        todos: [],
+        userCounter: 0,
+        lastMessageCounter: 0,
+        lastPartCounter: 0,
+      }
       this.persistentMessages.set(sessionId, p)
     }
     return p
@@ -239,7 +250,9 @@ export class StdioRuntimeClient implements RuntimeClient {
   async prompt(sessionId: string, content: string, opts?: PromptOpts): Promise<void> {
     const existing = this.managed.get(sessionId)
     if (existing) {
-      try { existing.proc.kill() } catch {}
+      try {
+        existing.proc.kill()
+      } catch {}
       this.managed.delete(sessionId)
     }
 
@@ -252,7 +265,7 @@ export class StdioRuntimeClient implements RuntimeClient {
 
     const info = this.sessionInfo.get(sessionId)
     if (info && !info.title && content.length > 0) {
-      info.title = content.length > 50 ? content.slice(0, 50) + "…" : content
+      info.title = content.length > 50 ? `${content.slice(0, 50)}…` : content
     }
 
     p.userCounter += 1
@@ -309,7 +322,11 @@ export class StdioRuntimeClient implements RuntimeClient {
       start(controller) {
         for (const m of client.managed.values()) {
           for (const block of m.eventBuffer) {
-            try { controller.enqueue(encoder.encode(block)) } catch { /* backpressure */ }
+            try {
+              controller.enqueue(encoder.encode(block))
+            } catch {
+              /* backpressure */
+            }
           }
         }
         listener = (block: string) => {
@@ -409,9 +426,12 @@ export class StdioRuntimeClient implements RuntimeClient {
   private async spawnSession(sessionId: string, content: string, opts?: PromptOpts): Promise<ManagedSession> {
     const files = opts?.files ?? []
     const args = [
-      "claude", "-p",
-      "--output-format", "stream-json",
-      "--permission-mode", "bypassPermissions",
+      "claude",
+      "-p",
+      "--output-format",
+      "stream-json",
+      "--permission-mode",
+      "bypassPermissions",
       "--verbose",
     ]
     if (files.length > 0) {
@@ -427,7 +447,10 @@ export class StdioRuntimeClient implements RuntimeClient {
       args.push("--model", extractClaudeModelId(model))
     }
 
-    logger.info({ sessionId, cwd: this.directory, model, resume: this.spawnedOnce.has(sessionId) }, "spawning claude subprocess")
+    logger.info(
+      { sessionId, cwd: this.directory, model, resume: this.spawnedOnce.has(sessionId) },
+      "spawning claude subprocess",
+    )
 
     const proc = Bun.spawn(args, {
       cwd: this.directory,
@@ -437,7 +460,10 @@ export class StdioRuntimeClient implements RuntimeClient {
       env: childEnv(),
     }) as Subprocess<"pipe", "pipe", "pipe">
 
-    logger.info({ sessionId, pid: proc.pid, contentLength: content.length, files: files.length }, "writing prompt to claude stdin")
+    logger.info(
+      { sessionId, pid: proc.pid, contentLength: content.length, files: files.length },
+      "writing prompt to claude stdin",
+    )
     try {
       proc.stdin.write(files.length > 0 ? streamJsonUserMessage(content, files) : content)
       proc.stdin.flush()
@@ -472,24 +498,26 @@ export class StdioRuntimeClient implements RuntimeClient {
     this.readStderr(sessionId, managed).catch((err) => {
       logger.warn({ err, sessionId }, "claude stderr reader crashed")
     })
-    proc.exited.then((code) => {
-      const still = this.managed.get(sessionId)
-      if (still !== managed) return
-      this.managed.delete(sessionId)
+    proc.exited
+      .then((code) => {
+        const still = this.managed.get(sessionId)
+        if (still !== managed) return
+        this.managed.delete(sessionId)
 
-      const stderrText = managed.stderrChunks.join("").trim()
-      if (code !== 0 && code !== null) {
-        const reason = stderrText || `claude exited with code ${code}`
-        this.emitClientBlock(this.buildSseBlock("session.error", { sessionID: sessionId, message: reason }))
-        logger.warn({ sessionId, code, stderr: stderrText.slice(0, 500) }, "claude subprocess exited with error")
-      } else {
-        this.emitClientBlock(this.buildSseBlock("session.status", { sessionID: sessionId, type: "idle" }))
-        logger.info({ sessionId, code }, "claude subprocess exited normally")
-      }
+        const stderrText = managed.stderrChunks.join("").trim()
+        if (code !== 0 && code !== null) {
+          const reason = stderrText || `claude exited with code ${code}`
+          this.emitClientBlock(this.buildSseBlock("session.error", { sessionID: sessionId, message: reason }))
+          logger.warn({ sessionId, code, stderr: stderrText.slice(0, 500) }, "claude subprocess exited with error")
+        } else {
+          this.emitClientBlock(this.buildSseBlock("session.status", { sessionID: sessionId, type: "idle" }))
+          logger.info({ sessionId, code }, "claude subprocess exited normally")
+        }
 
-      const exitInfo = this.sessionInfo.get(sessionId)
-      if (exitInfo) this.syncSessionToDb(sessionId, exitInfo)
-    }).catch(() => {})
+        const exitInfo = this.sessionInfo.get(sessionId)
+        if (exitInfo) this.syncSessionToDb(sessionId, exitInfo)
+      })
+      .catch(() => {})
 
     return managed
   }
@@ -536,7 +564,9 @@ export class StdioRuntimeClient implements RuntimeClient {
         }
       }
     } finally {
-      try { reader.releaseLock() } catch {}
+      try {
+        reader.releaseLock()
+      } catch {}
     }
   }
 
@@ -652,15 +682,15 @@ export class StdioRuntimeClient implements RuntimeClient {
   // reach into private fields.
   // -------------------------------------------------------------------------
 
-  hydrateFromDb(sessions: Array<{ id: string; title?: string; agent?: string; time?: { created?: number; updated?: number } }>): void {
+  hydrateFromDb(
+    sessions: Array<{ id: string; title?: string; agent?: string; time?: { created?: number; updated?: number } }>,
+  ): void {
     for (const s of sessions) {
       if (this.sessionInfo.has(s.id)) continue
       this.sessionInfo.set(s.id, {
         id: s.id,
         title: s.title,
-        createdAt: s.time?.created
-          ? new Date(s.time.created).toISOString()
-          : new Date().toISOString(),
+        createdAt: s.time?.created ? new Date(s.time.created).toISOString() : new Date().toISOString(),
         agent: s.agent,
       })
       this.spawnedOnce.add(s.id)

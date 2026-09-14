@@ -1,6 +1,6 @@
+import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { z } from "zod"
-import { eq } from "drizzle-orm"
 import { db } from "../db/index"
 import { tags } from "../db/schema"
 import { parseBody } from "../lib/validation"
@@ -81,5 +81,3 @@ tagRoutes.delete("/:id", async (c) => {
   await db.delete(tags).where(eq(tags.id, id))
   return c.json({ ok: true })
 })
-
-

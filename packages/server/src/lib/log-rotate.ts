@@ -1,4 +1,4 @@
-import { openSync, fstatSync, ftruncateSync, writeSync, closeSync, mkdirSync } from "node:fs"
+import { closeSync, fstatSync, ftruncateSync, mkdirSync, openSync, writeSync } from "node:fs"
 import { dirname } from "node:path"
 import { MAX_LOG_BYTES } from "../cli/paths"
 

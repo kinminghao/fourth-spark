@@ -1,6 +1,6 @@
-import { useState, type MouseEvent, type ReactNode } from "react"
-import { Check, Trash2, X } from "lucide-react"
 import clsx from "clsx"
+import { Check, Trash2, X } from "lucide-react"
+import { type MouseEvent, type ReactNode, useState } from "react"
 
 interface InlineConfirmProps {
   /** Called when the user confirms the action */
@@ -44,18 +44,20 @@ export function InlineConfirm({
   const roundClass = variant === "outlined" ? "rounded-md" : "rounded"
   const gap = size === "sm" ? "gap-0.5" : "gap-1"
 
-  const handleStop = stopPropagation
-    ? (e: MouseEvent) => e.stopPropagation()
-    : undefined
+  const handleStop = stopPropagation ? (e: MouseEvent) => e.stopPropagation() : undefined
 
   if (confirming) {
     return (
       <div className={clsx("flex items-center", gap)} onClick={handleStop}>
         <button
           type="button"
-          onClick={() => { onConfirm(); setConfirming(false) }}
+          onClick={() => {
+            onConfirm()
+            setConfirming(false)
+          }}
           className={clsx(
-            roundClass, padClass,
+            roundClass,
+            padClass,
             "text-red-400 hover:bg-red-500/10",
             variant === "outlined" && "border border-red-500/30",
           )}
@@ -66,7 +68,8 @@ export function InlineConfirm({
           type="button"
           onClick={() => setConfirming(false)}
           className={clsx(
-            roundClass, padClass,
+            roundClass,
+            padClass,
             "text-fg-4 hover:bg-elevated",
             variant === "outlined" && "border border-line",
           )}
@@ -82,10 +85,14 @@ export function InlineConfirm({
       {children}
       <button
         type="button"
-        onClick={(e) => { handleStop?.(e); setConfirming(true) }}
+        onClick={(e) => {
+          handleStop?.(e)
+          setConfirming(true)
+        }}
         title={title}
         className={clsx(
-          roundClass, padClass,
+          roundClass,
+          padClass,
           triggerClassName ?? "text-fg-5 hover:text-red-400",
           variant === "outlined" && "border border-line transition-colors hover:border-red-500/30",
         )}

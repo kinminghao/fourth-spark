@@ -15,12 +15,7 @@ export interface NotificationOpts {
   persistent?: boolean
 }
 
-type AddHandler = (
-  message: string,
-  variant: NotificationVariant,
-  sessionId?: string,
-  opts?: NotificationOpts,
-) => void
+type AddHandler = (message: string, variant: NotificationVariant, sessionId?: string, opts?: NotificationOpts) => void
 
 type RemoveHandler = (id: string) => void
 

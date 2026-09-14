@@ -1,14 +1,9 @@
+import { and, eq, inArray } from "drizzle-orm"
 import type { Hono } from "hono"
-import { eq, and, inArray } from "drizzle-orm"
 import { db } from "../../db/index"
-import { pullRequests, prIssueLinks, issues } from "../../db/schema"
+import { issues, prIssueLinks, pullRequests } from "../../db/schema"
 import { parseBody } from "../../lib/validation"
-import {
-  LinkIssueBody,
-  prId,
-  rewriteAttachmentUrls,
-  getRepoGitClient,
-} from "./helpers"
+import { getRepoGitClient, LinkIssueBody, prId, rewriteAttachmentUrls } from "./helpers"
 
 export function registerDetailRoutes(app: Hono): void {
   // GET /:number/files — fetch PR changed files from platform
@@ -18,14 +13,22 @@ export function registerDetailRoutes(app: Hono): void {
     if (!Number.isFinite(number)) return c.json({ error: "invalid PR number" }, 400)
 
     const pid = prId(repoId, number)
-    const [row] = await db.select({ diffStats: pullRequests.diffStats }).from(pullRequests).where(eq(pullRequests.id, pid))
+    const [row] = await db
+      .select({ diffStats: pullRequests.diffStats })
+      .from(pullRequests)
+      .where(eq(pullRequests.id, pid))
     if (row?.diffStats) return c.json(row.diffStats)
 
     const ctx = await getRepoGitClient(repoId)
     if (!ctx) return c.json([])
 
     const files = await ctx.client.listPullRequestFiles(number)
-    const diffStats = files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
+    const diffStats = files.map((f) => ({
+      filename: f.filename,
+      status: f.status,
+      additions: f.additions,
+      deletions: f.deletions,
+    }))
     await db.update(pullRequests).set({ diffStats }).where(eq(pullRequests.id, pid))
     return c.json(diffStats)
   })
@@ -63,8 +66,10 @@ export function registerDetailRoutes(app: Hono): void {
     if (!Number.isFinite(number)) return c.json({ error: "invalid PR number" }, 400)
 
     const pid = prId(repoId, number)
-    const links = await db.select({ issueId: prIssueLinks.issueId })
-      .from(prIssueLinks).where(eq(prIssueLinks.prId, pid))
+    const links = await db
+      .select({ issueId: prIssueLinks.issueId })
+      .from(prIssueLinks)
+      .where(eq(prIssueLinks.prId, pid))
 
     if (links.length === 0) return c.json([])
 
@@ -96,8 +101,7 @@ export function registerDetailRoutes(app: Hono): void {
     const repoId = c.req.param("repoId")!
     const number = Number(c.req.param("number"))
     const issueNumber = Number(c.req.param("issueNumber"))
-    if (!Number.isFinite(number) || !Number.isFinite(issueNumber))
-      return c.json({ error: "invalid number" }, 400)
+    if (!Number.isFinite(number) || !Number.isFinite(issueNumber)) return c.json({ error: "invalid number" }, 400)
 
     const pid = prId(repoId, number)
     const iid = `${repoId}_${issueNumber}`

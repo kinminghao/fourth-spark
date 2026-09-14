@@ -1,43 +1,43 @@
-import { Hono } from "hono"
+import { execSync } from "node:child_process"
+import { existsSync, realpathSync, unlinkSync } from "node:fs"
+import { dirname, join, resolve } from "node:path"
 import { apiReference } from "@scalar/hono-api-reference"
+import { Hono } from "hono"
+import { initRegistry } from "./core/registry"
+import { runMigrations } from "./db/migrate"
+import { HTTPS_PORT, initWorkerConfig, PORT } from "./lib/config"
+import { runtimeManager } from "./lib/process-manager"
+import { ensureSenseVoice } from "./lib/sensevoice-manager"
+import { startSyncScheduler, stopSyncScheduler } from "./lib/sync-scheduler"
+import { seedSystemAgents } from "./lib/system-agents"
+import { ensureTlsCert, getLocalIPs, getTlsPaths, isLocalClient } from "./lib/tls-manager"
 import { corsMiddleware } from "./middleware/cors"
-import { requestLogger, logger } from "./middleware/logger"
 import { onError } from "./middleware/errors"
+import { logger, requestLogger } from "./middleware/logger"
 import { generateOpenApiSpec } from "./openapi/index"
-import { sessions } from "./routes/sessions"
-import { events, globalEvents } from "./routes/events"
+import { agentMemoryRoutes, agentSessionRoutes } from "./routes/agent-memories"
 import { agents } from "./routes/agents"
-import { issueRoutes } from "./routes/issues"
-import { settingsRoutes } from "./routes/settings"
+import { globalAgentsMd, repoAgentsMd } from "./routes/agents-md"
+import { analyticsRoutes } from "./routes/analytics"
+import { cloudRoutes } from "./routes/cloud"
+import { globalCustomAgents, repoCustomAgents } from "./routes/custom-agents"
+import { events, globalEvents } from "./routes/events"
+import { fsRoutes } from "./routes/fs"
 import { gitHostRoutes } from "./routes/git-hosts"
 import { health, repoHealth } from "./routes/health"
-import { repoRoutes } from "./routes/repos"
-import { fsRoutes } from "./routes/fs"
-import { usageRoutes } from "./routes/usage"
-import { globalAgentsMd, repoAgentsMd } from "./routes/agents-md"
-import { globalCustomAgents, repoCustomAgents } from "./routes/custom-agents"
-import { agentMemoryRoutes, agentSessionRoutes } from "./routes/agent-memories"
-import { globalFragments, repoFragments } from "./routes/prompt-fragments"
-import { modelRoutes } from "./routes/models"
+import { issueRoutes } from "./routes/issues"
 import { mcpRoute } from "./routes/mcp"
-import { tagRoutes } from "./routes/tags"
 import { milestoneRoutes } from "./routes/milestones"
+import { modelRoutes } from "./routes/models"
+import { globalFragments, repoFragments } from "./routes/prompt-fragments"
 import { pullRoutes } from "./routes/pulls"
-import { workspaceRoutes } from "./routes/workspaces"
-import { PORT, HTTPS_PORT, initWorkerConfig } from "./lib/config"
-import { getLocalIPs, isLocalClient, ensureTlsCert, getTlsPaths } from "./lib/tls-manager"
-import { runtimeManager } from "./lib/process-manager"
-import { initRegistry } from "./core/registry"
-import { cloudRoutes } from "./routes/cloud"
-import { analyticsRoutes } from "./routes/analytics"
-import { seedSystemAgents } from "./lib/system-agents"
-import { startSyncScheduler, stopSyncScheduler } from "./lib/sync-scheduler"
-import { ensureSenseVoice } from "./lib/sensevoice-manager"
+import { repoRoutes } from "./routes/repos"
+import { sessions } from "./routes/sessions"
+import { settingsRoutes } from "./routes/settings"
+import { tagRoutes } from "./routes/tags"
 import { transcribeRoute } from "./routes/transcribe"
-import { runMigrations } from "./db/migrate"
-import { resolve, join, dirname } from "node:path"
-import { existsSync, realpathSync, unlinkSync } from "node:fs"
-import { execSync } from "node:child_process"
+import { usageRoutes } from "./routes/usage"
+import { workspaceRoutes } from "./routes/workspaces"
 import "./db/index"
 
 const app = new Hono()
@@ -109,8 +109,11 @@ app.route("/api/repos/:repoId", repoScoped)
 // Static file serving (production build)
 // ---------------------------------------------------------------------------
 const BINARY_DIR = (() => {
-  try { return dirname(realpathSync(process.execPath)) }
-  catch { return process.cwd() }
+  try {
+    return dirname(realpathSync(process.execPath))
+  } catch {
+    return process.cwd()
+  }
 })()
 
 const STATIC_DIR = resolve(process.env.STATIC_DIR ?? join(BINARY_DIR, "public"))
@@ -151,7 +154,7 @@ if (existsSync(join(STATIC_DIR, "index.html"))) {
 // ---------------------------------------------------------------------------
 // Startup — sync database schema, then spawn opencode for all repos
 // ---------------------------------------------------------------------------
-const registry = initRegistry()
+const _registry = initRegistry()
 const localIPs = getLocalIPs()
 let httpsReady = false
 
@@ -232,8 +235,12 @@ async function startup() {
       logger.info({ port: HTTPS_PORT, ips: [...localIPs] }, "HTTPS server started for LAN access")
     } catch (err) {
       logger.warn({ err }, "HTTPS server failed to start (bad TLS cert?) — removing cert and falling back to HTTP-only")
-      try { unlinkSync(tls.cert) } catch {}
-      try { unlinkSync(tls.key) } catch {}
+      try {
+        unlinkSync(tls.cert)
+      } catch {}
+      try {
+        unlinkSync(tls.key)
+      } catch {}
     }
   }
 
@@ -272,10 +279,7 @@ startup().catch((err) => {
 async function gracefulShutdown(signal: string) {
   logger.info({ signal }, "shutting down — stopping all opencode processes")
   stopSyncScheduler()
-  await Promise.race([
-    runtimeManager.stopAll(),
-    new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
-  ])
+  await Promise.race([runtimeManager.stopAll(), new Promise<void>((resolve) => setTimeout(resolve, 10_000))])
   process.exit(0)
 }
 
@@ -285,5 +289,3 @@ process.on("SIGHUP", () => {
   logger.info("SIGHUP received (bun --watch) — keeping opencode processes alive")
   process.exit(0)
 })
-
-

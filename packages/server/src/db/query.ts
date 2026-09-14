@@ -1,6 +1,6 @@
-import { eq, desc, asc, lt, and, or, inArray, count } from "drizzle-orm"
+import { and, asc, count, desc, eq, inArray, lt, or } from "drizzle-orm"
 import { db } from "./index"
-import { sessions, messages, parts, todos, repos, sessionLinks, issues, pullRequests } from "./schema"
+import { issues, messages, parts, pullRequests, repos, sessionLinks, sessions, todos } from "./schema"
 
 // ---------------------------------------------------------------------------
 // DB read layer — returns shapes matching the OpenCode API contract so the
@@ -13,7 +13,9 @@ export async function getRepoDirectory(repoId: string): Promise<string | null> {
 }
 
 export async function listSessionsFromDB(directory: string) {
-  const rows = await db.select().from(sessions)
+  const rows = await db
+    .select()
+    .from(sessions)
     .where(eq(sessions.directory, directory))
     .orderBy(desc(sessions.timeUpdated))
 
@@ -27,15 +29,15 @@ export async function getSessionFromDB(sessionId: string) {
 }
 
 export async function getMessagesFromDB(sessionId: string) {
-  const msgRows = await db.select().from(messages)
+  const msgRows = await db
+    .select()
+    .from(messages)
     .where(eq(messages.sessionId, sessionId))
     .orderBy(asc(messages.timeCreated))
 
   if (msgRows.length === 0) return []
 
-  const partRows = await db.select().from(parts)
-    .where(eq(parts.sessionId, sessionId))
-    .orderBy(asc(parts.timeCreated))
+  const partRows = await db.select().from(parts).where(eq(parts.sessionId, sessionId)).orderBy(asc(parts.timeCreated))
 
   const partsByMessage = new Map<string, PartRow[]>()
   for (const part of partRows) {
@@ -70,31 +72,29 @@ function formatMessageRow(msg: MessageRow, msgParts: PartRow[]) {
   }
 }
 
-export async function getMessagesPaginated(
-  sessionId: string,
-  limit: number,
-  before?: string,
-) {
+export async function getMessagesPaginated(sessionId: string, limit: number, before?: string) {
   let cursorTime: number | undefined
   let cursorId: string | undefined
   if (before) {
-    const [cursor] = await db.select({ timeCreated: messages.timeCreated, id: messages.id })
-      .from(messages).where(eq(messages.id, before))
+    const [cursor] = await db
+      .select({ timeCreated: messages.timeCreated, id: messages.id })
+      .from(messages)
+      .where(eq(messages.id, before))
     cursorTime = cursor?.timeCreated
     cursorId = cursor?.id
   }
 
-  const cursorCondition = cursorTime != null && cursorId != null
-    ? or(
-        lt(messages.timeCreated, cursorTime),
-        and(eq(messages.timeCreated, cursorTime), lt(messages.id, cursorId)),
-      )
-    : undefined
+  const cursorCondition =
+    cursorTime != null && cursorId != null
+      ? or(lt(messages.timeCreated, cursorTime), and(eq(messages.timeCreated, cursorTime), lt(messages.id, cursorId)))
+      : undefined
   const condition = cursorCondition
     ? and(eq(messages.sessionId, sessionId), cursorCondition)
     : eq(messages.sessionId, sessionId)
 
-  const msgRows = await db.select().from(messages)
+  const msgRows = await db
+    .select()
+    .from(messages)
     .where(condition)
     .orderBy(desc(messages.timeCreated), desc(messages.id))
     .limit(limit + 1)
@@ -104,11 +104,10 @@ export async function getMessagesPaginated(
   msgRows.reverse()
 
   const msgIds = msgRows.map((m) => m.id)
-  const partRows = msgIds.length > 0
-    ? await db.select().from(parts)
-        .where(inArray(parts.messageId, msgIds))
-        .orderBy(asc(parts.timeCreated))
-    : []
+  const partRows =
+    msgIds.length > 0
+      ? await db.select().from(parts).where(inArray(parts.messageId, msgIds)).orderBy(asc(parts.timeCreated))
+      : []
 
   const partsByMessage = new Map<string, PartRow[]>()
   for (const part of partRows) {
@@ -124,8 +123,7 @@ export async function getMessagesPaginated(
 }
 
 export async function getMessageCount(sessionId: string): Promise<number> {
-  const [{ value }] = await db.select({ value: count() })
-    .from(messages).where(eq(messages.sessionId, sessionId))
+  const [{ value }] = await db.select({ value: count() }).from(messages).where(eq(messages.sessionId, sessionId))
   return value
 }
 
@@ -139,20 +137,14 @@ export async function getSessionLinksFromDB(sessionId: string) {
   const issueIds = links.filter((l) => l.type === "issue").map((l) => l.targetId)
   const prIds = links.filter((l) => l.type === "pr").map((l) => l.targetId)
 
-  const linkedIssues = issueIds.length > 0
-    ? await db.select().from(issues).where(inArray(issues.id, issueIds))
-    : []
-  const linkedPrs = prIds.length > 0
-    ? await db.select().from(pullRequests).where(inArray(pullRequests.id, prIds))
-    : []
+  const linkedIssues = issueIds.length > 0 ? await db.select().from(issues).where(inArray(issues.id, issueIds)) : []
+  const linkedPrs = prIds.length > 0 ? await db.select().from(pullRequests).where(inArray(pullRequests.id, prIds)) : []
 
   return { issues: linkedIssues, pullRequests: linkedPrs }
 }
 
 export async function getTodosFromDB(sessionId: string) {
-  const rows = await db.select().from(todos)
-    .where(eq(todos.sessionId, sessionId))
-    .orderBy(asc(todos.position))
+  const rows = await db.select().from(todos).where(eq(todos.sessionId, sessionId)).orderBy(asc(todos.position))
 
   return rows.map((row) => ({
     content: row.content,

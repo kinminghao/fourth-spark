@@ -12,12 +12,9 @@
 /* ── Tailwind v4 design tokens ─────────────────────────────────────────── */
 @theme {
   --font-sans:
-    system-ui, -apple-system, "Segoe UI", Roboto,
-    "Microsoft YaHei", "PingFang SC", "Noto Sans SC",
-    sans-serif;
+    system-ui, -apple-system, "Segoe UI", Roboto, "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
   --font-mono:
-    "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", ui-monospace,
-    SFMono-Regular, Menlo, Consolas, monospace;
+    "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Surfaces */
   --color-base: var(--t-base);
@@ -331,7 +328,9 @@ body {
   font-size: 0.7rem;
   font-family: var(--font-mono, ui-monospace, monospace);
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
 }
 .md-table-toggle:hover {
   color: var(--t-fg-3, #a1a1aa);
@@ -526,7 +525,8 @@ body {
 }
 
 @keyframes highlight-flash {
-  0%, 15% {
+  0%,
+  15% {
     outline: 2px solid var(--color-blue-500, #3b82f6);
     outline-offset: 2px;
     border-radius: 6px;
@@ -553,13 +553,27 @@ body {
 }
 
 @keyframes fs-swipe-left-anim {
-  0%, 100% { transform: translateX(0); opacity: 0.4; }
-  50% { transform: translateX(-28px); opacity: 1; }
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateX(-28px);
+    opacity: 1;
+  }
 }
 
 @keyframes fs-swipe-right-anim {
-  0%, 100% { transform: translateX(0); opacity: 0.4; }
-  50% { transform: translateX(28px); opacity: 1; }
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateX(28px);
+    opacity: 1;
+  }
 }
 
 .fs-swipe-left {

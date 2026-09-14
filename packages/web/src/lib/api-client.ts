@@ -207,18 +207,12 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
       },
     })
   } catch (cause) {
-    throw new ApiError(
-      cause instanceof Error ? cause.message : "Network request failed",
-      0,
-    )
+    throw new ApiError(cause instanceof Error ? cause.message : "Network request failed", 0)
   }
 
   if (!response.ok) {
     const body = await response.text().catch(() => "")
-    throw new ApiError(
-      body.trim() || `${response.status} ${response.statusText}`,
-      response.status,
-    )
+    throw new ApiError(body.trim() || `${response.status} ${response.statusText}`, response.status)
   }
 
   if (response.status === 204) {
@@ -391,10 +385,7 @@ export interface Workspace {
 }
 
 export async function listWorkspaces(repoId: string): Promise<Workspace[]> {
-  return unwrapList<Workspace>(
-    await apiFetch<unknown>(`${repoBase(repoId)}/workspaces`),
-    "workspaces",
-  )
+  return unwrapList<Workspace>(await apiFetch<unknown>(`${repoBase(repoId)}/workspaces`), "workspaces")
 }
 
 export async function removeWorkspace(repoId: string, workspaceId: string): Promise<void> {
@@ -457,39 +448,45 @@ export async function createSession(
   })
 }
 
-export async function sendMessage(repoId: string, sessionId: string, content: string, agent?: string, model?: string, variant?: string, files?: PromptFile[]): Promise<void> {
-  await apiFetch<void>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/actions/prompt`,
-    { method: "POST", body: JSON.stringify({ content, agent, model, variant, files }) },
-  )
+export async function sendMessage(
+  repoId: string,
+  sessionId: string,
+  content: string,
+  agent?: string,
+  model?: string,
+  variant?: string,
+  files?: PromptFile[],
+): Promise<void> {
+  await apiFetch<void>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/actions/prompt`, {
+    method: "POST",
+    body: JSON.stringify({ content, agent, model, variant, files }),
+  })
 }
 
 export async function abortSession(repoId: string, sessionId: string): Promise<void> {
-  await apiFetch<void>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/actions/abort`,
-    { method: "POST" },
-  )
+  await apiFetch<void>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/actions/abort`, {
+    method: "POST",
+  })
 }
 
 export async function replyQuestion(repoId: string, sessionId: string, answers: string[][]): Promise<void> {
-  await apiFetch<void>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/questions/reply`,
-    { method: "POST", body: JSON.stringify({ answers }) },
-  )
+  await apiFetch<void>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/questions/reply`, {
+    method: "POST",
+    body: JSON.stringify({ answers }),
+  })
 }
 
 export async function rejectQuestion(repoId: string, sessionId: string): Promise<void> {
-  await apiFetch<void>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/questions/reject`,
-    { method: "POST" },
-  )
+  await apiFetch<void>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/questions/reject`, {
+    method: "POST",
+  })
 }
 
 export async function revertSession(repoId: string, sessionId: string, messageID: string): Promise<Session> {
-  return apiFetch<Session>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/actions/revert`,
-    { method: "POST", body: JSON.stringify({ messageID }) },
-  )
+  return apiFetch<Session>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/actions/revert`, {
+    method: "POST",
+    body: JSON.stringify({ messageID }),
+  })
 }
 
 function normalizeMessage(raw: unknown): Message {
@@ -533,9 +530,7 @@ export async function getMessages(
 }
 
 export async function getSessionStatus(repoId: string, sessionId: string): Promise<SessionStatus> {
-  return apiFetch<SessionStatus>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/status`,
-  )
+  return apiFetch<SessionStatus>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/status`)
 }
 
 export interface SessionLinks {
@@ -544,9 +539,7 @@ export interface SessionLinks {
 }
 
 export async function getSessionLinks(repoId: string, sessionId: string): Promise<SessionLinks> {
-  return apiFetch<SessionLinks>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/links`,
-  )
+  return apiFetch<SessionLinks>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/links`)
 }
 
 export interface SessionSnapshot {
@@ -557,9 +550,7 @@ export interface SessionSnapshot {
 }
 
 export async function getSessionSnapshot(repoId: string, sessionId: string): Promise<SessionSnapshot> {
-  return apiFetch<SessionSnapshot>(
-    `${repoBase(repoId)}/sessions/snapshot/${encodeURIComponent(sessionId)}`,
-  )
+  return apiFetch<SessionSnapshot>(`${repoBase(repoId)}/sessions/snapshot/${encodeURIComponent(sessionId)}`)
 }
 
 export interface SessionLinkSummary {
@@ -568,23 +559,31 @@ export interface SessionLinkSummary {
 }
 
 export async function getAllSessionLinks(repoId: string): Promise<Record<string, SessionLinkSummary>> {
-  return apiFetch<Record<string, SessionLinkSummary>>(
-    `${repoBase(repoId)}/sessions/all-links`,
-  )
+  return apiFetch<Record<string, SessionLinkSummary>>(`${repoBase(repoId)}/sessions/all-links`)
 }
 
-export async function addSessionLink(repoId: string, sessionId: string, type: "issue" | "pr", targetId: string): Promise<void> {
-  await apiFetch<void>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/links`,
-    { method: "POST", body: JSON.stringify({ type, targetId }) },
-  )
+export async function addSessionLink(
+  repoId: string,
+  sessionId: string,
+  type: "issue" | "pr",
+  targetId: string,
+): Promise<void> {
+  await apiFetch<void>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/links`, {
+    method: "POST",
+    body: JSON.stringify({ type, targetId }),
+  })
 }
 
-export async function removeSessionLink(repoId: string, sessionId: string, type: "issue" | "pr", targetId: string): Promise<void> {
-  await apiFetch<void>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/links`,
-    { method: "DELETE", body: JSON.stringify({ type, targetId }) },
-  )
+export async function removeSessionLink(
+  repoId: string,
+  sessionId: string,
+  type: "issue" | "pr",
+  targetId: string,
+): Promise<void> {
+  await apiFetch<void>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/links`, {
+    method: "DELETE",
+    body: JSON.stringify({ type, targetId }),
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -603,12 +602,35 @@ export async function listGlobalCustomAgents(): Promise<CustomAgent[]> {
   return unwrapList<CustomAgent>(await apiFetch<unknown>("/api/custom-agents"))
 }
 
-export async function createGlobalCustomAgent(data: { name: string; baseAgent: string; model?: string; variant?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }): Promise<CustomAgent> {
+export async function createGlobalCustomAgent(data: {
+  name: string
+  baseAgent: string
+  model?: string
+  variant?: string
+  systemPrompt?: string
+  systemPromptPosition?: number
+  fragmentIds?: string[]
+}): Promise<CustomAgent> {
   return apiFetch<CustomAgent>("/api/custom-agents", { method: "POST", body: JSON.stringify(data) })
 }
 
-export async function updateCustomAgent(id: string, data: { name?: string; baseAgent?: string; model?: string | null; variant?: string | null; memoryModel?: string | null; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }): Promise<CustomAgent> {
-  return apiFetch<CustomAgent>(`/api/custom-agents/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) })
+export async function updateCustomAgent(
+  id: string,
+  data: {
+    name?: string
+    baseAgent?: string
+    model?: string | null
+    variant?: string | null
+    memoryModel?: string | null
+    systemPrompt?: string
+    systemPromptPosition?: number
+    fragmentIds?: string[]
+  },
+): Promise<CustomAgent> {
+  return apiFetch<CustomAgent>(`/api/custom-agents/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
 }
 
 export async function deleteCustomAgent(id: string): Promise<void> {
@@ -635,8 +657,14 @@ export async function reorderCustomAgents(items: Array<{ id: string; sortOrder: 
   await apiFetch<{ ok: boolean }>("/api/custom-agents/reorder", { method: "PATCH", body: JSON.stringify({ items }) })
 }
 
-export async function reorderRepoCustomAgents(repoId: string, items: Array<{ id: string; sortOrder: number }>): Promise<void> {
-  await apiFetch<{ ok: boolean }>(`${repoBase(repoId)}/custom-agents/reorder`, { method: "PATCH", body: JSON.stringify({ items }) })
+export async function reorderRepoCustomAgents(
+  repoId: string,
+  items: Array<{ id: string; sortOrder: number }>,
+): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`${repoBase(repoId)}/custom-agents/reorder`, {
+    method: "PATCH",
+    body: JSON.stringify({ items }),
+  })
 }
 
 export interface MemoryVersion {
@@ -662,7 +690,10 @@ export interface AgentMemory {
   updatedAt: number
 }
 
-export async function listAgentMemories(agentId: string, opts?: { category?: string; includeSuperseded?: boolean }): Promise<AgentMemory[]> {
+export async function listAgentMemories(
+  agentId: string,
+  opts?: { category?: string; includeSuperseded?: boolean },
+): Promise<AgentMemory[]> {
   const params = new URLSearchParams()
   if (opts?.category) params.set("category", opts.category)
   if (opts?.includeSuperseded) params.set("includeSuperseded", "true")
@@ -670,16 +701,28 @@ export async function listAgentMemories(agentId: string, opts?: { category?: str
   return apiFetch<AgentMemory[]>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories${qs ? `?${qs}` : ""}`)
 }
 
-export async function updateAgentMemory(agentId: string, memId: string, data: { content?: string; category?: string; importance?: number }): Promise<AgentMemory> {
-  return apiFetch<AgentMemory>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(memId)}`, { method: "PUT", body: JSON.stringify(data) })
+export async function updateAgentMemory(
+  agentId: string,
+  memId: string,
+  data: { content?: string; category?: string; importance?: number },
+): Promise<AgentMemory> {
+  return apiFetch<AgentMemory>(
+    `/api/custom-agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(memId)}`,
+    { method: "PUT", body: JSON.stringify(data) },
+  )
 }
 
 export async function deleteAgentMemory(agentId: string, memId: string): Promise<void> {
-  await apiFetch<void>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(memId)}`, { method: "DELETE" })
+  await apiFetch<void>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(memId)}`, {
+    method: "DELETE",
+  })
 }
 
 export async function extractAgentMemories(agentId: string, sessionIds: string[]): Promise<{ queued: number }> {
-  return apiFetch<{ queued: number }>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/extract`, { method: "POST", body: JSON.stringify({ sessionIds }) })
+  return apiFetch<{ queued: number }>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/extract`, {
+    method: "POST",
+    body: JSON.stringify({ sessionIds }),
+  })
 }
 
 export interface MemoryChange {
@@ -706,7 +749,9 @@ export async function getMemoryConsolidationStats(agentId: string): Promise<Cons
 }
 
 export async function triggerConsolidation(agentId: string): Promise<ConsolidationStats> {
-  return apiFetch<ConsolidationStats>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/consolidate`, { method: "POST" })
+  return apiFetch<ConsolidationStats>(`/api/custom-agents/${encodeURIComponent(agentId)}/memories/consolidate`, {
+    method: "POST",
+  })
 }
 
 export interface AgentSession {
@@ -729,7 +774,18 @@ export async function listRepoCustomAgents(repoId: string): Promise<CustomAgent[
   return unwrapList<CustomAgent>(await apiFetch<unknown>(`${repoBase(repoId)}/custom-agents`))
 }
 
-export async function createRepoCustomAgent(repoId: string, data: { name: string; baseAgent: string; model?: string; variant?: string; systemPrompt?: string; systemPromptPosition?: number; fragmentIds?: string[] }): Promise<CustomAgent> {
+export async function createRepoCustomAgent(
+  repoId: string,
+  data: {
+    name: string
+    baseAgent: string
+    model?: string
+    variant?: string
+    systemPrompt?: string
+    systemPromptPosition?: number
+    fragmentIds?: string[]
+  },
+): Promise<CustomAgent> {
   return apiFetch<CustomAgent>(`${repoBase(repoId)}/custom-agents`, { method: "POST", body: JSON.stringify(data) })
 }
 
@@ -754,7 +810,10 @@ export async function createGlobalFragment(data: { name: string; content?: strin
 }
 
 export async function updateFragment(id: string, data: { name?: string; content?: string }): Promise<PromptFragment> {
-  return apiFetch<PromptFragment>(`/api/prompt-fragments/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) })
+  return apiFetch<PromptFragment>(`/api/prompt-fragments/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
 }
 
 export async function deleteFragment(id: string): Promise<void> {
@@ -813,10 +872,7 @@ export async function listIssues(
   const params = new URLSearchParams({ state })
   if (opts?.limit != null) params.set("limit", String(opts.limit))
   if (opts?.offset != null) params.set("offset", String(opts.offset))
-  return unwrapPaginated<Issue>(
-    await apiFetch<unknown>(`${repoBase(repoId)}/issues?${params}`),
-    "issues",
-  )
+  return unwrapPaginated<Issue>(await apiFetch<unknown>(`${repoBase(repoId)}/issues?${params}`), "issues")
 }
 
 export async function syncIssues(repoId: string, state = "all"): Promise<{ synced: number }> {
@@ -872,9 +928,7 @@ export interface PullRequest {
 }
 
 export async function listIssuePullRequests(repoId: string, issueNumber: number): Promise<PullRequest[]> {
-  return unwrapList<PullRequest>(
-    await apiFetch<unknown>(`${repoBase(repoId)}/issues/${issueNumber}/pulls`),
-  )
+  return unwrapList<PullRequest>(await apiFetch<unknown>(`${repoBase(repoId)}/issues/${issueNumber}/pulls`))
 }
 
 export async function mergePullRequest(
@@ -883,10 +937,10 @@ export async function mergePullRequest(
   prNumber: number,
   closeIssue = false,
 ): Promise<void> {
-  await apiFetch<void>(
-    `${repoBase(repoId)}/issues/${issueNumber}/pulls/${prNumber}/merge`,
-    { method: "POST", body: JSON.stringify({ closeIssue }) },
-  )
+  await apiFetch<void>(`${repoBase(repoId)}/issues/${issueNumber}/pulls/${prNumber}/merge`, {
+    method: "POST",
+    body: JSON.stringify({ closeIssue }),
+  })
 }
 
 export interface PersistentPullRequest {
@@ -967,7 +1021,11 @@ export async function createIssueComment(repoId: string, issueNumber: number, bo
   })
 }
 
-export async function polishComment(repoId: string, issueNumber: number, draft: string): Promise<{ sessionId: string; draftPath: string }> {
+export async function polishComment(
+  repoId: string,
+  issueNumber: number,
+  draft: string,
+): Promise<{ sessionId: string; draftPath: string }> {
   return apiFetch<{ sessionId: string; draftPath: string }>(`${repoBase(repoId)}/issues/${issueNumber}/polish`, {
     method: "POST",
     body: JSON.stringify({ draft }),
@@ -978,7 +1036,11 @@ export async function getDraft(repoId: string, issueNumber: number): Promise<{ b
   return apiFetch<{ body: string }>(`${repoBase(repoId)}/issues/${issueNumber}/draft`)
 }
 
-export async function polishIssueCreate(repoId: string, title: string, body?: string): Promise<{ sessionId: string; draftPath: string }> {
+export async function polishIssueCreate(
+  repoId: string,
+  title: string,
+  body?: string,
+): Promise<{ sessionId: string; draftPath: string }> {
   return apiFetch<{ sessionId: string; draftPath: string }>(`${repoBase(repoId)}/issues/polish-create`, {
     method: "POST",
     body: JSON.stringify({ title, body }),
@@ -994,24 +1056,28 @@ export async function deleteIssueCreateDraft(repoId: string): Promise<void> {
 }
 
 export async function renameSession(repoId: string, sessionId: string, title: string): Promise<void> {
-  await apiFetch<void>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`,
-    { method: "PATCH", body: JSON.stringify({ title }) },
-  )
+  await apiFetch<void>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ title }),
+  })
 }
 
-export async function updateSessionCompleted(repoId: string, sessionId: string, completedAt: number | null): Promise<void> {
-  await apiFetch<void>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`,
-    { method: "PATCH", body: JSON.stringify({ completedAt }) },
-  )
+export async function updateSessionCompleted(
+  repoId: string,
+  sessionId: string,
+  completedAt: number | null,
+): Promise<void> {
+  await apiFetch<void>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ completedAt }),
+  })
 }
 
 export async function updateSessionPinned(repoId: string, sessionId: string, pinnedAt: number | null): Promise<void> {
-  await apiFetch<void>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`,
-    { method: "PATCH", body: JSON.stringify({ pinnedAt }) },
-  )
+  await apiFetch<void>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ pinnedAt }),
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -1213,9 +1279,7 @@ export interface SessionFile {
 }
 
 export async function getSessionFiles(repoId: string, sessionId: string): Promise<SessionFile[]> {
-  return apiFetch<SessionFile[]>(
-    `${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/files`,
-  )
+  return apiFetch<SessionFile[]>(`${repoBase(repoId)}/sessions/${encodeURIComponent(sessionId)}/files`)
 }
 
 export function getSessionFileUrl(repoId: string, sessionId: string, filePath: string): string {

@@ -64,9 +64,7 @@ function buildSseBlock(eventType: string, properties: Record<string, unknown>): 
 // ---------------------------------------------------------------------------
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 }
 
 function asString(value: unknown): string | undefined {
@@ -83,11 +81,7 @@ function asNumber(value: unknown): number | undefined {
 // spinner while the first tokens arrive.
 // ---------------------------------------------------------------------------
 
-function handleSystem(
-  event: Record<string, unknown>,
-  sessionId: string,
-  state: ClaudeSessionState,
-): string[] {
+function handleSystem(event: Record<string, unknown>, sessionId: string, state: ClaudeSessionState): string[] {
   if (event.subtype !== "init") return []
   const model = asString(event.model)
   if (model) state.lastModelId = model
@@ -101,11 +95,7 @@ function handleSystem(
 // appended blocks.
 // ---------------------------------------------------------------------------
 
-function handleAssistant(
-  event: Record<string, unknown>,
-  sessionId: string,
-  state: ClaudeSessionState,
-): string[] {
+function handleAssistant(event: Record<string, unknown>, sessionId: string, state: ClaudeSessionState): string[] {
   const msg = asRecord(event.message)
   if (!msg) return []
   const claudeMsgId = asString(msg.id)
@@ -141,13 +131,15 @@ function handleAssistant(
           const delta = text.slice(prevLen)
           existing.content = text
           state.textPartLengths.set(existing.id, text.length)
-          deltas.push(buildSseBlock("message.part.delta", {
-            sessionID: sessionId,
-            messageID: state.ourMessageId,
-            partID: existing.id,
-            field: "text",
-            delta,
-          }))
+          deltas.push(
+            buildSseBlock("message.part.delta", {
+              sessionID: sessionId,
+              messageID: state.ourMessageId,
+              partID: existing.id,
+              field: "text",
+              delta,
+            }),
+          )
         }
       } else {
         state.partCounter += 1
@@ -235,11 +227,7 @@ function buildTodoUpdateFromInput(input: unknown, sessionId: string): string | n
   return buildSseBlock("todo.updated", { sessionID: sessionId, todos })
 }
 
-function handleToolResult(
-  event: Record<string, unknown>,
-  sessionId: string,
-  state: ClaudeSessionState,
-): string[] {
+function handleToolResult(event: Record<string, unknown>, sessionId: string, state: ClaudeSessionState): string[] {
   const toolUseId = asString(event.tool_use_id)
   if (!toolUseId) return []
   const partId = state.toolUseIdToPartId.get(toolUseId)
@@ -278,11 +266,7 @@ function handleToolResult(
 // a session.status idle (or session.error) so the UI drops the busy state.
 // ---------------------------------------------------------------------------
 
-function handleResult(
-  event: Record<string, unknown>,
-  sessionId: string,
-  state: ClaudeSessionState,
-): string[] {
+function handleResult(event: Record<string, unknown>, sessionId: string, state: ClaudeSessionState): string[] {
   const blocks: string[] = []
   const isError = event.subtype === "error" || event.is_error === true
 
@@ -311,10 +295,8 @@ function handleResult(
   blocks.push(buildSseBlock("session.updated", sessionProps))
 
   if (isError) {
-    const message = asString(event.result)
-      ?? asString(event.message)
-      ?? asString(event.error)
-      ?? "Claude Code returned an error"
+    const message =
+      asString(event.result) ?? asString(event.message) ?? asString(event.error) ?? "Claude Code returned an error"
     blocks.push(buildSseBlock("session.error", { sessionID: sessionId, message }))
   }
 
@@ -327,11 +309,7 @@ function handleResult(
 // Malformed / unknown events are silently dropped so the stream keeps flowing.
 // ---------------------------------------------------------------------------
 
-export function claudeEventToSseBlocks(
-  line: string,
-  sessionId: string,
-  state: ClaudeSessionState,
-): string[] {
+export function claudeEventToSseBlocks(line: string, sessionId: string, state: ClaudeSessionState): string[] {
   const trimmed = line.trim()
   if (!trimmed) return []
   let parsed: unknown

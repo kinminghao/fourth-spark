@@ -1,7 +1,7 @@
-import { eq } from "drizzle-orm"
 import { existsSync, mkdirSync, symlinkSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import { eq } from "drizzle-orm"
 import { db } from "../db/index"
 import { repos, workspaces } from "../db/schema"
 import { logger } from "../middleware/logger"
@@ -55,14 +55,19 @@ async function detectBaseBranch(repoLocalPath: string): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export const workspaceManager = {
-  async create(repoId: string, repoLocalPath: string, baseBranch?: string, runtimeType?: string | null): Promise<Workspace> {
+  async create(
+    repoId: string,
+    repoLocalPath: string,
+    baseBranch?: string,
+    runtimeType?: string | null,
+  ): Promise<Workspace> {
     mkdirSync(WORKTREE_DIR, { recursive: true })
 
     const id = crypto.randomUUID()
     const sid = shortId()
     const branch = `ws/${sid}`
     const localPath = join(WORKTREE_DIR, `${repoId}-${sid}`)
-    const resolvedBase = baseBranch ?? await detectBaseBranch(repoLocalPath)
+    const resolvedBase = baseBranch ?? (await detectBaseBranch(repoLocalPath))
 
     const result = runGit(["worktree", "add", localPath, "-b", branch], repoLocalPath)
     if (!result.ok) {
@@ -75,16 +80,19 @@ export const workspaceManager = {
     symlinkInstructionFileIfMissing(repoLocalPath, localPath, instructionFileName(runtimeType))
 
     const now = Date.now()
-    const [row] = await db.insert(workspaces).values({
-      id,
-      repoId,
-      branch,
-      localPath,
-      baseBranch: resolvedBase,
-      status: "active",
-      createdAt: now,
-      updatedAt: now,
-    }).returning()
+    const [row] = await db
+      .insert(workspaces)
+      .values({
+        id,
+        repoId,
+        branch,
+        localPath,
+        baseBranch: resolvedBase,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
 
     logger.info({ workspaceId: id, repoId, branch, localPath }, "workspace created")
     return row
@@ -95,8 +103,7 @@ export const workspaceManager = {
     if (!ws) return
 
     // git worktree remove / branch delete must run from the main repo, not the worktree itself.
-    const [repo] = await db.select({ localPath: repos.localPath })
-      .from(repos).where(eq(repos.id, ws.repoId))
+    const [repo] = await db.select({ localPath: repos.localPath }).from(repos).where(eq(repos.id, ws.repoId))
     const cwd = repo?.localPath ?? ws.localPath
 
     const removeResult = runGit(["worktree", "remove", "--force", ws.localPath], cwd)
@@ -106,7 +113,10 @@ export const workspaceManager = {
 
     const branchDelete = runGit(["branch", "-D", ws.branch], cwd)
     if (!branchDelete.ok) {
-      logger.warn({ workspaceId, branch: ws.branch, stderr: branchDelete.stderr.trim() }, "branch delete failed, continuing")
+      logger.warn(
+        { workspaceId, branch: ws.branch, stderr: branchDelete.stderr.trim() },
+        "branch delete failed, continuing",
+      )
     }
 
     await db.delete(workspaces).where(eq(workspaces.id, workspaceId))
@@ -136,17 +146,14 @@ export const workspaceManager = {
   },
 
   async updateStatus(workspaceId: string, status: string): Promise<void> {
-    await db.update(workspaces)
-      .set({ status, updatedAt: Date.now() })
-      .where(eq(workspaces.id, workspaceId))
+    await db.update(workspaces).set({ status, updatedAt: Date.now() }).where(eq(workspaces.id, workspaceId))
   },
 
   async checkMerged(workspaceId: string): Promise<boolean> {
     const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, workspaceId))
     if (!ws) return false
 
-    const [repo] = await db.select({ localPath: repos.localPath })
-      .from(repos).where(eq(repos.id, ws.repoId))
+    const [repo] = await db.select({ localPath: repos.localPath }).from(repos).where(eq(repos.id, ws.repoId))
     if (!repo) return false
 
     const result = runGit(["merge-base", "--is-ancestor", ws.branch, ws.baseBranch], repo.localPath)

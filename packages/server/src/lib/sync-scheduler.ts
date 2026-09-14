@@ -1,9 +1,9 @@
-import { db } from "../db/index"
-import { repos, issues, issueComments, milestones, tags, issueTags, pullRequests, prIssueLinks } from "../db/schema"
 import { eq } from "drizzle-orm"
-import { parseGitUrl } from "./git-url"
-import { createGitIssueClient, getHostInfo, type GitComment, type GitPullRequest } from "./git-provider"
+import { db } from "../db/index"
+import { issueComments, issues, issueTags, milestones, prIssueLinks, pullRequests, repos, tags } from "../db/schema"
 import { logger } from "../middleware/logger"
+import { createGitIssueClient, type GitComment, type GitPullRequest, getHostInfo } from "./git-provider"
+import { parseGitUrl } from "./git-url"
 
 const SYNC_INTERVAL_MS = 60 * 60 * 1000
 const REPO_CONCURRENCY = 3
@@ -117,9 +117,14 @@ async function syncRepo(repoId: string, gitUrl: string): Promise<void> {
       while (active < CONCURRENCY && commentQueue.length > 0) {
         const row = commentQueue.shift()!
         active++
-        client.listComments(row.number)
-          .then((comments) => { commentResults.push({ issueNum: row.number, comments }) })
-          .catch((err) => { logger.warn({ err, repoId, issueNumber: row.number }, "[sync-scheduler] failed to sync comments") })
+        client
+          .listComments(row.number)
+          .then((comments) => {
+            commentResults.push({ issueNum: row.number, comments })
+          })
+          .catch((err) => {
+            logger.warn({ err, repoId, issueNumber: row.number }, "[sync-scheduler] failed to sync comments")
+          })
           .finally(() => {
             active--
             finished++
@@ -155,7 +160,10 @@ async function syncRepo(repoId: string, gitUrl: string): Promise<void> {
     logger.warn({ err, repoId }, "[sync-scheduler] failed to sync comments")
   }
 
-  const allDbIssues = await db.select({ id: issues.id, labels: issues.labels }).from(issues).where(eq(issues.repoId, repoId))
+  const allDbIssues = await db
+    .select({ id: issues.id, labels: issues.labels })
+    .from(issues)
+    .where(eq(issues.repoId, repoId))
   const seenTags = new Map<string, string>()
   let totalTags = 0
 
@@ -167,21 +175,27 @@ async function syncRepo(repoId: string, gitUrl: string): Promise<void> {
         for (const label of labels) {
           if (seenTags.has(label.name)) continue
           const tid = `${repoId}_tag_${label.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`
-          await tx.insert(tags).values({
-            id: tid,
-            repoId,
-            name: label.name,
-            color: label.color || "6b7280",
-            description: null,
-            createdAt: Date.now(),
-          }).onConflictDoNothing()
+          await tx
+            .insert(tags)
+            .values({
+              id: tid,
+              repoId,
+              name: label.name,
+              color: label.color || "6b7280",
+              description: null,
+              createdAt: Date.now(),
+            })
+            .onConflictDoNothing()
           seenTags.set(label.name, tid)
           totalTags++
         }
         const tagIds = labels.map((l) => seenTags.get(l.name)!).filter(Boolean)
         if (tagIds.length > 0) {
           await tx.delete(issueTags).where(eq(issueTags.issueId, row.id))
-          await tx.insert(issueTags).values(tagIds.map((tid) => ({ issueId: row.id, tagId: tid }))).onConflictDoNothing()
+          await tx
+            .insert(issueTags)
+            .values(tagIds.map((tid) => ({ issueId: row.id, tagId: tid })))
+            .onConflictDoNothing()
         }
       })
     }
@@ -199,7 +213,10 @@ async function syncRepo(repoId: string, gitUrl: string): Promise<void> {
         const batch = await client.listPullRequests({ state: s, page, limit })
         if (batch.length === 0) break
 
-        const enriched: Array<{ detail: GitPullRequest; diffStats: Array<{ filename: string; status: string; additions: number; deletions: number }> | null }> = []
+        const enriched: Array<{
+          detail: GitPullRequest
+          diffStats: Array<{ filename: string; status: string; additions: number; deletions: number }> | null
+        }> = []
         let prActive = 0
         const prQueue = [...batch]
 
@@ -218,7 +235,12 @@ async function syncRepo(repoId: string, gitUrl: string): Promise<void> {
               ])
                 .then(([detail, files]) => {
                   const diffStats = files
-                    ? files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
+                    ? files.map((f) => ({
+                        filename: f.filename,
+                        status: f.status,
+                        additions: f.additions,
+                        deletions: f.deletions,
+                      }))
                     : null
                   enriched.push({ detail: detail as GitPullRequest, diffStats })
                 })
@@ -275,8 +297,10 @@ async function syncRepo(repoId: string, gitUrl: string): Promise<void> {
     logger.warn({ err, repoId }, "[sync-scheduler] failed to sync PRs")
   }
 
-  const allPrs = await db.select({ id: pullRequests.id, number: pullRequests.number, body: pullRequests.body })
-    .from(pullRequests).where(eq(pullRequests.repoId, repoId))
+  const allPrs = await db
+    .select({ id: pullRequests.id, number: pullRequests.number, body: pullRequests.body })
+    .from(pullRequests)
+    .where(eq(pullRequests.repoId, repoId))
   let totalLinks = 0
   try {
     await db.transaction(async (tx) => {
@@ -295,7 +319,10 @@ async function syncRepo(repoId: string, gitUrl: string): Promise<void> {
     logger.warn({ err, repoId }, "[sync-scheduler] failed to sync PR-issue links")
   }
 
-  logger.info({ repoId, totalIssues, totalComments, totalTags, totalPrs, totalLinks }, "[sync-scheduler] repo sync complete")
+  logger.info(
+    { repoId, totalIssues, totalComments, totalTags, totalPrs, totalLinks },
+    "[sync-scheduler] repo sync complete",
+  )
 }
 
 async function runFullSync(): Promise<void> {
@@ -316,7 +343,9 @@ async function runFullSync(): Promise<void> {
         const repo = queue.shift()!
         active++
         syncRepo(repo.id, repo.gitUrl)
-          .catch((err) => { logger.error({ err, repoId: repo.id }, "[sync-scheduler] repo sync failed") })
+          .catch((err) => {
+            logger.error({ err, repoId: repo.id }, "[sync-scheduler] repo sync failed")
+          })
           .finally(() => {
             active--
             finished++
@@ -333,9 +362,13 @@ async function runFullSync(): Promise<void> {
 
 export function startSyncScheduler(): void {
   logger.info({ intervalMs: SYNC_INTERVAL_MS }, "[sync-scheduler] started")
-  runFullSync().catch((err) => { logger.error({ err }, "[sync-scheduler] initial sync failed") })
+  runFullSync().catch((err) => {
+    logger.error({ err }, "[sync-scheduler] initial sync failed")
+  })
   timer = setInterval(() => {
-    runFullSync().catch((err) => { logger.error({ err }, "[sync-scheduler] scheduled sync failed") })
+    runFullSync().catch((err) => {
+      logger.error({ err }, "[sync-scheduler] scheduled sync failed")
+    })
   }, SYNC_INTERVAL_MS)
 }
 

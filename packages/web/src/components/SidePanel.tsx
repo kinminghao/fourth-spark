@@ -1,13 +1,13 @@
-import { useState, useRef, useEffect, useCallback } from "react"
-import { useNavigate } from "react-router-dom"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
 import clsx from "clsx"
-import { Link2, Plus, X, Search, ChevronDown, ChevronUp, FileText, Image, GripHorizontal } from "lucide-react"
-import type { Message, Todo, SessionLinks, Session, SessionFile } from "../lib/api-client"
+import { ChevronDown, ChevronUp, FileText, GripHorizontal, Image, Link2, Plus, Search, X } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { useNavigate } from "react-router-dom"
+import type { Message, Session, SessionFile, SessionLinks, Todo } from "../lib/api-client"
 import { getSessionFiles, getSessionFileUrl } from "../lib/api-client"
 import { normalizeTodoStatus, type TodoStatus } from "../lib/message-parts"
 import { useIssueStore } from "../stores/issue-store"
 import { usePrStore } from "../stores/pr-store"
+import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
 import { PreviewableImage } from "./Attachments"
 
@@ -63,12 +63,8 @@ function TodoTab({ todos }: { todos: readonly Todo[] }) {
           const done = st === "completed" || st === "cancelled"
           return (
             <li key={todo.id} className="flex items-start gap-2 font-mono text-xs">
-              <span className={clsx("shrink-0 leading-5", mark.color, mark.spin && "fs-spin")}>
-                {mark.glyph}
-              </span>
-              <span className={clsx("leading-5", done ? "text-fg-5 line-through" : "text-fg-2")}>
-                {todo.content}
-              </span>
+              <span className={clsx("shrink-0 leading-5", mark.color, mark.spin && "fs-spin")}>{mark.glyph}</span>
+              <span className={clsx("leading-5", done ? "text-fg-5 line-through" : "text-fg-2")}>{todo.content}</span>
             </li>
           )
         })}
@@ -108,15 +104,9 @@ function PromptsTab({
                 className="group w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
               >
                 <div className="flex items-center gap-2">
-                  <span className="shrink-0 font-mono text-[10px] text-emerald-400/60">
-                    ❯
-                  </span>
-                  <span className="shrink-0 font-mono text-[10px] tabular-nums text-fg-5">
-                    #{index + 1}
-                  </span>
-                  {time && (
-                    <span className="ml-auto shrink-0 font-mono text-[10px] text-fg-6">{time}</span>
-                  )}
+                  <span className="shrink-0 font-mono text-[10px] text-emerald-400/60">❯</span>
+                  <span className="shrink-0 font-mono text-[10px] tabular-nums text-fg-5">#{index + 1}</span>
+                  {time && <span className="ml-auto shrink-0 font-mono text-[10px] text-fg-6">{time}</span>}
                 </div>
                 {preview && (
                   <p className="mt-0.5 line-clamp-2 pl-5 text-xs leading-relaxed text-fg-3 group-hover:text-fg-2">
@@ -150,10 +140,14 @@ function LinkMatchRow({
   onToggle: () => void
 }) {
   const badgeColor = isPr
-    ? state === "open" ? "bg-emerald-500/15 text-emerald-400"
-      : mergedAt ? "bg-purple-500/15 text-purple-400"
-      : "bg-red-500/15 text-red-400"
-    : state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400"
+    ? state === "open"
+      ? "bg-emerald-500/15 text-emerald-400"
+      : mergedAt
+        ? "bg-purple-500/15 text-purple-400"
+        : "bg-red-500/15 text-red-400"
+    : state === "open"
+      ? "bg-emerald-500/15 text-emerald-400"
+      : "bg-purple-500/15 text-purple-400"
 
   return (
     <li>
@@ -200,7 +194,10 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
     if (matchMode) inputRef.current?.focus()
   }, [matchMode])
 
-  const exitMatch = () => { setMatchMode(null); setQuery("") }
+  const exitMatch = () => {
+    setMatchMode(null)
+    setQuery("")
+  }
 
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
 
@@ -214,9 +211,7 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
   }
 
   const q = query.trim().toLowerCase()
-  const filteredIssues = !q
-    ? allIssues
-    : allIssues.filter((i) => `#${i.number} ${i.title}`.toLowerCase().includes(q))
+  const filteredIssues = !q ? allIssues : allIssues.filter((i) => `#${i.number} ${i.title}`.toLowerCase().includes(q))
   const filteredPrs = !q
     ? allPrs
     : allPrs.filter((p) => `#${p.number} ${p.title} ${p.headBranch}`.toLowerCase().includes(q))
@@ -266,7 +261,9 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
           {items.length === 0 ? (
             <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">
               {(isIssueMode ? allIssues : allPrs).length === 0
-                ? (isIssueMode ? "暂无 Issue，请先同步" : "暂无 PR，请先同步")
+                ? isIssueMode
+                  ? "暂无 Issue，请先同步"
+                  : "暂无 PR，请先同步"
                 : "无匹配结果"}
             </p>
           ) : (
@@ -278,7 +275,7 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
                   number={item.number}
                   title={item.title}
                   state={item.state}
-                  mergedAt={isIssueMode ? undefined : (item as typeof allPrs[number]).mergedAt}
+                  mergedAt={isIssueMode ? undefined : (item as (typeof allPrs)[number]).mergedAt}
                   isPr={!isIssueMode}
                   onToggle={() => handleToggle(matchMode, item.id, linkedIds.has(item.id))}
                 />
@@ -321,17 +318,23 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
               Issues ({issueCount})
             </div>
             <ul className="space-y-1">
-              {links!.issues.map((issue) => (
+              {links?.issues.map((issue) => (
                 <li key={issue.id} className="group flex items-start gap-1">
                   <button
                     type="button"
-                    onClick={() => navigate(`/${encodeURIComponent(repoName!)}/dev/issues?id=${encodeURIComponent(issue.id)}`)}
+                    onClick={() =>
+                      navigate(`/${encodeURIComponent(repoName!)}/dev/issues?id=${encodeURIComponent(issue.id)}`)
+                    }
                     className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
                   >
-                    <span className={clsx(
-                      "mt-0.5 shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
-                      issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-                    )}>
+                    <span
+                      className={clsx(
+                        "mt-0.5 shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
+                        issue.state === "open"
+                          ? "bg-emerald-500/15 text-emerald-400"
+                          : "bg-purple-500/15 text-purple-400",
+                      )}
+                    >
                       #{issue.number}
                     </span>
                     <span className="line-clamp-2 text-xs leading-5 text-fg-3 group-hover:text-fg-2">
@@ -356,24 +359,28 @@ function LinksTab({ links, sessionId }: { links?: SessionLinks; sessionId: strin
               Pull Requests ({prCount})
             </div>
             <ul className="space-y-1">
-              {links!.pullRequests.map((pr) => (
+              {links?.pullRequests.map((pr) => (
                 <li key={pr.id} className="group flex items-start gap-1">
                   <button
                     type="button"
-                    onClick={() => navigate(`/${encodeURIComponent(repoName!)}/dev/pulls?id=${encodeURIComponent(pr.id)}`)}
+                    onClick={() =>
+                      navigate(`/${encodeURIComponent(repoName!)}/dev/pulls?id=${encodeURIComponent(pr.id)}`)
+                    }
                     className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated/60"
                   >
-                    <span className={clsx(
-                      "mt-0.5 shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
-                      pr.state === "open" ? "bg-emerald-500/15 text-emerald-400"
-                        : pr.mergedAt ? "bg-purple-500/15 text-purple-400"
-                        : "bg-red-500/15 text-red-400",
-                    )}>
+                    <span
+                      className={clsx(
+                        "mt-0.5 shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-semibold",
+                        pr.state === "open"
+                          ? "bg-emerald-500/15 text-emerald-400"
+                          : pr.mergedAt
+                            ? "bg-purple-500/15 text-purple-400"
+                            : "bg-red-500/15 text-red-400",
+                      )}
+                    >
                       #{pr.number}
                     </span>
-                    <span className="line-clamp-2 text-xs leading-5 text-fg-3 group-hover:text-fg-2">
-                      {pr.title}
-                    </span>
+                    <span className="line-clamp-2 text-xs leading-5 text-fg-3 group-hover:text-fg-2">{pr.title}</span>
                   </button>
                   <button
                     type="button"
@@ -413,10 +420,15 @@ const AGENT_COLORS: Record<string, string> = {
 
 function subtaskStatusDot(status: string | undefined): string {
   switch (status) {
-    case "idle": return "bg-emerald-500"
-    case "busy": case "retry": return "bg-amber-500 animate-pulse"
-    case "error": return "bg-red-500"
-    default: return "bg-fg-5"
+    case "idle":
+      return "bg-emerald-500"
+    case "busy":
+    case "retry":
+      return "bg-amber-500 animate-pulse"
+    case "error":
+      return "bg-red-500"
+    default:
+      return "bg-fg-5"
   }
 }
 
@@ -467,9 +479,7 @@ function SubtasksTab() {
   return (
     <div className="flex-1 overflow-y-auto px-2 py-2">
       {isSiblingView && (
-        <div className="mb-1.5 px-2 font-mono text-[10px] text-fg-5">
-          同级子任务 ({children.length})
-        </div>
+        <div className="mb-1.5 px-2 font-mono text-[10px] text-fg-5">同级子任务 ({children.length})</div>
       )}
       <ul className="space-y-0.5">
         {children.map((child) => {
@@ -482,7 +492,9 @@ function SubtasksTab() {
             <li key={child.id}>
               <button
                 type="button"
-                onClick={() => { if (!isCurrent && activeRepoId) void setActiveSession(activeRepoId, child.id) }}
+                onClick={() => {
+                  if (!isCurrent && activeRepoId) void setActiveSession(activeRepoId, child.id)
+                }}
                 className={clsx(
                   "group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
                   isCurrent
@@ -494,7 +506,9 @@ function SubtasksTab() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     {child.agent && (
-                      <span className={clsx("shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium", agentColor)}>
+                      <span
+                        className={clsx("shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium", agentColor)}
+                      >
                         {child.agent}
                       </span>
                     )}
@@ -504,10 +518,12 @@ function SubtasksTab() {
                       </span>
                     )}
                   </div>
-                  <p className={clsx(
-                    "mt-0.5 line-clamp-2 text-xs leading-5",
-                    isCurrent ? "text-fg-2" : "text-fg-3 group-hover:text-fg-2",
-                  )}>
+                  <p
+                    className={clsx(
+                      "mt-0.5 line-clamp-2 text-xs leading-5",
+                      isCurrent ? "text-fg-2" : "text-fg-3 group-hover:text-fg-2",
+                    )}
+                  >
                     {title}
                   </p>
                 </div>
@@ -554,16 +570,9 @@ function FileItem({
 
   if (IMAGE_EXTS.has(ext)) {
     return (
-      <li
-        className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-elevated/60"
-        title={file.path}
-      >
+      <li className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-elevated/60" title={file.path}>
         <Image className="h-3 w-3 shrink-0 text-fg-5" aria-hidden />
-        <PreviewableImage
-          url={url}
-          label={name}
-          className="h-8 w-8 shrink-0 object-cover"
-        />
+        <PreviewableImage url={url} label={name} className="h-8 w-8 shrink-0 object-cover" />
         <span className="min-w-0 truncate text-xs text-fg-3">{name}</span>
       </li>
     )
@@ -586,10 +595,7 @@ function FileItem({
   }
 
   return (
-    <li
-      className="flex items-center gap-2 rounded-md px-2 py-1"
-      title={file.path}
-    >
+    <li className="flex items-center gap-2 rounded-md px-2 py-1" title={file.path}>
       <FileText className="h-3.5 w-3.5 shrink-0 text-fg-4" />
       <span className="min-w-0 truncate text-xs text-fg-3">{name}</span>
     </li>
@@ -619,12 +625,19 @@ function FilesPanel({
     let cancelled = false
     const fetch = () => {
       getSessionFiles(repoId, sessionId)
-        .then((res) => { if (!cancelled) setFiles(res) })
-        .catch(() => { if (!cancelled) setFiles([]) })
+        .then((res) => {
+          if (!cancelled) setFiles(res)
+        })
+        .catch(() => {
+          if (!cancelled) setFiles([])
+        })
     }
     fetch()
     const interval = setInterval(fetch, 10_000)
-    return () => { cancelled = true; clearInterval(interval) }
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [repoId, sessionId])
 
   useEffect(() => {
@@ -659,10 +672,7 @@ function FilesPanel({
         const state = dragStateRef.current
         if (!state) return
         const delta = state.startY - ev.clientY
-        const next = Math.max(
-          FILES_PANEL_MIN_HEIGHT,
-          Math.min(state.startHeight + delta, state.maxHeight),
-        )
+        const next = Math.max(FILES_PANEL_MIN_HEIGHT, Math.min(state.startHeight + delta, state.maxHeight))
         if (panelRef.current) panelRef.current.style.height = `${next}px`
       }
 
@@ -726,9 +736,7 @@ function FilesPanel({
       </button>
       <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1">
         {count === 0 ? (
-          <p className="px-2 py-4 text-center font-mono text-xs text-fg-5">
-            暂无变更文件
-          </p>
+          <p className="px-2 py-4 text-center font-mono text-xs text-fg-5">暂无变更文件</p>
         ) : (
           <ul className="space-y-0.5">
             {files.map((f) => (
@@ -769,10 +777,7 @@ export function SidePanel({
   const subtaskCount = allSessions.filter((s) => s.parentID === subtaskParentId).length
 
   return (
-    <div
-      ref={containerRef}
-      className="flex h-full w-72 shrink-0 flex-col border-l border-line bg-surface"
-    >
+    <div ref={containerRef} className="flex h-full w-72 shrink-0 flex-col border-l border-line bg-surface">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div data-guide="run-side-tabs" className="flex items-center border-b border-line">
           <button
@@ -780,15 +785,11 @@ export function SidePanel({
             onClick={() => setActiveTab("todo")}
             className={clsx(
               "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
-              activeTab === "todo"
-                ? "border-blue-500 text-blue-500"
-                : "border-transparent text-fg-4 hover:text-fg-2",
+              activeTab === "todo" ? "border-blue-500 text-blue-500" : "border-transparent text-fg-4 hover:text-fg-2",
             )}
           >
             待办
-            {todos.length > 0 && (
-              <span className="font-mono text-[10px] text-fg-5">{todos.length}</span>
-            )}
+            {todos.length > 0 && <span className="font-mono text-[10px] text-fg-5">{todos.length}</span>}
           </button>
           <button
             type="button"
@@ -801,24 +802,18 @@ export function SidePanel({
             )}
           >
             输入
-            {userCount > 0 && (
-              <span className="font-mono text-[10px] text-fg-5">{userCount}</span>
-            )}
+            {userCount > 0 && <span className="font-mono text-[10px] text-fg-5">{userCount}</span>}
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("links")}
             className={clsx(
               "flex flex-1 items-center justify-center gap-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
-              activeTab === "links"
-                ? "border-blue-500 text-blue-500"
-                : "border-transparent text-fg-4 hover:text-fg-2",
+              activeTab === "links" ? "border-blue-500 text-blue-500" : "border-transparent text-fg-4 hover:text-fg-2",
             )}
           >
             关联
-            {linkCount > 0 && (
-              <span className="font-mono text-[10px] text-fg-5">{linkCount}</span>
-            )}
+            {linkCount > 0 && <span className="font-mono text-[10px] text-fg-5">{linkCount}</span>}
           </button>
           <button
             type="button"
@@ -831,9 +826,7 @@ export function SidePanel({
             )}
           >
             子任务
-            {subtaskCount > 0 && (
-              <span className="font-mono text-[10px] text-fg-5">{subtaskCount}</span>
-            )}
+            {subtaskCount > 0 && <span className="font-mono text-[10px] text-fg-5">{subtaskCount}</span>}
           </button>
         </div>
 

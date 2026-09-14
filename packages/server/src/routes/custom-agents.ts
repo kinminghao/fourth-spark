@@ -1,9 +1,9 @@
+import { and, asc, eq, inArray, isNull, or } from "drizzle-orm"
 import { Hono } from "hono"
 import { z } from "zod"
-import { eq, or, and, isNull, asc, inArray } from "drizzle-orm"
 import { db } from "../db/index"
-import { customAgents, customAgentFragments, promptFragments } from "../db/schema"
-import { parseBody, MAX_NAME_LENGTH, MAX_CONTENT_LENGTH } from "../lib/validation"
+import { customAgentFragments, customAgents, promptFragments } from "../db/schema"
+import { MAX_CONTENT_LENGTH, MAX_NAME_LENGTH, parseBody } from "../lib/validation"
 
 const ALLOWED_BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atlas - Plan Executor"]
 
@@ -44,10 +44,14 @@ const ImportCustomAgentBody = z.object({
     variant: z.string().nullable().optional(),
     systemPrompt: z.string().max(MAX_CONTENT_LENGTH).optional(),
   }),
-  fragments: z.array(z.object({
-    name: z.string().max(MAX_NAME_LENGTH).optional(),
-    content: z.string().max(MAX_CONTENT_LENGTH).optional(),
-  })).optional(),
+  fragments: z
+    .array(
+      z.object({
+        name: z.string().max(MAX_NAME_LENGTH).optional(),
+        content: z.string().max(MAX_CONTENT_LENGTH).optional(),
+      }),
+    )
+    .optional(),
 })
 
 type FragmentInfo = { id: string; name: string; content: string }
@@ -55,13 +59,14 @@ type FragmentInfo = { id: string; name: string; content: string }
 async function attachFragments<T extends { id: string }>(agents: T[]): Promise<(T & { fragments: FragmentInfo[] })[]> {
   if (agents.length === 0) return []
   const ids = agents.map((a) => a.id)
-  const joins = await db.select({
-    customAgentId: customAgentFragments.customAgentId,
-    position: customAgentFragments.position,
-    id: promptFragments.id,
-    name: promptFragments.name,
-    content: promptFragments.content,
-  })
+  const joins = await db
+    .select({
+      customAgentId: customAgentFragments.customAgentId,
+      position: customAgentFragments.position,
+      id: promptFragments.id,
+      name: promptFragments.name,
+      content: promptFragments.content,
+    })
     .from(customAgentFragments)
     .innerJoin(promptFragments, eq(customAgentFragments.fragmentId, promptFragments.id))
     .where(inArray(customAgentFragments.customAgentId, ids))
@@ -79,16 +84,18 @@ async function attachFragments<T extends { id: string }>(agents: T[]): Promise<(
 async function syncFragmentIds(agentId: string, fragmentIds: string[]) {
   await db.delete(customAgentFragments).where(eq(customAgentFragments.customAgentId, agentId))
   if (fragmentIds.length > 0) {
-    await db.insert(customAgentFragments).values(
-      fragmentIds.map((fid, i) => ({ customAgentId: agentId, fragmentId: fid, position: i })),
-    )
+    await db
+      .insert(customAgentFragments)
+      .values(fragmentIds.map((fid, i) => ({ customAgentId: agentId, fragmentId: fid, position: i })))
   }
 }
 
 export const globalCustomAgents = new Hono()
 
 globalCustomAgents.get("/", async (c) => {
-  const rows = await db.select().from(customAgents)
+  const rows = await db
+    .select()
+    .from(customAgents)
     .where(isNull(customAgents.repoId))
     .orderBy(asc(customAgents.sortOrder), asc(customAgents.createdAt))
   return c.json(await attachFragments(rows))
@@ -125,7 +132,10 @@ globalCustomAgents.post("/", async (c) => {
 globalCustomAgents.put("/:id", async (c) => {
   const id = c.req.param("id")
 
-  const [existing] = await db.select({ isSystem: customAgents.isSystem }).from(customAgents).where(eq(customAgents.id, id))
+  const [existing] = await db
+    .select({ isSystem: customAgents.isSystem })
+    .from(customAgents)
+    .where(eq(customAgents.id, id))
   const isSystem = existing?.isSystem === 1
 
   const [body, err] = await parseBody(c, UpdateCustomAgentBody)
@@ -162,7 +172,10 @@ globalCustomAgents.put("/:id", async (c) => {
 
 globalCustomAgents.delete("/:id", async (c) => {
   const id = c.req.param("id")
-  const [existing] = await db.select({ isSystem: customAgents.isSystem }).from(customAgents).where(eq(customAgents.id, id))
+  const [existing] = await db
+    .select({ isSystem: customAgents.isSystem })
+    .from(customAgents)
+    .where(eq(customAgents.id, id))
   if (existing?.isSystem === 1) {
     return c.json({ error: "系统内置 Agent 不可删除" }, 403)
   }
@@ -180,7 +193,8 @@ globalCustomAgents.patch("/reorder", async (c) => {
 
   const now = Date.now()
   for (const item of body.items) {
-    await db.update(customAgents)
+    await db
+      .update(customAgents)
       .set({ sortOrder: item.sortOrder, updatedAt: now })
       .where(and(eq(customAgents.id, item.id), isNull(customAgents.repoId)))
   }
@@ -192,7 +206,10 @@ globalCustomAgents.patch("/reorder", async (c) => {
 // ---------------------------------------------------------------------------
 
 globalCustomAgents.get("/:id/export", async (c) => {
-  const [agent] = await db.select().from(customAgents).where(eq(customAgents.id, c.req.param("id")))
+  const [agent] = await db
+    .select()
+    .from(customAgents)
+    .where(eq(customAgents.id, c.req.param("id")))
   if (!agent) return c.json({ error: "not found" }, 404)
 
   const [withFragments] = await attachFragments([agent])
@@ -231,9 +248,12 @@ globalCustomAgents.post("/import", async (c) => {
   for (const frag of fragData) {
     if (!frag.name) continue
     const content = frag.content ?? ""
-    const [existing] = await db.select({ id: promptFragments.id })
+    const [existing] = await db
+      .select({ id: promptFragments.id })
       .from(promptFragments)
-      .where(and(eq(promptFragments.name, frag.name), eq(promptFragments.content, content), isNull(promptFragments.repoId)))
+      .where(
+        and(eq(promptFragments.name, frag.name), eq(promptFragments.content, content), isNull(promptFragments.repoId)),
+      )
       .limit(1)
 
     if (existing) {
@@ -276,7 +296,9 @@ export const repoCustomAgents = new Hono()
 
 repoCustomAgents.get("/", async (c) => {
   const repoId = c.req.param("repoId")!
-  const rows = await db.select().from(customAgents)
+  const rows = await db
+    .select()
+    .from(customAgents)
     .where(or(isNull(customAgents.repoId), eq(customAgents.repoId, repoId)))
     .orderBy(asc(customAgents.sortOrder), asc(customAgents.createdAt))
   return c.json(await attachFragments(rows))
@@ -289,7 +311,8 @@ repoCustomAgents.patch("/reorder", async (c) => {
 
   const now = Date.now()
   for (const item of body.items) {
-    await db.update(customAgents)
+    await db
+      .update(customAgents)
       .set({ sortOrder: item.sortOrder, updatedAt: now })
       .where(and(eq(customAgents.id, item.id), or(isNull(customAgents.repoId), eq(customAgents.repoId, repoId))))
   }

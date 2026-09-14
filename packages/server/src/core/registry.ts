@@ -1,19 +1,10 @@
-import type {
-  McpToolProvider,
-  GitPlatformFactory,
-  AccountPool,
-  AgentRuntime,
-} from "./types"
+import { giteaPlatformFactory, githubPlatformFactory, gitlabPlatformFactory } from "../lib/git-provider"
+import { localAccountPool } from "../lib/local-account-pool"
+import { gitToolProvider } from "../mcp/git-tools"
+import { openCodeCredentialWriter } from "../runtimes/opencode/credential"
 import type { RuntimeProvider } from "./runtime-provider"
 import type { CredentialWriter } from "./runtime-types"
-import { gitToolProvider } from "../mcp/git-tools"
-import {
-  githubPlatformFactory,
-  giteaPlatformFactory,
-  gitlabPlatformFactory,
-} from "../lib/git-provider"
-import { localAccountPool } from "../lib/local-account-pool"
-import { openCodeCredentialWriter } from "../runtimes/opencode/credential"
+import type { AccountPool, AgentRuntime, GitPlatformFactory, McpToolProvider } from "./types"
 
 export interface PluginRegistry {
   runtime?: AgentRuntime

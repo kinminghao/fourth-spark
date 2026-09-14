@@ -1,10 +1,10 @@
-import { describe, expect, test, beforeEach } from "bun:test"
+import { beforeEach, describe, expect, test } from "bun:test"
 import {
-  initWorkerConfig,
-  reloadWorkerConfig,
-  isWorkerMode,
-  getWorkerConfig,
   getDefaultWorkerId,
+  getWorkerConfig,
+  initWorkerConfig,
+  isWorkerMode,
+  reloadWorkerConfig,
 } from "../../../src/lib/config"
 
 // Helper: create a mock getSetting function
@@ -21,10 +21,12 @@ describe("initWorkerConfig", () => {
   })
 
   test("loads config from DB settings", async () => {
-    await initWorkerConfig(mockGetSetting({
-      cloud_master_url: "https://pool.example.com",
-      cloud_worker_id: "worker-1",
-    }))
+    await initWorkerConfig(
+      mockGetSetting({
+        cloud_master_url: "https://pool.example.com",
+        cloud_worker_id: "worker-1",
+      }),
+    )
     expect(isWorkerMode()).toBe(true)
     expect(getWorkerConfig()).toEqual({
       masterUrl: "https://pool.example.com",
@@ -33,10 +35,12 @@ describe("initWorkerConfig", () => {
   })
 
   test("strips trailing slashes from masterUrl", async () => {
-    await initWorkerConfig(mockGetSetting({
-      cloud_master_url: "https://pool.example.com///",
-      cloud_worker_id: "worker-1",
-    }))
+    await initWorkerConfig(
+      mockGetSetting({
+        cloud_master_url: "https://pool.example.com///",
+        cloud_worker_id: "worker-1",
+      }),
+    )
     expect(getWorkerConfig()?.masterUrl).toBe("https://pool.example.com")
   })
 
@@ -60,26 +64,32 @@ describe("initWorkerConfig", () => {
   })
 
   test("rejects invalid masterUrl (not HTTP)", async () => {
-    await initWorkerConfig(mockGetSetting({
-      cloud_master_url: "ftp://invalid.com",
-      cloud_worker_id: "worker-1",
-    }))
+    await initWorkerConfig(
+      mockGetSetting({
+        cloud_master_url: "ftp://invalid.com",
+        cloud_worker_id: "worker-1",
+      }),
+    )
     expect(isWorkerMode()).toBe(false)
   })
 
   test("rejects invalid workerId (too long)", async () => {
-    await initWorkerConfig(mockGetSetting({
-      cloud_master_url: "https://pool.example.com",
-      cloud_worker_id: "a".repeat(65),
-    }))
+    await initWorkerConfig(
+      mockGetSetting({
+        cloud_master_url: "https://pool.example.com",
+        cloud_worker_id: "a".repeat(65),
+      }),
+    )
     expect(isWorkerMode()).toBe(false)
   })
 
   test("rejects workerId with invalid chars", async () => {
-    await initWorkerConfig(mockGetSetting({
-      cloud_master_url: "https://pool.example.com",
-      cloud_worker_id: "worker with spaces",
-    }))
+    await initWorkerConfig(
+      mockGetSetting({
+        cloud_master_url: "https://pool.example.com",
+        cloud_worker_id: "worker with spaces",
+      }),
+    )
     expect(isWorkerMode()).toBe(false)
   })
 })
@@ -89,10 +99,12 @@ describe("reloadWorkerConfig", () => {
     await initWorkerConfig(mockGetSetting({}))
     expect(isWorkerMode()).toBe(false)
 
-    await reloadWorkerConfig(mockGetSetting({
-      cloud_master_url: "https://new-pool.example.com",
-      cloud_worker_id: "new-worker",
-    }))
+    await reloadWorkerConfig(
+      mockGetSetting({
+        cloud_master_url: "https://new-pool.example.com",
+        cloud_worker_id: "new-worker",
+      }),
+    )
     expect(isWorkerMode()).toBe(true)
     expect(getWorkerConfig()?.masterUrl).toBe("https://new-pool.example.com")
   })

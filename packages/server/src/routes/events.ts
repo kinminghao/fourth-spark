@@ -1,12 +1,11 @@
-import { Hono } from "hono"
 import { eq } from "drizzle-orm"
-import { streamSSE, type SSEStreamingApi } from "hono/streaming"
-import { runtimeManager } from "../lib/process-manager"
-import { workspaceManager } from "../lib/workspace-manager"
+import { Hono } from "hono"
+import { type SSEStreamingApi, streamSSE } from "hono/streaming"
 import { db } from "../db/index"
 import { sessions as sessionsTable, workspaces } from "../db/schema"
-import { logger } from "../middleware/logger"
 import { syncSseEvent } from "../db/sync"
+import { runtimeManager } from "../lib/process-manager"
+import { logger } from "../middleware/logger"
 
 export const events = new Hono()
 export const globalEvents = new Hono()
@@ -57,7 +56,12 @@ function learnChildSession(event: RawEvent, parentId: string, childIds: Set<stri
   }
 }
 
-async function forwardBlock(block: string, sessionId: string, childIds: Set<string>, stream: SSEStreamingApi): Promise<void> {
+async function forwardBlock(
+  block: string,
+  sessionId: string,
+  childIds: Set<string>,
+  stream: SSEStreamingApi,
+): Promise<void> {
   const result = parseBlock(block)
   if (!result) return
   const { dataStr, parsed } = result
@@ -87,11 +91,15 @@ events.get("/:id/events", (c) => {
   return streamSSE(c, async (stream) => {
     let client = repoClient
     try {
-      const [row] = await db.select({ workspaceId: sessionsTable.workspaceId })
-        .from(sessionsTable).where(eq(sessionsTable.id, sessionId))
+      const [row] = await db
+        .select({ workspaceId: sessionsTable.workspaceId })
+        .from(sessionsTable)
+        .where(eq(sessionsTable.id, sessionId))
       if (row?.workspaceId) {
-        const [ws] = await db.select({ localPath: workspaces.localPath })
-          .from(workspaces).where(eq(workspaces.id, row.workspaceId))
+        const [ws] = await db
+          .select({ localPath: workspaces.localPath })
+          .from(workspaces)
+          .where(eq(workspaces.id, row.workspaceId))
         if (ws) client = repoClient.withDirectory(ws.localPath)
       }
     } catch {

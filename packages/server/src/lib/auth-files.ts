@@ -1,8 +1,8 @@
-import { readFile, writeFile, mkdir, rename } from "node:fs/promises"
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
-import { join, dirname } from "node:path"
-import { withFileLock } from "./lockfile"
+import { dirname, join } from "node:path"
 import { SENTINEL_REFRESH } from "./lease-constants"
+import { withFileLock } from "./lockfile"
 
 export type ProviderId = "anthropic" | "openai"
 
@@ -36,7 +36,10 @@ export function accountsOf(file: AccountsFile, provider: ProviderId): StoredAcco
   return file.accounts.filter((a) => providerOf(a) === provider)
 }
 
-export function applyToken(record: StoredAccount, token: { refresh: string; access?: string; expires?: number }): StoredAccount {
+export function applyToken(
+  record: StoredAccount,
+  token: { refresh: string; access?: string; expires?: number },
+): StoredAccount {
   if (token.refresh !== SENTINEL_REFRESH && token.refresh !== record.refresh) record.refreshMintedAt = Date.now()
   record.refresh = token.refresh
   record.access = token.access
@@ -91,7 +94,7 @@ export async function loadAccounts(): Promise<AccountsFile> {
     activeId: data?.activeId,
     openaiActiveId: data?.openaiActiveId,
     accounts: Array.isArray(data?.accounts)
-      ? (data!.accounts as StoredAccount[]).filter((a) => typeof a.id === "string" && a.id.length > 0)
+      ? (data?.accounts as StoredAccount[]).filter((a) => typeof a.id === "string" && a.id.length > 0)
       : [],
   }
 }
@@ -100,10 +103,12 @@ export async function saveAccounts(file: AccountsFile): Promise<void> {
   await atomicWrite(ACCOUNTS_PATH, file)
 }
 
-export async function readAuthAnthropic(): Promise<{ access?: string; refresh?: string; expires?: number } | undefined> {
+export async function readAuthAnthropic(): Promise<
+  { access?: string; refresh?: string; expires?: number } | undefined
+> {
   const path = await resolveAuthJsonPath()
   const auth = await readJson<AuthJson>(path)
-  const entry = auth?.["anthropic"]
+  const entry = auth?.anthropic
   if (entry?.type === "oauth") return { access: entry.access, refresh: entry.refresh, expires: entry.expires }
   return undefined
 }
@@ -112,15 +117,23 @@ export type TokenWrite =
   | { kind: "full"; refresh: string; access?: string; expires?: number }
   | { kind: "lease"; access: string; expires: number }
 
-function resolveRefresh(write: TokenWrite | { refresh: string; access?: string; expires?: number }): { refresh: string; access?: string; expires?: number } {
+function resolveRefresh(write: TokenWrite | { refresh: string; access?: string; expires?: number }): {
+  refresh: string
+  access?: string
+  expires?: number
+} {
   if (!("kind" in write)) return write
   switch (write.kind) {
-    case "full": return { refresh: write.refresh, access: write.access, expires: write.expires }
-    case "lease": return { refresh: SENTINEL_REFRESH, access: write.access, expires: write.expires }
+    case "full":
+      return { refresh: write.refresh, access: write.access, expires: write.expires }
+    case "lease":
+      return { refresh: SENTINEL_REFRESH, access: write.access, expires: write.expires }
   }
 }
 
-export async function writeAuthAnthropic(write: TokenWrite | { refresh: string; access?: string; expires?: number }): Promise<void> {
+export async function writeAuthAnthropic(
+  write: TokenWrite | { refresh: string; access?: string; expires?: number },
+): Promise<void> {
   const token = resolveRefresh(write)
   const path = await resolveAuthJsonPath()
   let auth: AuthJson
@@ -133,7 +146,7 @@ export async function writeAuthAnthropic(write: TokenWrite | { refresh: string; 
       throw err
     }
   }
-  auth["anthropic"] = { type: "oauth", access: token.access ?? "", refresh: token.refresh, expires: token.expires ?? 0 }
+  auth.anthropic = { type: "oauth", access: token.access ?? "", refresh: token.refresh, expires: token.expires ?? 0 }
   await atomicWrite(path, auth)
 }
 
@@ -167,6 +180,9 @@ let authLock: Promise<unknown> = Promise.resolve()
 export function withAuthLock<T>(fn: () => Promise<T>): Promise<T> {
   const job = async () => withFileLock(await authLockPath(), fn)
   const run = authLock.then(job, job)
-  authLock = run.then(() => undefined, () => undefined)
+  authLock = run.then(
+    () => undefined,
+    () => undefined,
+  )
   return run
 }

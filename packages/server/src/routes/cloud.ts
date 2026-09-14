@@ -1,6 +1,6 @@
 import { Hono } from "hono"
 import { z } from "zod"
-import { getWorkerConfig, getDefaultWorkerId } from "../lib/config"
+import { getDefaultWorkerId, getWorkerConfig } from "../lib/config"
 import { CLOUD_ROUTES, NETWORK_TIMEOUT_MS } from "../lib/lease-constants"
 import { runtimeManager } from "../lib/process-manager"
 import { parseBody } from "../lib/validation"
@@ -31,7 +31,10 @@ async function resolveHeldAccount(masterUrl: string, accountId: string): Promise
     if (!Array.isArray(data.accounts)) return { id: accountId, label: accountId.slice(0, 8) }
     const match = data.accounts.find((a) => accountId.startsWith(a.idPrefix))
     if (match) return { id: accountId, label: match.label }
-    logger.debug({ accountId: accountId.slice(0, 8), prefixes: data.accounts.map((a) => a.idPrefix) }, "cloud: no prefix match for held account")
+    logger.debug(
+      { accountId: accountId.slice(0, 8), prefixes: data.accounts.map((a) => a.idPrefix) },
+      "cloud: no prefix match for held account",
+    )
     return { id: accountId, label: accountId.slice(0, 8) }
   } catch {
     return { id: accountId, label: accountId.slice(0, 8) }

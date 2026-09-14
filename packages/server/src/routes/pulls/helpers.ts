@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 // Re-export shared helpers from lib/git-utils so consumers import from one place
-export { prId, prToDb, extractUpstreamMessage, rewriteAttachmentUrls, getRepoGitClient } from "../../lib/git-utils"
+export { extractUpstreamMessage, getRepoGitClient, prId, prToDb, rewriteAttachmentUrls } from "../../lib/git-utils"
 
 // ---------------------------------------------------------------------------
 // Request body schemas

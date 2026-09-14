@@ -72,9 +72,7 @@ function PageCrashFallbackInner({ error, reset }: { error: Error; reset: () => v
     <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
       <div className="text-3xl">:/</div>
       <h2 className="text-base font-semibold text-fg">当前页面加载失败</h2>
-      <p className="max-w-md text-sm text-fg-4">
-        该页面发生渲染错误，但你可以继续使用侧边栏导航到其他页面。
-      </p>
+      <p className="max-w-md text-sm text-fg-4">该页面发生渲染错误，但你可以继续使用侧边栏导航到其他页面。</p>
       {import.meta.env.DEV && (
         <pre className="max-h-40 max-w-lg overflow-auto rounded-md bg-elevated p-3 text-left text-xs text-fg-3">
           {error.message}

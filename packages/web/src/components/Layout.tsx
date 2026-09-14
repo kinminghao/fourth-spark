@@ -1,15 +1,34 @@
-import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom"
-import { BarChart3, Bot, Box, Check, ChevronDown, ChevronsLeft, ChevronsRight, Code2, GitBranch, HelpCircle, Loader2, Monitor, Moon, MoreVertical, Play, Settings, Sun, Zap } from "lucide-react"
-import type { LucideIcon } from "lucide-react"
 import clsx from "clsx"
+import type { LucideIcon } from "lucide-react"
+import {
+  BarChart3,
+  Bot,
+  Box,
+  Check,
+  ChevronDown,
+  ChevronsLeft,
+  ChevronsRight,
+  Code2,
+  GitBranch,
+  HelpCircle,
+  Loader2,
+  Monitor,
+  Moon,
+  MoreVertical,
+  Play,
+  Settings,
+  Sun,
+  Zap,
+} from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useThemeStore } from "../stores/theme-store"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
+import { type BranchList, checkoutBranch, listBranches } from "../lib/api-client"
+import { VERSION_CHECK_INTERVAL_MS } from "../lib/constants"
 import { useLayoutStore } from "../stores/layout-store"
-import { listBranches, checkoutBranch, type BranchList } from "../lib/api-client"
+import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
+import { useThemeStore } from "../stores/theme-store"
 import { GuideTour } from "./GuideTour"
 import { sectionFromPath } from "./guide-steps"
-import { VERSION_CHECK_INTERVAL_MS } from "../lib/constants"
 
 interface NavItem {
   segment: string
@@ -61,7 +80,10 @@ function RepoSwitcher({
   const ref = useRef<HTMLDivElement>(null)
   const activeRepo = repos.find((r) => r.id === activeRepoId)
 
-  const close = useCallback(() => { setOpen(false); setFocusedIndex(-1) }, [])
+  const close = useCallback(() => {
+    setOpen(false)
+    setFocusedIndex(-1)
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -72,30 +94,33 @@ function RepoSwitcher({
     return () => document.removeEventListener("mousedown", handler)
   }, [open, close])
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (!open) return
-    switch (e.key) {
-      case "Escape":
-        e.preventDefault()
-        close()
-        break
-      case "ArrowDown":
-        e.preventDefault()
-        setFocusedIndex((i) => Math.min(i + 1, repos.length - 1))
-        break
-      case "ArrowUp":
-        e.preventDefault()
-        setFocusedIndex((i) => Math.max(i - 1, 0))
-        break
-      case "Enter":
-        if (focusedIndex >= 0 && focusedIndex < repos.length) {
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!open) return
+      switch (e.key) {
+        case "Escape":
           e.preventDefault()
-          onRepoChange(repos[focusedIndex].id)
           close()
-        }
-        break
-    }
-  }, [open, close, focusedIndex, repos, onRepoChange])
+          break
+        case "ArrowDown":
+          e.preventDefault()
+          setFocusedIndex((i) => Math.min(i + 1, repos.length - 1))
+          break
+        case "ArrowUp":
+          e.preventDefault()
+          setFocusedIndex((i) => Math.max(i - 1, 0))
+          break
+        case "Enter":
+          if (focusedIndex >= 0 && focusedIndex < repos.length) {
+            e.preventDefault()
+            onRepoChange(repos[focusedIndex].id)
+            close()
+          }
+          break
+      }
+    },
+    [open, close, focusedIndex, repos, onRepoChange],
+  )
 
   return (
     <div ref={ref} className="relative" onKeyDown={handleKeyDown}>
@@ -125,20 +150,17 @@ function RepoSwitcher({
                 type="button"
                 role="option"
                 aria-selected={r.id === activeRepoId}
-                onClick={() => { onRepoChange(r.id); close() }}
+                onClick={() => {
+                  onRepoChange(r.id)
+                  close()
+                }}
                 className={clsx(
                   "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors",
-                  r.id === activeRepoId
-                    ? "font-medium text-blue-600"
-                    : "text-fg-2 hover:bg-elevated",
+                  r.id === activeRepoId ? "font-medium text-blue-600" : "text-fg-2 hover:bg-elevated",
                   focusedIndex === i && "bg-elevated",
                 )}
               >
-                {r.id === activeRepoId ? (
-                  <Check className="h-3 w-3 shrink-0" />
-                ) : (
-                  <span className="h-3 w-3 shrink-0" />
-                )}
+                {r.id === activeRepoId ? <Check className="h-3 w-3 shrink-0" /> : <span className="h-3 w-3 shrink-0" />}
                 <span className="truncate">{r.name}</span>
               </button>
             ))}
@@ -147,7 +169,10 @@ function RepoSwitcher({
             <button
               type="button"
               data-guide="manage-repos"
-              onClick={() => { navigate("/repos"); close() }}
+              onClick={() => {
+                navigate("/repos")
+                close()
+              }}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg-3 transition-colors hover:bg-elevated hover:text-fg"
             >
               <Settings className="h-3 w-3 shrink-0" />
@@ -184,7 +209,10 @@ function BranchSwitcher({ repoId, currentBranch }: { repoId: string; currentBran
   }, [open, close])
 
   const handleOpen = async () => {
-    if (open) { close(); return }
+    if (open) {
+      close()
+      return
+    }
     setOpen(true)
     setLoading(true)
     setError(null)
@@ -242,9 +270,7 @@ function BranchSwitcher({ repoId, currentBranch }: { repoId: string; currentBran
                   onClick={() => handleCheckout(b)}
                   className={clsx(
                     "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors",
-                    b === currentBranch
-                      ? "font-medium text-blue-600"
-                      : "text-fg-2 hover:bg-elevated",
+                    b === currentBranch ? "font-medium text-blue-600" : "text-fg-2 hover:bg-elevated",
                   )}
                 >
                   {b === currentBranch ? (
@@ -281,9 +307,7 @@ function BranchSwitcher({ repoId, currentBranch }: { repoId: string; currentBran
               )}
             </div>
           ) : null}
-          {error && (
-            <div className="border-t border-line px-3 py-2 text-xs text-red-500">{error}</div>
-          )}
+          {error && <div className="border-t border-line px-3 py-2 text-xs text-red-500">{error}</div>}
         </div>
       )}
     </div>
@@ -305,7 +329,10 @@ function useLatestVersion() {
     const id = setInterval(check, VERSION_CHECK_INTERVAL_MS)
     const onFocus = () => check()
     window.addEventListener("focus", onFocus)
-    return () => { clearInterval(id); window.removeEventListener("focus", onFocus) }
+    return () => {
+      clearInterval(id)
+      window.removeEventListener("focus", onFocus)
+    }
   }, [])
   return latest
 }
@@ -347,7 +374,10 @@ function HeaderOverflowMenu({
         <div className="absolute right-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
           <button
             type="button"
-            onClick={() => { navigate("/analytics"); setOpen(false) }}
+            onClick={() => {
+              navigate("/analytics")
+              setOpen(false)
+            }}
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-fg-2 transition-colors hover:bg-elevated"
           >
             <BarChart3 className="h-3.5 w-3.5 text-fg-4" />
@@ -355,7 +385,10 @@ function HeaderOverflowMenu({
           </button>
           <button
             type="button"
-            onClick={() => { navigate("/settings"); setOpen(false) }}
+            onClick={() => {
+              navigate("/settings")
+              setOpen(false)
+            }}
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-fg-2 transition-colors hover:bg-elevated"
           >
             <Settings className="h-3.5 w-3.5 text-fg-4" />
@@ -363,7 +396,10 @@ function HeaderOverflowMenu({
           </button>
           <button
             type="button"
-            onClick={() => { cycle(); setOpen(false) }}
+            onClick={() => {
+              cycle()
+              setOpen(false)
+            }}
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-fg-2 transition-colors hover:bg-elevated"
           >
             <ThemeIcon className="h-3.5 w-3.5 text-fg-4" />
@@ -383,7 +419,10 @@ function HeaderOverflowMenu({
           </a>
           <button
             type="button"
-            onClick={() => { useLayoutStore.getState().startGuideTour(sectionFromPath(window.location.pathname)); setOpen(false) }}
+            onClick={() => {
+              useLayoutStore.getState().startGuideTour(sectionFromPath(window.location.pathname))
+              setOpen(false)
+            }}
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-fg-2 transition-colors hover:bg-elevated"
           >
             <HelpCircle className="h-3.5 w-3.5 text-fg-4" />
@@ -432,7 +471,8 @@ function Header() {
           </span>
           {latestVersion && (
             <span className="hidden text-[10px] text-amber-500 sm:inline">
-              → v{latestVersion} 可用，运行 <code className="rounded bg-amber-500/10 px-1 font-mono">fourth-spark upgrade</code> 更新
+              → v{latestVersion} 可用，运行{" "}
+              <code className="rounded bg-amber-500/10 px-1 font-mono">fourth-spark upgrade</code> 更新
             </span>
           )}
         </div>
@@ -441,9 +481,7 @@ function Header() {
           {repos.length > 0 && (
             <div className="flex items-center gap-2">
               <RepoSwitcher repos={repos} activeRepoId={activeRepoId} onRepoChange={handleRepoChange} />
-              {activeRepo && activeRepoId && (
-                <BranchSwitcher repoId={activeRepoId} currentBranch={activeRepo.branch} />
-              )}
+              {activeRepo && activeRepoId && <BranchSwitcher repoId={activeRepoId} currentBranch={activeRepo.branch} />}
             </div>
           )}
           <div className="hidden items-center gap-1 md:flex">
@@ -502,7 +540,8 @@ function Header() {
       {latestVersion && (
         <div className="border-t border-line px-4 py-1.5 sm:hidden">
           <span className="text-[10px] text-amber-500">
-            → v{latestVersion} 可用，运行 <code className="rounded bg-amber-500/10 px-1 font-mono">fourth-spark upgrade</code> 更新
+            → v{latestVersion} 可用，运行{" "}
+            <code className="rounded bg-amber-500/10 px-1 font-mono">fourth-spark upgrade</code> 更新
           </span>
         </div>
       )}
@@ -562,9 +601,7 @@ function Sidebar() {
           clsx(
             "mx-2 flex items-center rounded-md py-2 text-sm transition-colors",
             collapsed ? "justify-center px-2" : "gap-2.5 px-3",
-            isActive
-              ? "bg-blue-500/10 font-medium text-blue-600"
-              : "text-fg-4 hover:bg-elevated hover:text-fg-2",
+            isActive ? "bg-blue-500/10 font-medium text-blue-600" : "text-fg-4 hover:bg-elevated hover:text-fg-2",
           )
         }
       >
@@ -584,10 +621,7 @@ function Sidebar() {
         title={collapsed ? "展开导航" : "收起导航"}
         className="mx-2 flex items-center justify-center rounded-md py-2 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
       >
-        {collapsed
-          ? <ChevronsRight className="h-4 w-4" />
-          : <ChevronsLeft className="h-4 w-4" />
-        }
+        {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
       </button>
     </nav>
   )

@@ -1,18 +1,36 @@
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { loadAccounts, saveAccounts, readAuthAnthropic, writeAuthAnthropic, withAuthLock, accountsOf, providerOf, applyToken, type StoredAccount, type AccountsFile } from "./auth-files"
-import { refreshToken, isStale as isTokenStale, RefreshRevokedError } from "./token-refresh"
 import { logger } from "../middleware/logger"
+import {
+  type AccountsFile,
+  accountsOf,
+  applyToken,
+  loadAccounts,
+  providerOf,
+  readAuthAnthropic,
+  type StoredAccount,
+  saveAccounts,
+  withAuthLock,
+  writeAuthAnthropic,
+} from "./auth-files"
+import { isStale as isTokenStale, RefreshRevokedError, refreshToken } from "./token-refresh"
 
 // Write credential to all non-OpenCode runtimes (OpenCode is handled by writeAuthAnthropic).
-async function broadcastCredentialToOtherRuntimes(token: { kind: "full" | "lease"; refresh?: string; access?: string; expires?: number }): Promise<void> {
+async function broadcastCredentialToOtherRuntimes(token: {
+  kind: "full" | "lease"
+  refresh?: string
+  access?: string
+  expires?: number
+}): Promise<void> {
   try {
     const { getRegistry } = await import("../core/registry")
     for (const provider of getRegistry().providers.values()) {
       if (provider.id === "opencode") continue
-      await provider.credentialWriter.write(token as Parameters<typeof provider.credentialWriter.write>[0]).catch((err) => {
-        logger.warn({ err, runtimeId: provider.id }, "failed to broadcast credential to runtime")
-      })
+      await provider.credentialWriter
+        .write(token as Parameters<typeof provider.credentialWriter.write>[0])
+        .catch((err) => {
+          logger.warn({ err, runtimeId: provider.id }, "failed to broadcast credential to runtime")
+        })
     }
   } catch {}
 }
@@ -53,7 +71,8 @@ function restoreCooldown(): void {
 
 restoreCooldown()
 
-const RATE_LIMIT_RE = /rate limit|usage limit|limit reached|too many requests|out of (?:usage|quota)|5[- ]?hour|weekly limit|exceed/i
+const RATE_LIMIT_RE =
+  /rate limit|usage limit|limit reached|too many requests|out of (?:usage|quota)|5[- ]?hour|weekly limit|exceed/i
 
 export function isUsageLimit(message?: string): boolean {
   if (!message) return false
@@ -76,12 +95,15 @@ export function parseResetMsFromMessage(message?: string): number | undefined {
 function scheduleRecovery(id: string, until: number): void {
   const existing = recoveryTimers.get(id)
   if (existing) clearTimeout(existing)
-  const timer = setTimeout(() => {
-    recoveryTimers.delete(id)
-    cooldown.delete(id)
-    cooldownPending.delete(id)
-    logger.info({ id }, "account cooldown expired, rejoining selection")
-  }, Math.max(0, until - Date.now()))
+  const timer = setTimeout(
+    () => {
+      recoveryTimers.delete(id)
+      cooldown.delete(id)
+      cooldownPending.delete(id)
+      logger.info({ id }, "account cooldown expired, rejoining selection")
+    },
+    Math.max(0, until - Date.now()),
+  )
   timer.unref?.()
   recoveryTimers.set(id, timer)
 }
@@ -89,9 +111,7 @@ function scheduleRecovery(id: string, until: number): void {
 const DEFAULT_COOLDOWN_MS = 30 * 60_000
 
 export function markCooldown(id: string, untilMs?: number): void {
-  const deadline = typeof untilMs === "number" && Number.isFinite(untilMs)
-    ? untilMs
-    : Date.now() + DEFAULT_COOLDOWN_MS
+  const deadline = typeof untilMs === "number" && Number.isFinite(untilMs) ? untilMs : Date.now() + DEFAULT_COOLDOWN_MS
   cooldownPending.delete(id)
   cooldown.set(id, deadline)
   scheduleRecovery(id, deadline)
@@ -125,9 +145,7 @@ function isCooled(id: string): boolean {
 
 function pickNext(file: AccountsFile, activeId?: string): StoredAccount | undefined {
   const pool = accountsOf(file, "anthropic")
-  const candidates = pool.filter(
-    (a) => a.id !== activeId && !isCooled(a.id) && !a.excluded && !a.needsReauth,
-  )
+  const candidates = pool.filter((a) => a.id !== activeId && !isCooled(a.id) && !a.excluded && !a.needsReauth)
   if (candidates.length === 0) return undefined
   const order = pool.map((a) => a.id)
   const start = activeId ? order.indexOf(activeId) : -1
@@ -153,11 +171,15 @@ export async function switchToAccount(targetId: string): Promise<StoredAccount> 
     if (file.activeId && file.activeId !== targetId && outAuth?.refresh) {
       const outIdx = file.accounts.findIndex((a) => a.id === file.activeId)
       if (outIdx >= 0) {
-        applyToken(file.accounts[outIdx], { refresh: outAuth.refresh, access: outAuth.access, expires: outAuth.expires })
+        applyToken(file.accounts[outIdx], {
+          refresh: outAuth.refresh,
+          access: outAuth.access,
+          expires: outAuth.expires,
+        })
       }
     }
 
-    let account = file.accounts[index]
+    const account = file.accounts[index]
     if (isTokenStale(account)) {
       try {
         const fresh = await refreshToken(account.refresh)
@@ -187,13 +209,20 @@ export async function switchToAccount(targetId: string): Promise<StoredAccount> 
     file.activeId = targetId
     await saveAccounts(file)
     await writeAuthAnthropic({ refresh: account.refresh, access: account.access, expires: account.expires })
-    await broadcastCredentialToOtherRuntimes({ kind: "full", refresh: account.refresh, access: account.access, expires: account.expires })
+    await broadcastCredentialToOtherRuntimes({
+      kind: "full",
+      refresh: account.refresh,
+      access: account.access,
+      expires: account.expires,
+    })
     logger.info({ id: targetId, label: account.label }, "switched active account")
     return account
   })
 }
 
-export type SwitchResult = { switched: true; from?: string; to: string; label: string } | { switched: false; reason: string }
+export type SwitchResult =
+  | { switched: true; from?: string; to: string; label: string }
+  | { switched: false; reason: string }
 
 export async function autoSwitch(currentActiveId?: string): Promise<SwitchResult> {
   if (currentActiveId) markCooldown(currentActiveId)

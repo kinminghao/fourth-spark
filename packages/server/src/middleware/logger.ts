@@ -1,8 +1,8 @@
+import { Writable } from "node:stream"
 import type { MiddlewareHandler } from "hono"
 import { pino } from "pino"
 import { LOG_FILE } from "../cli/paths"
 import { initRotatingLog, writeRotatingLog } from "../lib/log-rotate"
-import { Writable } from "node:stream"
 
 function createRotatingDestination(): Writable {
   initRotatingLog(LOG_FILE)

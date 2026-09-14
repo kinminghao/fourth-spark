@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { formatTokens, formatCost } from "../../src/lib/format"
+import { formatCost, formatTokens } from "../../src/lib/format"
 
 describe("formatTokens", () => {
   test("millions", () => {

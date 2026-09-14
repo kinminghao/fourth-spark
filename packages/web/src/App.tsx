@@ -1,26 +1,25 @@
 import { useEffect } from "react"
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom"
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom"
+import { AppCrashFallback, ErrorBoundary, guarded } from "./components/ErrorBoundary"
 import { Layout } from "./components/Layout"
+import { ToastContainer } from "./components/ToastContainer"
+import { freezeMonitor } from "./lib/freeze-monitor"
+import { orchestrator } from "./lib/session-orchestrator"
+import { AgentDetailPage } from "./pages/AgentDetailPage"
+import { AgentsPage } from "./pages/AgentsPage"
+import { AnalyticsPage } from "./pages/AnalyticsPage"
+import { DevPage } from "./pages/DevPage"
 import { ReposPage } from "./pages/ReposPage"
 import { RunPage } from "./pages/RunPage"
-import { DevPage } from "./pages/DevPage"
-import { AgentsPage } from "./pages/AgentsPage"
-import { AgentDetailPage } from "./pages/AgentDetailPage"
 import { SettingsPage } from "./pages/SettingsPage"
-import { AnalyticsPage } from "./pages/AnalyticsPage"
-import { useRepoStore, selectActiveRepoName } from "./stores/repo-store"
-import { useSessionStore } from "./stores/session-store"
 import { useCustomAgentStore } from "./stores/custom-agent-store"
 import { useIssueStore } from "./stores/issue-store"
+import { setNotificationHandler } from "./stores/notifications"
 import { usePrStore } from "./stores/pr-store"
+import { selectActiveRepoName, useRepoStore } from "./stores/repo-store"
+import { useSessionStore } from "./stores/session-store"
 import { useThemeStore } from "./stores/theme-store"
 import { useToastStore } from "./stores/toast-store"
-import { setNotificationHandler } from "./stores/notifications"
-import { ToastContainer } from "./components/ToastContainer"
-import { ErrorBoundary, AppCrashFallback, guarded } from "./components/ErrorBoundary"
-import { orchestrator } from "./lib/session-orchestrator"
-import { freezeMonitor } from "./lib/freeze-monitor"
-
 
 function extractRepoSlugFromUrl(pathname: string): string | null {
   const match = pathname.match(/^\/([^/]+)\/(run|agents|issues|pulls|dev)/)
@@ -51,10 +50,7 @@ function AppInner() {
 
   useEffect(() => {
     freezeMonitor.start()
-    setNotificationHandler(
-      useToastStore.getState().addToast,
-      useToastStore.getState().removeToast,
-    )
+    setNotificationHandler(useToastStore.getState().addToast, useToastStore.getState().removeToast)
     void useRepoStore.getState().loadRepos()
     const cleanupTheme = useThemeStore.getState().init()
     return () => {

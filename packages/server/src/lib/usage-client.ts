@@ -1,5 +1,5 @@
-import { CLOUD_ROUTES, NETWORK_TIMEOUT_MS } from "./lease-constants"
 import { logger } from "../middleware/logger"
+import { CLOUD_ROUTES, NETWORK_TIMEOUT_MS } from "./lease-constants"
 
 export type UsageWindowView = {
   label: string
@@ -31,9 +31,7 @@ export type UsageFetchFailure =
   | { kind: "bad-response"; detail: string }
   | { kind: "throttled"; retryAfterMs?: number }
 
-export type UsageFetchOutcome =
-  | { ok: true; view: UsageSnapshotView }
-  | { ok: false; failure: UsageFetchFailure }
+export type UsageFetchOutcome = { ok: true; view: UsageSnapshotView } | { ok: false; failure: UsageFetchFailure }
 
 function errorMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -49,7 +47,11 @@ function parseWindow(raw: unknown): UsageWindowView | undefined {
   if (typeof r.label !== "string") return undefined
   if (typeof r.utilization !== "number" || !Number.isFinite(r.utilization)) return undefined
   if (r.resetsAt !== undefined && typeof r.resetsAt !== "string") return undefined
-  return { label: r.label, utilization: r.utilization, ...(typeof r.resetsAt === "string" ? { resetsAt: r.resetsAt } : {}) }
+  return {
+    label: r.label,
+    utilization: r.utilization,
+    ...(typeof r.resetsAt === "string" ? { resetsAt: r.resetsAt } : {}),
+  }
 }
 
 function parseAccount(raw: unknown): UsageAccountView | undefined {
@@ -66,12 +68,18 @@ function parseAccount(raw: unknown): UsageAccountView | undefined {
     windows.push(parsed)
   }
   if (r.expiresAt !== undefined && (typeof r.expiresAt !== "number" || !Number.isFinite(r.expiresAt))) return undefined
-  const holders = Array.isArray(r.holders) && r.holders.every((h: unknown) => typeof h === "string")
-    ? (r.holders as string[])
-    : undefined
+  const holders =
+    Array.isArray(r.holders) && r.holders.every((h: unknown) => typeof h === "string")
+      ? (r.holders as string[])
+      : undefined
   return {
-    idPrefix: r.idPrefix, label: r.label, windows, hasUsage: r.hasUsage,
-    coolingDown: r.coolingDown, excluded: r.excluded, needsReauth: r.needsReauth,
+    idPrefix: r.idPrefix,
+    label: r.label,
+    windows,
+    hasUsage: r.hasUsage,
+    coolingDown: r.coolingDown,
+    excluded: r.excluded,
+    needsReauth: r.needsReauth,
     ...(holders && holders.length > 0 ? { holders } : {}),
     ...(typeof r.expiresAt === "number" ? { expiresAt: r.expiresAt } : {}),
   }
@@ -109,9 +117,11 @@ export function createUsageClient(masterUrl: string) {
     if (res.status === 429) {
       let retryAfterMs: number | undefined
       try {
-        const val = (JSON.parse(text) as Record<string, unknown>)?.["retryAfterMs"]
+        const val = (JSON.parse(text) as Record<string, unknown>)?.retryAfterMs
         if (typeof val === "number" && Number.isFinite(val) && val > 0) retryAfterMs = val
-      } catch { /* not json */ }
+      } catch {
+        /* not json */
+      }
       return { ok: false, failure: { kind: "throttled", ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) } }
     }
 
@@ -120,7 +130,9 @@ export function createUsageClient(masterUrl: string) {
     }
 
     let raw: unknown
-    try { raw = JSON.parse(text) } catch {
+    try {
+      raw = JSON.parse(text)
+    } catch {
       return { ok: false, failure: { kind: "bad-response", detail: `unparseable: ${redact(text)}` } }
     }
 

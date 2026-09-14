@@ -1,9 +1,9 @@
+import { asc, eq, isNull, or } from "drizzle-orm"
 import { Hono } from "hono"
 import { z } from "zod"
-import { eq, or, isNull, asc } from "drizzle-orm"
 import { db } from "../db/index"
 import { promptFragments } from "../db/schema"
-import { parseBody, MAX_NAME_LENGTH, MAX_CONTENT_LENGTH } from "../lib/validation"
+import { MAX_CONTENT_LENGTH, MAX_NAME_LENGTH, parseBody } from "../lib/validation"
 
 const CreateFragmentBody = z.object({
   name: z.string().min(1).max(MAX_NAME_LENGTH),
@@ -19,7 +19,9 @@ const UpdateFragmentBody = z.object({
 export const globalFragments = new Hono()
 
 globalFragments.get("/", async (c) => {
-  const rows = await db.select().from(promptFragments)
+  const rows = await db
+    .select()
+    .from(promptFragments)
     .where(isNull(promptFragments.repoId))
     .orderBy(asc(promptFragments.sortOrder), asc(promptFragments.createdAt))
   return c.json(rows)
@@ -68,7 +70,9 @@ export const repoFragments = new Hono()
 
 repoFragments.get("/", async (c) => {
   const repoId = c.req.param("repoId")!
-  const rows = await db.select().from(promptFragments)
+  const rows = await db
+    .select()
+    .from(promptFragments)
     .where(or(isNull(promptFragments.repoId), eq(promptFragments.repoId, repoId)))
     .orderBy(asc(promptFragments.sortOrder), asc(promptFragments.createdAt))
   return c.json(rows)

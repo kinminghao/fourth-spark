@@ -1,6 +1,6 @@
-import { memo } from "react"
-import { AlertTriangle } from "lucide-react"
 import clsx from "clsx"
+import { AlertTriangle } from "lucide-react"
+import { memo } from "react"
 import type { PersistentPullRequest } from "../lib/api-client"
 import { relativeTime } from "../lib/date-utils"
 
@@ -20,9 +20,7 @@ function CompactPrRowInner({
         onClick={onSelect}
         className={clsx(
           "group flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors",
-          isActive
-            ? "border-l-2 border-blue-500 bg-elevated/80"
-            : "border-l-2 border-transparent hover:bg-elevated/50",
+          isActive ? "border-l-2 border-blue-500 bg-elevated/80" : "border-l-2 border-transparent hover:bg-elevated/50",
         )}
       >
         <span
@@ -67,21 +65,17 @@ function CompactPrRowInner({
   )
 }
 
-export const CompactPrRow = memo(CompactPrRowInner, (prev, next) =>
-  prev.pr.number === next.pr.number &&
-  prev.pr.state === next.pr.state &&
-  prev.pr.title === next.pr.title &&
-  prev.pr.draft === next.pr.draft &&
-  prev.isActive === next.isActive,
+export const CompactPrRow = memo(
+  CompactPrRowInner,
+  (prev, next) =>
+    prev.pr.number === next.pr.number &&
+    prev.pr.state === next.pr.state &&
+    prev.pr.title === next.pr.title &&
+    prev.pr.draft === next.pr.draft &&
+    prev.isActive === next.isActive,
 )
 
-function FullWidthPrRowInner({
-  pr,
-  onSelect,
-}: {
-  pr: PersistentPullRequest
-  onSelect: () => void
-}) {
+function FullWidthPrRowInner({ pr, onSelect }: { pr: PersistentPullRequest; onSelect: () => void }) {
   return (
     <li>
       <button
@@ -104,9 +98,13 @@ function FullWidthPrRowInner({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             {pr.draft === 1 && (
-              <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide bg-fg-6/15 text-fg-4">DRAFT</span>
+              <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide bg-fg-6/15 text-fg-4">
+                DRAFT
+              </span>
             )}
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg-2 group-hover:text-fg">{pr.title}</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg-2 group-hover:text-fg">
+              {pr.title}
+            </span>
             {pr.mergeable === "false" && pr.state === "open" && (
               <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-500/15 text-red-400">
                 <AlertTriangle className="inline h-3 w-3 -mt-px" /> Conflict
@@ -115,18 +113,32 @@ function FullWidthPrRowInner({
             {pr.assignees && pr.assignees.length > 0 && (
               <div className="hidden shrink-0 items-center -space-x-1.5 sm:flex">
                 {pr.assignees.slice(0, 3).map((a) => (
-                  <img key={a.login} src={a.avatar_url} alt={a.login} title={a.login} className="h-5 w-5 rounded-full ring-2 ring-surface" />
+                  <img
+                    key={a.login}
+                    src={a.avatar_url}
+                    alt={a.login}
+                    title={a.login}
+                    className="h-5 w-5 rounded-full ring-2 ring-surface"
+                  />
                 ))}
               </div>
             )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1">
-            <span className="shrink-0 font-mono text-[11px] text-fg-5">{pr.headBranch} → {pr.baseBranch}</span>
+            <span className="shrink-0 font-mono text-[11px] text-fg-5">
+              {pr.headBranch} → {pr.baseBranch}
+            </span>
             <span className="text-fg-6">·</span>
             {pr.authorLogin && (
               <>
                 <span className="shrink-0 text-[11px] text-fg-5" title={pr.authorLogin}>
-                  {pr.authorAvatar && <img src={pr.authorAvatar} alt="" className="mr-1 inline-block h-3.5 w-3.5 rounded-full align-text-bottom" />}
+                  {pr.authorAvatar && (
+                    <img
+                      src={pr.authorAvatar}
+                      alt=""
+                      className="mr-1 inline-block h-3.5 w-3.5 rounded-full align-text-bottom"
+                    />
+                  )}
                   {pr.authorLogin}
                 </span>
                 <span className="text-fg-6">·</span>
@@ -154,10 +166,12 @@ function FullWidthPrRowInner({
   )
 }
 
-export const FullWidthPrRow = memo(FullWidthPrRowInner, (prev, next) =>
-  prev.pr.number === next.pr.number &&
-  prev.pr.state === next.pr.state &&
-  prev.pr.title === next.pr.title &&
-  prev.pr.draft === next.pr.draft &&
-  prev.pr.mergeable === next.pr.mergeable,
+export const FullWidthPrRow = memo(
+  FullWidthPrRowInner,
+  (prev, next) =>
+    prev.pr.number === next.pr.number &&
+    prev.pr.state === next.pr.state &&
+    prev.pr.title === next.pr.title &&
+    prev.pr.draft === next.pr.draft &&
+    prev.pr.mergeable === next.pr.mergeable,
 )

@@ -1,19 +1,27 @@
-import type { Hono } from "hono"
-import { eq } from "drizzle-orm"
-import { resolve, relative, extname, isAbsolute } from "node:path"
 import { lstatSync } from "node:fs"
-import { workspaceManager } from "../../lib/workspace-manager"
+import { extname, isAbsolute, relative, resolve } from "node:path"
+import { eq } from "drizzle-orm"
+import type { Hono } from "hono"
 import { db } from "../../db/index"
 import { sessions as sessionsTable } from "../../db/schema"
+import { workspaceManager } from "../../lib/workspace-manager"
 
 // ---------------------------------------------------------------------------
 // Session file preview — previewable extension allowlist
 // ---------------------------------------------------------------------------
 
 export const PREVIEWABLE_EXTENSIONS = new Set([
-  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
-  ".html", ".htm",
-  ".md", ".txt", ".log",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".svg",
+  ".html",
+  ".htm",
+  ".md",
+  ".txt",
+  ".log",
 ])
 
 export const PREVIEW_MIME_MAP: Record<string, string> = {
@@ -33,7 +41,10 @@ export const PREVIEW_MIME_MAP: Record<string, string> = {
 export const HTML_EXTS = new Set([".html", ".htm"])
 
 export async function resolveSessionWorkspace(sessionId: string) {
-  const [session] = await db.select({ workspaceId: sessionsTable.workspaceId }).from(sessionsTable).where(eq(sessionsTable.id, sessionId))
+  const [session] = await db
+    .select({ workspaceId: sessionsTable.workspaceId })
+    .from(sessionsTable)
+    .where(eq(sessionsTable.id, sessionId))
   if (!session?.workspaceId) return null
   return workspaceManager.get(session.workspaceId)
 }
@@ -85,7 +96,7 @@ export function registerFileRoutes(app: Hono): void {
     }
 
     const file = Bun.file(absolutePath)
-    if (!await file.exists()) {
+    if (!(await file.exists())) {
       return c.json({ error: "File not found" }, 404)
     }
 

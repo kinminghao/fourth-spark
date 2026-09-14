@@ -1,22 +1,28 @@
-import { useEffect, useState, useCallback, useMemo } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
-import { Loader2, RefreshCw, Search, X } from "lucide-react"
 import clsx from "clsx"
+import { Loader2, RefreshCw, Search, X } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useNavigate, useSearchParams } from "react-router-dom"
+import { IssueCreateForm } from "../components/IssueCreateForm"
+import { type DetailTab, IssueDetailWithTabs } from "../components/IssueDetailWithTabs"
+import {
+  type ExpandedFilter,
+  IssueFilters,
+  STATE_FILTERS,
+  type StateFilter,
+  type TypeFilter,
+} from "../components/IssueFilters"
+import { FullWidthIssueRow, IssueRow } from "../components/IssueRow"
+import { IssueTreeSidebar } from "../components/IssueTree"
+import { Pagination } from "../components/Pagination"
+import { IssueSessionSidebar } from "../components/SessionSidebar"
+import { SwipeDrawer } from "../components/SwipeDrawer"
+import { useIssueFilters } from "../hooks/use-issue-filters"
+import { useSwipeDrawer } from "../hooks/use-swipe-drawer"
+import { PAGE_SIZE } from "../lib/constants"
 import { useIssueStore } from "../stores/issue-store"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
+import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
 import { useToastStore } from "../stores/toast-store"
-import { useSwipeDrawer } from "../hooks/use-swipe-drawer"
-import { useIssueFilters } from "../hooks/use-issue-filters"
-import { SwipeDrawer } from "../components/SwipeDrawer"
-import { IssueDetailWithTabs, type DetailTab } from "../components/IssueDetailWithTabs"
-import { IssueCreateForm } from "../components/IssueCreateForm"
-import { IssueRow, FullWidthIssueRow } from "../components/IssueRow"
-import { IssueTreeSidebar } from "../components/IssueTree"
-import { IssueSessionSidebar } from "../components/SessionSidebar"
-import { IssueFilters, STATE_FILTERS, type StateFilter, type TypeFilter, type ExpandedFilter } from "../components/IssueFilters"
-import { Pagination } from "../components/Pagination"
-import { PAGE_SIZE } from "../lib/constants"
 
 export function IssuesPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("open")
@@ -70,28 +76,37 @@ export function IssuesPage() {
     if (searchParams.get("id")) return
     const stored = useIssueStore.getState().viewingIssueId
     if (stored) setSearchParams({ id: stored }, { replace: true })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams.get, setSearchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openIssue = useCallback((id: string) => {
-    setSearchParams({ id }, { replace: false })
-  }, [setSearchParams])
+  const openIssue = useCallback(
+    (id: string) => {
+      setSearchParams({ id }, { replace: false })
+    },
+    [setSearchParams],
+  )
 
   const closeIssue = useCallback(() => {
     setSearchParams({}, { replace: false })
     setViewingIssue(null)
   }, [setSearchParams, setViewingIssue])
 
-  const changeTab = useCallback((newTab: DetailTab) => {
-    if (!selectedId) return
-    const params: Record<string, string> = { id: selectedId }
-    if (newTab === "pr") params.tab = "pr"
-    setSearchParams(params, { replace: false })
-  }, [selectedId, setSearchParams])
+  const changeTab = useCallback(
+    (newTab: DetailTab) => {
+      if (!selectedId) return
+      const params: Record<string, string> = { id: selectedId }
+      if (newTab === "pr") params.tab = "pr"
+      setSearchParams(params, { replace: false })
+    },
+    [selectedId, setSearchParams],
+  )
 
-  const openPr = useCallback((num: number) => {
-    if (!selectedId) return
-    setSearchParams({ id: selectedId, tab: "pr", prId: String(num) }, { replace: false })
-  }, [selectedId, setSearchParams])
+  const openPr = useCallback(
+    (num: number) => {
+      if (!selectedId) return
+      setSearchParams({ id: selectedId, tab: "pr", prId: String(num) }, { replace: false })
+    },
+    [selectedId, setSearchParams],
+  )
 
   const backToPrList = useCallback(() => {
     if (!selectedId) return
@@ -111,16 +126,23 @@ export function IssuesPage() {
     if (syncError) useToastStore.getState().addToast(syncError, "error")
   }, [syncError])
 
-  useEffect(() => { setPage(0) }, [stateFilter, typeFilter, searchQuery, tagFilterMode, selectedMilestoneId, selectedAuthor, selectedAssignee])
+  useEffect(() => {
+    setPage(0)
+  }, [])
 
-  const {
-    childrenMap, issueType, milestoneMap,
-    finalFiltered, counts, uniqueAuthors, uniqueAssignees,
-  } = useIssueFilters({
-    issues, tags, milestones, tagFilterMode,
-    stateFilter, typeFilter, searchQuery,
-    selectedMilestoneId, selectedAuthor, selectedAssignee,
-  })
+  const { childrenMap, issueType, milestoneMap, finalFiltered, counts, uniqueAuthors, uniqueAssignees } =
+    useIssueFilters({
+      issues,
+      tags,
+      milestones,
+      tagFilterMode,
+      stateFilter,
+      typeFilter,
+      searchQuery,
+      selectedMilestoneId,
+      selectedAuthor,
+      selectedAssignee,
+    })
 
   const pagedIssues = useMemo(() => {
     const start = page * PAGE_SIZE
@@ -158,15 +180,21 @@ export function IssuesPage() {
     return sessions.filter((s) => s.issueId && ids.has(s.issueId) && !s.parentID)
   }, [selectedId, treeRootId, childrenMap, sessions])
 
-  const handleSessionSelect = useCallback((sessionId: string) => {
-    useSessionStore.setState({ activeSessionId: sessionId })
-    navigate(`/${encodeURIComponent(repoName!)}/run`)
-  }, [navigate, repoName])
+  const handleSessionSelect = useCallback(
+    (sessionId: string) => {
+      useSessionStore.setState({ activeSessionId: sessionId })
+      navigate(`/${encodeURIComponent(repoName!)}/run`)
+    },
+    [navigate, repoName],
+  )
 
-  const handleSelectIssue = useCallback((id: string, type: ReturnType<typeof issueType>) => {
-    openIssue(id)
-    setViewingIssue(id, type === "epic" ? id : null)
-  }, [openIssue, setViewingIssue])
+  const handleSelectIssue = useCallback(
+    (id: string, type: ReturnType<typeof issueType>) => {
+      openIssue(id)
+      setViewingIssue(id, type === "epic" ? id : null)
+    },
+    [openIssue, setViewingIssue],
+  )
 
   // --- Swipe ---
 
@@ -184,9 +212,7 @@ export function IssuesPage() {
       <div
         className={clsx(
           "shrink-0 flex-col bg-surface",
-          selectedId
-            ? "hidden md:flex md:w-80 border-r border-line"
-            : "flex w-full",
+          selectedId ? "hidden md:flex md:w-80 border-r border-line" : "flex w-full",
         )}
       >
         {!selectedId ? (
@@ -247,16 +273,16 @@ export function IssuesPage() {
                     onClick={() => setStateFilter(key)}
                     className={clsx(
                       "flex flex-1 items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors",
-                      stateFilter === key
-                        ? "border-b-2 border-blue-500 text-blue-500"
-                        : "text-fg-4 hover:text-fg-2",
+                      stateFilter === key ? "border-b-2 border-blue-500 text-blue-500" : "text-fg-4 hover:text-fg-2",
                     )}
                   >
                     {label}
-                    <span className={clsx(
-                      "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
-                      stateFilter === key ? "bg-blue-500/10 text-blue-500" : "bg-elevated text-fg-5",
-                    )}>
+                    <span
+                      className={clsx(
+                        "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+                        stateFilter === key ? "bg-blue-500/10 text-blue-500" : "bg-elevated text-fg-5",
+                      )}
+                    >
                       {count}
                     </span>
                   </button>
@@ -274,7 +300,11 @@ export function IssuesPage() {
                   className="min-w-0 flex-1 bg-transparent font-mono text-xs text-fg placeholder:text-fg-6 focus:outline-none"
                 />
                 {searchQuery && (
-                  <button type="button" onClick={() => setSearchQuery("")} className="shrink-0 text-fg-5 hover:text-fg-3">
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="shrink-0 text-fg-5 hover:text-fg-3"
+                  >
                     <X className="h-3 w-3" />
                   </button>
                 )}
@@ -285,9 +315,7 @@ export function IssuesPage() {
 
         <div className={clsx("flex-1 overflow-y-auto", selectedId ? "px-2 py-2" : "px-3 py-3")}>
           {!activeRepoId ? (
-            <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">
-              请先选择一个仓库
-            </p>
+            <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">请先选择一个仓库</p>
           ) : !issuesLoaded ? (
             <div className="flex flex-col items-center gap-2 py-8">
               <Loader2 className="h-4 w-4 fs-spin text-fg-5" />
@@ -328,107 +356,113 @@ export function IssuesPage() {
       </div>
 
       {selectedId && (
-      <SwipeDrawer side="left" open={listDrawerOpen} onClose={() => setListDrawerOpen(false)}>
-        <div className="flex h-full flex-col">
-          <div className="border-b border-line px-3 py-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">Issues</span>
+        <SwipeDrawer side="left" open={listDrawerOpen} onClose={() => setListDrawerOpen(false)}>
+          <div className="flex h-full flex-col">
+            <div className="border-b border-line px-3 py-3">
+              <span className="text-xs font-semibold uppercase tracking-wider text-fg-3">Issues</span>
+            </div>
+            <div className="flex-1 overflow-y-auto px-2 py-2">
+              {finalFiltered.length === 0 ? (
+                <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">无匹配 Issue</p>
+              ) : (
+                <ul className="space-y-0.5">
+                  {pagedIssues.map((issue) => (
+                    <IssueRow
+                      key={issue.id}
+                      issue={issue}
+                      sessionCount={sessionCounts.get(issue.id) ?? 0}
+                      isActive={selectedId === issue.id}
+                      isEpic={issueType(issue) === "epic"}
+                      milestone={issue.milestoneId ? milestoneMap.get(issue.milestoneId) : undefined}
+                      onSelect={() => {
+                        handleSelectIssue(issue.id, issueType(issue))
+                        setListDrawerOpen(false)
+                      }}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+            <Pagination total={finalFiltered.length} page={page} onPageChange={setPage} />
           </div>
-          <div className="flex-1 overflow-y-auto px-2 py-2">
-            {finalFiltered.length === 0 ? (
-              <p className="px-2 py-8 text-center font-mono text-xs text-fg-5">无匹配 Issue</p>
-            ) : (
-              <ul className="space-y-0.5">
-                {pagedIssues.map((issue) => (
-                  <IssueRow
-                    key={issue.id}
-                    issue={issue}
-                    sessionCount={sessionCounts.get(issue.id) ?? 0}
-                    isActive={selectedId === issue.id}
-                    isEpic={issueType(issue) === "epic"}
-                    milestone={issue.milestoneId ? milestoneMap.get(issue.milestoneId) : undefined}
-                    onSelect={() => {
-                      handleSelectIssue(issue.id, issueType(issue))
-                      setListDrawerOpen(false)
-                    }}
-                  />
-                ))}
-              </ul>
-            )}
-          </div>
-          <Pagination total={finalFiltered.length} page={page} onPageChange={setPage} />
-        </div>
-      </SwipeDrawer>
+        </SwipeDrawer>
       )}
 
       {/* ---- right: detail + overlay sidebar ---- */}
       {selectedId && (
-      <div className="relative flex min-w-0 flex-1 flex-col bg-term">
-        {selectedIssue ? (
-          <>
-            <IssueDetailWithTabs
-              issue={selectedIssue}
-              milestone={selectedIssue.milestoneId ? milestoneMap.get(selectedIssue.milestoneId) : undefined}
-              tab={tab}
-              prNumber={prNumber}
-              onTabChange={changeTab}
-              onSelectPr={openPr}
-              onBackToPrList={backToPrList}
-              onBack={() => { closeIssue(); setSidebarOpen(false) }}
-              onClose={() => { closeIssue(); setSidebarOpen(false) }}
-              onToggleSidebar={() => setSidebarOpen((v) => !v)}
-            />
+        <div className="relative flex min-w-0 flex-1 flex-col bg-term">
+          {selectedIssue ? (
+            <>
+              <IssueDetailWithTabs
+                issue={selectedIssue}
+                milestone={selectedIssue.milestoneId ? milestoneMap.get(selectedIssue.milestoneId) : undefined}
+                tab={tab}
+                prNumber={prNumber}
+                onTabChange={changeTab}
+                onSelectPr={openPr}
+                onBackToPrList={backToPrList}
+                onBack={() => {
+                  closeIssue()
+                  setSidebarOpen(false)
+                }}
+                onClose={() => {
+                  closeIssue()
+                  setSidebarOpen(false)
+                }}
+                onToggleSidebar={() => setSidebarOpen((v) => !v)}
+              />
 
-            {/* Sidebar overlay panel */}
-            {sidebarOpen && (
-              <>
-                <div
-                  className="absolute inset-0 z-10 bg-black/30"
-                  onClick={() => setSidebarOpen(false)}
-                />
-                <div className="absolute right-0 top-0 bottom-0 z-20 flex w-[280px] flex-col border-l border-line bg-surface shadow-xl">
-                  <div className="flex shrink-0 items-center justify-between border-b border-line px-3 py-2.5">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-4">
-                      {treeRootId ? "子任务树 & 运行记录" : "运行记录"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSidebarOpen(false)}
-                      className="flex h-6 w-6 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+              {/* Sidebar overlay panel */}
+              {sidebarOpen && (
+                <>
+                  <div className="absolute inset-0 z-10 bg-black/30" onClick={() => setSidebarOpen(false)} />
+                  <div className="absolute right-0 top-0 bottom-0 z-20 flex w-[280px] flex-col border-l border-line bg-surface shadow-xl">
+                    <div className="flex shrink-0 items-center justify-between border-b border-line px-3 py-2.5">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-4">
+                        {treeRootId ? "子任务树 & 运行记录" : "运行记录"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSidebarOpen(false)}
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                      {treeRootId ? (
+                        (() => {
+                          const rootIssue = issues.find((i) => i.id === treeRootId)
+                          if (!rootIssue) return null
+                          return (
+                            <IssueTreeSidebar
+                              rootIssue={rootIssue}
+                              childrenMap={childrenMap}
+                              currentId={selectedId}
+                              onSelect={(id) => {
+                                openIssue(id)
+                                setViewingIssue(id, treeRootId)
+                                setSidebarOpen(false)
+                              }}
+                              sessions={selectedIssueSessions}
+                              onSessionSelect={handleSessionSelect}
+                            />
+                          )
+                        })()
+                      ) : (
+                        <IssueSessionSidebar sessions={selectedIssueSessions} onSessionSelect={handleSessionSelect} />
+                      )}
+                    </div>
                   </div>
-                  <div className="min-h-0 flex-1 overflow-hidden">
-                    {treeRootId ? (() => {
-                      const rootIssue = issues.find((i) => i.id === treeRootId)
-                      if (!rootIssue) return null
-                      return (
-                        <IssueTreeSidebar
-                          rootIssue={rootIssue}
-                          childrenMap={childrenMap}
-                          currentId={selectedId}
-                          onSelect={(id) => { openIssue(id); setViewingIssue(id, treeRootId); setSidebarOpen(false) }}
-                          sessions={selectedIssueSessions}
-                          onSessionSelect={handleSessionSelect}
-                        />
-                      )
-                    })() : (
-                      <IssueSessionSidebar
-                        sessions={selectedIssueSessions}
-                        onSessionSelect={handleSessionSelect}
-                      />
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-          </>
-        ) : (
-          <div className="flex flex-1 items-center justify-center">
-            <p className="font-mono text-xs text-fg-5">Issue 未找到</p>
-          </div>
-        )}
-      </div>
+                </>
+              )}
+            </>
+          ) : (
+            <div className="flex flex-1 items-center justify-center">
+              <p className="font-mono text-xs text-fg-5">Issue 未找到</p>
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

@@ -4,7 +4,7 @@
 // Extracted from lib/process-manager.ts.
 // ---------------------------------------------------------------------------
 
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs"
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { logger } from "../../middleware/logger"
 
@@ -21,9 +21,7 @@ export function injectMcpConfig(localPath: string, repoId: string, serverPort: n
     // corrupt or missing — start fresh
   }
 
-  const mcpPath = sessionId
-    ? `/api/repos/${repoId}/mcp/s/${sessionId}`
-    : `/api/repos/${repoId}/mcp`
+  const mcpPath = sessionId ? `/api/repos/${repoId}/mcp/s/${sessionId}` : `/api/repos/${repoId}/mcp`
 
   const mcp = (config.mcp ?? {}) as Record<string, unknown>
   mcp[MCP_SERVER_KEY] = {
@@ -31,7 +29,7 @@ export function injectMcpConfig(localPath: string, repoId: string, serverPort: n
     url: `http://127.0.0.1:${serverPort}${mcpPath}`,
   }
   config.mcp = mcp
-  writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n")
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`)
   logger.info({ repoId, sessionId, configPath }, "injected MCP config into opencode.json")
 }
 
@@ -51,7 +49,7 @@ export function removeMcpConfig(localPath: string): void {
     if (meaningful.length === 0) {
       unlinkSync(configPath)
     } else {
-      writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n")
+      writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`)
     }
   } catch {
     // best-effort cleanup

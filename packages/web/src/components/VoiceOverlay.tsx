@@ -1,5 +1,5 @@
-import { type KeyboardEvent, type RefObject } from "react"
 import { Loader2, Send } from "lucide-react"
+import type { KeyboardEvent, RefObject } from "react"
 import type { SpeechPhase } from "../hooks/use-speech-to-text"
 
 // Per-bar amplitude multipliers so the 7 bars scale volumeLevel at slightly
@@ -10,8 +10,12 @@ const BAR_MIN_HEIGHT_PX = 4
 const BAR_MAX_HEIGHT_PX = 24
 
 export function formatVoiceDuration(totalSeconds: number): string {
-  const mm = Math.floor(totalSeconds / 60).toString().padStart(2, "0")
-  const ss = Math.floor(totalSeconds % 60).toString().padStart(2, "0")
+  const mm = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0")
+  const ss = Math.floor(totalSeconds % 60)
+    .toString()
+    .padStart(2, "0")
   return `${mm}:${ss}`
 }
 
@@ -20,13 +24,8 @@ export function Waveform({ volumeLevel }: { volumeLevel: number }) {
   return (
     <div className="flex h-6 items-center gap-1" aria-hidden="true">
       {BAR_MULTIPLIERS.map((multiplier, i) => {
-        const raw =
-          BAR_MIN_HEIGHT_PX +
-          clampedVolume * multiplier * (BAR_MAX_HEIGHT_PX - BAR_MIN_HEIGHT_PX)
-        const height = Math.max(
-          BAR_MIN_HEIGHT_PX,
-          Math.min(BAR_MAX_HEIGHT_PX, raw),
-        )
+        const raw = BAR_MIN_HEIGHT_PX + clampedVolume * multiplier * (BAR_MAX_HEIGHT_PX - BAR_MIN_HEIGHT_PX)
+        const height = Math.max(BAR_MIN_HEIGHT_PX, Math.min(BAR_MAX_HEIGHT_PX, raw))
         return (
           <span
             key={i}
@@ -77,9 +76,7 @@ export function VoiceOverlay({
             {hasText ? (
               <>
                 <span className="text-fg">{transcript}</span>
-                {interimTranscript && (
-                  <span className="text-fg-4">{interimTranscript}</span>
-                )}
+                {interimTranscript && <span className="text-fg-4">{interimTranscript}</span>}
               </>
             ) : (
               <span className="italic text-fg-5">正在聆听…</span>
@@ -90,14 +87,8 @@ export function VoiceOverlay({
         {phase === "recognizing" && (
           <div className="flex items-center gap-3">
             <Loader2 className="h-5 w-5 shrink-0 text-emerald-400 fs-spin" />
-            <span className="font-mono text-sm text-emerald-400">
-              识别中…
-            </span>
-            {interimTranscript && (
-              <span className="truncate text-base text-fg-4">
-                {interimTranscript}
-              </span>
-            )}
+            <span className="font-mono text-sm text-emerald-400">识别中…</span>
+            {interimTranscript && <span className="truncate text-base text-fg-4">{interimTranscript}</span>}
           </div>
         )}
 
@@ -157,9 +148,7 @@ export function VoiceStatusBar({
   if (phase === "done") {
     return (
       <div className={className}>
-        <span className="hidden font-mono text-[10px] text-fg-6 sm:inline">
-          ⌘/Ctrl+⏎ 发送 · Esc 取消
-        </span>
+        <span className="hidden font-mono text-[10px] text-fg-6 sm:inline">⌘/Ctrl+⏎ 发送 · Esc 取消</span>
         <div className="ml-auto flex items-center gap-2">
           <button
             type="button"
@@ -193,16 +182,12 @@ export function VoiceStatusBar({
             <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-red-400" />
             录音中
           </span>
-          <span className="font-mono text-[11px] tabular-nums text-fg-4">
-            {formatVoiceDuration(elapsed)}
-          </span>
+          <span className="font-mono text-[11px] tabular-nums text-fg-4">{formatVoiceDuration(elapsed)}</span>
         </>
       ) : (
         <>
           <Loader2 className="h-4 w-4 shrink-0 text-emerald-400 fs-spin" />
-          <span className="font-mono text-[11px] text-emerald-400">
-            识别中…
-          </span>
+          <span className="font-mono text-[11px] text-emerald-400">识别中…</span>
         </>
       )}
     </div>

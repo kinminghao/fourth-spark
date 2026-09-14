@@ -1,6 +1,6 @@
 import { Hono } from "hono"
-import { registerCrudRoutes } from "./crud"
 import { registerCommentRoutes } from "./comments"
+import { registerCrudRoutes } from "./crud"
 import { registerPolishRoutes } from "./polish"
 import { registerTagRoutes } from "./tags"
 

@@ -4,7 +4,14 @@ import { z } from "zod"
 import { TMP_BASE_DIR } from "../../lib/config"
 
 // Re-export shared helpers from lib/git-utils so consumers import from one place
-export { issueId, issueToDb, commentToDb, extractUpstreamMessage, rewriteAttachmentUrls, getRepoGitClient } from "../../lib/git-utils"
+export {
+  commentToDb,
+  extractUpstreamMessage,
+  getRepoGitClient,
+  issueId,
+  issueToDb,
+  rewriteAttachmentUrls,
+} from "../../lib/git-utils"
 
 // ---------------------------------------------------------------------------
 // Request body schemas

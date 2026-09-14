@@ -24,5 +24,3 @@ export function normalizeGitUrl(url: string): string {
   if (!parsed) return url
   return `https://${parsed.host}/${parsed.owner}/${parsed.repo}.git`
 }
-
-

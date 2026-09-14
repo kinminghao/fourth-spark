@@ -33,7 +33,8 @@ export interface GitErrorInfo {
 
 const ERROR_PATTERNS: Array<{ patterns: RegExp; code: string; message: string; retryable: boolean }> = [
   {
-    patterns: /could not resolve host|connection timed out|connection refused|unable to access|network is unreachable|ssl|tls handshake|gnutls|failed to connect/i,
+    patterns:
+      /could not resolve host|connection timed out|connection refused|unable to access|network is unreachable|ssl|tls handshake|gnutls|failed to connect/i,
     code: "NETWORK",
     message: "网络连接失败，正在重试...",
     retryable: true,
@@ -107,7 +108,7 @@ export function isRetryableGitError(stdout: string, stderr: string): boolean {
 // Branch name validation (reject user input that could break git commands)
 // ---------------------------------------------------------------------------
 
-const BRANCH_NAME_RE = /^[a-zA-Z0-9._\/-]+$/
+const BRANCH_NAME_RE = /^[a-zA-Z0-9._/-]+$/
 
 /** Validates per git-check-ref-format rules; also rejects leading `-` (CLI injection). */
 export function isValidGitBranchName(name: string): boolean {
@@ -186,7 +187,9 @@ export async function withRepoLock<T>(repoPath: string, fn: () => T | Promise<T>
   const prev = repoLocks.get(repoPath) ?? Promise.resolve()
 
   let resolve!: () => void
-  const lockPromise = new Promise<void>((r) => { resolve = r })
+  const lockPromise = new Promise<void>((r) => {
+    resolve = r
+  })
   repoLocks.set(repoPath, lockPromise)
 
   await prev

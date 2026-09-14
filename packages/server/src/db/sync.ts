@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm"
-import { db } from "./index"
-import { sessions, messages, parts, todos } from "./schema"
 import { logger } from "../middleware/logger"
+import { db } from "./index"
+import { messages, parts, sessions, todos } from "./schema"
 
 type R = Record<string, unknown>
 
@@ -98,7 +98,10 @@ async function upsertMessage(sessionId: string, props: R): Promise<void> {
     model: str(model?.modelID || props.modelID) || null,
     provider: str(model?.providerID || props.providerID) || null,
     variant: str(model?.variant || props.variant) || null,
-    cost: typeof props.cost === "number" && Number.isFinite(props.cost) ? Math.min(Math.max(0, props.cost), MAX_COST) : null,
+    cost:
+      typeof props.cost === "number" && Number.isFinite(props.cost)
+        ? Math.min(Math.max(0, props.cost), MAX_COST)
+        : null,
     timeCreated: num((props.time as R)?.created, now),
     timeUpdated: num((props.time as R)?.updated, now),
   }
@@ -113,21 +116,24 @@ async function upsertPart(sessionId: string, messageId: string, props: R): Promi
   const partType = str(props.type)
   const { id: _, type: __, ...raw } = props
   const data = sanitizeForPg(raw) as Record<string, unknown>
-  await db.insert(parts).values({
-    id,
-    messageId,
-    sessionId,
-    type: partType,
-    data,
-    timeCreated: num((props.time as R)?.created, now),
-    timeUpdated: num((props.time as R)?.updated, now),
-  }).onConflictDoUpdate({
-    target: parts.id,
-    set: {
+  await db
+    .insert(parts)
+    .values({
+      id,
+      messageId,
+      sessionId,
+      type: partType,
       data,
+      timeCreated: num((props.time as R)?.created, now),
       timeUpdated: num((props.time as R)?.updated, now),
-    },
-  })
+    })
+    .onConflictDoUpdate({
+      target: parts.id,
+      set: {
+        data,
+        timeUpdated: num((props.time as R)?.updated, now),
+      },
+    })
 }
 
 async function upsertTodos(sessionId: string, items: unknown[]): Promise<void> {
@@ -153,23 +159,29 @@ async function upsertTodos(sessionId: string, items: unknown[]): Promise<void> {
 
 async function ensureSession(sessionId: string): Promise<void> {
   const now = Date.now()
-  await db.insert(sessions).values({
-    id: sessionId,
-    title: "",
-    timeCreated: now,
-    timeUpdated: now,
-  }).onConflictDoNothing()
+  await db
+    .insert(sessions)
+    .values({
+      id: sessionId,
+      title: "",
+      timeCreated: now,
+      timeUpdated: now,
+    })
+    .onConflictDoNothing()
 }
 
 async function ensureMessage(sessionId: string, messageId: string): Promise<void> {
   const now = Date.now()
-  await db.insert(messages).values({
-    id: messageId,
-    sessionId,
-    role: "assistant",
-    timeCreated: now,
-    timeUpdated: now,
-  }).onConflictDoNothing()
+  await db
+    .insert(messages)
+    .values({
+      id: messageId,
+      sessionId,
+      role: "assistant",
+      timeCreated: now,
+      timeUpdated: now,
+    })
+    .onConflictDoNothing()
 }
 
 // ---------------------------------------------------------------------------
@@ -195,12 +207,15 @@ async function fireWithRetry(fn: () => Promise<void>, ctx: Record<string, unknow
 }
 
 export function syncSessionsList(items: unknown[]): Promise<void> {
-  return fireWithRetry(async () => {
-    for (const item of items) {
-      const r = asRecord(item)
-      if (r && typeof r.id === "string") await upsertSession(r)
-    }
-  }, { op: "syncSessionsList" })
+  return fireWithRetry(
+    async () => {
+      for (const item of items) {
+        const r = asRecord(item)
+        if (r && typeof r.id === "string") await upsertSession(r)
+      }
+    },
+    { op: "syncSessionsList" },
+  )
 }
 
 async function syncMessagesCore(sessionId: string, items: unknown[]): Promise<void> {
@@ -245,53 +260,61 @@ export function syncSseEvent(sessionId: string, eventName: string, raw: string):
   const props = getProps(data)
   if (!props) return Promise.resolve()
 
-  return fireWithRetry(async () => {
-    switch (type) {
-      case "session.updated": {
-        await upsertSession(props)
-        break
-      }
-      case "message.updated": {
-        const info = asRecord(props.info)
-        const msgProps = info && typeof info.id === "string"
-          ? { ...info, ...(Array.isArray(props.parts) ? { parts: props.parts } : {}) }
-          : props
-        if (typeof msgProps.id === "string") {
-          await ensureSession(sessionId)
-          await upsertMessage(sessionId, msgProps)
+  return fireWithRetry(
+    async () => {
+      switch (type) {
+        case "session.updated": {
+          await upsertSession(props)
+          break
         }
-        const errObj = asRecord(info?.error ?? msgProps.error)
-        if (errObj) {
-          const errData = asRecord(errObj.data)
-          const errMsg = str(errData?.message || errObj.message)
-          logger.warn(
-            { sessionId, messageId: str(msgProps.id), errorName: str(errObj.name), errorMessage: errMsg, finish: str(info?.finish ?? msgProps.finish) },
-            "upstream message error",
-          )
+        case "message.updated": {
+          const info = asRecord(props.info)
+          const msgProps =
+            info && typeof info.id === "string"
+              ? { ...info, ...(Array.isArray(props.parts) ? { parts: props.parts } : {}) }
+              : props
+          if (typeof msgProps.id === "string") {
+            await ensureSession(sessionId)
+            await upsertMessage(sessionId, msgProps)
+          }
+          const errObj = asRecord(info?.error ?? msgProps.error)
+          if (errObj) {
+            const errData = asRecord(errObj.data)
+            const errMsg = str(errData?.message || errObj.message)
+            logger.warn(
+              {
+                sessionId,
+                messageId: str(msgProps.id),
+                errorName: str(errObj.name),
+                errorMessage: errMsg,
+                finish: str(info?.finish ?? msgProps.finish),
+              },
+              "upstream message error",
+            )
+          }
+          break
         }
-        break
-      }
-      case "message.part.updated":
-      case "message.part.delta": {
-        const part = asRecord(props.part) ?? props
-        const messageId = str(props.messageID || props.messageId || part.messageID || part.messageId)
-        if (part.type && part.id && messageId) {
-          await ensureSession(sessionId)
-          await ensureMessage(sessionId, messageId)
-          await upsertPart(sessionId, messageId, part)
+        case "message.part.updated":
+        case "message.part.delta": {
+          const part = asRecord(props.part) ?? props
+          const messageId = str(props.messageID || props.messageId || part.messageID || part.messageId)
+          if (part.type && part.id && messageId) {
+            await ensureSession(sessionId)
+            await ensureMessage(sessionId, messageId)
+            await upsertPart(sessionId, messageId, part)
+          }
+          break
         }
-        break
-      }
-      case "todo.updated": {
-        const items = Array.isArray(props) ? props
-          : Array.isArray(props.todos) ? props.todos as unknown[]
-          : []
-        if (items.length > 0) {
-          await ensureSession(sessionId)
-          await upsertTodos(sessionId, items)
+        case "todo.updated": {
+          const items = Array.isArray(props) ? props : Array.isArray(props.todos) ? (props.todos as unknown[]) : []
+          if (items.length > 0) {
+            await ensureSession(sessionId)
+            await upsertTodos(sessionId, items)
+          }
+          break
         }
-        break
       }
-    }
-  }, { op: "syncSseEvent", type, sessionId })
+    },
+    { op: "syncSseEvent", type, sessionId },
+  )
 }

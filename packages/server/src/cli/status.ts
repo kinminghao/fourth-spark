@@ -1,7 +1,7 @@
-import { readFileSync, existsSync } from "node:fs"
 import { execSync } from "node:child_process"
-import { PID_FILE, LOG_FILE, isProcessRunning } from "./paths"
-import { PORT, APP_VERSION } from "../lib/config"
+import { existsSync, readFileSync } from "node:fs"
+import { APP_VERSION, PORT } from "../lib/config"
+import { isProcessRunning, LOG_FILE, PID_FILE } from "./paths"
 
 export async function statusCommand(): Promise<void> {
   console.log(`fourth-spark ${APP_VERSION}`)
@@ -12,7 +12,7 @@ export async function statusCommand(): Promise<void> {
 
   if (existsSync(PID_FILE)) {
     serverPid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10)
-    serverRunning = !isNaN(serverPid) && isProcessRunning(serverPid)
+    serverRunning = !Number.isNaN(serverPid) && isProcessRunning(serverPid)
   }
 
   console.log(serverRunning ? `Server:     running (PID ${serverPid})` : "Server:     stopped")

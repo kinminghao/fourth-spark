@@ -1,16 +1,19 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { homedir } from "node:os"
+import { dirname, join } from "node:path"
+import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { z } from "zod"
-import { homedir } from "node:os"
-import { join, dirname } from "node:path"
-import { readFile, writeFile, mkdir } from "node:fs/promises"
-import { eq } from "drizzle-orm"
 import { db } from "../db/index"
 import { repos } from "../db/schema"
 import { parseBody } from "../lib/validation"
 
 async function safeRead(path: string): Promise<string> {
-  try { return await readFile(path, "utf-8") }
-  catch { return "" }
+  try {
+    return await readFile(path, "utf-8")
+  } catch {
+    return ""
+  }
 }
 
 async function safeWrite(path: string, content: string): Promise<void> {
@@ -67,14 +70,20 @@ globalAgentsMd.put("/", async (c) => {
 export const repoAgentsMd = new Hono()
 
 repoAgentsMd.get("/:id/agents-md", async (c) => {
-  const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
+  const [repo] = await db
+    .select()
+    .from(repos)
+    .where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found" }, 404)
   const fileName = instructionFileName(repo.runtimeType)
   return c.json({ content: await safeRead(join(repo.localPath, fileName)) })
 })
 
 repoAgentsMd.put("/:id/agents-md", async (c) => {
-  const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
+  const [repo] = await db
+    .select()
+    .from(repos)
+    .where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found" }, 404)
   const [body, err] = await parseBody(c, UpdateRepoAgentsMdBody)
   if (err) return err

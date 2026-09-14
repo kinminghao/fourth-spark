@@ -1,9 +1,9 @@
-import { useLocation, useNavigate } from "react-router-dom"
-import { CircleDot, GitPullRequest } from "lucide-react"
 import clsx from "clsx"
+import { CircleDot, GitPullRequest } from "lucide-react"
+import { useLocation, useNavigate } from "react-router-dom"
 import { useIssueStore } from "../stores/issue-store"
 import { usePrStore } from "../stores/pr-store"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
+import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 import { IssuesPage } from "./IssuesPage"
 import { PullRequestsPage } from "./PullRequestsPage"
 
@@ -35,17 +35,17 @@ export function DevPage() {
             onClick={() => navigate(pathForSegment(repoName, "issues"))}
             className={clsx(
               "flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
-              segment === "issues"
-                ? "bg-surface text-fg shadow-sm"
-                : "text-fg-4 hover:text-fg-2",
+              segment === "issues" ? "bg-surface text-fg shadow-sm" : "text-fg-4 hover:text-fg-2",
             )}
           >
             <CircleDot className="h-3.5 w-3.5" />
             Issues
-            <span className={clsx(
-              "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
-              segment === "issues" ? "bg-blue-500/10 text-blue-500" : "text-fg-5",
-            )}>
+            <span
+              className={clsx(
+                "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+                segment === "issues" ? "bg-blue-500/10 text-blue-500" : "text-fg-5",
+              )}
+            >
               {openIssueCount}
             </span>
           </button>
@@ -54,17 +54,17 @@ export function DevPage() {
             onClick={() => navigate(pathForSegment(repoName, "pulls"))}
             className={clsx(
               "flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
-              segment === "pulls"
-                ? "bg-surface text-fg shadow-sm"
-                : "text-fg-4 hover:text-fg-2",
+              segment === "pulls" ? "bg-surface text-fg shadow-sm" : "text-fg-4 hover:text-fg-2",
             )}
           >
             <GitPullRequest className="h-3.5 w-3.5" />
             PRs
-            <span className={clsx(
-              "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
-              segment === "pulls" ? "bg-blue-500/10 text-blue-500" : "text-fg-5",
-            )}>
+            <span
+              className={clsx(
+                "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+                segment === "pulls" ? "bg-blue-500/10 text-blue-500" : "text-fg-5",
+              )}
+            >
               {openPrCount}
             </span>
           </button>

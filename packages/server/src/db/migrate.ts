@@ -1,11 +1,9 @@
-import postgres from "postgres"
-import { resolve, join, dirname } from "node:path"
-import { existsSync, realpathSync, readFileSync, appendFileSync, mkdirSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs"
 import { homedir } from "node:os"
+import { dirname, join, resolve } from "node:path"
+import postgres from "postgres"
 
-const DATABASE_URL =
-  process.env.DATABASE_URL ??
-  "postgresql://fourth_spark:fourth_spark@localhost:5460/fourth_spark"
+const DATABASE_URL = process.env.DATABASE_URL ?? "postgresql://fourth_spark:fourth_spark@localhost:5460/fourth_spark"
 
 interface JournalEntry {
   idx: number
@@ -21,16 +19,10 @@ function makeIdempotent(sql: string): string {
   if (!s) return s
 
   // CREATE TABLE → CREATE TABLE IF NOT EXISTS
-  s = s.replace(
-    /^CREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS\b)/i,
-    "CREATE TABLE IF NOT EXISTS ",
-  )
+  s = s.replace(/^CREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS\b)/i, "CREATE TABLE IF NOT EXISTS ")
 
   // ALTER TABLE ... ADD COLUMN → ADD COLUMN IF NOT EXISTS  (PG 9.6+)
-  s = s.replace(
-    /\bADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS\b)/gi,
-    "ADD COLUMN IF NOT EXISTS ",
-  )
+  s = s.replace(/\bADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS\b)/gi, "ADD COLUMN IF NOT EXISTS ")
 
   // CREATE [UNIQUE] INDEX → CREATE ... INDEX IF NOT EXISTS  (PG 9.5+)
   s = s.replace(
@@ -39,16 +31,10 @@ function makeIdempotent(sql: string): string {
   )
 
   // DROP TABLE → DROP TABLE IF EXISTS
-  s = s.replace(
-    /^DROP\s+TABLE\s+(?!IF\s+EXISTS\b)/i,
-    "DROP TABLE IF EXISTS ",
-  )
+  s = s.replace(/^DROP\s+TABLE\s+(?!IF\s+EXISTS\b)/i, "DROP TABLE IF EXISTS ")
 
   // DROP INDEX → DROP INDEX IF EXISTS
-  s = s.replace(
-    /^DROP\s+INDEX\s+(?!IF\s+EXISTS\b|CONCURRENTLY\b)/i,
-    "DROP INDEX IF EXISTS ",
-  )
+  s = s.replace(/^DROP\s+INDEX\s+(?!IF\s+EXISTS\b|CONCURRENTLY\b)/i, "DROP INDEX IF EXISTS ")
 
   // ALTER TABLE ... ADD CONSTRAINT → wrap in DO block to swallow duplicate_object
   if (/^ALTER\s+TABLE\b.*\bADD\s+CONSTRAINT\b/i.test(s)) {
@@ -79,22 +65,21 @@ function makeIdempotent(sql: string): string {
  */
 export async function runMigrations(): Promise<boolean> {
   const binaryDir = (() => {
-    try { return dirname(realpathSync(process.execPath)) }
-    catch { return process.cwd() }
+    try {
+      return dirname(realpathSync(process.execPath))
+    } catch {
+      return process.cwd()
+    }
   })()
 
-  const migrationsFolder = resolve(
-    process.env.MIGRATIONS_DIR ?? join(binaryDir, "drizzle"),
-  )
+  const migrationsFolder = resolve(process.env.MIGRATIONS_DIR ?? join(binaryDir, "drizzle"))
   const journalPath = join(migrationsFolder, "meta", "_journal.json")
   if (!existsSync(journalPath)) {
     console.warn(`[migrate] migration journal not found at ${journalPath} — skipping migrations`)
     return false
   }
 
-  const journal: { entries: JournalEntry[] } = JSON.parse(
-    readFileSync(journalPath, "utf-8"),
-  )
+  const journal: { entries: JournalEntry[] } = JSON.parse(readFileSync(journalPath, "utf-8"))
   if (journal.entries.length === 0) return false
 
   const logDir = join(homedir(), ".fourth-spark", "logs")

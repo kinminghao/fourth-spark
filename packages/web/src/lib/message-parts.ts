@@ -8,15 +8,7 @@ import type { MessagePart, Todo } from "./api-client"
 
 type PartKind = "text" | "thinking" | "tool" | "file" | "other"
 
-const TOOL_TYPES = new Set([
-  "tool",
-  "tool-use",
-  "tool_use",
-  "tool-call",
-  "tool_call",
-  "tool-result",
-  "tool_result",
-])
+const TOOL_TYPES = new Set(["tool", "tool-use", "tool_use", "tool-call", "tool_call", "tool-result", "tool_result"])
 
 const THINKING_TYPES = new Set(["thinking", "reasoning", "reason"])
 
@@ -114,8 +106,7 @@ export function normalizeTodoStatus(status: string): TodoStatus {
 }
 
 export function countCompletedTodos(todos: readonly Todo[]): number {
-  return todos.filter((todo) => normalizeTodoStatus(todo.status) === "completed")
-    .length
+  return todos.filter((todo) => normalizeTodoStatus(todo.status) === "completed").length
 }
 
 interface QuestionOption {

@@ -1,5 +1,5 @@
-import { ChevronDown, Plus, RefreshCw, Search, X } from "lucide-react"
 import clsx from "clsx"
+import { ChevronDown, Plus, RefreshCw, Search, X } from "lucide-react"
 import { useIssueStore } from "../stores/issue-store"
 import { useRepoStore } from "../stores/repo-store"
 
@@ -80,7 +80,10 @@ export function IssueFilters({
         <span className="shrink-0 text-sm font-semibold text-fg md:order-1">Issues</span>
         {/* Sync/Create: right-aligned on mobile, end of row on desktop */}
         {activeRepoId && (
-          <div data-guide="issue-sync-create" className="ml-auto flex shrink-0 items-center gap-1 md:order-last md:ml-0">
+          <div
+            data-guide="issue-sync-create"
+            className="ml-auto flex shrink-0 items-center gap-1 md:order-last md:ml-0"
+          >
             <button
               type="button"
               onClick={() => activeRepoId && void syncIssues(activeRepoId)}
@@ -115,16 +118,16 @@ export function IssueFilters({
                   onClick={() => setStateFilter(key)}
                   className={clsx(
                     "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                    stateFilter === key
-                      ? "bg-surface text-fg shadow-sm"
-                      : "text-fg-4 hover:text-fg-2",
+                    stateFilter === key ? "bg-surface text-fg shadow-sm" : "text-fg-4 hover:text-fg-2",
                   )}
                 >
                   {label}
-                  <span className={clsx(
-                    "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
-                    stateFilter === key ? "bg-blue-500/10 text-blue-500" : "text-fg-5",
-                  )}>
+                  <span
+                    className={clsx(
+                      "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+                      stateFilter === key ? "bg-blue-500/10 text-blue-500" : "text-fg-5",
+                    )}
+                  >
                     {count}
                   </span>
                 </button>
@@ -159,8 +162,11 @@ export function IssueFilters({
             onClick={() => setExpandedFilter(expandedFilter === "type" ? null : "type")}
             className={clsx(
               "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-              expandedFilter === "type" ? "bg-elevated text-fg"
-                : typeFilter !== "all" ? "text-fg-2" : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
+              expandedFilter === "type"
+                ? "bg-elevated text-fg"
+                : typeFilter !== "all"
+                  ? "text-fg-2"
+                  : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
             )}
           >
             类型
@@ -177,8 +183,11 @@ export function IssueFilters({
             onClick={() => setExpandedFilter(expandedFilter === "tag" ? null : "tag")}
             className={clsx(
               "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-              expandedFilter === "tag" ? "bg-elevated text-fg"
-                : tagFilterMode.size > 0 ? "text-fg-2" : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
+              expandedFilter === "tag"
+                ? "bg-elevated text-fg"
+                : tagFilterMode.size > 0
+                  ? "text-fg-2"
+                  : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
             )}
           >
             标签
@@ -194,54 +203,76 @@ export function IssueFilters({
             onClick={() => setExpandedFilter(expandedFilter === "milestone" ? null : "milestone")}
             className={clsx(
               "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-              expandedFilter === "milestone" ? "bg-elevated text-fg"
-                : selectedMilestoneId ? "text-fg-2" : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
+              expandedFilter === "milestone"
+                ? "bg-elevated text-fg"
+                : selectedMilestoneId
+                  ? "text-fg-2"
+                  : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
             )}
           >
             Milestone
-            {selectedMilestoneId && (() => {
-              const ms = milestones.find((m) => m.id === selectedMilestoneId)
-              return ms ? <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">{ms.title}</span> : null
-            })()}
-            <ChevronDown className={clsx("h-3 w-3 transition-transform", expandedFilter === "milestone" && "rotate-180")} />
+            {selectedMilestoneId &&
+              (() => {
+                const ms = milestones.find((m) => m.id === selectedMilestoneId)
+                return ms ? (
+                  <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">{ms.title}</span>
+                ) : null
+              })()}
+            <ChevronDown
+              className={clsx("h-3 w-3 transition-transform", expandedFilter === "milestone" && "rotate-180")}
+            />
           </button>
           <button
             type="button"
             onClick={() => setExpandedFilter(expandedFilter === "author" ? null : "author")}
             className={clsx(
               "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-              expandedFilter === "author" ? "bg-elevated text-fg"
-                : selectedAuthor ? "text-fg-2" : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
+              expandedFilter === "author"
+                ? "bg-elevated text-fg"
+                : selectedAuthor
+                  ? "text-fg-2"
+                  : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
             )}
           >
             Author
             {selectedAuthor && (
               <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">{selectedAuthor}</span>
             )}
-            <ChevronDown className={clsx("h-3 w-3 transition-transform", expandedFilter === "author" && "rotate-180")} />
+            <ChevronDown
+              className={clsx("h-3 w-3 transition-transform", expandedFilter === "author" && "rotate-180")}
+            />
           </button>
           <button
             type="button"
             onClick={() => setExpandedFilter(expandedFilter === "assignee" ? null : "assignee")}
             className={clsx(
               "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-              expandedFilter === "assignee" ? "bg-elevated text-fg"
-                : selectedAssignee ? "text-fg-2" : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
+              expandedFilter === "assignee"
+                ? "bg-elevated text-fg"
+                : selectedAssignee
+                  ? "text-fg-2"
+                  : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
             )}
           >
             Assignee
             {selectedAssignee && (
               <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">{selectedAssignee}</span>
             )}
-            <ChevronDown className={clsx("h-3 w-3 transition-transform", expandedFilter === "assignee" && "rotate-180")} />
+            <ChevronDown
+              className={clsx("h-3 w-3 transition-transform", expandedFilter === "assignee" && "rotate-180")}
+            />
           </button>
         </div>
       </div>
       {expandedFilter === "type" && (
-        <div className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2" style={{ scrollbarWidth: "none" }}>
+        <div
+          className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2"
+          style={{ scrollbarWidth: "none" }}
+        >
           {(["epic", "stray", "task", "all"] as const).map((key) => {
             const label = key === "epic" ? "Epic" : key === "stray" ? "游离" : key === "task" ? "任务" : "全部"
-            const count = key === "epic" ? epicCount : key === "stray" ? strayCount : key === "task" ? taskCount : afterStateCount
+            const count =
+              key === "epic" ? epicCount : key === "stray" ? strayCount : key === "task" ? taskCount : afterStateCount
             const active = typeFilter === key
             return (
               <button
@@ -251,15 +282,23 @@ export function IssueFilters({
                 className={clsx(
                   "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors",
                   active
-                    ? key === "epic" ? "bg-amber-400/15 text-amber-400"
-                      : key === "stray" ? "bg-sky-400/15 text-sky-400"
-                      : key === "task" ? "bg-violet-400/15 text-violet-400"
-                      : "bg-fg-6/20 text-fg-3"
+                    ? key === "epic"
+                      ? "bg-amber-400/15 text-amber-400"
+                      : key === "stray"
+                        ? "bg-sky-400/15 text-sky-400"
+                        : key === "task"
+                          ? "bg-violet-400/15 text-violet-400"
+                          : "bg-fg-6/20 text-fg-3"
                     : "bg-elevated/60 text-fg-5 hover:bg-elevated hover:text-fg-3",
                 )}
               >
                 {label}
-                <span className={clsx("rounded-full px-1.5 py-0.5 font-mono text-[10px] font-medium", active ? "opacity-70" : "text-fg-6")}>
+                <span
+                  className={clsx(
+                    "rounded-full px-1.5 py-0.5 font-mono text-[10px] font-medium",
+                    active ? "opacity-70" : "text-fg-6",
+                  )}
+                >
                   {count}
                 </span>
               </button>
@@ -268,7 +307,10 @@ export function IssueFilters({
         </div>
       )}
       {expandedFilter === "tag" && (
-        <div className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2" style={{ scrollbarWidth: "none" }}>
+        <div
+          className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2"
+          style={{ scrollbarWidth: "none" }}
+        >
           {tags.length === 0 ? (
             <span className="text-xs text-fg-5">暂无标签</span>
           ) : (
@@ -288,9 +330,21 @@ export function IssueFilters({
                           ? "opacity-90 line-through decoration-2"
                           : "opacity-50 hover:opacity-80",
                     )}
-                    style={mode === "exclude"
-                      ? { backgroundColor: `#${tag.color}10`, color: `#${tag.color}`, boxShadow: `inset 0 0 0 1px color-mix(in srgb, #${tag.color} 30%, transparent)` }
-                      : { backgroundColor: `#${tag.color}18`, color: `#${tag.color}`, boxShadow: mode === "include" ? `inset 0 0 0 1px color-mix(in srgb, #${tag.color} 50%, transparent)` : undefined }
+                    style={
+                      mode === "exclude"
+                        ? {
+                            backgroundColor: `#${tag.color}10`,
+                            color: `#${tag.color}`,
+                            boxShadow: `inset 0 0 0 1px color-mix(in srgb, #${tag.color} 30%, transparent)`,
+                          }
+                        : {
+                            backgroundColor: `#${tag.color}18`,
+                            color: `#${tag.color}`,
+                            boxShadow:
+                              mode === "include"
+                                ? `inset 0 0 0 1px color-mix(in srgb, #${tag.color} 50%, transparent)`
+                                : undefined,
+                          }
                     }
                   >
                     {mode === "exclude" && <span className="mr-1 text-[10px]">✕</span>}
@@ -299,8 +353,11 @@ export function IssueFilters({
                 )
               })}
               {tagFilterMode.size > 0 && (
-                <button type="button" onClick={clearTagFilter}
-                  className="shrink-0 rounded-md px-2 py-1 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3">
+                <button
+                  type="button"
+                  onClick={clearTagFilter}
+                  className="shrink-0 rounded-md px-2 py-1 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3"
+                >
                   清除
                 </button>
               )}
@@ -309,7 +366,10 @@ export function IssueFilters({
         </div>
       )}
       {expandedFilter === "milestone" && (
-        <div className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2" style={{ scrollbarWidth: "none" }}>
+        <div
+          className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2"
+          style={{ scrollbarWidth: "none" }}
+        >
           {milestones.length === 0 ? (
             <span className="text-xs text-fg-5">暂无里程碑</span>
           ) : (
@@ -334,8 +394,11 @@ export function IssueFilters({
                 )
               })}
               {selectedMilestoneId && (
-                <button type="button" onClick={() => setMilestoneFilter(null)}
-                  className="shrink-0 rounded-md px-2 py-1 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3">
+                <button
+                  type="button"
+                  onClick={() => setMilestoneFilter(null)}
+                  className="shrink-0 rounded-md px-2 py-1 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3"
+                >
                   清除
                 </button>
               )}
@@ -344,7 +407,10 @@ export function IssueFilters({
         </div>
       )}
       {expandedFilter === "author" && (
-        <div className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2" style={{ scrollbarWidth: "none" }}>
+        <div
+          className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2"
+          style={{ scrollbarWidth: "none" }}
+        >
           {uniqueAuthors.length === 0 ? (
             <span className="text-xs text-fg-5">同步后可见作者</span>
           ) : (
@@ -366,8 +432,11 @@ export function IssueFilters({
                 </button>
               ))}
               {selectedAuthor && (
-                <button type="button" onClick={() => setSelectedAuthor(null)}
-                  className="shrink-0 rounded-md px-2 py-1 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAuthor(null)}
+                  className="shrink-0 rounded-md px-2 py-1 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3"
+                >
                   清除
                 </button>
               )}
@@ -376,7 +445,10 @@ export function IssueFilters({
         </div>
       )}
       {expandedFilter === "assignee" && (
-        <div className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2" style={{ scrollbarWidth: "none" }}>
+        <div
+          className="flex items-center gap-2 overflow-x-auto border-b border-line px-4 py-2"
+          style={{ scrollbarWidth: "none" }}
+        >
           {uniqueAssignees.length === 0 ? (
             <span className="text-xs text-fg-5">同步后可见指派人</span>
           ) : (
@@ -398,8 +470,11 @@ export function IssueFilters({
                 </button>
               ))}
               {selectedAssignee && (
-                <button type="button" onClick={() => setSelectedAssignee(null)}
-                  className="shrink-0 rounded-md px-2 py-1 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAssignee(null)}
+                  className="shrink-0 rounded-md px-2 py-1 text-[10px] text-fg-5 transition-colors hover:bg-elevated hover:text-fg-3"
+                >
                   清除
                 </button>
               )}

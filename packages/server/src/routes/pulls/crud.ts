@@ -1,19 +1,19 @@
+import { and, desc, eq } from "drizzle-orm"
 import type { Hono } from "hono"
-import { eq, and, desc } from "drizzle-orm"
 import { db } from "../../db/index"
-import { pullRequests, prIssueLinks, issues, repos } from "../../db/schema"
+import { issues, prIssueLinks, pullRequests, repos } from "../../db/schema"
+import { createGitIssueClient, GitApiError, type GitPullRequest, getHostInfo } from "../../lib/git-provider"
 import { parseGitUrl } from "../../lib/git-url"
-import { createGitIssueClient, getHostInfo, GitApiError, type GitPullRequest } from "../../lib/git-provider"
-import { logger } from "../../middleware/logger"
 import { parseOptionalBody } from "../../lib/validation"
+import { logger } from "../../middleware/logger"
 import {
-  SyncPullsBody,
-  prId,
-  rewriteAttachmentUrls,
   extractUpstreamMessage,
-  prToDb,
-  parseIssueRefs,
   getRepoGitClient,
+  parseIssueRefs,
+  prId,
+  prToDb,
+  rewriteAttachmentUrls,
+  SyncPullsBody,
 } from "./helpers"
 
 export function registerCrudRoutes(app: Hono): void {
@@ -25,7 +25,9 @@ export function registerCrudRoutes(app: Hono): void {
     const conditions = [eq(pullRequests.repoId, repoId)]
     if (state !== "all") conditions.push(eq(pullRequests.state, state))
 
-    const rows = await db.select().from(pullRequests)
+    const rows = await db
+      .select()
+      .from(pullRequests)
       .where(and(...conditions))
       .orderBy(desc(pullRequests.updatedAt))
 
@@ -68,7 +70,10 @@ export function registerCrudRoutes(app: Hono): void {
           const batch = await client.listPullRequests({ state: s, page, limit })
           if (batch.length === 0) break
 
-          const enriched: Array<{ detail: GitPullRequest; diffStats: Array<{ filename: string; status: string; additions: number; deletions: number }> | null }>  = []
+          const enriched: Array<{
+            detail: GitPullRequest
+            diffStats: Array<{ filename: string; status: string; additions: number; deletions: number }> | null
+          }> = []
           let active = 0
           const queue = [...batch]
 
@@ -93,7 +98,12 @@ export function registerCrudRoutes(app: Hono): void {
                 ])
                   .then(([detail, files]) => {
                     const diffStats = files
-                      ? files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
+                      ? files.map((f) => ({
+                          filename: f.filename,
+                          status: f.status,
+                          additions: f.additions,
+                          deletions: f.deletions,
+                        }))
                       : null
                     enriched.push({ detail: detail as GitPullRequest, diffStats })
                   })
@@ -129,8 +139,10 @@ export function registerCrudRoutes(app: Hono): void {
     }
 
     let totalLinks = 0
-    const allPrs = await db.select({ id: pullRequests.id, number: pullRequests.number, body: pullRequests.body })
-      .from(pullRequests).where(eq(pullRequests.repoId, repoId))
+    const allPrs = await db
+      .select({ id: pullRequests.id, number: pullRequests.number, body: pullRequests.body })
+      .from(pullRequests)
+      .where(eq(pullRequests.repoId, repoId))
     for (const row of allPrs) {
       const refs = parseIssueRefs(row.body)
       for (const issueNum of refs) {
@@ -162,7 +174,12 @@ export function registerCrudRoutes(app: Hono): void {
           try {
             const detail = await ctx.client.getPullRequest(number)
             const files = await ctx.client.listPullRequestFiles(number)
-            const diffStats = files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
+            const diffStats = files.map((f) => ({
+              filename: f.filename,
+              status: f.status,
+              additions: f.additions,
+              deletions: f.deletions,
+            }))
             const statsUpdate = {
               additions: detail.additions ?? 0,
               deletions: detail.deletions ?? 0,
@@ -187,7 +204,12 @@ export function registerCrudRoutes(app: Hono): void {
 
     const gpr = await ctx.client.getPullRequest(number)
     const files = await ctx.client.listPullRequestFiles(number).catch(() => [])
-    const diffStats = files.map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions }))
+    const diffStats = files.map((f) => ({
+      filename: f.filename,
+      status: f.status,
+      additions: f.additions,
+      deletions: f.deletions,
+    }))
     const values = { ...prToDb(repoId, gpr), diffStats }
     await db.insert(pullRequests).values(values).onConflictDoNothing()
     values.body = rewriteAttachmentUrls(values.body, repoId)
@@ -208,7 +230,8 @@ export function registerCrudRoutes(app: Hono): void {
     } catch (err) {
       if (err instanceof GitApiError) {
         const msg = err.message
-        const isConflict = msg.includes("merge conflict") || msg.includes("not mergeable") || err.status === 405 || err.status === 409
+        const isConflict =
+          msg.includes("merge conflict") || msg.includes("not mergeable") || err.status === 405 || err.status === 409
         const status = isConflict ? 409 : err.status >= 400 && err.status < 600 ? err.status : 500
         const userMessage = isConflict
           ? "PR 存在合并冲突，请先解决冲突后再合入"

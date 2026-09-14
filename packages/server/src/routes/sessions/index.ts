@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import { registerCrudRoutes } from "./crud"
-import { registerMessageRoutes } from "./messages"
 import { registerFileRoutes } from "./files"
+import { registerMessageRoutes } from "./messages"
 
 export { buildIssueContext } from "./issue-context"
 

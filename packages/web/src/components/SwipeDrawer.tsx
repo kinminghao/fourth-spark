@@ -1,5 +1,5 @@
-import type { ReactNode } from "react"
 import clsx from "clsx"
+import type { ReactNode } from "react"
 
 interface SwipeDrawerProps {
   /** Which side the drawer slides in from */
@@ -27,13 +27,7 @@ export function SwipeDrawer({ side, open, onClose, children, width = "w-80" }: S
   return (
     <div className="md:hidden">
       {/* Backdrop */}
-      {open && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50"
-          onClick={onClose}
-          aria-hidden="true"
-        />
-      )}
+      {open && <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} aria-hidden="true" />}
 
       {/* Drawer panel */}
       <div
@@ -41,11 +35,7 @@ export function SwipeDrawer({ side, open, onClose, children, width = "w-80" }: S
           "fixed top-0 bottom-0 z-50 flex flex-col bg-surface pt-[var(--safe-top)] pb-[var(--safe-bottom)] shadow-xl transition-transform duration-200 ease-out",
           width,
           isLeft ? "left-0 border-r border-line" : "right-0 border-l border-line",
-          open
-            ? "translate-x-0"
-            : isLeft
-              ? "-translate-x-full"
-              : "translate-x-full",
+          open ? "translate-x-0" : isLeft ? "-translate-x-full" : "translate-x-full",
         )}
       >
         {children}

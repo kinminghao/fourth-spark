@@ -1,7 +1,7 @@
-import { loadAccounts, readAuthAnthropic, accountsOf, type StoredAccount } from "./auth-files"
-import { refreshToken, isStale } from "./token-refresh"
 import { logger } from "../middleware/logger"
-import { isWorkerMode, getWorkerConfig } from "./config"
+import { accountsOf, loadAccounts, readAuthAnthropic, type StoredAccount } from "./auth-files"
+import { getWorkerConfig, isWorkerMode } from "./config"
+import { isStale, refreshToken } from "./token-refresh"
 import { createUsageClient, type UsageSnapshotView } from "./usage-client"
 
 const USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage"
@@ -114,19 +114,28 @@ let usageCache: { result: UsageResult; fetchedAt: number } | null = null
 
 function snapshotToUsageResult(view: UsageSnapshotView, activeId?: string): UsageResult {
   const accounts: AccountUsage[] = view.accounts.map((a) => {
-    const usage: UsageResponse | undefined = a.hasUsage && a.windows.length > 0
-      ? {
-          five_hour: a.windows.find((w) => w.label === "5 小时" || w.label === "five_hour")
-            ? { utilization: a.windows.find((w) => w.label === "5 小时" || w.label === "five_hour")!.utilization, resets_at: a.windows.find((w) => w.label === "5 小时" || w.label === "five_hour")!.resetsAt }
-            : undefined,
-          seven_day: a.windows.find((w) => w.label === "7 天" || w.label === "seven_day")
-            ? { utilization: a.windows.find((w) => w.label === "7 天" || w.label === "seven_day")!.utilization, resets_at: a.windows.find((w) => w.label === "7 天" || w.label === "seven_day")!.resetsAt }
-            : undefined,
-          scoped: a.windows
-            .filter((w) => w.label !== "5 小时" && w.label !== "five_hour" && w.label !== "7 天" && w.label !== "seven_day")
-            .map((w) => ({ label: w.label, utilization: w.utilization, resets_at: w.resetsAt })),
-        }
-      : undefined
+    const usage: UsageResponse | undefined =
+      a.hasUsage && a.windows.length > 0
+        ? {
+            five_hour: a.windows.find((w) => w.label === "5 小时" || w.label === "five_hour")
+              ? {
+                  utilization: a.windows.find((w) => w.label === "5 小时" || w.label === "five_hour")?.utilization,
+                  resets_at: a.windows.find((w) => w.label === "5 小时" || w.label === "five_hour")?.resetsAt,
+                }
+              : undefined,
+            seven_day: a.windows.find((w) => w.label === "7 天" || w.label === "seven_day")
+              ? {
+                  utilization: a.windows.find((w) => w.label === "7 天" || w.label === "seven_day")?.utilization,
+                  resets_at: a.windows.find((w) => w.label === "7 天" || w.label === "seven_day")?.resetsAt,
+                }
+              : undefined,
+            scoped: a.windows
+              .filter(
+                (w) => w.label !== "5 小时" && w.label !== "five_hour" && w.label !== "7 天" && w.label !== "seven_day",
+              )
+              .map((w) => ({ label: w.label, utilization: w.utilization, resets_at: w.resetsAt })),
+          }
+        : undefined
     return {
       id: a.idPrefix,
       label: a.label,

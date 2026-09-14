@@ -20,5 +20,5 @@ export async function isValidAgent(client: RuntimeClient, name: string | undefin
 
 export async function resolveAgent(client: RuntimeClient, name: string | undefined): Promise<string | undefined> {
   if (!name) return undefined
-  return await isValidAgent(client, name) ? name : undefined
+  return (await isValidAgent(client, name)) ? name : undefined
 }

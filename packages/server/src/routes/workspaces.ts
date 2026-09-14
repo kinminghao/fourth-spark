@@ -1,11 +1,11 @@
+import { eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
-import { workspaceManager } from "../lib/workspace-manager"
-import { logger } from "../middleware/logger"
-import { runtimeManager } from "../lib/process-manager"
 import { db } from "../db/index"
 import { repos, sessions as sessionsTable } from "../db/schema"
 import { runGit } from "../lib/git-runner"
-import { eq, inArray } from "drizzle-orm"
+import { runtimeManager } from "../lib/process-manager"
+import { workspaceManager } from "../lib/workspace-manager"
+import { logger } from "../middleware/logger"
 
 const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -46,44 +46,44 @@ workspaceRoutes.get("/", async (c) => {
   const [repo] = await db.select({ localPath: repos.localPath }).from(repos).where(eq(repos.id, repoId))
   const repoLocalPath = repo?.localPath
 
-  const augmented = await Promise.all(list.map(async (ws) => {
-    const diskUsage = await workspaceManager.getDiskUsage(ws.localPath)
+  const augmented = await Promise.all(
+    list.map(async (ws) => {
+      const diskUsage = await workspaceManager.getDiskUsage(ws.localPath)
 
-    // Inline git call — checkMerged() re-queries workspace+repo from DB which we already have
-    let merged = false
-    if (repoLocalPath) {
-      try {
-        merged = runGit(["merge-base", "--is-ancestor", ws.branch, ws.baseBranch], repoLocalPath).ok
-      } catch {
-        merged = false
+      // Inline git call — checkMerged() re-queries workspace+repo from DB which we already have
+      let merged = false
+      if (repoLocalPath) {
+        try {
+          merged = runGit(["merge-base", "--is-ancestor", ws.branch, ws.baseBranch], repoLocalPath).ok
+        } catch {
+          merged = false
+        }
       }
-    }
 
-    let status: "active" | "idle" | "merged" | "stale" = "idle"
+      let status: "active" | "idle" | "merged" | "stale" = "idle"
 
-    const wsSessionIds = sessionsByWorkspace.get(ws.id) ?? []
-    const hasBusySession = wsSessionIds.some(
-      (sid) => sessionStatuses[sid]?.type === "busy",
-    )
-    if (hasBusySession) {
-      status = "active"
-    }
-
-    if (status !== "active" && merged) {
-      status = "merged"
-      if (Date.now() - ws.updatedAt > STALE_THRESHOLD_MS) {
-        status = "stale"
+      const wsSessionIds = sessionsByWorkspace.get(ws.id) ?? []
+      const hasBusySession = wsSessionIds.some((sid) => sessionStatuses[sid]?.type === "busy")
+      if (hasBusySession) {
+        status = "active"
       }
-    }
 
-    return {
-      ...ws,
-      diskUsage,
-      merged,
-      status,
-      canDelete: status !== "active",
-    }
-  }))
+      if (status !== "active" && merged) {
+        status = "merged"
+        if (Date.now() - ws.updatedAt > STALE_THRESHOLD_MS) {
+          status = "stale"
+        }
+      }
+
+      return {
+        ...ws,
+        diskUsage,
+        merged,
+        status,
+        canDelete: status !== "active",
+      }
+    }),
+  )
 
   return c.json(augmented)
 })
@@ -104,8 +104,7 @@ workspaceRoutes.delete("/:id", async (c) => {
 
       const workspaceSessionIds = new Set(workspaceSessions.map((s) => s.id))
       const hasBusySession = Object.entries(sessionStatuses).some(
-        ([sessionId, sessionStatus]) =>
-          workspaceSessionIds.has(sessionId) && sessionStatus.type === "busy"
+        ([sessionId, sessionStatus]) => workspaceSessionIds.has(sessionId) && sessionStatus.type === "busy",
       )
 
       if (hasBusySession) {
@@ -174,9 +173,7 @@ workspaceRoutes.post("/cleanup", async (c) => {
     let status: "active" | "idle" | "merged" | "stale" = "idle"
 
     const wsSessionIds = sessionsByWorkspace.get(ws.id) ?? []
-    const hasBusySession = wsSessionIds.some(
-      (sid) => sessionStatuses[sid]?.type === "busy",
-    )
+    const hasBusySession = wsSessionIds.some((sid) => sessionStatuses[sid]?.type === "busy")
     if (hasBusySession) {
       status = "active"
     }

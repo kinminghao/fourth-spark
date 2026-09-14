@@ -1,8 +1,8 @@
-import { SessionWorker, type WorkerPoolCallbacks } from "./session-worker"
-import { GlobalEventDispatcher } from "./global-event-dispatcher"
-import { SessionSupervisor } from "./session-supervisor"
 import { useSessionStore } from "../stores/session-store"
 import { freezeMonitor } from "./freeze-monitor"
+import { GlobalEventDispatcher } from "./global-event-dispatcher"
+import { SessionSupervisor } from "./session-supervisor"
+import { SessionWorker, type WorkerPoolCallbacks } from "./session-worker"
 
 class SessionOrchestrator {
   private workers = new Map<string, SessionWorker>()

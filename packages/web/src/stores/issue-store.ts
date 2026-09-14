@@ -1,7 +1,7 @@
 import { create } from "zustand"
+import type { Issue, Milestone, Tag } from "../lib/api-client"
 import * as api from "../lib/api-client"
 import { ApiError } from "../lib/api-client"
-import type { Issue, Tag, Milestone } from "../lib/api-client"
 import { ISSUES_LOAD_LIMIT } from "../lib/constants"
 
 /** Monotonic version counter — incremented on every load/sync call so stale
@@ -85,7 +85,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       const parentId = get().issues.find((i) => i.number === parentNumber)?.id
       if (parentId) {
         set((s) => ({
-          issues: s.issues.map((i) => i.number === childNumber ? { ...i, parentId } : i),
+          issues: s.issues.map((i) => (i.number === childNumber ? { ...i, parentId } : i)),
           matchingCandidateId: null,
         }))
       }
@@ -99,7 +99,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     try {
       const updated = await api.updateIssue(repoId, issueNumber, { state })
       set((s) => ({
-        issues: s.issues.map((i) => i.number === issueNumber ? { ...i, state: updated.state } : i),
+        issues: s.issues.map((i) => (i.number === issueNumber ? { ...i, state: updated.state } : i)),
       }))
       return true
     } catch {
@@ -160,7 +160,9 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     try {
       const tags = await api.listTags(repoId)
       set({ tags })
-    } catch { /* noop */ }
+    } catch {
+      /* noop */
+    }
   },
 
   cycleTagFilter: (tagId) => {
@@ -180,7 +182,9 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     try {
       const milestones = await api.listMilestones(repoId)
       set({ milestones })
-    } catch { /* noop */ }
+    } catch {
+      /* noop */
+    }
   },
 
   setMilestoneFilter: (id) => set({ selectedMilestoneId: id }),

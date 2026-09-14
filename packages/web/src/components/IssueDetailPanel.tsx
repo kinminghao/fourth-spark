@@ -1,26 +1,16 @@
+import clsx from "clsx"
+import { ChevronLeft, CircleDot, ExternalLink, Flag, GitBranch, PanelRight, Play, X, XCircle } from "lucide-react"
 import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
-import {
-  ChevronLeft,
-  CircleDot,
-  ExternalLink,
-  Flag,
-  GitBranch,
-  PanelRight,
-  Play,
-  X,
-  XCircle,
-} from "lucide-react"
 import ReactMarkdown from "react-markdown"
+import { useNavigate } from "react-router-dom"
 import rehypeRaw from "rehype-raw"
 import remarkGfm from "remark-gfm"
-import clsx from "clsx"
-import { listIssueComments, type Issue, type IssueComment, type Milestone } from "../lib/api-client"
+import { type Issue, type IssueComment, listIssueComments, type Milestone } from "../lib/api-client"
+import { fmtDate } from "../lib/date-utils"
 import { useIssueStore } from "../stores/issue-store"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
+import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
 import { CommentComposer } from "./CommentComposer"
-import { fmtDate } from "../lib/date-utils"
 
 export function IssueDetailPanel({
   issue,
@@ -75,9 +65,7 @@ export function IssueDetailPanel({
               <span
                 className={clsx(
                   "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
-                  issue.state === "open"
-                    ? "bg-emerald-500/15 text-emerald-400"
-                    : "bg-purple-500/15 text-purple-400",
+                  issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
                 )}
               >
                 #{issue.number} {issue.state}
@@ -101,9 +89,7 @@ export function IssueDetailPanel({
                 </span>
               )}
             </div>
-            <h2 className="mt-1 text-base font-semibold text-fg">
-              {issue.title}
-            </h2>
+            <h2 className="mt-1 text-base font-semibold text-fg">{issue.title}</h2>
             {(issue.authorLogin || (issue.assignees && issue.assignees.length > 0)) && (
               <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-fg-4">
                 {issue.authorLogin && (
@@ -117,7 +103,13 @@ export function IssueDetailPanel({
                     <span className="text-fg-5">→</span>
                     <span className="flex items-center -space-x-1">
                       {issue.assignees.map((a) => (
-                        <img key={a.login} src={a.avatar_url} alt={a.login} title={a.login} className="h-4 w-4 rounded-full ring-1 ring-surface" />
+                        <img
+                          key={a.login}
+                          src={a.avatar_url}
+                          alt={a.login}
+                          title={a.login}
+                          className="h-4 w-4 rounded-full ring-1 ring-surface"
+                        />
                       ))}
                     </span>
                     <span className="text-fg-4">{issue.assignees.map((a) => a.login).join(", ")}</span>
@@ -219,39 +211,35 @@ export function IssueDetailPanel({
               </ReactMarkdown>
             </div>
           ) : (
-            <p className="py-10 text-center font-mono text-xs text-fg-5">
-              该 Issue 没有描述内容
-            </p>
+            <p className="py-10 text-center font-mono text-xs text-fg-5">该 Issue 没有描述内容</p>
           )}
 
           {loadingComments ? (
             <p className="mt-8 text-center font-mono text-xs text-fg-6">加载评论…</p>
-          ) : comments.length > 0 && (
-            <div className="mt-8 border-t border-line pt-6">
-              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-fg-4">
-                评论 ({comments.length})
-              </h3>
-              <div className="space-y-4">
-                {comments.map((c) => (
-                  <div key={c.id} className="rounded-lg border border-line bg-elevated/40 px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <img
-                        src={c.user.avatar_url}
-                        alt={c.user.login}
-                        className="h-5 w-5 rounded-full"
-                      />
-                      <span className="text-xs font-semibold text-fg-2">{c.user.login}</span>
-                      <span className="text-[10px] text-fg-6">{fmtDate(c.created_at)}</span>
+          ) : (
+            comments.length > 0 && (
+              <div className="mt-8 border-t border-line pt-6">
+                <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-fg-4">
+                  评论 ({comments.length})
+                </h3>
+                <div className="space-y-4">
+                  {comments.map((c) => (
+                    <div key={c.id} className="rounded-lg border border-line bg-elevated/40 px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <img src={c.user.avatar_url} alt={c.user.login} className="h-5 w-5 rounded-full" />
+                        <span className="text-xs font-semibold text-fg-2">{c.user.login}</span>
+                        <span className="text-[10px] text-fg-6">{fmtDate(c.created_at)}</span>
+                      </div>
+                      <div className="markdown-body mt-2 text-sm leading-relaxed text-fg-3">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                          {c.body}
+                        </ReactMarkdown>
+                      </div>
                     </div>
-                    <div className="markdown-body mt-2 text-sm leading-relaxed text-fg-3">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                        {c.body}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )
           )}
 
           {activeRepoId && (

@@ -1,15 +1,11 @@
-import { useState } from "react"
 import clsx from "clsx"
 import { Check, MessageCircleQuestion, Send, X } from "lucide-react"
+import { useState } from "react"
 import type { MessagePart } from "../lib/api-client"
-import {
-  getQuestions,
-  getToolStatus,
-  type QuestionData,
-} from "../lib/message-parts"
+import { getQuestions, getToolStatus, type QuestionData } from "../lib/message-parts"
+import { useRepoStore } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
 import { useToastStore } from "../stores/toast-store"
-import { useRepoStore } from "../stores/repo-store"
 
 function QuestionCard({
   q,
@@ -37,9 +33,7 @@ function QuestionCard({
 
   return (
     <div className="space-y-2">
-      {q.header && (
-        <div className="text-xs font-semibold text-fg-3">{q.header}</div>
-      )}
+      {q.header && <div className="text-xs font-semibold text-fg-3">{q.header}</div>}
       <p className="text-sm text-fg-2">{q.question}</p>
       {q.options.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -66,9 +60,7 @@ function QuestionCard({
               >
                 {isSelected && <Check className="mr-1 inline h-3 w-3" />}
                 <span className="font-medium">{opt.label}</span>
-                {opt.description && (
-                  <span className="ml-1.5 text-fg-5">{opt.description}</span>
-                )}
+                {opt.description && <span className="ml-1.5 text-fg-5">{opt.description}</span>}
               </button>
             )
           })}
@@ -112,7 +104,6 @@ function QuestionCard({
               }
             }}
             placeholder="输入自定义回复…"
-            autoFocus
             className="flex-1 rounded-md border border-blue-500/40 bg-blue-500/5 px-3 py-1.5 text-xs text-fg-1 placeholder:text-fg-5 outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30"
           />
           {isSingle && (
@@ -181,9 +172,7 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
         const isSelected = current.includes(label)
         return {
           ...prev,
-          [questionIndex]: isSelected
-            ? current.filter((l) => l !== label)
-            : [...current, label],
+          [questionIndex]: isSelected ? current.filter((l) => l !== label) : [...current, label],
         }
       }
       // Single-select: replace
@@ -215,9 +204,7 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
   }
 
   const answeredCount = questions.filter(
-    (_, i) =>
-      (selections[i]?.length ?? 0) > 0 ||
-      (customTexts[i]?.trim().length ?? 0) > 0,
+    (_, i) => (selections[i]?.length ?? 0) > 0 || (customTexts[i]?.trim().length ?? 0) > 0,
   ).length
   const allAnswered = !isSingle && answeredCount === questions.length
 
@@ -251,9 +238,7 @@ export function QuestionPanel({ part }: { part: MessagePart }) {
       )}
     >
       <div className="flex items-center gap-2 px-3 py-1.5 font-mono text-xs">
-        <MessageCircleQuestion
-          className={clsx("h-3.5 w-3.5 shrink-0", active ? "text-blue-400" : "text-fg-4")}
-        />
+        <MessageCircleQuestion className={clsx("h-3.5 w-3.5 shrink-0", active ? "text-blue-400" : "text-fg-4")} />
         <span className={clsx("font-medium", active ? "text-blue-300" : "text-fg-3")}>
           {resolved === "answered" ? "已回复" : resolved === "dismissed" ? "已取消" : active ? "等待回复" : "Question"}
         </span>

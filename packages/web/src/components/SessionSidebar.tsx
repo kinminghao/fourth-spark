@@ -1,14 +1,15 @@
-import { Activity } from "lucide-react"
 import clsx from "clsx"
+import { Activity } from "lucide-react"
 import type { Session } from "../lib/api-client"
 import { useIssueStore } from "../stores/issue-store"
 
 export function formatSessionTime(session: Session): string {
-  const raw = typeof session.time?.created === "number"
-    ? session.time.created
-    : session.createdAt
-      ? Date.parse(session.createdAt)
-      : 0
+  const raw =
+    typeof session.time?.created === "number"
+      ? session.time.created
+      : session.createdAt
+        ? Date.parse(session.createdAt)
+        : 0
   if (!raw || Number.isNaN(raw)) return ""
   const ms = raw < 1_000_000_000_000 ? raw * 1000 : raw
   const date = new Date(ms)
@@ -63,9 +64,7 @@ export function SidebarSessionList({
     <div className="flex min-h-0 flex-1 flex-col border-t border-line">
       <div className="flex items-center gap-1.5 border-b border-line px-3 py-3">
         <Activity className="h-3.5 w-3.5 text-fg-5" />
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-4">
-          运行记录
-        </span>
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-4">运行记录</span>
         <span className="ml-auto rounded-full bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-5">
           {sessions.length}
         </span>
@@ -80,10 +79,14 @@ export function SidebarSessionList({
               return (
                 <div key={gid}>
                   <div className="mb-1 flex items-center gap-1.5 px-1">
-                    <span className={clsx(
-                      "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium",
-                      issue.state === "open" ? "bg-emerald-500/15 text-emerald-400" : "bg-purple-500/15 text-purple-400",
-                    )}>
+                    <span
+                      className={clsx(
+                        "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium",
+                        issue.state === "open"
+                          ? "bg-emerald-500/15 text-emerald-400"
+                          : "bg-purple-500/15 text-purple-400",
+                      )}
+                    >
                       #{issue.number}
                     </span>
                     <span className="min-w-0 truncate text-xs font-medium text-fg-3">{issue.title}</span>

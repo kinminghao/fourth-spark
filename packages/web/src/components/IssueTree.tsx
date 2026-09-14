@@ -1,5 +1,5 @@
-import { Network } from "lucide-react"
 import clsx from "clsx"
+import { Network } from "lucide-react"
 import type { Issue, Session } from "../lib/api-client"
 import { SidebarSessionList } from "./SessionSidebar"
 
@@ -26,9 +26,7 @@ export function TreeNode({
         onClick={() => onSelect(issue.id)}
         className={clsx(
           "group flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-          isCurrent
-            ? "bg-blue-500/10 text-blue-400"
-            : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
+          isCurrent ? "bg-blue-500/10 text-blue-400" : "text-fg-4 hover:bg-elevated/60 hover:text-fg-2",
         )}
         style={{ paddingLeft: `${depth * 18 + 8}px` }}
       >
@@ -38,18 +36,13 @@ export function TreeNode({
             issue.state === "open" ? "bg-emerald-400" : "bg-purple-400",
           )}
         />
-        <span className="shrink-0 font-mono text-[10px] text-fg-6">
-          #{issue.number}
-        </span>
+        <span className="shrink-0 font-mono text-[10px] text-fg-6">#{issue.number}</span>
         <span className="min-w-0 truncate">{issue.title}</span>
       </button>
 
       {children.length > 0 && (
         <div className="relative">
-          <div
-            className="absolute top-0 bottom-3 w-px bg-line"
-            style={{ left: `${depth * 18 + 16}px` }}
-          />
+          <div className="absolute top-0 bottom-3 w-px bg-line" style={{ left: `${depth * 18 + 16}px` }} />
           {children.map((child) => (
             <TreeNode
               key={child.id}
@@ -66,10 +59,7 @@ export function TreeNode({
   )
 }
 
-export function countDescendants(
-  rootId: string,
-  childrenMap: Map<string, Issue[]>,
-): { total: number; closed: number } {
+export function countDescendants(rootId: string, childrenMap: Map<string, Issue[]>): { total: number; closed: number } {
   let total = 0
   let closed = 0
   const stack = [...(childrenMap.get(rootId) ?? [])]
@@ -107,9 +97,7 @@ export function IssueTreeSidebar({
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center gap-1.5 border-b border-line px-3 py-3">
           <Network className="h-3.5 w-3.5 text-fg-5" />
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-4">
-            子任务树
-          </span>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-4">子任务树</span>
         </div>
 
         {total > 0 && (
@@ -127,13 +115,7 @@ export function IssueTreeSidebar({
         )}
 
         <div className="flex-1 overflow-y-auto py-2">
-          <TreeNode
-            issue={rootIssue}
-            childrenMap={childrenMap}
-            currentId={currentId}
-            onSelect={onSelect}
-            depth={0}
-          />
+          <TreeNode issue={rootIssue} childrenMap={childrenMap} currentId={currentId} onSelect={onSelect} depth={0} />
         </div>
       </div>
 

@@ -1,11 +1,11 @@
-import { useEffect } from "react"
 import { BarChart3, Loader2 } from "lucide-react"
-import { useAnalyticsStore } from "../stores/analytics-store"
-import { TimeRangeSelector } from "../components/analytics/TimeRangeSelector"
-import { SummaryCards } from "../components/analytics/SummaryCards"
-import { CostTrendChart } from "../components/analytics/CostTrendChart"
-import { CostByRepoChart } from "../components/analytics/CostByRepoChart"
+import { useEffect } from "react"
 import { CostByAgentChart } from "../components/analytics/CostByAgentChart"
+import { CostByRepoChart } from "../components/analytics/CostByRepoChart"
+import { CostTrendChart } from "../components/analytics/CostTrendChart"
+import { SummaryCards } from "../components/analytics/SummaryCards"
+import { TimeRangeSelector } from "../components/analytics/TimeRangeSelector"
+import { useAnalyticsStore } from "../stores/analytics-store"
 
 export function AnalyticsPage() {
   const loading = useAnalyticsStore((s) => s.loading)
@@ -29,30 +29,30 @@ export function AnalyticsPage() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
       <div className="mx-auto max-w-5xl space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-bold text-fg">统计</h1>
-        <TimeRangeSelector />
-      </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-xl font-bold text-fg">统计</h1>
+          <TimeRangeSelector />
+        </div>
 
-      {loading && !hasLoaded ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-5 w-5 animate-spin text-fg-5" />
-        </div>
-      ) : isEmpty ? (
-        <div className="flex flex-col items-center gap-2 py-16 text-fg-5">
-          <BarChart3 className="h-8 w-8 text-fg-6" />
-          <span className="text-sm">该时间范围内暂无消耗数据</span>
-        </div>
-      ) : (
-        <>
-          <SummaryCards />
-          <CostTrendChart />
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <CostByRepoChart />
-            <CostByAgentChart />
+        {loading && !hasLoaded ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-5 w-5 animate-spin text-fg-5" />
           </div>
-        </>
-      )}
+        ) : isEmpty ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-fg-5">
+            <BarChart3 className="h-8 w-8 text-fg-6" />
+            <span className="text-sm">该时间范围内暂无消耗数据</span>
+          </div>
+        ) : (
+          <>
+            <SummaryCards />
+            <CostTrendChart />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <CostByRepoChart />
+              <CostByAgentChart />
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

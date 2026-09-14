@@ -1,8 +1,8 @@
-import { eq, and, isNull, isNotNull, desc, inArray, not, like } from "drizzle-orm"
+import { and, desc, eq, inArray, isNotNull, isNull, like, not } from "drizzle-orm"
 import { db } from "../db/index"
-import { agentMemories, sessions as sessionsTable, customAgents } from "../db/schema"
-import type { MemoryVersion } from "../db/schema"
 import { getMessagesFromDB, getTodosFromDB } from "../db/query"
+import type { MemoryVersion } from "../db/schema"
+import { agentMemories, customAgents, sessions as sessionsTable } from "../db/schema"
 import { logger } from "../middleware/logger"
 
 export type ExtractionAction =
@@ -64,7 +64,10 @@ export interface ExtractionInputData {
   memories: Array<{ id: string; category: string; content: string; importance: number }>
 }
 
-export async function buildExtractionData(sessionId: string, customAgentId: string): Promise<ExtractionInputData | null> {
+export async function buildExtractionData(
+  sessionId: string,
+  customAgentId: string,
+): Promise<ExtractionInputData | null> {
   const dbMessages = await getMessagesFromDB(sessionId)
   if (dbMessages.length === 0) return null
 
@@ -79,7 +82,10 @@ export async function buildExtractionData(sessionId: string, customAgentId: stri
         const text = (p.content as string) ?? (p.text as string) ?? ""
         if (text.trim()) lines.push({ role, content: text })
       } else if (part.type === "tool-call" || part.type === "tool-result") {
-        const toolName = (part as Record<string, unknown>).toolName as string ?? (part as Record<string, unknown>).tool as string ?? "tool"
+        const toolName =
+          ((part as Record<string, unknown>).toolName as string) ??
+          ((part as Record<string, unknown>).tool as string) ??
+          "tool"
         const input = JSON.stringify((part as Record<string, unknown>).input ?? "").slice(0, TOOL_SUMMARY_LIMIT)
         const output = JSON.stringify((part as Record<string, unknown>).output ?? "").slice(0, TOOL_SUMMARY_LIMIT)
         if (part.type === "tool-call") {
@@ -110,17 +116,21 @@ export async function buildExtractionData(sessionId: string, customAgentId: stri
     messages = [...head, { role: "系统", content: `[... 省略 ${skipped} 条中间对话 ...]` }, ...tail]
   }
 
-  const todos = (await getTodosFromDB(sessionId)).map(t => ({ status: t.status, content: t.content }))
+  const todos = (await getTodosFromDB(sessionId)).map((t) => ({ status: t.status, content: t.content }))
 
-  const existing = await db.select().from(agentMemories)
-    .where(and(
-      eq(agentMemories.customAgentId, customAgentId),
-      isNull(agentMemories.supersededBy),
-    ))
+  const existing = await db
+    .select()
+    .from(agentMemories)
+    .where(and(eq(agentMemories.customAgentId, customAgentId), isNull(agentMemories.supersededBy)))
     .orderBy(desc(agentMemories.importance))
     .limit(MAX_EXISTING_MEMORIES)
 
-  const memories = existing.map(m => ({ id: m.id, category: m.category, content: m.content, importance: m.importance }))
+  const memories = existing.map((m) => ({
+    id: m.id,
+    category: m.category,
+    content: m.content,
+    importance: m.importance,
+  }))
 
   return { messages, todos, memories }
 }
@@ -138,14 +148,18 @@ export function parseExtractionResult(text: string, opts: ParseOptions = {}): Ex
   try {
     const parsed = JSON.parse(text)
     if (Array.isArray(parsed)) return validateActions(parsed, opts)
-  } catch { /* fallback */ }
+  } catch {
+    /* fallback */
+  }
 
   const match = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
   if (match?.[1]) {
     try {
       const parsed = JSON.parse(match[1])
       if (Array.isArray(parsed)) return validateActions(parsed, opts)
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   const arrayMatch = text.match(/\[\s*\{[\s\S]*?\}\s*\]/)
@@ -153,7 +167,9 @@ export function parseExtractionResult(text: string, opts: ParseOptions = {}): Ex
     try {
       const parsed = JSON.parse(arrayMatch[0])
       if (Array.isArray(parsed)) return validateActions(parsed, opts)
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   logger.warn({ text: text.slice(0, 200) }, "failed to parse extraction result as JSON")
@@ -194,9 +210,15 @@ function validateActions(raw: unknown[], opts: ParseOptions = {}): ExtractionAct
       case "update": {
         if (typeof obj.targetId !== "string" || typeof obj.content !== "string") continue
         const updateContent = sanitizeMemoryContent(obj.content, maxLen)
-        const updateCheck = validateMemoryContent(updateContent, { maxLength: maxLen, skipForbiddenPatterns: skipForbidden })
+        const updateCheck = validateMemoryContent(updateContent, {
+          maxLength: maxLen,
+          skipForbiddenPatterns: skipForbidden,
+        })
         if (!updateCheck.ok) {
-          logger.info({ reason: updateCheck.reason, targetId: obj.targetId, content: updateContent.slice(0, 80) }, "memory rejected (update)")
+          logger.info(
+            { reason: updateCheck.reason, targetId: obj.targetId, content: updateContent.slice(0, 80) },
+            "memory rejected (update)",
+          )
           continue
         }
         actions.push({
@@ -211,9 +233,15 @@ function validateActions(raw: unknown[], opts: ParseOptions = {}): ExtractionAct
       case "merge": {
         if (!Array.isArray(obj.targetIds) || typeof obj.content !== "string") continue
         const mergeContent = sanitizeMemoryContent(obj.content, maxLen)
-        const mergeCheck = validateMemoryContent(mergeContent, { maxLength: maxLen, skipForbiddenPatterns: skipForbidden })
+        const mergeCheck = validateMemoryContent(mergeContent, {
+          maxLength: maxLen,
+          skipForbiddenPatterns: skipForbidden,
+        })
         if (!mergeCheck.ok) {
-          logger.info({ reason: mergeCheck.reason, targetIds: obj.targetIds, content: mergeContent.slice(0, 80) }, "memory rejected (merge)")
+          logger.info(
+            { reason: mergeCheck.reason, targetIds: obj.targetIds, content: mergeContent.slice(0, 80) },
+            "memory rejected (merge)",
+          )
           continue
         }
         actions.push({
@@ -249,7 +277,11 @@ function validateActions(raw: unknown[], opts: ParseOptions = {}): ExtractionAct
   return actions
 }
 
-export async function executeActions(customAgentId: string, sessionId: string, actions: ExtractionAction[]): Promise<void> {
+export async function executeActions(
+  customAgentId: string,
+  sessionId: string,
+  actions: ExtractionAction[],
+): Promise<void> {
   const now = Date.now()
 
   for (const action of actions) {
@@ -281,15 +313,15 @@ export async function executeActions(customAgentId: string, sessionId: string, a
         }
 
         case "update": {
-          const [current] = await db.select({
-            content: agentMemories.content,
-            importance: agentMemories.importance,
-            category: agentMemories.category,
-            history: agentMemories.history,
-          }).from(agentMemories).where(and(
-            eq(agentMemories.id, action.targetId),
-            eq(agentMemories.customAgentId, customAgentId),
-          ))
+          const [current] = await db
+            .select({
+              content: agentMemories.content,
+              importance: agentMemories.importance,
+              category: agentMemories.category,
+              history: agentMemories.history,
+            })
+            .from(agentMemories)
+            .where(and(eq(agentMemories.id, action.targetId), eq(agentMemories.customAgentId, customAgentId)))
           if (!current) break
           const prev: MemoryVersion = {
             content: current.content,
@@ -300,15 +332,15 @@ export async function executeActions(customAgentId: string, sessionId: string, a
             source: sessionId,
           }
           const history = [...(current.history ?? []), prev]
-          await db.update(agentMemories).set({
-            content: action.content,
-            importance: action.importance,
-            history,
-            updatedAt: now,
-          }).where(and(
-            eq(agentMemories.id, action.targetId),
-            eq(agentMemories.customAgentId, customAgentId),
-          ))
+          await db
+            .update(agentMemories)
+            .set({
+              content: action.content,
+              importance: action.importance,
+              history,
+              updatedAt: now,
+            })
+            .where(and(eq(agentMemories.id, action.targetId), eq(agentMemories.customAgentId, customAgentId)))
           logger.info({ memId: action.targetId, customAgentId, sessionId }, "memory updated")
           break
         }
@@ -316,16 +348,16 @@ export async function executeActions(customAgentId: string, sessionId: string, a
         case "merge": {
           const newId = newMemoryId()
           await db.transaction(async (tx) => {
-            const sourceRows = await tx.select({
-              id: agentMemories.id,
-              content: agentMemories.content,
-              importance: agentMemories.importance,
-              category: agentMemories.category,
-              history: agentMemories.history,
-            }).from(agentMemories).where(and(
-              inArray(agentMemories.id, action.targetIds),
-              eq(agentMemories.customAgentId, customAgentId),
-            ))
+            const sourceRows = await tx
+              .select({
+                id: agentMemories.id,
+                content: agentMemories.content,
+                importance: agentMemories.importance,
+                category: agentMemories.category,
+                history: agentMemories.history,
+              })
+              .from(agentMemories)
+              .where(and(inArray(agentMemories.id, action.targetIds), eq(agentMemories.customAgentId, customAgentId)))
 
             const combinedHistory: MemoryVersion[] = []
             for (const src of sourceRows) {
@@ -353,13 +385,13 @@ export async function executeActions(customAgentId: string, sessionId: string, a
               updatedAt: now,
             })
             for (const oldId of action.targetIds) {
-              await tx.update(agentMemories).set({
-                supersededBy: newId,
-                updatedAt: now,
-              }).where(and(
-                eq(agentMemories.id, oldId),
-                eq(agentMemories.customAgentId, customAgentId),
-              ))
+              await tx
+                .update(agentMemories)
+                .set({
+                  supersededBy: newId,
+                  updatedAt: now,
+                })
+                .where(and(eq(agentMemories.id, oldId), eq(agentMemories.customAgentId, customAgentId)))
             }
           })
           logger.info({ newId, merged: action.targetIds, customAgentId, sessionId }, "memories merged")
@@ -367,15 +399,15 @@ export async function executeActions(customAgentId: string, sessionId: string, a
         }
 
         case "reinforce": {
-          const [existing] = await db.select({
-            importance: agentMemories.importance,
-            content: agentMemories.content,
-            category: agentMemories.category,
-            history: agentMemories.history,
-          }).from(agentMemories).where(and(
-            eq(agentMemories.id, action.targetId),
-            eq(agentMemories.customAgentId, customAgentId),
-          ))
+          const [existing] = await db
+            .select({
+              importance: agentMemories.importance,
+              content: agentMemories.content,
+              category: agentMemories.category,
+              history: agentMemories.history,
+            })
+            .from(agentMemories)
+            .where(and(eq(agentMemories.id, action.targetId), eq(agentMemories.customAgentId, customAgentId)))
           if (existing) {
             const newImportance = Math.min(existing.importance * 1.2, 1.0)
             const prev: MemoryVersion = {
@@ -387,26 +419,29 @@ export async function executeActions(customAgentId: string, sessionId: string, a
               source: sessionId,
             }
             const history = [...(existing.history ?? []), prev]
-            await db.update(agentMemories).set({
-              importance: newImportance,
-              history,
-              updatedAt: now,
-            }).where(eq(agentMemories.id, action.targetId))
+            await db
+              .update(agentMemories)
+              .set({
+                importance: newImportance,
+                history,
+                updatedAt: now,
+              })
+              .where(eq(agentMemories.id, action.targetId))
             logger.info({ memId: action.targetId, importance: newImportance, customAgentId }, "memory reinforced")
           }
           break
         }
 
         case "delete": {
-          const [current] = await db.select({
-            content: agentMemories.content,
-            importance: agentMemories.importance,
-            category: agentMemories.category,
-            history: agentMemories.history,
-          }).from(agentMemories).where(and(
-            eq(agentMemories.id, action.targetId),
-            eq(agentMemories.customAgentId, customAgentId),
-          ))
+          const [current] = await db
+            .select({
+              content: agentMemories.content,
+              importance: agentMemories.importance,
+              category: agentMemories.category,
+              history: agentMemories.history,
+            })
+            .from(agentMemories)
+            .where(and(eq(agentMemories.id, action.targetId), eq(agentMemories.customAgentId, customAgentId)))
           if (!current) break
           const prev: MemoryVersion = {
             content: current.content,
@@ -417,24 +452,26 @@ export async function executeActions(customAgentId: string, sessionId: string, a
             source: sessionId,
           }
           const history = [...(current.history ?? []), prev]
-          await db.update(agentMemories).set({
-            supersededBy: "consolidated-out",
-            history,
-            updatedAt: now,
-          }).where(and(
-            eq(agentMemories.id, action.targetId),
-            eq(agentMemories.customAgentId, customAgentId),
-          ))
-          logger.info({ memId: action.targetId, reason: action.reason, customAgentId, sessionId }, "memory deleted (consolidated-out)")
+          await db
+            .update(agentMemories)
+            .set({
+              supersededBy: "consolidated-out",
+              history,
+              updatedAt: now,
+            })
+            .where(and(eq(agentMemories.id, action.targetId), eq(agentMemories.customAgentId, customAgentId)))
+          logger.info(
+            { memId: action.targetId, reason: action.reason, customAgentId, sessionId },
+            "memory deleted (consolidated-out)",
+          )
           break
         }
 
         case "skip": {
-          await db.update(agentMemories).set({ updatedAt: now })
-            .where(and(
-              eq(agentMemories.id, action.targetId),
-              eq(agentMemories.customAgentId, customAgentId),
-            ))
+          await db
+            .update(agentMemories)
+            .set({ updatedAt: now })
+            .where(and(eq(agentMemories.id, action.targetId), eq(agentMemories.customAgentId, customAgentId)))
           break
         }
       }
@@ -445,26 +482,30 @@ export async function executeActions(customAgentId: string, sessionId: string, a
 }
 
 export async function getSessionCustomAgentId(sessionId: string): Promise<string | null> {
-  const [session] = await db.select({ customAgentId: sessionsTable.customAgentId })
+  const [session] = await db
+    .select({ customAgentId: sessionsTable.customAgentId })
     .from(sessionsTable)
     .where(eq(sessionsTable.id, sessionId))
   if (!session?.customAgentId) return null
 
-  const [agent] = await db.select({ memoryEnabled: customAgents.memoryEnabled })
+  const [agent] = await db
+    .select({ memoryEnabled: customAgents.memoryEnabled })
     .from(customAgents)
     .where(eq(customAgents.id, session.customAgentId))
-  if (!agent || agent.memoryEnabled !== 1) return null
+  if (agent?.memoryEnabled !== 1) return null
 
   return session.customAgentId
 }
 
 export async function sessionNeedsExtraction(sessionId: string): Promise<boolean> {
-  const [session] = await db.select({ timeUpdated: sessionsTable.timeUpdated })
+  const [session] = await db
+    .select({ timeUpdated: sessionsTable.timeUpdated })
     .from(sessionsTable)
     .where(eq(sessionsTable.id, sessionId))
   if (!session) return false
 
-  const [latestMemory] = await db.select({ createdAt: agentMemories.createdAt })
+  const [latestMemory] = await db
+    .select({ createdAt: agentMemories.createdAt })
     .from(agentMemories)
     .where(eq(agentMemories.sessionId, sessionId))
     .orderBy(desc(agentMemories.createdAt))
@@ -475,18 +516,21 @@ export async function sessionNeedsExtraction(sessionId: string): Promise<boolean
 }
 
 export async function listExtractableSessions(): Promise<Array<{ id: string; customAgentId: string }>> {
-  const rows = await db.select({
-    id: sessionsTable.id,
-    customAgentId: sessionsTable.customAgentId,
-    timeUpdated: sessionsTable.timeUpdated,
-  })
+  const rows = await db
+    .select({
+      id: sessionsTable.id,
+      customAgentId: sessionsTable.customAgentId,
+      timeUpdated: sessionsTable.timeUpdated,
+    })
     .from(sessionsTable)
     .innerJoin(customAgents, eq(sessionsTable.customAgentId, customAgents.id))
-    .where(and(
-      isNotNull(sessionsTable.customAgentId),
-      eq(customAgents.memoryEnabled, 1),
-      not(like(sessionsTable.title, "[internal]%")),
-    ))
+    .where(
+      and(
+        isNotNull(sessionsTable.customAgentId),
+        eq(customAgents.memoryEnabled, 1),
+        not(like(sessionsTable.title, "[internal]%")),
+      ),
+    )
 
   const result: Array<{ id: string; customAgentId: string }> = []
   for (const row of rows) {

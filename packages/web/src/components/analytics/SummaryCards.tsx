@@ -1,8 +1,8 @@
-import { DollarSign, MessageSquare, Zap } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { useAnalyticsStore } from "../../stores/analytics-store"
-import { formatCost, formatTokens } from "../../lib/format"
+import { DollarSign, MessageSquare, Zap } from "lucide-react"
 import type { AnalyticsGroup, AnalyticsSummary } from "../../lib/api-client"
+import { formatCost, formatTokens } from "../../lib/format"
+import { useAnalyticsStore } from "../../stores/analytics-store"
 
 interface Split {
   user: AnalyticsSummary

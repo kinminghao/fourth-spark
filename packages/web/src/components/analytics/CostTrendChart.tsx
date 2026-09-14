@@ -1,8 +1,8 @@
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { useMemo } from "react"
-import { useAnalyticsStore } from "../../stores/analytics-store"
-import { formatCost } from "../../lib/format"
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import type { AnalyticsGroup } from "../../lib/api-client"
+import { formatCost } from "../../lib/format"
+import { useAnalyticsStore } from "../../stores/analytics-store"
 
 interface TrendPoint {
   date: string

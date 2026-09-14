@@ -1,6 +1,6 @@
+import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { z } from "zod"
-import { eq } from "drizzle-orm"
 import { db } from "../db/index"
 import { gitHosts } from "../db/schema"
 import { parseBody } from "../lib/validation"
@@ -68,5 +68,5 @@ gitHostRoutes.delete("/:id", async (c) => {
 
 function maskToken(token: string): string {
   if (token.length <= 8) return "••••••••"
-  return token.slice(0, 4) + "••••" + token.slice(-4)
+  return `${token.slice(0, 4)}••••${token.slice(-4)}`
 }

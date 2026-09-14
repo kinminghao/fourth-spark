@@ -1,14 +1,22 @@
-import { Hono } from "hono"
+import { existsSync, mkdirSync } from "node:fs"
+import { homedir } from "node:os"
+import { basename, join, resolve } from "node:path"
 import { eq } from "drizzle-orm"
-import { basename, resolve, join } from "node:path"
+import { Hono } from "hono"
 import { z } from "zod"
 import { db } from "../db/index"
 import { repos } from "../db/schema"
+import {
+  classifyGitError,
+  cleanupStaleLock,
+  isValidGitBranchName,
+  pruneRemoteRefs,
+  runGit,
+  runGitWithRetry,
+  withRepoLock,
+} from "../lib/git-runner"
+import { normalizeGitUrl, parseGitUrl } from "../lib/git-url"
 import { runtimeManager } from "../lib/process-manager"
-import { existsSync, mkdirSync } from "node:fs"
-import { homedir } from "node:os"
-import { runGit, runGitWithRetry, withRepoLock, cleanupStaleLock, pruneRemoteRefs, classifyGitError, isValidGitBranchName } from "../lib/git-runner"
-import { parseGitUrl, normalizeGitUrl } from "../lib/git-url"
 import { parseBody } from "../lib/validation"
 
 const ResolveRepoBody = z.object({
@@ -38,7 +46,7 @@ export const repoRoutes = new Hono()
 
 function getBranch(localPath: string): string | null {
   const result = runGit(["rev-parse", "--abbrev-ref", "HEAD"], localPath, { timeout: 5_000 })
-  return result.ok ? (result.stdout || null) : null
+  return result.ok ? result.stdout || null : null
 }
 
 // POST /api/repos/resolve — read .git directory to extract repo name and remote URL.
@@ -76,9 +84,7 @@ repoRoutes.post("/clone", async (c) => {
   const repoName = parsed?.repo ?? (basename(gitUrl).replace(/\.git$/, "") || "repo")
 
   const defaultBase = join(homedir(), ".fourth-spark", "repos")
-  const targetDir = body.targetDir?.trim()
-    ? resolve(body.targetDir.trim())
-    : join(defaultBase, repoName)
+  const targetDir = body.targetDir?.trim() ? resolve(body.targetDir.trim()) : join(defaultBase, repoName)
 
   if (body.targetDir?.includes("..")) {
     return c.json({ error: "目标路径不允许包含 '..'" }, 400)
@@ -95,11 +101,7 @@ repoRoutes.post("/clone", async (c) => {
     return c.json({ error: `无法创建父目录: ${parentDir}` }, 500)
   }
 
-  const result = await runGitWithRetry(
-    ["clone", "--", gitUrl, targetDir],
-    parentDir,
-    { timeout: 300_000 },
-  )
+  const result = await runGitWithRetry(["clone", "--", gitUrl, targetDir], parentDir, { timeout: 300_000 })
 
   if (!result.ok) {
     const errorInfo = classifyGitError(result.stdout, result.stderr)
@@ -124,9 +126,15 @@ repoRoutes.post("/", async (c) => {
 
   const runtimeType = body.runtimeType ?? "opencode"
 
-  const [existing] = await db.select({ id: repos.id, name: repos.name }).from(repos).where(eq(repos.localPath, body.localPath))
+  const [existing] = await db
+    .select({ id: repos.id, name: repos.name })
+    .from(repos)
+    .where(eq(repos.localPath, body.localPath))
   if (existing) {
-    return c.json({ error: `Local path already registered as repo "${existing.name}". Delete it first before re-adding.` }, 409)
+    return c.json(
+      { error: `Local path already registered as repo "${existing.name}". Delete it first before re-adding.` },
+      409,
+    )
   }
 
   const id = crypto.randomUUID()
@@ -169,9 +177,17 @@ repoRoutes.get("/", async (c) => {
 
 // GET /api/repos/:id — get a single repo.
 repoRoutes.get("/:id", async (c) => {
-  const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
+  const [repo] = await db
+    .select()
+    .from(repos)
+    .where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found" }, 404)
-  return c.json({ ...repo, worktreeEnabled: Boolean(repo.worktreeEnabled), running: runtimeManager.isRunning(repo.id), branch: getBranch(repo.localPath) })
+  return c.json({
+    ...repo,
+    worktreeEnabled: Boolean(repo.worktreeEnabled),
+    running: runtimeManager.isRunning(repo.id),
+    branch: getBranch(repo.localPath),
+  })
 })
 
 // DELETE /api/repos/:id — stop the opencode process and remove the repo.
@@ -184,7 +200,10 @@ repoRoutes.delete("/:id", async (c) => {
 
 // POST /api/repos/:id/start — manually start a stopped repo.
 repoRoutes.post("/:id/start", async (c) => {
-  const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
+  const [repo] = await db
+    .select()
+    .from(repos)
+    .where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found" }, 404)
   try {
     await runtimeManager.start(repo.id, repo.localPath, repo.runtimeType ?? undefined)
@@ -203,32 +222,45 @@ repoRoutes.post("/:id/stop", async (c) => {
 
 // GET /api/repos/:id/branches — list all branches.
 repoRoutes.get("/:id/branches", async (c) => {
-  const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
+  const [repo] = await db
+    .select()
+    .from(repos)
+    .where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found" }, 404)
 
   const current = getBranch(repo.localPath)
 
   const result = runGit(["branch", "--format=%(refname:short)"], repo.localPath)
-  const local = result.ok && result.stdout
-    ? result.stdout.split("\n").map((b) => b.trim()).filter(Boolean)
-    : current ? [current] : []
+  const local =
+    result.ok && result.stdout
+      ? result.stdout
+          .split("\n")
+          .map((b) => b.trim())
+          .filter(Boolean)
+      : current
+        ? [current]
+        : []
 
   const remoteResult = runGit(["branch", "-r", "--format=%(refname:short)"], repo.localPath)
-  const remote = remoteResult.ok && remoteResult.stdout
-    ? remoteResult.stdout
-        .split("\n")
-        .map((b) => b.trim())
-        .filter((b) => b && !b.includes("->"))
-        .map((b) => b.replace(/^origin\//, ""))
-        .filter((b) => !local.includes(b))
-    : []
+  const remote =
+    remoteResult.ok && remoteResult.stdout
+      ? remoteResult.stdout
+          .split("\n")
+          .map((b) => b.trim())
+          .filter((b) => b && !b.includes("->"))
+          .map((b) => b.replace(/^origin\//, ""))
+          .filter((b) => !local.includes(b))
+      : []
 
   return c.json({ current, local, remote })
 })
 
 // POST /api/repos/:id/checkout — switch branch.
 repoRoutes.post("/:id/checkout", async (c) => {
-  const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
+  const [repo] = await db
+    .select()
+    .from(repos)
+    .where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found" }, 404)
 
   const [body, err] = await parseBody(c, CheckoutBody)
@@ -270,7 +302,10 @@ repoRoutes.post("/:id/checkout", async (c) => {
 
 // POST /api/repos/:id/pull — pull latest code from remote.
 repoRoutes.post("/:id/pull", async (c) => {
-  const [repo] = await db.select().from(repos).where(eq(repos.id, c.req.param("id")))
+  const [repo] = await db
+    .select()
+    .from(repos)
+    .where(eq(repos.id, c.req.param("id")))
   if (!repo) return c.json({ error: "Repo not found" }, 404)
 
   return await withRepoLock(repo.localPath, async () => {
@@ -302,7 +337,14 @@ repoRoutes.post("/:id/pull", async (c) => {
       summary += "（已自动暂存并恢复本地修改）"
     }
 
-    return c.json({ output: result.stdout, branch: getBranch(repo.localPath), summary, alreadyUpToDate, autostashed, filesChanged })
+    return c.json({
+      output: result.stdout,
+      branch: getBranch(repo.localPath),
+      summary,
+      alreadyUpToDate,
+      autostashed,
+      filesChanged,
+    })
   })
 })
 
@@ -330,6 +372,9 @@ repoRoutes.patch("/:id/worktree", async (c) => {
   const id = c.req.param("id")
   const [body, err] = await parseBody(c, UpdateWorktreeBody)
   if (err) return err
-  await db.update(repos).set({ worktreeEnabled: body.enabled ? 1 : 0, updatedAt: Date.now() }).where(eq(repos.id, id))
+  await db
+    .update(repos)
+    .set({ worktreeEnabled: body.enabled ? 1 : 0, updatedAt: Date.now() })
+    .where(eq(repos.id, id))
   return c.json({ worktreeEnabled: body.enabled })
 })

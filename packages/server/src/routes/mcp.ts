@@ -1,5 +1,5 @@
-import { Hono } from "hono"
 import { createMcpHandler } from "@modelcontextprotocol/server"
+import { Hono } from "hono"
 import { buildGitMcpServer } from "../mcp/git-tools"
 
 // ---------------------------------------------------------------------------

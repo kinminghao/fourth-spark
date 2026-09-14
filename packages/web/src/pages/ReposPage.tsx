@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import clsx from "clsx"
 import {
   AlertTriangle,
   ArrowDownToLine,
@@ -19,14 +18,15 @@ import {
   Trash2,
   X,
 } from "lucide-react"
-import clsx from "clsx"
-import * as api from "../lib/api-client"
-import { useRepoStore } from "../stores/repo-store"
-import { useToastStore } from "../stores/toast-store"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { AddRepoModal } from "../components/AddRepoModal"
 import { AgentsMdModal } from "../components/AgentsMdModal"
-import { extractHostFromGitUrl } from "../lib/git-url"
 import { useAsyncData } from "../hooks/use-async-data"
+import * as api from "../lib/api-client"
+import { extractHostFromGitUrl } from "../lib/git-url"
+import { useRepoStore } from "../stores/repo-store"
+import { useToastStore } from "../stores/toast-store"
 
 const BYTES_PER_KB = 1024
 const BYTES_PER_MB = BYTES_PER_KB * 1024
@@ -48,11 +48,16 @@ function WorkspacesSection({ repoId }: { repoId: string }) {
   const [cleaning, setCleaning] = useState(false)
   const [mutationError, setMutationError] = useState<string | null>(null)
 
-  const { data: workspaces, loading, error: loadError, reload } = useAsyncData(
-    () => api.listWorkspaces(repoId),
-    [repoId, expanded],
-    { skip: !expanded, showErrorToast: false, errorMessage: "加载失败" },
-  )
+  const {
+    data: workspaces,
+    loading,
+    error: loadError,
+    reload,
+  } = useAsyncData(() => api.listWorkspaces(repoId), [repoId, expanded], {
+    skip: !expanded,
+    showErrorToast: false,
+    errorMessage: "加载失败",
+  })
 
   const error = mutationError ?? loadError
 
@@ -175,12 +180,7 @@ function WorkspacesSection({ repoId }: { repoId: string }) {
                         <span className="text-fg-2">{branchTail}</span>
                       </span>
                     </div>
-                    <span
-                      className={clsx(
-                        "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                        statusColor,
-                      )}
-                    >
+                    <span className={clsx("shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium", statusColor)}>
                       {statusLabel}
                     </span>
                     <span className="flex shrink-0 items-center gap-0.5 text-fg-5">
@@ -229,7 +229,8 @@ export function RepoListContent() {
   const [knownHosts, setKnownHosts] = useState<Set<string> | null>(null)
 
   useEffect(() => {
-    api.listGitHosts()
+    api
+      .listGitHosts()
       .then((hosts) => setKnownHosts(new Set(hosts.map((h) => h.host.toLowerCase()))))
       .catch(() => {})
   }, [])
@@ -279,7 +280,11 @@ export function RepoListContent() {
     } catch (err) {
       let message = "拉取失败"
       if (err instanceof api.ApiError) {
-        try { message = JSON.parse(err.message).error ?? err.message } catch { message = err.message }
+        try {
+          message = JSON.parse(err.message).error ?? err.message
+        } catch {
+          message = err.message
+        }
       }
       addToast(message, "error", undefined, { persistent: true })
     }
@@ -319,7 +324,6 @@ export function RepoListContent() {
           </button>
         </div>
       ) : (
-        <>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {repos.map((repo, repoIdx) => {
             const isActive = repo.id === activeRepoId
@@ -349,9 +353,7 @@ export function RepoListContent() {
                   <span
                     className={clsx(
                       "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-                      repo.running
-                        ? "bg-emerald-500/10 text-emerald-600"
-                        : "bg-fg-6/30 text-fg-4",
+                      repo.running ? "bg-emerald-500/10 text-emerald-600" : "bg-fg-6/30 text-fg-4",
                     )}
                   >
                     <span className={clsx("h-1.5 w-1.5 rounded-full", repo.running ? "bg-emerald-500" : "bg-fg-5")} />
@@ -424,7 +426,10 @@ export function RepoListContent() {
                     {pullingId === repo.id ? (
                       <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
                     ) : (
-                      <><ArrowDownToLine className="h-3 w-3" />拉取</>
+                      <>
+                        <ArrowDownToLine className="h-3 w-3" />
+                        拉取
+                      </>
                     )}
                   </button>
                   <button
@@ -441,9 +446,15 @@ export function RepoListContent() {
                     {togglingId === repo.id ? (
                       <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
                     ) : repo.running ? (
-                      <><Square className="h-3 w-3 fill-current" />停止</>
+                      <>
+                        <Square className="h-3 w-3 fill-current" />
+                        停止
+                      </>
                     ) : (
-                      <><Play className="h-3 w-3 fill-current" />启动</>
+                      <>
+                        <Play className="h-3 w-3 fill-current" />
+                        启动
+                      </>
                     )}
                   </button>
                   <div className="relative" ref={menuOpenId === repo.id ? menuRef : undefined}>
@@ -456,7 +467,10 @@ export function RepoListContent() {
                       <Ellipsis className="h-4 w-4" />
                     </button>
                     {menuOpenId === repo.id && (
-                      <div data-guide={repoIdx === 0 ? "repo-overflow-dropdown" : undefined} className="absolute right-0 top-full z-20 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-line bg-elevated shadow-lg">
+                      <div
+                        data-guide={repoIdx === 0 ? "repo-overflow-dropdown" : undefined}
+                        className="absolute right-0 top-full z-20 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-line bg-elevated shadow-lg"
+                      >
                         <button
                           type="button"
                           className={clsx(
@@ -483,7 +497,12 @@ export function RepoListContent() {
                         >
                           <GitBranch className="h-3 w-3" />
                           <span>Worktree</span>
-                          <span className={clsx("ml-auto text-[10px]", repo.worktreeEnabled ? "text-violet-500" : "text-fg-5")}>
+                          <span
+                            className={clsx(
+                              "ml-auto text-[10px]",
+                              repo.worktreeEnabled ? "text-violet-500" : "text-fg-5",
+                            )}
+                          >
                             {repo.worktreeEnabled ? "已开启" : "已关闭"}
                           </span>
                         </button>
@@ -520,10 +539,14 @@ export function RepoListContent() {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => { void removeRepo(repo.id); setConfirmingId(null) }}
+                        onClick={() => {
+                          void removeRepo(repo.id)
+                          setConfirmingId(null)
+                        }}
                         className="flex h-6 items-center gap-1 rounded border border-red-500/30 px-2 text-xs text-red-500 transition-colors hover:bg-red-500/10"
                       >
-                        <Check className="h-3 w-3" />确认
+                        <Check className="h-3 w-3" />
+                        确认
                       </button>
                       <button
                         type="button"
@@ -541,18 +564,13 @@ export function RepoListContent() {
             )
           })}
         </div>
-        </>
       )}
 
       <p className="mt-3 text-xs text-fg-5">{repos.length} 个仓库</p>
 
       {showAdd && <AddRepoModal onClose={() => setShowAdd(false)} />}
       {agentsMdRepo && (
-        <AgentsMdModal
-          repoId={agentsMdRepo.id}
-          repoName={agentsMdRepo.name}
-          onClose={() => setAgentsMdRepo(null)}
-        />
+        <AgentsMdModal repoId={agentsMdRepo.id} repoName={agentsMdRepo.name} onClose={() => setAgentsMdRepo(null)} />
       )}
     </>
   )

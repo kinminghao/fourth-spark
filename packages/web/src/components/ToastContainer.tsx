@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { useToastStore, type Toast, type ToastVariant } from "../stores/toast-store"
+import { TOAST_DURATION_MS, TOAST_EXIT_MS } from "../lib/constants"
+import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 import { useSessionStore } from "../stores/session-store"
-import { useRepoStore, selectActiveRepoName } from "../stores/repo-store"
-import { TOAST_EXIT_MS, TOAST_DURATION_MS } from "../lib/constants"
+import { type Toast, type ToastVariant, useToastStore } from "../stores/toast-store"
 
 type RenderToast = Toast & { exiting?: boolean }
 
@@ -47,9 +47,7 @@ export function ToastContainer() {
   useEffect(() => {
     const liveIds = new Set(toasts.map((t) => t.id))
     setRendered((prev) => {
-      let next = prev.map((r) =>
-        liveIds.has(r.id) || r.exiting ? r : { ...r, exiting: true },
-      )
+      let next = prev.map((r) => (liveIds.has(r.id) || r.exiting ? r : { ...r, exiting: true }))
       for (const t of toasts) {
         if (!next.some((r) => r.id === t.id)) next = [...next, { ...t }]
       }
@@ -111,14 +109,15 @@ export function ToastContainer() {
                 >
                   {cfg.icon}
                 </span>
-                <p className="min-w-0 flex-1 text-sm leading-snug break-words text-fg">
-                  {t.message}
-                </p>
+                <p className="min-w-0 flex-1 text-sm leading-snug break-words text-fg">{t.message}</p>
                 {t.persistent && !t.exiting && (
                   <button
                     type="button"
                     aria-label="关闭"
-                    onClick={(e) => { e.stopPropagation(); removeToast(t.id) }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      removeToast(t.id)
+                    }}
                     className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-fg-4 transition-colors hover:bg-fg/10 hover:text-fg"
                   >
                     ✕
