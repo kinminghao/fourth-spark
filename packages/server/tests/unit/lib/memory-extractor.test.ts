@@ -4,7 +4,7 @@ import {
   validateMemoryContent,
   normalizeCategory,
   MAX_CONSOLIDATION_CONTENT_LENGTH,
-} from "../../src/lib/memory-extractor"
+} from "../../../src/lib/memory-extractor"
 
 describe("sanitizeMemoryContent", () => {
   test("passes clean content through", () => {

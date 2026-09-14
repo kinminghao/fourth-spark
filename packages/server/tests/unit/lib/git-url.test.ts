@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parseGitUrl, normalizeGitUrl } from "../../src/lib/git-url"
+import { parseGitUrl, normalizeGitUrl } from "../../../src/lib/git-url"
 
 describe("parseGitUrl", () => {
   test("SSH format", () => {

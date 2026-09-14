@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach } from "bun:test"
-import { createDefaultRegistry, initRegistry, getRegistry } from "../../src/core/registry"
+import { createDefaultRegistry, initRegistry, getRegistry } from "../../../src/core/registry"
 
 describe("createDefaultRegistry", () => {
   test("returns registry with default gitPlatforms", () => {

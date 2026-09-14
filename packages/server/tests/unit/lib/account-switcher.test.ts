@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { isUsageLimit, parseResetMsFromMessage } from "../../src/lib/account-switcher"
+import { isUsageLimit, parseResetMsFromMessage } from "../../../src/lib/account-switcher"
 
 describe("isUsageLimit", () => {
   test("returns false for undefined/empty", () => {

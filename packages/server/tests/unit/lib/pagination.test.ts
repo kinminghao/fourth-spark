@@ -4,7 +4,7 @@ import {
   paginatedResponse,
   DEFAULT_LIMIT,
   MAX_LIMIT,
-} from "../../src/lib/pagination"
+} from "../../../src/lib/pagination"
 
 describe("parsePagination", () => {
   test("defaults when no params", () => {

@@ -9,6 +9,7 @@
     "build": "bun run --filter '*' build",
     "test": "bun run test:server && bun run test:web",
     "test:server": "bun run --filter server test",
-    "test:web": "bun run --filter web test"
+    "test:web": "bun run --filter web test",
+    "test:db": "bun run --filter server test:db"
   }
 }

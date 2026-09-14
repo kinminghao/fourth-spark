@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Hono } from "hono"
-import { corsMiddleware } from "../../src/middleware/cors"
+import { corsMiddleware } from "../../../src/middleware/cors"
 
 // Build a minimal app with CORS middleware + a test route
 function createApp() {

@@ -3,7 +3,7 @@ import { describe, expect, test, mock, beforeEach } from "bun:test"
 // Mock process-manager to avoid heavy runtime initialization
 const mockGetClient = mock(() => null)
 const mockHealthCheck = mock(() => Promise.resolve({ reachable: false }))
-mock.module("../../src/lib/process-manager", () => ({
+mock.module("../../../src/lib/process-manager", () => ({
   runtimeManager: {
     getClient: mockGetClient,
     healthCheck: mockHealthCheck,
@@ -13,7 +13,7 @@ mock.module("../../src/lib/process-manager", () => ({
 // Mock global fetch for GitHub API version check
 const originalFetch = globalThis.fetch
 
-const { health, repoHealth } = await import("../../src/routes/health")
+const { health, repoHealth } = await import("../../../src/routes/health")
 
 describe("health route — GET /", () => {
   beforeEach(() => {

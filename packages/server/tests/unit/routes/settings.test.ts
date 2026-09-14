@@ -17,7 +17,7 @@ const mockDelete = mock(() => ({
   where: mock(() => Promise.resolve()),
 }))
 
-mock.module("../../src/db/index", () => ({
+mock.module("../../../src/db/index", () => ({
   db: {
     select: mockSelect,
     insert: mockInsert,
@@ -25,7 +25,7 @@ mock.module("../../src/db/index", () => ({
   },
 }))
 
-const { settingsRoutes } = await import("../../src/routes/settings")
+const { settingsRoutes } = await import("../../../src/routes/settings")
 
 describe("settings routes", () => {
   beforeEach(() => {

@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "bun run --watch src/index.ts",
-    "test": "bun test tests/"
+    "test": "bun test tests/unit/",
+    "test:db": "bun test --preload ./tests/integration/setup.ts tests/integration/"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",

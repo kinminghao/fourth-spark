@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { onError } from "../../src/middleware/errors"
-import { RuntimeError } from "../../src/core/runtime-types"
+import { onError } from "../../../src/middleware/errors"
+import { RuntimeError } from "../../../src/core/runtime-types"
 import type { Context } from "hono"
 
 // onError doesn't use the Context parameter (it's prefixed with _c)

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { sanitizeForPg, num, str } from "../../src/db/sync"
+import { sanitizeForPg, num, str } from "../../../src/db/sync"
 
 describe("sanitizeForPg", () => {
   test("passes clean strings through", () => {

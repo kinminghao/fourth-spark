@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
-import { childEnv } from "../../src/lib/child-env"
+import { childEnv } from "../../../src/lib/child-env"
 
 describe("childEnv", () => {
   const savedEnv: Record<string, string | undefined> = {}

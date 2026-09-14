@@ -7,8 +7,27 @@ on:
     branches: [main]
 
 jobs:
-  test-server:
-    name: Server Tests
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.x"
+
+      - run: bun install --frozen-lockfile
+
+      - name: Server unit tests
+        run: bun run test:server
+
+      - name: Web tests
+        run: bun run test:web
+
+  test-db:
+    name: DB Integration Tests
     runs-on: ubuntu-latest
 
     services:
@@ -35,23 +54,7 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - name: Run server tests
-        run: bun run test:server
+      - name: DB integration tests
+        run: bun run test:db
         env:
           TEST_DATABASE_URL: postgresql://fourth_spark:fourth_spark@localhost:5460/fourth_spark_test
-
-  test-web:
-    name: Web Tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.x"
-
-      - run: bun install --frozen-lockfile
-
-      - name: Run web tests
-        run: bun run test:web

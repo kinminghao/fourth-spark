@@ -5,7 +5,7 @@ import {
   isWorkerMode,
   getWorkerConfig,
   getDefaultWorkerId,
-} from "../../src/lib/config"
+} from "../../../src/lib/config"
 
 // Helper: create a mock getSetting function
 function mockGetSetting(values: Record<string, string | undefined>) {
