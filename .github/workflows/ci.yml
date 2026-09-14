@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test-server:
+    name: Server Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fourth_spark
+          POSTGRES_PASSWORD: fourth_spark
+          POSTGRES_DB: fourth_spark_test
+        ports:
+          - 5460:5432
+        options: >-
+          --health-cmd="pg_isready -U fourth_spark"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.x"
+
+      - run: bun install --frozen-lockfile
+
+      - name: Run server tests
+        run: bun run test:server
+        env:
+          TEST_DATABASE_URL: postgresql://fourth_spark:fourth_spark@localhost:5460/fourth_spark_test
+
+  test-web:
+    name: Web Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.x"
+
+      - run: bun install --frozen-lockfile
+
+      - name: Run web tests
+        run: bun run test:web
