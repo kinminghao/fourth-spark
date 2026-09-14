@@ -46,6 +46,7 @@ export const EMPTY_TODOS: readonly Todo[] = []
 export const EMPTY_QUEUE: readonly string[] = []
 
 const _pendingQueueMarks: Record<string, number> = {}
+const _manualTitles = new Set<string>()
 
 function partKey(part: MessagePart): string | undefined {
   return part.id ?? part.callID
@@ -560,9 +561,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const exists = state.sessions.some((s) => s.id === info.id)
       if (exists) {
         return {
-          sessions: state.sessions.map((s) =>
-            s.id === info.id ? { ...s, ...info } : s,
-          ),
+          sessions: state.sessions.map((s) => {
+            if (s.id !== info.id) return s
+            const merged = { ...s, ...info }
+            if (_manualTitles.has(info.id) && s.title) {
+              merged.title = s.title
+            }
+            return merged
+          }),
         }
       }
       // New session (e.g. child session spawned by task tool) — add it
@@ -605,6 +611,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   renameSession: async (repoId, id, title) => {
+    _manualTitles.add(id)
     set((state) => ({
       sessions: state.sessions.map((s) =>
         s.id === id ? { ...s, title } : s,
@@ -613,6 +620,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       await api.renameSession(repoId, id, title)
     } catch {
+      _manualTitles.delete(id)
       await get().loadSessions(repoId)
     }
   },

@@ -77,7 +77,11 @@ async function upsertSession(props: R): Promise<void> {
     timeCreated: num((props.time as R)?.created, now),
     timeUpdated: num((props.time as R)?.updated, now),
   }
-  const { id: _, timeCreated: __, ...updateSet } = values
+  // Exclude `title` from updates — user-renamed titles (set via PATCH) must
+  // not be overwritten by runtime sync.  Title is only written on INSERT
+  // (new session); the list endpoint falls back to the live title when the
+  // DB title is empty, so AI-generated titles still surface correctly.
+  const { id: _, timeCreated: __, title: _title, ...updateSet } = values
   await db.insert(sessions).values(values).onConflictDoUpdate({ target: sessions.id, set: updateSet })
 }
 

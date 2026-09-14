@@ -276,7 +276,7 @@ export function registerCrudRoutes(app: Hono): void {
     ])
 
     const session = liveSession
-      ? { ...liveSession, ...(dbSession ? { cost: dbSession.cost, tokens: dbSession.tokens, model: dbSession.model } : {}) }
+      ? { ...liveSession, ...(dbSession ? { cost: dbSession.cost, tokens: dbSession.tokens, model: dbSession.model, ...(dbSession.title ? { title: dbSession.title } : {}) } : {}) }
       : dbSession
     const todos = liveTodos ?? await getTodosFromDB(sessionId)
 
