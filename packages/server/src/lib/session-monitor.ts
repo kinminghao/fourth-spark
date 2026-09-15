@@ -528,7 +528,10 @@ async function startExtraction(
     logger.warn({ err, sourceSessionId }, "memory extraction failed")
   } finally {
     const debugKeep = process.env.MEMORY_DEBUG === "true"
-    if (extractionSessionId && !debugKeep) client.deleteSession(extractionSessionId).catch(() => {})
+    if (extractionSessionId && !debugKeep) {
+      client.deleteSession(extractionSessionId).catch(() => {})
+      db.delete(sessionsTable).where(eq(sessionsTable.id, extractionSessionId)).catch(() => {})
+    }
     if (!debugKeep) {
       try {
         await unlink(inputPath)
