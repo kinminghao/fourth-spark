@@ -664,17 +664,19 @@ export function RunView({
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+
+  // Must fire before the scroll effect below — React runs effects in definition order
+  useEffect(() => {
+    stickToBottomRef.current = true
+    setShowScrollToBottom(false)
+  }, [activeSessionId])
+
   useEffect(() => {
     const element = scrollRef.current
     if (element && stickToBottomRef.current) {
       element.scrollTop = element.scrollHeight
     }
-  }, [])
-
-  useEffect(() => {
-    stickToBottomRef.current = true
-    setShowScrollToBottom(false)
-  }, [])
+  }, [messages])
 
   useEffect(() => {
     if (status !== "busy" && status !== "retry") return
