@@ -120,7 +120,8 @@ function extractSessionInfo(data: unknown): (Partial<Session> & { id: string }) 
   if (!props || typeof props.id !== "string") return null
 
   const info: Partial<Session> & { id: string } = { id: props.id as string }
-  if (typeof props.title === "string") info.title = props.title
+  const title = typeof props.title === "string" ? props.title : typeof props.name === "string" ? props.name : undefined
+  if (title) info.title = title
   if (typeof props.agent === "string") info.agent = props.agent
   if (typeof props.cost === "number") info.cost = props.cost
   const parentID =
