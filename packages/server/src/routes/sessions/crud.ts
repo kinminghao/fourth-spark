@@ -140,7 +140,7 @@ export function registerCrudRoutes(app: Hono): void {
       .insert(sessionsTable)
       .values({
         id: session.id,
-        title: session.title ?? body.title ?? "",
+        title: body.title ?? "",
         repoId,
         workspaceId,
         issueId: body.issueId ?? null,
