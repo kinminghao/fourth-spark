@@ -1,4 +1,5 @@
 import { repoEventsUrl } from "./api-client"
+import { getAuthToken } from "./config"
 import { freezeMonitor } from "./freeze-monitor"
 import { parseEventData } from "./sse-events"
 
@@ -36,7 +37,12 @@ export class GlobalEventDispatcher {
 
   private connect(): void {
     if (this.disposed) return
-    const url = repoEventsUrl(this.repoId)
+    let url = repoEventsUrl(this.repoId)
+    const token = getAuthToken()
+    if (token) {
+      const sep = url.includes("?") ? "&" : "?"
+      url = `${url}${sep}token=${encodeURIComponent(token)}`
+    }
     const source = new EventSource(url)
     this.source = source
 
