@@ -126,7 +126,7 @@ export function InputBar() {
     }
     element.style.height = "auto"
     element.style.height = `${Math.min(element.scrollHeight, MAX_HEIGHT_PX)}px`
-  }, [])
+  }, [value])
 
   // Unknown model (default / unpinned) stays permissive; only a hard false blocks
   const imagesAllowed = pinnedModels.find((m) => m.id === selectedModel)?.supportsImage !== false
