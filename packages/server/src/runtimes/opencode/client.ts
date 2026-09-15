@@ -66,6 +66,13 @@ function makeFetchers(baseUrl: string) {
   return { buildUrl, ensureOk, getJson, postJson, send }
 }
 
+type RawSession = Session & { name?: string }
+
+function normalizeSession(raw: RawSession): Session {
+  if (!raw.title && raw.name) raw.title = raw.name
+  return raw
+}
+
 export class HttpRuntimeClient implements RuntimeClient {
   readonly baseUrl: string
   readonly directory: string
@@ -81,20 +88,23 @@ export class HttpRuntimeClient implements RuntimeClient {
     return new HttpRuntimeClient(this.baseUrl, directory)
   }
 
-  listSessions(): Promise<Session[]> {
-    return this.fetchers.getJson<Session[]>("/session", { directory: this.directory })
+  async listSessions(): Promise<Session[]> {
+    const list = await this.fetchers.getJson<RawSession[]>("/session", { directory: this.directory })
+    return list.map(normalizeSession)
   }
 
-  createSession(opts: { agent?: string; title?: string }): Promise<Session> {
-    return this.fetchers.postJson<Session>(
+  async createSession(opts: { agent?: string; title?: string }): Promise<Session> {
+    const raw = await this.fetchers.postJson<RawSession>(
       "/session",
       { directory: this.directory },
       { title: opts.title, agent: opts.agent },
     )
+    return normalizeSession(raw)
   }
 
-  getSession(sessionId: string): Promise<Session> {
-    return this.fetchers.getJson<Session>(`/session/${sessionId}`, { directory: this.directory })
+  async getSession(sessionId: string): Promise<Session> {
+    const raw = await this.fetchers.getJson<RawSession>(`/session/${sessionId}`, { directory: this.directory })
+    return normalizeSession(raw)
   }
 
   deleteSession(sessionId: string): Promise<void> {

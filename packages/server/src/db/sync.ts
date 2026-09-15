@@ -64,7 +64,7 @@ async function upsertSession(props: R): Promise<void> {
   const values = {
     id,
     parentId: str(props.parent_id || props.parentID) || null,
-    title: str(props.title),
+    title: str(props.title) || str(props.name),
     agent: str(props.agent) || null,
     model: asRecord(props.model),
     directory: str(props.directory) || null,
