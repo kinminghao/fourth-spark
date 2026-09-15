@@ -9,6 +9,7 @@
  */
 
 const STORAGE_KEY = "fourth-spark-server-url"
+const AUTH_TOKEN_KEY = "fourth-spark-auth-token"
 
 /**
  * Detect if running inside Capacitor's native WebView.
@@ -44,4 +45,16 @@ export function setServerUrl(url: string): void {
 /** Read the currently stored server URL (may be empty). */
 export function getServerUrl(): string {
   return localStorage.getItem(STORAGE_KEY) ?? ""
+}
+
+export function getAuthToken(): string | null {
+  return localStorage.getItem(AUTH_TOKEN_KEY)
+}
+
+export function setAuthToken(token: string): void {
+  localStorage.setItem(AUTH_TOKEN_KEY, token)
+}
+
+export function clearAuthToken(): void {
+  localStorage.removeItem(AUTH_TOKEN_KEY)
 }
