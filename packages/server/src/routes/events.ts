@@ -32,22 +32,24 @@ function shouldForward(event: RawEvent, sessionId: string, childIds: ReadonlySet
   return event.type !== undefined && GLOBAL_EVENT_TYPES.has(event.type)
 }
 
-function parseBlock(block: string): { dataStr: string; parsed: RawEvent } | null {
+function parseBlock(block: string): { dataStr: string; parsed: RawEvent; eventName?: string } | null {
   const dataLines: string[] = []
+  let eventName: string | undefined
   for (const line of block.split("\n")) {
     if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart())
+    else if (line.startsWith("event:")) eventName = line.slice(6).trimStart()
   }
   if (dataLines.length === 0) return null
   const dataStr = dataLines.join("\n")
   try {
-    return { dataStr, parsed: JSON.parse(dataStr) }
+    return { dataStr, parsed: JSON.parse(dataStr), eventName }
   } catch {
     return null
   }
 }
 
-function learnChildSession(event: RawEvent, parentId: string, childIds: Set<string>): void {
-  if (event.type !== "session.updated") return
+function learnChildSession(resolvedType: string | undefined, event: RawEvent, parentId: string, childIds: Set<string>): void {
+  if (resolvedType !== "session.updated") return
   const props = event.properties
   if (!props?.id) return
   const declaredParent = props.parent_id ?? props.parentID
@@ -64,22 +66,26 @@ async function forwardBlock(
 ): Promise<void> {
   const result = parseBlock(block)
   if (!result) return
-  const { dataStr, parsed } = result
-  learnChildSession(parsed, sessionId, childIds)
-  if (shouldForward(parsed, sessionId, childIds)) {
+  const { dataStr, parsed, eventName } = result
+  // Prefer type from JSON payload; fall back to SSE `event:` header so named
+  // events whose JSON omits `type` are still forwarded with the correct name.
+  const resolvedType = parsed.type ?? eventName
+  learnChildSession(resolvedType, parsed, sessionId, childIds)
+  if (shouldForward({ ...parsed, type: resolvedType }, sessionId, childIds)) {
     const syncId = parsed.properties?.sessionID ?? sessionId
-    syncSseEvent(syncId, parsed.type ?? "", dataStr).catch(() => {})
-    await stream.writeSSE({ data: dataStr, event: parsed.type })
+    syncSseEvent(syncId, resolvedType ?? "", dataStr).catch(() => {})
+    await stream.writeSSE({ data: dataStr, event: resolvedType })
   }
 }
 
 async function forwardBlockGlobal(block: string, stream: SSEStreamingApi): Promise<void> {
   const result = parseBlock(block)
   if (!result) return
-  const { dataStr, parsed } = result
-  const sessionId = parsed.properties?.sessionID
-  if (sessionId) syncSseEvent(sessionId, parsed.type ?? "", dataStr).catch(() => {})
-  await stream.writeSSE({ data: dataStr, event: parsed.type })
+  const { dataStr, parsed, eventName } = result
+  const resolvedType = parsed.type ?? eventName
+  const sessionId = parsed.properties?.sessionID ?? parsed.properties?.id
+  if (sessionId) syncSseEvent(sessionId, resolvedType ?? "", dataStr).catch(() => {})
+  await stream.writeSSE({ data: dataStr, event: resolvedType })
 }
 
 // GET /api/repos/:repoId/sessions/:id/events — session-scoped SSE proxy.
