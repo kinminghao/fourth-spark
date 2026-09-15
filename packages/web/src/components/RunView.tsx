@@ -189,7 +189,7 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     if (!el) return
     el.style.height = "auto"
     el.style.height = `${Math.min(el.scrollHeight, MAX_NEW_HEIGHT_PX)}px`
-  }, [])
+  }, [draft])
 
   const selectedAgentDesc = visibleAgents.find((a) => a.id === customAgentId)?.description
   const hasContext = Boolean(issueId)
