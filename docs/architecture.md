@@ -393,12 +393,17 @@ Claude 订阅账号的自动轮换：
 
 ### MemoryExtractor (`lib/memory-extractor.ts`)
 
-自定义 Agent 的会话记忆提取与管理：
+自定义 Agent 的会话记忆提取与管理，采用「尝试水位线」状态机避免空结果与失败被无限重试：
 
 - **提取** — 从会话历史构建 prompt，提取 add/update/merge/reinforce/skip 操作
 - **分类** — general/decision/lesson/preference/pattern 五种记忆分类
 - **重要度** — 0–1 浮点评分，reinforce 操作自动提升 20%
 - **合并** — 多条旧记忆可合并为一条新记忆，旧记忆标记 supersededBy
+- **认领与水位线** — `claimExtractionAttempt()` 用原子条件 UPDATE 认领一次尝试，把 `sessions.lastExtractionAt` 置为认领时刻的 `timeUpdated` 快照作为内容水位线，并写入带 `EXTRACTION_CLAIM_LEASE_MS` 租约的 `sessions.extractionRetryAt`（兼作在途锁与崩溃恢复上限）；调度扫描与手动提取（`POST /extract`）共用同一状态
+- **结算与有界退避** — `processExtractionOutput()` 给出结果后，成功调用 `settleExtractionSuccess()` 归零尝试计数并清空重试，失败调用 `settleExtractionFailure()` 按 `EXTRACTION_RETRY_BACKOFF_MS` 安排下次重试；结算按认领租约条件更新，过期认领不会覆盖新认领的状态；尝试达到 `EXTRACTION_MAX_ATTEMPTS` 后进入休眠，直到会话产生新活动
+- **结果判定口径** — 输出文件缺失、为空、无法解析，或解析出的动作落库失败，记为失败；合法 JSON 数组（含显式 `[]` 或条目全部被拒）记为完成，因此空结果同样推进水位线、不再重试
+- **扫描策略** — `session-monitor.ts` 按 `EXTRACTION_SCAN_INTERVAL_MS` 周期触发：到期会话按 `lastExtractionAt` 最久未提取者优先排序，单次最多入队 `EXTRACTION_MAX_PER_SCAN` 个，跳过从未提取、无记忆且陈旧超过 `EXTRACTION_SKIP_STALE_DAYS` 的积压，并用互斥标志防止扫描重叠
+- **审计日志** — `lib/memory-logs.ts` 以 JSONL 追加提取与扫描记录到 `~/.fourth-spark/memory-logs/`（每 Agent `extraction-<date>.jsonl`，扫描汇总 `extraction-scan-<date>.jsonl`）
 
 ### MemoryConsolidation (`lib/memory-consolidation.ts`)
 
