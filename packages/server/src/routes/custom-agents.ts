@@ -5,7 +5,12 @@ import { db } from "../db/index"
 import { customAgentFragments, customAgents, promptFragments } from "../db/schema"
 import { MAX_CONTENT_LENGTH, MAX_NAME_LENGTH, parseBody } from "../lib/validation"
 
-const ALLOWED_BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atlas - Plan Executor"]
+const ALLOWED_BASE_AGENTS = [
+  "Sisyphus - ultraworker",
+  "Prometheus - Plan Builder",
+  "Atlas - Plan Executor",
+  "Hephaestus - Deep Agent",
+]
 
 const CreateCustomAgentBody = z.object({
   name: z.string().min(1).max(MAX_NAME_LENGTH),
