@@ -13,9 +13,11 @@ import { getConsolidationStats, triggerManualConsolidation } from "../lib/memory
 import {
   buildExtractionData,
   buildFullExtractionPrompt,
-  executeActions,
-  MAX_CONSOLIDATION_CONTENT_LENGTH,
-  parseExtractionResult,
+  claimExtractionAttempt,
+  type ExtractionClaim,
+  processExtractionOutput,
+  settleExtractionFailure,
+  settleExtractionSuccess,
 } from "../lib/memory-extractor"
 import { runtimeManager } from "../lib/process-manager"
 import { MEMORY_EXTRACTOR_ID, MEMORY_EXTRACTOR_PROMPT } from "../lib/system-agents"
@@ -243,6 +245,8 @@ agentMemoryRoutes.post("/extract", async (c) => {
     const outputPath = `/tmp/memory-extract-${uuid}-output.json`
     let extractionSessionId: string | undefined
     let client: RuntimeClient | null = null
+    let claim: ExtractionClaim | null = null
+    let settled = false
     try {
       const found = await findClientForSession(session.id)
       if (!found) {
@@ -251,22 +255,25 @@ agentMemoryRoutes.post("/extract", async (c) => {
       }
       client = found.client
 
-      try {
-        const msgs = await client.getMessages(session.id)
-        syncMessagesList(session.id, msgs).catch(() => {})
-        await new Promise((r) => setTimeout(r, 500))
-      } catch {
-        /* best-effort */
+      claim = await claimExtractionAttempt(session.id, "manual")
+      if (!claim) {
+        results.push({ sessionId: session.id, status: "error", error: "extraction already in progress" })
+        continue
       }
+      const attempts = claim.attempts
+
+      const msgs = await client.getMessages(session.id)
+      await syncMessagesList(session.id, msgs)
 
       const data = await buildExtractionData(session.id, agentId)
       if (!data) {
+        await settleExtractionSuccess(session.id, claim.leaseUntil)
+        settled = true
         results.push({ sessionId: session.id, status: "skipped", error: "no content to extract" })
         continue
       }
 
       await Bun.write(inputPath, JSON.stringify(data))
-      await Bun.write(outputPath, "[]")
 
       const agent = await resolveAgent(client, "Sisyphus - ultraworker")
       const extractionSession = await client.createSession({ agent, title: `[internal] memory extraction` })
@@ -292,6 +299,7 @@ agentMemoryRoutes.post("/extract", async (c) => {
 
       const startedAt = Date.now()
       const TIMEOUT = 120_000
+      let timedOut = false
       while (Date.now() - startedAt < TIMEOUT) {
         await new Promise((r) => setTimeout(r, 2_000))
         try {
@@ -303,24 +311,34 @@ agentMemoryRoutes.post("/extract", async (c) => {
         }
         break
       }
+      if (Date.now() - startedAt >= TIMEOUT) timedOut = true
 
       const file = Bun.file(outputPath)
-      const resultText = (await file.exists()) ? (await file.text()).trim() : ""
+      const resultText = (await file.exists()) ? (await file.text()).trim() : null
 
-      if (resultText && resultText !== "[]") {
-        const actions = parseExtractionResult(resultText, {
-          maxLength: MAX_CONSOLIDATION_CONTENT_LENGTH,
-        })
-        if (actions.length > 0) {
-          await executeActions(agentId, session.id, actions)
-          results.push({ sessionId: session.id, status: "ok", actions: actions.length })
-        } else {
-          results.push({ sessionId: session.id, status: "empty", error: "parsed 0 actions" })
-        }
-      } else {
+      const outcome = await processExtractionOutput(agentId, session.id, resultText)
+      const owned =
+        outcome.kind === "completed"
+          ? await settleExtractionSuccess(session.id, claim.leaseUntil)
+          : await settleExtractionFailure(session.id, attempts, claim.leaseUntil)
+      settled = true
+      if (!owned) logger.warn({ sessionId: session.id, outcome: outcome.kind }, "manual settle skipped: claim superseded")
+      logger.info(
+        { sessionId: session.id, outcome: outcome.kind, timedOut, attempts },
+        "manual memory extraction finished",
+      )
+
+      if (outcome.kind === "completed" && outcome.actionCount > 0) {
+        results.push({ sessionId: session.id, status: "ok", actions: outcome.actionCount })
+      } else if (outcome.kind === "completed") {
         results.push({ sessionId: session.id, status: "empty", error: "no memories extracted" })
+      } else {
+        results.push({ sessionId: session.id, status: "error", error: outcome.error })
       }
     } catch (err) {
+      if (!settled && claim) {
+        await settleExtractionFailure(session.id, claim.attempts, claim.leaseUntil).catch(() => {})
+      }
       results.push({ sessionId: session.id, status: "error", error: String(err) })
     } finally {
       if (extractionSessionId && client) client.deleteSession(extractionSessionId).catch(() => {})

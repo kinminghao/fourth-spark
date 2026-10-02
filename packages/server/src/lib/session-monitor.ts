@@ -16,12 +16,16 @@ import { runMemoryConsolidation } from "./memory-consolidation"
 import {
   buildExtractionData,
   buildFullExtractionPrompt,
-  executeActions,
+  claimExtractionAttempt,
+  type ExtractionClaim,
+  type ExtractionClaimMode,
   getSessionCustomAgentId,
   listExtractableSessions,
-  MAX_CONSOLIDATION_CONTENT_LENGTH,
-  parseExtractionResult,
+  processExtractionOutput,
+  settleExtractionFailure,
+  settleExtractionSuccess,
 } from "./memory-extractor"
+import { writeExtractionLog, writeScanLog } from "./memory-logs"
 import { MEMORY_EXTRACTOR_PROMPT } from "./system-agents"
 
 const POLL_INTERVAL_MS = 3_000
@@ -71,8 +75,13 @@ async function resolvePrompt(filename: string, fallback: string): Promise<string
   return fallback
 }
 const EXTRACTION_SCAN_INTERVAL_MS = 4 * 60 * 60 * 1_000
+const EXTRACTION_MAX_PER_SCAN = 10
 let extractionScanTimer: ReturnType<typeof setInterval> | undefined
-const pendingExtractions = new Map<string, Array<{ sourceSessionId: string; customAgentId: string }>>()
+let extractionScanInProgress = false
+const pendingExtractions = new Map<
+  string,
+  Array<{ sourceSessionId: string; customAgentId: string; mode: ExtractionClaimMode }>
+>()
 const extractingRepos = new Set<string>()
 
 function dedup(key: string): boolean {
@@ -419,20 +428,30 @@ async function repromptSession(client: RuntimeClient, sessionId: string): Promis
   }
 }
 
-async function triggerMemoryExtraction(repoId: string, client: RuntimeClient, sourceSessionId: string): Promise<void> {
+async function triggerMemoryExtraction(
+  repoId: string,
+  client: RuntimeClient,
+  sourceSessionId: string,
+  mode: ExtractionClaimMode = "scheduled",
+): Promise<void> {
   const customAgentId = await getSessionCustomAgentId(sourceSessionId)
   if (!customAgentId) return
 
   if (extractingRepos.has(repoId)) {
     const queue = pendingExtractions.get(repoId) ?? []
-    queue.push({ sourceSessionId, customAgentId })
+    const existing = queue.find((e) => e.sourceSessionId === sourceSessionId)
+    if (existing) {
+      if (mode === "manual" && existing.mode !== "manual") existing.mode = "manual"
+      return
+    }
+    queue.push({ sourceSessionId, customAgentId, mode })
     pendingExtractions.set(repoId, queue)
-    logger.info({ repoId, sourceSessionId, queueSize: queue.length }, "memory extraction queued")
+    logger.info({ repoId, sourceSessionId, queueSize: queue.length, mode }, "memory extraction queued")
     return
   }
 
   extractingRepos.add(repoId)
-  await startExtraction(repoId, client, sourceSessionId, customAgentId)
+  await startExtraction(repoId, client, sourceSessionId, customAgentId, mode)
 }
 
 async function startExtraction(
@@ -440,27 +459,49 @@ async function startExtraction(
   client: RuntimeClient,
   sourceSessionId: string,
   customAgentId: string,
+  mode: ExtractionClaimMode = "scheduled",
 ): Promise<void> {
+  let claim: ExtractionClaim | null
+  try {
+    claim = await claimExtractionAttempt(sourceSessionId, mode)
+  } catch (err) {
+    logger.warn({ err, repoId, sourceSessionId, mode }, "memory extraction claim failed")
+    processNextExtraction(repoId)
+    return
+  }
+  if (!claim) {
+    logger.info({ repoId, sourceSessionId, mode }, "memory extraction claim not acquired, skipping")
+    processNextExtraction(repoId)
+    return
+  }
+
   let extractionSessionId: string | undefined
+  let settled = false
+  const startedAt = Date.now()
   const uuid = crypto.randomUUID()
   const inputPath = `/tmp/memory-extract-${uuid}-input.json`
   const outputPath = `/tmp/memory-extract-${uuid}-output.json`
   try {
-    try {
-      const msgs = await client.getMessages(sourceSessionId)
-      syncMessagesList(sourceSessionId, msgs).catch(() => {})
-    } catch {
-      /* best-effort sync */
-    }
+    const msgs = await client.getMessages(sourceSessionId)
+    await syncMessagesList(sourceSessionId, msgs)
 
     const data = await buildExtractionData(sourceSessionId, customAgentId)
     if (!data) {
-      processNextExtraction(repoId)
+      const owned = await settleExtractionSuccess(sourceSessionId, claim.leaseUntil)
+      settled = true
+      if (!owned) logger.warn({ sourceSessionId }, "memory extraction skipped settle: claim superseded")
+      await writeExtractionLog(customAgentId, {
+        type: "extraction_run",
+        sourceSessionId,
+        result: "skipped",
+        attempts: claim.attempts,
+        settled: owned,
+      })
+      logger.info({ sourceSessionId, attempts: claim.attempts }, "memory extraction skipped: no content")
       return
     }
 
     await Bun.write(inputPath, JSON.stringify(data))
-    await Bun.write(outputPath, "[]")
 
     const agent = await resolveAgent(client, "Sisyphus - ultraworker")
     const session = await client.createSession({ agent, title: `[internal] memory extraction` })
@@ -495,7 +536,7 @@ async function startExtraction(
       "memory extraction started, waiting for result",
     )
 
-    const startedAt = Date.now()
+    let timedOut = false
     while (Date.now() - startedAt < EXTRACTION_TIMEOUT_MS) {
       await new Promise((r) => setTimeout(r, 2_000))
       try {
@@ -507,30 +548,64 @@ async function startExtraction(
       }
       break
     }
+    if (Date.now() - startedAt >= EXTRACTION_TIMEOUT_MS) timedOut = true
 
     const file = Bun.file(outputPath)
-    const resultText = (await file.exists()) ? (await file.text()).trim() : ""
-    logger.info({ sessionId: session.id, sourceSessionId, resultLen: resultText.length }, "memory extraction file read")
+    const resultText = (await file.exists()) ? (await file.text()).trim() : null
+    logger.info(
+      { sessionId: session.id, sourceSessionId, resultLen: resultText?.length ?? 0 },
+      "memory extraction file read",
+    )
 
-    if (resultText && resultText !== "[]") {
-      const actions = parseExtractionResult(resultText, {
-        maxLength: MAX_CONSOLIDATION_CONTENT_LENGTH,
-      })
-      if (actions.length > 0) {
-        await executeActions(customAgentId, sourceSessionId, actions)
-        logger.info(
-          { sessionId: session.id, actionCount: actions.length, sourceSessionId },
-          "memory extraction completed",
-        )
-      }
-    }
+    const outcome = await processExtractionOutput(customAgentId, sourceSessionId, resultText)
+    const owned =
+      outcome.kind === "completed"
+        ? await settleExtractionSuccess(sourceSessionId, claim.leaseUntil)
+        : await settleExtractionFailure(sourceSessionId, claim.attempts, claim.leaseUntil)
+    settled = true
+    if (!owned) logger.warn({ sourceSessionId, outcome: outcome.kind }, "memory extraction settle skipped: claim superseded")
+
+    await writeExtractionLog(customAgentId, {
+      type: "extraction_run",
+      sourceSessionId,
+      result: outcome.kind,
+      ...(outcome.kind === "completed"
+        ? {
+            actionCount: outcome.actionCount,
+            rawCount: outcome.rawCount,
+            rejectedCount: outcome.rejectedCount,
+            applied: outcome.applied,
+          }
+        : { error: outcome.error }),
+      timedOut,
+      durationMs: Date.now() - startedAt,
+      attempts: claim.attempts,
+      settled: owned,
+    })
+    logger.info(
+      { sessionId: session.id, sourceSessionId, outcome: outcome.kind, timedOut, attempts: claim.attempts },
+      "memory extraction finished",
+    )
   } catch (err) {
     logger.warn({ err, sourceSessionId }, "memory extraction failed")
+    if (!settled) {
+      await settleExtractionFailure(sourceSessionId, claim.attempts, claim.leaseUntil).catch(() => {})
+    }
+    await writeExtractionLog(customAgentId, {
+      type: "extraction_run",
+      sourceSessionId,
+      result: "failed",
+      error: err instanceof Error ? err.message : String(err),
+      durationMs: Date.now() - startedAt,
+      attempts: claim.attempts,
+    })
   } finally {
     const debugKeep = process.env.MEMORY_DEBUG === "true"
     if (extractionSessionId && !debugKeep) {
       client.deleteSession(extractionSessionId).catch(() => {})
-      db.delete(sessionsTable).where(eq(sessionsTable.id, extractionSessionId)).catch(() => {})
+      db.delete(sessionsTable)
+        .where(eq(sessionsTable.id, extractionSessionId))
+        .catch(() => {})
     }
     if (!debugKeep) {
       try {
@@ -555,7 +630,7 @@ function processNextExtraction(repoId: string): void {
 
   const repoEntry = entries.find((e) => e.repoId === repoId)
   if (repoEntry) {
-    startExtraction(repoId, repoEntry.client, next.sourceSessionId, next.customAgentId).catch((err) => {
+    startExtraction(repoId, repoEntry.client, next.sourceSessionId, next.customAgentId, next.mode).catch((err) => {
       logger.warn({ err, sourceSessionId: next.sourceSessionId }, "failed to start queued extraction")
       processNextExtraction(repoId)
     })
@@ -685,20 +760,34 @@ async function pollOnce(): Promise<void> {
 }
 
 async function runExtractionScan(): Promise<void> {
-  const sessions = await listExtractableSessions()
-  if (sessions.length === 0) return
-  logger.info({ count: sessions.length }, "memory extraction scan: found sessions needing extraction")
+  if (extractionScanInProgress) {
+    logger.warn("memory extraction scan already in progress, skipping")
+    return
+  }
+  extractionScanInProgress = true
+  try {
+    const { due, skippedStale } = await listExtractableSessions()
 
-  for (const { id: sessionId } of sessions) {
-    for (const { repoId, client } of entries) {
-      try {
-        await client.getSession(sessionId)
-        triggerMemoryExtraction(repoId, client, sessionId).catch((err) =>
-          logger.warn({ err, sessionId }, "scheduled memory extraction failed"),
-        )
-        break
-      } catch {}
+    let enqueued = 0
+    for (const { id: sessionId } of due) {
+      if (enqueued >= EXTRACTION_MAX_PER_SCAN) break
+      for (const { repoId, client } of entries) {
+        try {
+          await client.getSession(sessionId)
+          triggerMemoryExtraction(repoId, client, sessionId).catch((err) =>
+            logger.warn({ err, sessionId }, "scheduled memory extraction failed"),
+          )
+          enqueued++
+          break
+        } catch {}
+      }
     }
+
+    const capped = enqueued >= EXTRACTION_MAX_PER_SCAN
+    await writeScanLog({ type: "extraction_scan", due: due.length, enqueued, skippedStale, capped })
+    logger.info({ due: due.length, enqueued, skippedStale, capped }, "memory extraction scan: sessions enqueued")
+  } finally {
+    extractionScanInProgress = false
   }
 }
 
@@ -713,7 +802,7 @@ export const sessionMonitor = {
       for (const { repoId, client } of entries) {
         try {
           await client.getSession(sourceSessionId)
-          await triggerMemoryExtraction(repoId, client, sourceSessionId)
+          await triggerMemoryExtraction(repoId, client, sourceSessionId, "manual")
           return
         } catch {}
       }
