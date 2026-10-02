@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Smartphone,
   Trash2,
   User,
   Users,
@@ -47,7 +48,7 @@ function formatElapsed(ts: number): string {
   return `${Math.floor(m / 60)} 小时前`
 }
 
-type Tab = "repos" | "usage" | "git" | "models" | "agents" | "general" | "server" | "diagnostics"
+type Tab = "repos" | "usage" | "git" | "models" | "agents" | "general" | "devices" | "server" | "diagnostics"
 
 const BASE_TABS: { id: Tab; label: string; icon: typeof Zap }[] = [
   { id: "repos", label: "仓库", icon: Box },
@@ -56,6 +57,7 @@ const BASE_TABS: { id: Tab; label: string; icon: typeof Zap }[] = [
   { id: "models", label: "模型", icon: Cpu },
   { id: "agents", label: "AGENTS.md", icon: FileText },
   { id: "general", label: "通用", icon: Keyboard },
+  { id: "devices", label: "设备", icon: Smartphone },
   { id: "diagnostics", label: "诊断", icon: Activity },
 ]
 
@@ -1747,6 +1749,112 @@ function DiagnosticsSection() {
   )
 }
 
+function DevicesSection() {
+  const [devices, setDevices] = useState<api.DeviceInfo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [pairingCountdown, setPairingCountdown] = useState(0)
+
+  const loadDevices = useCallback(async () => {
+    setLoading(true)
+    try {
+      const rows = await api.getDevices()
+      setDevices(rows)
+    } catch {}
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    void loadDevices()
+  }, [loadDevices])
+
+  useEffect(() => {
+    if (pairingCountdown <= 0) return
+    const timer = setInterval(() => {
+      setPairingCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [pairingCountdown])
+
+  const handleStartPairing = useCallback(async () => {
+    try {
+      const result = await api.startPairing()
+      const seconds = Math.ceil((result.expiresAt - Date.now()) / 1000)
+      setPairingCountdown(Math.max(seconds, 1))
+    } catch {}
+  }, [])
+
+  const handleDelete = useCallback(
+    async (id: string) => {
+      try {
+        await api.deleteDevice(id)
+        setDevices((prev) => prev.filter((d) => d.id !== id))
+      } catch {}
+    },
+    [],
+  )
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-5 w-5 animate-spin text-fg-4" />
+      </div>
+    )
+  }
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-fg">已授权设备</h2>
+          <p className="mt-0.5 text-xs text-fg-4">管理可以访问此服务的设备</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleStartPairing}
+          disabled={pairingCountdown > 0}
+          className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          {pairingCountdown > 0 ? `配对中 (${pairingCountdown}s)` : "添加设备"}
+        </button>
+      </div>
+
+      {pairingCountdown > 0 && (
+        <div className="rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-400">
+          配对窗口已开启，请在新设备上打开 Fourth Spark 完成配对。
+        </div>
+      )}
+
+      {devices.length === 0 ? (
+        <p className="py-8 text-center text-sm text-fg-4">暂无已授权设备</p>
+      ) : (
+        <div className="space-y-2">
+          {devices.map((device) => (
+            <div key={device.id} className="flex items-center justify-between rounded-md border border-line bg-surface px-4 py-3">
+              <div className="flex items-center gap-3">
+                <Smartphone className="h-4 w-4 text-fg-4" />
+                <div>
+                  <p className="text-sm font-medium text-fg">{device.name}</p>
+                  <p className="text-xs text-fg-5">
+                    最后活跃：{new Date(device.lastSeenAt).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              <InlineConfirm onConfirm={() => handleDelete(device.id)} title="移除设备" />
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
 export function SettingsPage() {
   const [tab, setTab] = useState<Tab>("usage")
   const tabs = useMemo(() => (isNativePlatform() || getServerUrl() ? [...BASE_TABS, SERVER_TAB] : BASE_TABS), [])
@@ -1781,6 +1889,7 @@ export function SettingsPage() {
           {tab === "models" && <ModelManagementSection />}
           {tab === "agents" && <AgentsMdSection />}
           {tab === "general" && <QuickInputSection />}
+          {tab === "devices" && <DevicesSection />}
           {tab === "server" && <ServerSection />}
           {tab === "diagnostics" && <DiagnosticsSection />}
         </div>

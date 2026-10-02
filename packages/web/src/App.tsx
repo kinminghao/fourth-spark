@@ -8,10 +8,12 @@ import { orchestrator } from "./lib/session-orchestrator"
 import { AgentDetailPage } from "./pages/AgentDetailPage"
 import { AgentsPage } from "./pages/AgentsPage"
 import { AnalyticsPage } from "./pages/AnalyticsPage"
+import { AuthPage } from "./pages/AuthPage"
 import { DevPage } from "./pages/DevPage"
 import { ReposPage } from "./pages/ReposPage"
 import { RunPage } from "./pages/RunPage"
 import { SettingsPage } from "./pages/SettingsPage"
+import { useAuthStore } from "./stores/auth-store"
 import { useCustomAgentStore } from "./stores/custom-agent-store"
 import { useIssueStore } from "./stores/issue-store"
 import { setNotificationHandler } from "./stores/notifications"
@@ -128,11 +130,34 @@ function AppInner() {
   )
 }
 
+function AuthGate() {
+  const authState = useAuthStore((s) => s.state)
+  const checkAuth = useAuthStore((s) => s.checkAuth)
+
+  useEffect(() => {
+    void checkAuth()
+  }, [checkAuth])
+
+  if (authState === "checking") {
+    return (
+      <div className="flex h-screen items-center justify-center bg-base">
+        <span className="h-6 w-6 animate-spin rounded-full border-2 border-fg-5 border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (authState === "unauthenticated") {
+    return <AuthPage />
+  }
+
+  return <AppInner />
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <ErrorBoundary fallback={(error, reset) => <AppCrashFallback error={error} reset={reset} />}>
-        <AppInner />
+        <AuthGate />
       </ErrorBoundary>
     </BrowserRouter>
   )

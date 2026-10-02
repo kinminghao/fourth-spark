@@ -7,7 +7,7 @@
  * All session/agent calls are scoped to a repo via /api/repos/:repoId/*.
  */
 
-import { getApiBaseUrl } from "./config"
+import { getApiBaseUrl, getAuthToken, clearAuthToken } from "./config"
 
 export type SessionStatusValue = "idle" | "busy" | "retry"
 
@@ -195,19 +195,41 @@ export class ApiError extends Error {
   }
 }
 
+type AuthListener = () => void
+const authListeners = new Set<AuthListener>()
+
+export function onAuthRequired(listener: AuthListener): () => void {
+  authListeners.add(listener)
+  return () => authListeners.delete(listener)
+}
+
+function emitAuthRequired(): void {
+  clearAuthToken()
+  for (const listener of authListeners) listener()
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getAuthToken()
+  const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+
   let response: Response
   try {
     response = await fetch(getApiBaseUrl() + path, {
       ...init,
       headers: {
         Accept: "application/json",
+        ...authHeaders,
         ...(init?.body ? { "Content-Type": "application/json" } : {}),
         ...init?.headers,
       },
     })
   } catch (cause) {
     throw new ApiError(cause instanceof Error ? cause.message : "Network request failed", 0)
+  }
+
+  if (response.status === 401) {
+    emitAuthRequired()
+    throw new ApiError("Unauthorized", 401)
   }
 
   if (!response.ok) {
@@ -1325,4 +1347,58 @@ export async function fetchAnalyticsSummary(
   const params = new URLSearchParams({ from: String(from), to: String(to), groupBy })
   if (repoId) params.set("repoId", repoId)
   return apiFetch<AnalyticsResponse>(`/api/analytics/summary?${params}`)
+}
+
+// ---------------------------------------------------------------------------
+// Auth API — /api/auth
+// ---------------------------------------------------------------------------
+
+export interface AuthStatus {
+  authRequired: boolean
+}
+
+export interface DeviceInfo {
+  id: string
+  name: string
+  createdAt: number
+  lastSeenAt: number
+}
+
+export interface PairStatus {
+  open: boolean
+  expiresAt: number
+}
+
+export async function getAuthStatus(): Promise<AuthStatus> {
+  return apiFetch<AuthStatus>("/api/auth/status")
+}
+
+export async function getDevices(): Promise<DeviceInfo[]> {
+  return apiFetch<DeviceInfo[]>("/api/auth/devices")
+}
+
+export async function deleteDevice(id: string): Promise<void> {
+  await apiFetch<void>(`/api/auth/devices/${encodeURIComponent(id)}`, { method: "DELETE" })
+}
+
+export async function startPairing(): Promise<{ expiresAt: number }> {
+  return apiFetch<{ expiresAt: number }>("/api/auth/pair/start", { method: "POST" })
+}
+
+export async function getPairStatus(): Promise<PairStatus> {
+  return apiFetch<PairStatus>("/api/auth/pair/status")
+}
+
+export async function completePairing(name: string): Promise<{ device: DeviceInfo; token: string }> {
+  return apiFetch<{ device: DeviceInfo; token: string }>("/api/auth/pair/complete", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  })
+}
+
+export async function authenticateWithToken(token: string, name: string): Promise<{ ok: boolean; deviceId?: string }> {
+  return apiFetch<{ ok: boolean; deviceId?: string }>("/api/auth/token", {
+    method: "POST",
+    body: JSON.stringify({ token, name }),
+  })
 }
