@@ -18,6 +18,7 @@ Custom Agent = Base Agent + 模型覆盖 + [片段1, 片段2, ..., 补充指令,
 | Sisyphus - ultraworker | 通用代码开发 |
 | Prometheus - Plan Builder | 计划制定 |
 | Atlas - Plan Executor | 计划执行 |
+| Hephaestus - Deep Agent | 深度任务执行（仅支持 GPT 模型） |
 
 Base Agent 提供基础的工具权限和行为模式，Custom Agent 在其上叠加自定义指令。
 

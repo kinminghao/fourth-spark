@@ -11,7 +11,12 @@ import { agentAvatar, COPY_FEEDBACK_MS } from "../lib/constants"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 
-const BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atlas - Plan Executor"]
+const BASE_AGENTS = [
+  "Sisyphus - ultraworker",
+  "Prometheus - Plan Builder",
+  "Atlas - Plan Executor",
+  "Hephaestus - Deep Agent",
+]
 const PINNED_MODELS_KEY = "pinned_models"
 const SP_KEY = "__system_prompt__"
 

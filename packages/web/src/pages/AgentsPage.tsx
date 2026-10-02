@@ -19,7 +19,12 @@ import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 // Constants
 // ---------------------------------------------------------------------------
 
-const BASE_AGENTS = ["Sisyphus - ultraworker", "Prometheus - Plan Builder", "Atlas - Plan Executor"]
+const BASE_AGENTS = [
+  "Sisyphus - ultraworker",
+  "Prometheus - Plan Builder",
+  "Atlas - Plan Executor",
+  "Hephaestus - Deep Agent",
+]
 const PINNED_MODELS_KEY = "pinned_models"
 const SP_KEY = "__system_prompt__"
 
