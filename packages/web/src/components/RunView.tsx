@@ -112,6 +112,7 @@ const STICK_TO_BOTTOM_THRESHOLD_PX = 64
 
 function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const [draft, setDraft] = useState("")
+  const [submitting, setSubmitting] = useState(false)
   const [customAgentId, setCustomAgentId] = useState("")
   const [selectedVariant, setSelectedVariant] = useState("")
   const [issueId, setIssueId] = useState("")
@@ -222,21 +223,27 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
   }
 
   const submit = async () => {
+    if (submitting) return
     const text = expandFoldedTexts(draft.trim())
     if (!activeRepoId || (!text && !hasContext && attachments.length === 0)) return
-    const session = await createSession(
-      activeRepoId!,
-      text,
-      undefined,
-      undefined,
-      selectedVariant || undefined,
-      issueId || undefined,
-      customAgentId || undefined,
-      promptFiles.length > 0 ? promptFiles : undefined,
-    )
-    if (session) {
-      setDraft("")
-      clear()
+    setSubmitting(true)
+    try {
+      const session = await createSession(
+        activeRepoId!,
+        text,
+        undefined,
+        undefined,
+        selectedVariant || undefined,
+        issueId || undefined,
+        customAgentId || undefined,
+        promptFiles.length > 0 ? promptFiles : undefined,
+      )
+      if (session) {
+        setDraft("")
+        clear()
+      }
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -389,7 +396,9 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
               type="button"
               onClick={submit}
               disabled={
-                !activeRepoId || (!draft.trim() && !hasContext && attachments.length === 0 && foldedTexts.length === 0)
+                submitting ||
+                !activeRepoId ||
+                (!draft.trim() && !hasContext && attachments.length === 0 && foldedTexts.length === 0)
               }
               aria-label="Start run"
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white transition-colors duration-150 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-fg-6/30 disabled:text-fg-5"
