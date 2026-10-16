@@ -221,12 +221,10 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
     removeFoldedText(id)
   }
 
-  const submit = () => {
+  const submit = async () => {
     const text = expandFoldedTexts(draft.trim())
     if (!activeRepoId || (!text && !hasContext && attachments.length === 0)) return
-    setDraft("")
-    clear()
-    void createSession(
+    const session = await createSession(
       activeRepoId!,
       text,
       undefined,
@@ -236,6 +234,10 @@ function NewSessionInput({ onToggleSidebar }: { onToggleSidebar?: () => void }) 
       customAgentId || undefined,
       promptFiles.length > 0 ? promptFiles : undefined,
     )
+    if (session) {
+      setDraft("")
+      clear()
+    }
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
