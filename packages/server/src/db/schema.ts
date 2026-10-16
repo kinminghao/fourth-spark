@@ -389,6 +389,18 @@ export const sessionLinks = pgTable(
   ],
 )
 
+export const devices = pgTable(
+  "devices",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+    lastSeenAt: bigint("last_seen_at", { mode: "number" }).notNull(),
+  },
+  (t) => [uniqueIndex("devices_token_hash_idx").on(t.tokenHash)],
+)
+
 export const todos = pgTable(
   "todos",
   {

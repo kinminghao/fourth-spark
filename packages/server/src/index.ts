@@ -11,6 +11,8 @@ import { ensureSenseVoice } from "./lib/sensevoice-manager"
 import { startSyncScheduler, stopSyncScheduler } from "./lib/sync-scheduler"
 import { seedSystemAgents } from "./lib/system-agents"
 import { ensureTlsCert, getLocalIPs, getTlsPaths, isLocalClient } from "./lib/tls-manager"
+import { createDevice, hasAnyDevices, loadTokenCache } from "./lib/auth"
+import { authMiddleware } from "./middleware/auth"
 import { corsMiddleware } from "./middleware/cors"
 import { onError } from "./middleware/errors"
 import { logger, requestLogger } from "./middleware/logger"
@@ -19,6 +21,7 @@ import { agentMemoryRoutes, agentSessionRoutes } from "./routes/agent-memories"
 import { agents } from "./routes/agents"
 import { globalAgentsMd, repoAgentsMd } from "./routes/agents-md"
 import { analyticsRoutes } from "./routes/analytics"
+import { authRoutes } from "./routes/auth"
 import { cloudRoutes } from "./routes/cloud"
 import { globalCustomAgents, repoCustomAgents } from "./routes/custom-agents"
 import { events, globalEvents } from "./routes/events"
@@ -44,6 +47,7 @@ const app = new Hono()
 
 app.use("*", corsMiddleware)
 app.use("*", requestLogger)
+app.use("*", authMiddleware)
 app.onError(onError)
 
 // ---------------------------------------------------------------------------
@@ -66,6 +70,7 @@ app.get(
 // ---------------------------------------------------------------------------
 // Global routes
 // ---------------------------------------------------------------------------
+app.route("/api/auth", authRoutes)
 app.route("/api/repos", repoRoutes)
 app.route("/api/fs", fsRoutes)
 app.route("/api/settings", settingsRoutes)
@@ -190,6 +195,18 @@ async function startup() {
       if (ran) logger.info("database migrations applied")
     } catch (err) {
       logger.warn({ err }, "migration failed — continuing with existing schema")
+    }
+  }
+
+  await loadTokenCache()
+
+  // Bootstrap first device from AUTH_TOKEN env (set by `fourth-spark start`)
+  if (!hasAnyDevices() && process.env.AUTH_TOKEN) {
+    try {
+      await createDevice("localhost", process.env.AUTH_TOKEN)
+      logger.info("first device registered via AUTH_TOKEN")
+    } catch (err) {
+      logger.warn({ err }, "failed to bootstrap first device from AUTH_TOKEN")
     }
   }
 
