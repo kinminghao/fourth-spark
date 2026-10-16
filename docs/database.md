@@ -71,6 +71,9 @@ gitHosts              (Git 平台凭证，无 FK)
 | completedAt | bigint | 会话完成时间戳 |
 | timeCreated | bigint | 创建时间戳 |
 | timeUpdated | bigint | 更新时间戳 |
+| lastExtractionAt | bigint | 记忆提取认领时刻的 `timeUpdated` 快照，作为内容水位线（可空） |
+| extractionAttempts | integer | 当前内容版本的尝试次数（认领时递增，成功归零），默认 0 |
+| extractionRetryAt | bigint | 下次允许提取的时间戳；运行期间兼作在途租约，无待重试时为 null |
 
 ### messages — 消息
 
