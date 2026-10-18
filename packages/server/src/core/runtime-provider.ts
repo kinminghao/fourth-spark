@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import type { RuntimeClient } from "./runtime-client"
-import type { CredentialWriter } from "./runtime-types"
+import type { CredentialWriter, RuntimeCredentialChannel } from "./runtime-types"
 
 export interface RuntimeHealth {
   reachable: boolean
@@ -16,6 +16,7 @@ export interface RuntimeHealth {
 export interface RuntimeProvider {
   readonly id: string
   readonly credentialWriter: CredentialWriter
+  readonly credentialChannel: RuntimeCredentialChannel
 
   initialize(repoId: string, localPath: string): Promise<void>
   teardown(repoId: string): Promise<void>
@@ -25,4 +26,8 @@ export interface RuntimeProvider {
   injectMcp(localPath: string, repoId: string, serverPort: number, sessionId?: string): void
   removeMcp(localPath: string): void
   killAllSync(): void
+}
+
+export function needsCredentialPush(provider: RuntimeProvider): boolean {
+  return provider.credentialChannel === "runtime-push"
 }

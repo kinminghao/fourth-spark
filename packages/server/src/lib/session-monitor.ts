@@ -530,7 +530,9 @@ async function startExtraction(
     const debugKeep = process.env.MEMORY_DEBUG === "true"
     if (extractionSessionId && !debugKeep) {
       client.deleteSession(extractionSessionId).catch(() => {})
-      db.delete(sessionsTable).where(eq(sessionsTable.id, extractionSessionId)).catch(() => {})
+      db.delete(sessionsTable)
+        .where(eq(sessionsTable.id, extractionSessionId))
+        .catch(() => {})
     }
     if (!debugKeep) {
       try {

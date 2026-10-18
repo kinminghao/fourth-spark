@@ -1,5 +1,6 @@
 import { logger } from "../middleware/logger"
-import { loadAccounts, readAuthAnthropic } from "./auth-files"
+import { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } from "./account-providers"
+import { loadAccounts } from "./auth-files"
 import type { LeaseClient, LeaseFailure } from "./lease-client"
 import {
   LEASE_BACKOFF_BASE_MS,
@@ -71,7 +72,7 @@ export function createLeaseKeeper(client: LeaseClient) {
     if (disposed || ticking) return
     ticking = true
     try {
-      const auth = await readAuthAnthropic()
+      const auth = await getAccountProvider(DEFAULT_ACCOUNT_PROVIDER).credentialAdapter.read()
       if (disposed) return
       if (!renewalDue(auth)) return
 
@@ -119,7 +120,8 @@ export function createLeaseKeeper(client: LeaseClient) {
 
     async startup(): Promise<void> {
       const file = await loadAccounts()
-      if (file.activeId) this.adoptAccount(file.activeId)
+      const activeId = file.activeIds[DEFAULT_ACCOUNT_PROVIDER]
+      if (activeId) this.adoptAccount(activeId)
       await tickOnce()
     },
   }

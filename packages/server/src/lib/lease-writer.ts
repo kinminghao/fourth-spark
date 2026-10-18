@@ -1,21 +1,14 @@
 import { logger } from "../middleware/logger"
-import { recordLeasedActiveId, writeAuthAnthropic } from "./auth-files"
-
-async function broadcastLeaseToOtherRuntimes(access: string, expires: number): Promise<void> {
-  try {
-    const { getRegistry } = await import("../core/registry")
-    for (const provider of getRegistry().providers.values()) {
-      if (provider.id === "opencode") continue
-      await provider.credentialWriter.write({ kind: "lease", access, expires }).catch(() => {})
-    }
-  } catch {}
-}
+import { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } from "./account-providers"
+import { recordActiveId } from "./auth-files"
+import { broadcastCredentialToRuntimes } from "./credential-broadcast"
 
 export async function writeLease(input: { access: string; expires: number; accountId: string }): Promise<void> {
-  await writeAuthAnthropic({ kind: "lease", access: input.access, expires: input.expires })
-  await broadcastLeaseToOtherRuntimes(input.access, input.expires)
+  const { credentialAdapter } = getAccountProvider(DEFAULT_ACCOUNT_PROVIDER)
+  await credentialAdapter.write({ kind: "lease", access: input.access, expires: input.expires })
+  await broadcastCredentialToRuntimes({ kind: "lease", access: input.access, expires: input.expires })
   try {
-    await recordLeasedActiveId(input.accountId)
+    await recordActiveId(DEFAULT_ACCOUNT_PROVIDER, input.accountId)
   } catch (err) {
     logger.warn({ error: err instanceof Error ? err.message : String(err) }, "lease-writer: failed to record activeId")
   }

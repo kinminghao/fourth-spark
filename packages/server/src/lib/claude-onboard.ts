@@ -12,14 +12,9 @@
 
 import { createHash, randomBytes } from "node:crypto"
 import { logger } from "../middleware/logger"
-import {
-  applyToken,
-  loadAccounts,
-  type StoredAccount,
-  saveAccounts,
-  withAuthLock,
-  writeAuthAnthropic,
-} from "./auth-files"
+import type { AuthorizeResult, ExchangeResult, ProfileResult } from "./account-providers/types"
+import { applyToken, loadAccounts, providerOf, type StoredAccount, saveAccounts, withAuthLock } from "./auth-files"
+import { broadcastCredentialToRuntimes } from "./credential-broadcast"
 
 // ---------------------------------------------------------------------------
 // Constants — aligned with Claude Code CLI / claude-accounts-pool
@@ -63,29 +58,6 @@ type Pending = {
   state: string
   expiresAt: number
   attempts: number
-}
-
-export type AuthorizeResult = {
-  url: string
-  pendingId: string
-  expiresAt: number
-}
-
-export type ExchangeResult =
-  | { ok: true; id: string; label: string; existing: boolean }
-  | {
-      ok: false
-      reason: "unknown-pending" | "expired" | "exhausted" | "exchange-failed" | "profile-failed" | "throttled"
-      detail?: string
-      attemptsLeft?: number
-      retryAfterMs?: number
-    }
-
-type ProfileResult = {
-  uuid: string
-  email: string
-  displayName: string
-  subscription?: Record<string, unknown>
 }
 
 // ---------------------------------------------------------------------------
@@ -246,8 +218,9 @@ export async function exchange(pendingId: string, code: string): Promise<Exchang
     profile.subscription,
   )
 
-  // Write auth.json so the runtime picks it up immediately
-  await writeAuthAnthropic({
+  // Write the credential store (auth.json in v1) so the runtime picks it up immediately
+  const { getAccountProvider } = await import("./account-providers")
+  await getAccountProvider("anthropic").credentialAdapter.write({
     kind: "full",
     refresh: refreshToken,
     access: accessToken,
@@ -255,20 +228,12 @@ export async function exchange(pendingId: string, code: string): Promise<Exchang
   })
 
   // Broadcast to other runtimes
-  try {
-    const { getRegistry } = await import("../core/registry")
-    for (const provider of getRegistry().providers.values()) {
-      if (provider.id === "opencode") continue
-      await provider.credentialWriter
-        .write({
-          kind: "full",
-          refresh: refreshToken,
-          access: accessToken,
-          expires: expiresAt,
-        })
-        .catch(() => {})
-    }
-  } catch {}
+  await broadcastCredentialToRuntimes({
+    kind: "full",
+    refresh: refreshToken,
+    access: accessToken,
+    expires: expiresAt,
+  })
 
   logger.info({ uuid: profile.uuid, label: profile.email, existing }, "claude-onboard: account added")
 
@@ -289,10 +254,11 @@ export async function removeAccount(id: string): Promise<{ ok: true; label: stri
     const file = await loadAccounts()
     const index = file.accounts.findIndex((a) => a.id === id)
     if (index < 0) return { ok: false, reason: "account not found" }
-    if (file.activeId === id) return { ok: false, reason: "cannot remove active account" }
+    const provider = providerOf(file.accounts[index])
+    if (file.activeIds[provider] === id) return { ok: false, reason: "cannot remove active account" }
 
     const [removed] = file.accounts.splice(index, 1)
-    if (file.activeId === id) file.activeId = undefined
+    if (file.activeIds[provider] === id) file.activeIds[provider] = undefined
     await saveAccounts(file)
 
     logger.info({ id, label: removed.label }, "claude-onboard: account removed")
@@ -304,7 +270,7 @@ export async function removeAccount(id: string): Promise<{ ok: true; label: stri
 // Profile fetch
 // ---------------------------------------------------------------------------
 
-async function fetchProfile(access: string): Promise<ProfileResult> {
+export async function fetchProfile(access: string): Promise<ProfileResult> {
   const res = await fetch(PROFILE_ENDPOINT, {
     headers: {
       Authorization: `Bearer ${access}`,
@@ -346,23 +312,18 @@ async function upsertAccount(
     const index = file.accounts.findIndex((a) => a.id === id)
     const existing = index >= 0
 
+    let record: StoredAccount
     if (existing) {
-      applyToken(file.accounts[index], token)
-      if (subscription) file.accounts[index].subscription = subscription
+      record = file.accounts[index]
+      applyToken(record, token)
+      if (subscription) record.subscription = subscription
     } else {
-      const newAccount: StoredAccount = {
-        id,
-        label,
-        refresh: token.refresh,
-        access: token.access,
-        expires: token.expires,
-        subscription,
-      }
-      file.accounts.push(newAccount)
+      record = { id, label, refresh: token.refresh, access: token.access, expires: token.expires, subscription }
+      file.accounts.push(record)
     }
 
     // Set as active
-    file.activeId = id
+    file.activeIds[providerOf(record)] = id
     await saveAccounts(file)
 
     logger.info({ id, label, existing }, "claude-onboard: account upserted")

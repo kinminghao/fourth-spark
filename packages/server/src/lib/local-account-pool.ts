@@ -1,9 +1,10 @@
 import type { AccountPool, AcquireResult } from "../core/types"
+import { DEFAULT_ACCOUNT_PROVIDER } from "./account-providers"
 import { autoSwitch, clearCooldown, getActiveId, markCooldown, parseResetMsFromMessage } from "./account-switcher"
 
 export const localAccountPool: AccountPool = {
   async acquire(ctx): Promise<AcquireResult> {
-    const result = await autoSwitch(ctx.currentAccountId)
+    const result = await autoSwitch(DEFAULT_ACCOUNT_PROVIDER, ctx.currentAccountId)
     if (result.switched) {
       return { ok: true, accountId: result.to, credential: null }
     }
@@ -20,6 +21,6 @@ export const localAccountPool: AccountPool = {
   },
 
   async getActiveId(): Promise<string | undefined> {
-    return getActiveId()
+    return getActiveId(DEFAULT_ACCOUNT_PROVIDER)
   },
 }

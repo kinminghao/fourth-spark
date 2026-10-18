@@ -1,29 +1,9 @@
 import { logger } from "../middleware/logger"
-import { accountsOf, loadAccounts, readAuthAnthropic, type StoredAccount } from "./auth-files"
+import { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } from "./account-providers"
+import type { RefreshStrategy, UsageResponse } from "./account-providers/types"
+import { accountsOf, loadAccounts, type ProviderId, type StoredAccount } from "./auth-files"
 import { getWorkerConfig, isWorkerMode } from "./config"
-import { isStale, refreshToken } from "./token-refresh"
 import { createUsageClient, type UsageSnapshotView } from "./usage-client"
-
-const USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage"
-const OAUTH_BETA = "oauth-2025-04-20"
-const NETWORK_TIMEOUT_MS = 15_000
-
-export interface UsageWindow {
-  utilization: number
-  resets_at?: string
-}
-
-export interface ScopedUsageWindow extends UsageWindow {
-  label: string
-}
-
-export interface UsageResponse {
-  five_hour?: UsageWindow | null
-  seven_day?: UsageWindow | null
-  seven_day_sonnet?: UsageWindow | null
-  seven_day_opus?: UsageWindow | null
-  scoped?: ScopedUsageWindow[]
-}
 
 export interface AccountUsage {
   id: string
@@ -41,54 +21,17 @@ export interface UsageResult {
   accounts: AccountUsage[]
 }
 
-interface RawLimit {
-  kind?: string
-  percent?: unknown
-  resets_at?: unknown
-  scope?: { model?: { display_name?: unknown } | null } | null
-}
-
-function scopedFromLimits(limits: unknown): ScopedUsageWindow[] | undefined {
-  if (!Array.isArray(limits)) return undefined
-  const out: ScopedUsageWindow[] = []
-  for (const raw of limits as RawLimit[]) {
-    if (raw?.kind !== "weekly_scoped") continue
-    const label = raw.scope?.model?.display_name
-    if (typeof label !== "string" || label.length === 0) continue
-    if (typeof raw.percent !== "number" || !Number.isFinite(raw.percent)) continue
-    const resets_at = typeof raw.resets_at === "string" ? raw.resets_at : undefined
-    out.push({ label, utilization: raw.percent, resets_at })
-  }
-  return out.length > 0 ? out : undefined
-}
-
-async function fetchUsage(access: string): Promise<UsageResponse> {
-  const res = await fetch(USAGE_ENDPOINT, {
-    headers: {
-      Authorization: `Bearer ${access}`,
-      "anthropic-beta": OAUTH_BETA,
-    },
-    signal: AbortSignal.timeout(NETWORK_TIMEOUT_MS),
-  })
-  if (!res.ok) {
-    throw new Error(`usage request failed (${res.status})`)
-  }
-  const usage = (await res.json()) as UsageResponse & { limits?: unknown }
-  const scoped = scopedFromLimits(usage.limits)
-  if (scoped) usage.scoped = scoped
-  return usage
-}
-
 async function resolveAccess(
   account: StoredAccount,
   isActive: boolean,
   liveAuth: { access?: string; refresh?: string; expires?: number } | undefined,
+  refresh: RefreshStrategy,
 ): Promise<{ access?: string; error?: string; needsReauth?: boolean }> {
   if (isActive && liveAuth?.access && liveAuth.expires && liveAuth.expires >= Date.now()) {
     return { access: liveAuth.access }
   }
 
-  if (!isStale(account)) {
+  if (!refresh.isStale(account)) {
     return { access: account.access }
   }
 
@@ -100,7 +43,7 @@ async function resolveAccess(
   }
 
   try {
-    const fresh = await refreshToken(account.refresh)
+    const fresh = await refresh.refresh(account.refresh)
     return { access: fresh.access }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -110,7 +53,7 @@ async function resolveAccess(
 }
 
 const USAGE_CACHE_TTL_MS = 30_000
-let usageCache: { result: UsageResult; fetchedAt: number } | null = null
+const usageCaches = new Map<ProviderId, { result: UsageResult; fetchedAt: number }>()
 
 function snapshotToUsageResult(view: UsageSnapshotView, activeId?: string): UsageResult {
   const accounts: AccountUsage[] = view.accounts.map((a) => {
@@ -142,12 +85,16 @@ function snapshotToUsageResult(view: UsageSnapshotView, activeId?: string): Usag
   return { activeId, accounts }
 }
 
-export async function collectUsage(): Promise<UsageResult> {
-  if (usageCache && Date.now() - usageCache.fetchedAt < USAGE_CACHE_TTL_MS) {
-    return usageCache.result
+export async function collectUsage(provider: ProviderId): Promise<UsageResult> {
+  const cached = usageCaches.get(provider)
+  if (cached && Date.now() - cached.fetchedAt < USAGE_CACHE_TTL_MS) {
+    return cached.result
   }
 
   if (isWorkerMode()) {
+    if (provider !== DEFAULT_ACCOUNT_PROVIDER) {
+      throw new Error(`worker mode does not serve account provider "${provider}"`)
+    }
     const cfg = getWorkerConfig()
     if (!cfg) return { accounts: [] }
     const client = createUsageClient(cfg.masterUrl)
@@ -157,19 +104,20 @@ export async function collectUsage(): Promise<UsageResult> {
       return { accounts: [] }
     }
     const file = await loadAccounts()
-    const result = snapshotToUsageResult(outcome.view, file.activeId)
-    usageCache = { result, fetchedAt: Date.now() }
+    const result = snapshotToUsageResult(outcome.view, file.activeIds[provider])
+    usageCaches.set(provider, { result, fetchedAt: Date.now() })
     return result
   }
 
+  const descriptor = getAccountProvider(provider)
   const file = await loadAccounts()
-  const auth = await readAuthAnthropic()
-  const pool = accountsOf(file, "anthropic")
+  const auth = await descriptor.credentialAdapter.read()
+  const pool = accountsOf(file, provider)
 
   const results: AccountUsage[] = []
 
   for (const account of pool) {
-    const isActive = account.id === file.activeId
+    const isActive = account.id === file.activeIds[provider]
     const base: AccountUsage = {
       id: account.id,
       label: account.label,
@@ -177,7 +125,7 @@ export async function collectUsage(): Promise<UsageResult> {
       excluded: account.excluded ?? false,
     }
 
-    const resolved = await resolveAccess(account, isActive, auth)
+    const resolved = await resolveAccess(account, isActive, auth, descriptor.refresh)
     if (resolved.needsReauth) base.needsReauth = true
 
     if (!resolved.access) {
@@ -186,7 +134,7 @@ export async function collectUsage(): Promise<UsageResult> {
     }
 
     try {
-      const usage = await fetchUsage(resolved.access)
+      const usage = await descriptor.usage.fetch(resolved.access)
       results.push({ ...base, usage })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -195,20 +143,21 @@ export async function collectUsage(): Promise<UsageResult> {
     }
   }
 
-  const result: UsageResult = { activeId: file.activeId, accounts: results }
-  usageCache = { result, fetchedAt: Date.now() }
+  const result: UsageResult = { activeId: file.activeIds[provider], accounts: results }
+  usageCaches.set(provider, { result, fetchedAt: Date.now() })
   return result
 }
 
-export function retagActiveInCache(newActiveId: string): UsageResult | null {
-  if (!usageCache) return null
+export function retagActiveInCache(provider: ProviderId, newActiveId: string): UsageResult | null {
+  const cached = usageCaches.get(provider)
+  if (!cached) return null
   const updated: UsageResult = {
     activeId: newActiveId,
-    accounts: usageCache.result.accounts.map((a) => ({
+    accounts: cached.result.accounts.map((a) => ({
       ...a,
       active: a.id === newActiveId || newActiveId.startsWith(a.id),
     })),
   }
-  usageCache = { result: updated, fetchedAt: usageCache.fetchedAt }
+  usageCaches.set(provider, { result: updated, fetchedAt: cached.fetchedAt })
   return updated
 }
