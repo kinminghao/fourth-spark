@@ -151,7 +151,10 @@ export async function switchToAccount(provider: ProviderId, targetId: string): P
     const { credentialAdapter, refresh } = getAccountProvider(provider)
     const liveAuth = await credentialAdapter.read()
     const activeId = file.activeIds[provider]
-    if (activeId && activeId !== targetId && liveAuth?.refresh) {
+    // Static api-key credentials never rotate; adopting the live key would
+    // corrupt the outgoing record's identity (hash id/label keep pointing at
+    // the original key while the secret becomes a foreign one).
+    if (credentialAdapter.kind === "oauth" && activeId && activeId !== targetId && liveAuth?.refresh) {
       const outIdx = file.accounts.findIndex((a) => a.id === activeId)
       if (outIdx >= 0) {
         applyToken(file.accounts[outIdx], {
@@ -196,7 +199,7 @@ export async function switchToAccount(provider: ProviderId, targetId: string): P
       access: account.access,
       expires: account.expires,
     })
-    await broadcastCredentialToRuntimes({
+    await broadcastCredentialToRuntimes(provider, {
       kind: "full",
       refresh: account.refresh,
       access: account.access,

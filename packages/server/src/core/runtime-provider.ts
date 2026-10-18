@@ -5,6 +5,7 @@
 // provider.
 // ---------------------------------------------------------------------------
 
+import type { ProviderId } from "../lib/auth-files"
 import type { RuntimeClient } from "./runtime-client"
 import type { CredentialWriter, RuntimeCredentialChannel } from "./runtime-types"
 
@@ -17,6 +18,11 @@ export interface RuntimeProvider {
   readonly id: string
   readonly credentialWriter: CredentialWriter
   readonly credentialChannel: RuntimeCredentialChannel
+  /**
+   * Account provider this runtime's push channel is bound to. Required for
+   * runtime-push runtimes; account-store runtimes leave it unset.
+   */
+  readonly accountProvider?: ProviderId
 
   initialize(repoId: string, localPath: string): Promise<void>
   teardown(repoId: string): Promise<void>
@@ -30,4 +36,8 @@ export interface RuntimeProvider {
 
 export function needsCredentialPush(provider: RuntimeProvider): boolean {
   return provider.credentialChannel === "runtime-push"
+}
+
+export function consumesCredentialProvider(provider: RuntimeProvider, accountProvider: ProviderId): boolean {
+  return provider.credentialChannel === "runtime-push" && provider.accountProvider === accountProvider
 }

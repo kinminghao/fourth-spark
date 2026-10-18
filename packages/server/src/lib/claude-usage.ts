@@ -148,6 +148,10 @@ export async function collectUsage(provider: ProviderId): Promise<UsageResult> {
   return result
 }
 
+export function invalidateUsageCache(provider: ProviderId): void {
+  usageCaches.delete(provider)
+}
+
 export function retagActiveInCache(provider: ProviderId, newActiveId: string): UsageResult | null {
   const cached = usageCaches.get(provider)
   if (!cached) return null

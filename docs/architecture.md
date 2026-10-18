@@ -162,16 +162,17 @@ fourth-spark/
 │   │   │   │   ├── query.ts     # 通用查询辅助
 │   │   │   │   ├── sync.ts      # Runtime → PostgreSQL 数据同步
 │   │   │   │   └── migrate.ts   # 生产环境 migration 执行
-│   │   │   ├── lib/                             # 服务模块 (32 个)
+│   │   │   ├── lib/                             # 服务模块 (33 个)
 │   │   │   │   ├── process-manager.ts           # 薄包装：注册 Provider → 导出 runtimeManager
 │   │   │   │   ├── session-monitor.ts           # 会话状态监控与自动恢复
 │   │   │   │   ├── sync-scheduler.ts            # 每小时全量同步 Issue/PR/Comment/Tag
 │   │   │   │   ├── account-switcher.ts          # 账号切换/冷却（按 provider 参数化）
 │   │   │   │   ├── auth-files.ts                # 账号存储：auth.json 凭证条目 + claude-accounts.json
 │   │   │   │   ├── account-providers/           # 账号 Provider 描述符注册表
-│   │   │   │   │   ├── types.ts                 # 描述符与策略接口（凭证/登录/刷新/用量/身份）
-│   │   │   │   │   ├── auth-json.ts             # v1 凭证适配器（auth.json 条目）
+│   │   │   │   │   ├── types.ts                 # 描述符与策略接口（oauth/api-key 判别联合）
+│   │   │   │   │   ├── auth-json.ts             # v1 凭证适配器（auth.json oauth/api-key 条目）
 │   │   │   │   │   ├── anthropic.ts             # Anthropic (Claude) 描述符
+│   │   │   │   │   ├── opencode-go.ts           # OpenCode Go 描述符（API Key）
 │   │   │   │   │   └── index.ts                 # 注册表 + DEFAULT_ACCOUNT_PROVIDER
 │   │   │   │   ├── credential-broadcast.ts      # 凭证广播（按 runtime 凭证通道路由）
 │   │   │   │   ├── token-refresh.ts             # Anthropic OAuth Token 刷新
@@ -194,7 +195,8 @@ fourth-spark/
 │   │   │   │   ├── system-agents.ts             # 内置 Agent 初始化
 │   │   │   │   ├── memory-consolidation.ts      # Agent 记忆合并与归并
 │   │   │   │   ├── log-rotate.ts                # 运行时进程日志轮转
-│   │   │   │   ├── claude-onboard.ts            # Claude OAuth 登录引导流程
+│   │   │   │   ├── claude-onboard.ts            # Claude OAuth 登录引导 + 账号增删（单锁写入）
+│   │   │   │   ├── api-key-onboard.ts           # API Key 账号添加（校验 → 单锁写入账号与凭证）
 │   │   │   │   ├── child-env.ts                 # 子进程环境变量过滤（黑名单策略）
 │   │   │   │   ├── pagination.ts                # 列表接口分页辅助
 │   │   │   │   ├── validation.ts                # 请求体 Zod 校验辅助
@@ -218,7 +220,7 @@ fourth-spark/
 │   │   │   │   ├── agents-md.ts         # AGENTS.md 读写 (全局 + 仓库级)
 │   │   │   │   ├── settings.ts          # 全局设置 KV
 │   │   │   │   ├── git-hosts.ts         # Git 平台凭证管理
-│   │   │   │   ├── usage.ts             # Token 用量统计 + 账号切换
+│   │   │   │   ├── usage.ts             # 账号与用量 API（按 provider 参数化）
 │   │   │   │   ├── cloud.ts             # Cloud 账号池管理
 │   │   │   │   ├── transcribe.ts        # 语音转文字 (SenseVoice)
 │   │   │   │   ├── workspaces.ts        # Workspace 管理
@@ -395,12 +397,14 @@ routes 依赖的统一会话操作接口，每个 repo 一个实例：
 
 多 provider 账号基础层——每个 provider 注册一个描述符：
 
-- **描述符** — `{ id, label, 凭证适配器, 登录方式, 刷新策略, 用量源, 身份提取 }`，接口见 `types.ts`
-- **凭证适配器** — v1 实现读写 OpenCode auth.json 条目（`auth-json.ts`）；v2（SQLite 凭证库）以同一接口替换
+- **描述符** — `{ id, label, 凭证适配器, 登录方式, 刷新策略, 用量源, 身份提取? }`，接口见 `types.ts`；登录方式与凭证适配器按 `kind` 判别（`oauth` / `api-key`）
+- **已注册 provider** — `anthropic`（Claude，OAuth PKCE）；`opencode-go`（OpenCode Go 订阅，粘贴 API Key，经 models 端点校验、zen usage 采集用量，密钥不轮换）
+- **凭证适配器** — v1 实现读写 OpenCode auth.json 条目（`auth-json.ts`：OAuth 条目 `{type:"oauth"}`、API Key 条目 `{type:"api",key}`）；v2（SQLite 凭证库）以同一接口替换
 - **注册表** — `index.ts` 的 `getAccountProvider(id)` / `registerAccountProvider`；新增 provider 只需新增描述符模块并注册
-- **凭证路由** — `lib/credential-broadcast.ts` 按 runtime 声明的 `credentialChannel`（`account-store` / `runtime-push`）决定是否推送凭证
-- **账号存储** — `claude-accounts.json` 的 `activeIds: Record<providerId, accountId>` 记录各 provider 的激活账号；旧 `activeId` / `openaiActiveId` 字段在加载时自动迁移
-- **现状** — HTTP 面（`/api/usage/*`）仍为 Anthropic 单 provider，直连 `claude-onboard` 登录流程；OpenCode Go / Codex 的接入在后续 issue 落地
+- **凭证路由** — `lib/credential-broadcast.ts` 按 runtime 声明的 `credentialChannel`（`account-store` / `runtime-push`）与 `accountProvider` 绑定做 provider 限定的推送；account-store（opencode runtime）直读 auth.json，runtime-push（claude-code）只接收其绑定 provider 的凭证
+- **账号存储** — `claude-accounts.json` 的 `activeIds: Record<providerId, accountId>` 记录各 provider 的激活账号；旧 `activeId` / `openaiActiveId` 字段在加载时自动迁移；API Key 账号以 key 作为持久凭证
+- **HTTP 面** — `/api/usage`（`?provider=`）、`/api/usage/switch`（`provider` 可选）、`/api/usage/accounts`（POST 添加 API Key 账号 / DELETE 删除）；不带 provider 参数时保持 Anthropic 原契约；worker 模式仅服务默认 provider
+- **已知边界** — opencode runtime 启动时缓存 provider 连接态：运行期新增凭证实时生效，但删除「启动时已连接」的 provider 需 runtime 重启后才从 `/provider` connected 列表消失（磁盘状态始终正确）
 
 ### SenseVoice (`lib/sensevoice-manager.ts`)
 

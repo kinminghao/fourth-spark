@@ -1212,6 +1212,7 @@ export interface ScopedUsageWindow extends UsageWindow {
 export interface UsageResponse {
   five_hour?: UsageWindow | null
   seven_day?: UsageWindow | null
+  monthly?: UsageWindow | null
   seven_day_sonnet?: UsageWindow | null
   seven_day_opus?: UsageWindow | null
   scoped?: ScopedUsageWindow[]
@@ -1233,14 +1234,14 @@ export interface UsageResult {
   accounts: AccountUsage[]
 }
 
-export async function fetchUsage(): Promise<UsageResult> {
-  return apiFetch<UsageResult>("/api/usage")
+export async function fetchUsage(provider?: string): Promise<UsageResult> {
+  return apiFetch<UsageResult>(`/api/usage${provider ? `?provider=${encodeURIComponent(provider)}` : ""}`)
 }
 
-export async function switchUsageAccount(accountId: string): Promise<UsageResult> {
+export async function switchUsageAccount(accountId: string, provider?: string): Promise<UsageResult> {
   return apiFetch<UsageResult>("/api/usage/switch", {
     method: "POST",
-    body: JSON.stringify({ accountId }),
+    body: JSON.stringify({ accountId, ...(provider ? { provider } : {}) }),
   })
 }
 
@@ -1263,6 +1264,31 @@ export async function exchangeAccount(pendingId: string, code: string): Promise<
     method: "POST",
     body: JSON.stringify({ pendingId, code }),
   })
+}
+
+export type AddApiKeyAccountResult =
+  | { ok: true; id: string; label: string; existing: boolean }
+  | { ok: false; reason: string; detail?: string }
+
+export async function addApiKeyAccount(provider: string, key: string): Promise<AddApiKeyAccountResult> {
+  let response: Response
+  try {
+    response = await fetch(`${getApiBaseUrl()}/api/usage/accounts`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, key }),
+    })
+  } catch (cause) {
+    throw new ApiError(cause instanceof Error ? cause.message : "Network request failed", 0)
+  }
+
+  const raw = await response.text()
+  try {
+    return JSON.parse(raw) as AddApiKeyAccountResult
+  } catch (cause) {
+    if (!(cause instanceof SyntaxError)) throw cause
+    throw new ApiError(raw.trim() || `${response.status} ${response.statusText}`, response.status)
+  }
 }
 
 export async function deleteUsageAccount(accountId: string): Promise<void> {

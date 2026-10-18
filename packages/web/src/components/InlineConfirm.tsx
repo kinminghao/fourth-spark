@@ -15,6 +15,7 @@ interface InlineConfirmProps {
   stopPropagation?: boolean
   /** Title for the trigger button */
   title?: string
+  disabled?: boolean
   /** Sibling elements shown alongside trigger when not confirming, hidden when confirming */
   children?: ReactNode
 }
@@ -35,6 +36,7 @@ export function InlineConfirm({
   triggerClassName,
   stopPropagation,
   title = "删除",
+  disabled = false,
   children,
 }: InlineConfirmProps) {
   const [confirming, setConfirming] = useState(false)
@@ -55,6 +57,7 @@ export function InlineConfirm({
             onConfirm()
             setConfirming(false)
           }}
+          disabled={disabled}
           className={clsx(
             roundClass,
             padClass,
@@ -90,6 +93,7 @@ export function InlineConfirm({
           setConfirming(true)
         }}
         title={title}
+        disabled={disabled}
         className={clsx(
           roundClass,
           padClass,
