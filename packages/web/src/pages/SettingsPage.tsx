@@ -675,7 +675,7 @@ function ApiKeyLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucce
   )
 }
 
-function OpencodeGoSection() {
+function OpencodeGoSection({ localOnly = false }: { localOnly?: boolean }) {
   const [data, setData] = useState<UsageResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -725,7 +725,12 @@ function OpencodeGoSection() {
             <Sparkles className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-fg">OpenCode Go</h2>
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-sm font-semibold text-fg">OpenCode Go</h2>
+              {localOnly && (
+                <span className="rounded-full bg-elevated px-1.5 py-0.5 text-[10px] font-medium text-fg-4">仅本地</span>
+              )}
+            </div>
             <p className="mt-0.5 text-xs text-fg-4">
               OpenCode Go 订阅账号，粘贴 API Key 接入开源编码模型。
               <a
@@ -1484,13 +1489,9 @@ function AccountSection() {
           账号池
         </button>
       </div>
-      {loaded && mode === "local" && (
-        <>
-          <UsageSection />
-          <OpencodeGoSection />
-        </>
-      )}
+      {loaded && mode === "local" && <UsageSection />}
       {loaded && mode === "cloud" && <CloudPoolSection onStatusChange={handleStatusChange} />}
+      {loaded && <OpencodeGoSection localOnly={isWorker} />}
     </div>
   )
 }

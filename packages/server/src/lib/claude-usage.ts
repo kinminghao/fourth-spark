@@ -91,10 +91,9 @@ export async function collectUsage(provider: ProviderId): Promise<UsageResult> {
     return cached.result
   }
 
-  if (isWorkerMode()) {
-    if (provider !== DEFAULT_ACCOUNT_PROVIDER) {
-      throw new Error(`worker mode does not serve account provider "${provider}"`)
-    }
+  // Worker mode only changes where the DEFAULT provider's accounts come from
+  // (the cloud pool). Other providers are machine-local and use the local path.
+  if (isWorkerMode() && provider === DEFAULT_ACCOUNT_PROVIDER) {
     const cfg = getWorkerConfig()
     if (!cfg) return { accounts: [] }
     const client = createUsageClient(cfg.masterUrl)

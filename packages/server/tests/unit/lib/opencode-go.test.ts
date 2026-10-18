@@ -215,6 +215,56 @@ console.log("FIXTURE_RESULT:" + JSON.stringify({
 }))
 `
 
+const FIXTURE_WORKER = `
+import { mkdirSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
+
+const home = process.env.HOME
+const xdg = process.env.XDG_DATA_HOME
+const accountsPath = join(home, ".config", "opencode", "claude-accounts.json")
+const authPath = join(xdg, "opencode", "auth.json")
+
+globalThis.fetch = async (url) => {
+  const u = String(url)
+  if (u.includes("/inference/go/v1/models")) return new Response(JSON.stringify({ data: [] }), { status: 200 })
+  if (u.includes("/zen/go/v1/usage"))
+    return new Response(JSON.stringify({ usage: { rolling: { status: "ok", percent: 9 } } }), { status: 200 })
+  throw new Error("unexpected fetch: " + u)
+}
+
+mkdirSync(join(home, ".config", "opencode"), { recursive: true })
+mkdirSync(join(xdg, "opencode"), { recursive: true })
+writeFileSync(
+  accountsPath,
+  JSON.stringify(
+    {
+      version: 1,
+      activeIds: { anthropic: "acc-a" },
+      accounts: [{ id: "acc-a", label: "A", refresh: "rA", access: "aA", expires: Date.now() + 3600_000 }],
+    },
+    null,
+    2,
+  ),
+)
+writeFileSync(authPath, JSON.stringify({}, null, 2))
+
+const { initWorkerConfig, isWorkerMode } = await import(${mod("config")})
+await initWorkerConfig(async (key) => (key === "cloud_master_url" ? "http://127.0.0.1:9" : "fixture-worker"))
+
+const { addApiKeyAccount } = await import(${mod("api-key-onboard")})
+const { collectUsage } = await import(${mod("claude-usage")})
+const { removeAccount } = await import(${mod("claude-onboard")})
+
+const result = { isWorker: isWorkerMode() }
+const add = await addApiKeyAccount("opencode-go", "oc_sk_good_w1")
+result.addOk = add.ok
+const usage = await collectUsage("opencode-go")
+result.usageCount = usage.accounts.length
+result.usageIds = usage.accounts.map((a) => a.id)
+result.anthropicRemove = await removeAccount("acc-a")
+console.log("FIXTURE_RESULT:" + JSON.stringify(result))
+`
+
 type WindowResult = { utilization: number; resets_at?: string } | null
 
 interface FlowResult {
@@ -262,6 +312,14 @@ interface DegradationResult {
   accountCount: number
   accountError: string | null
   accountUsage: unknown
+}
+
+interface WorkerResult {
+  isWorker: boolean
+  addOk: boolean
+  usageCount: number
+  usageIds: string[]
+  anthropicRemove: { ok: boolean; reason?: string }
 }
 
 function runFixture(source: string, tag: string): Record<string, unknown> {
@@ -399,5 +457,24 @@ describe("opencode-go malformed usage response (isolated child process)", () => 
     expect(result.accountCount).toBe(1)
     expect(result.accountError).toContain("not valid JSON")
     expect(result.accountUsage).toBeNull()
+  })
+})
+
+describe("opencode-go in worker mode (isolated child process)", () => {
+  let result: WorkerResult
+
+  beforeAll(() => {
+    result = runFixture(FIXTURE_WORKER, "worker") as unknown as WorkerResult
+  })
+
+  test("machine-local providers stay fully available while the pool manages the default provider", () => {
+    expect(result.isWorker).toBe(true)
+    expect(result.addOk).toBe(true)
+    expect(result.usageCount).toBe(1)
+    expect(result.usageIds).toEqual([hashKey("oc_sk_good_w1")])
+  })
+
+  test("worker mode still protects the default provider's accounts from removal", () => {
+    expect(result.anthropicRemove).toEqual({ ok: false, reason: "account removal is not available in worker mode" })
   })
 })

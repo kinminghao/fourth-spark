@@ -40,6 +40,6 @@ OpenCode Go 订阅账号接入——粘贴 Console 签发的 API Key（`oc_sk_�
 
 ## 边界
 
-- 仅本地模式：账号池（worker）模式不服务非默认 provider，相关请求返回 400
+- 账号池（worker）模式只影响 Claude 账号来源；OpenCode Go 为机器本地凭证，在账号池模式下同样可配置（界面标注「仅本地」）
 - 一个 workspace 只允许一个 Go 订阅成员，多账号 = 多 workspace 的 key
 - 依赖 opencode v1 的 auth.json 凭证存储；v2（SQLite 凭证库）适配在后续工作项中跟进

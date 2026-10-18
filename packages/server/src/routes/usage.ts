@@ -40,9 +40,6 @@ usageRoutes.get("/", async (c) => {
   if (!isRegisteredAccountProvider(provider)) {
     return c.json({ error: `unknown account provider: ${provider}` }, 400)
   }
-  if (isWorkerMode() && provider !== DEFAULT_ACCOUNT_PROVIDER) {
-    return c.json({ error: `account provider "${provider}" is not available in worker mode` }, 400)
-  }
   const result = await collectUsage(provider)
   return c.json(result)
 })
@@ -52,11 +49,9 @@ usageRoutes.post("/switch", async (c) => {
   if (err) return err
   const provider = body.provider ?? DEFAULT_ACCOUNT_PROVIDER
 
-  if (isWorkerMode() && provider !== DEFAULT_ACCOUNT_PROVIDER) {
-    return c.json({ error: `account provider "${provider}" is not available in worker mode` }, 400)
-  }
-
-  if (isWorkerMode()) {
+  // Worker mode routes the DEFAULT provider through the cloud pool; other
+  // providers are machine-local and keep the local switch path.
+  if (isWorkerMode() && provider === DEFAULT_ACCOUNT_PROVIDER) {
     const cfg = getWorkerConfig()
     if (!cfg) return c.json({ error: "worker config not available" }, 500)
     const client = createLeaseClient(cfg.masterUrl, cfg.workerId)
@@ -101,9 +96,6 @@ usageRoutes.post("/authorize", (c) => {
 })
 
 usageRoutes.post("/accounts", async (c) => {
-  if (isWorkerMode()) {
-    return c.json({ error: "account onboarding is not available in worker mode" }, 400)
-  }
   const [body, err] = await parseBody(c, AddAccountBody)
   if (err) return err
   if (!isRegisteredAccountProvider(body.provider)) {
@@ -132,9 +124,6 @@ usageRoutes.post("/exchange", async (c) => {
 })
 
 usageRoutes.delete("/accounts/:id", async (c) => {
-  if (isWorkerMode()) {
-    return c.json({ error: "account removal is not available in worker mode" }, 400)
-  }
   const id = c.req.param("id")
   const result = await removeAccount(id)
   if (!result.ok) {

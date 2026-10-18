@@ -23,6 +23,7 @@ import {
   saveAccounts,
   withAuthLock,
 } from "./auth-files"
+import { isWorkerMode } from "./config"
 import { broadcastCredentialToRuntimes } from "./credential-broadcast"
 
 // ---------------------------------------------------------------------------
@@ -257,8 +258,13 @@ export async function removeAccount(id: string): Promise<{ ok: true; label: stri
     const index = file.accounts.findIndex((a) => a.id === id)
     if (index < 0) return { ok: false, reason: "account not found" }
     const provider = providerOf(file.accounts[index])
+    const { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } = await import("./account-providers")
+    // Worker mode manages the default provider's accounts from the cloud pool;
+    // machine-local providers stay removable.
+    if (provider === DEFAULT_ACCOUNT_PROVIDER && isWorkerMode()) {
+      return { ok: false, reason: "account removal is not available in worker mode" }
+    }
     if (file.activeIds[provider] === id) {
-      const { getAccountProvider } = await import("./account-providers")
       let apiKeyAdapter: ApiKeyCredentialAdapter | undefined
       try {
         const { credentialAdapter } = getAccountProvider(provider)
