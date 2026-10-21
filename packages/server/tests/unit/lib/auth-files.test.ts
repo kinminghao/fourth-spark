@@ -262,7 +262,7 @@ describe("auth-files and account switching in an isolated process", () => {
     expect(result.lease.activeId).toBe("acc-leased")
   })
 
-  test("removeAccount protects the active account of any migrated provider", () => {
-    expect(result.removeActive).toEqual({ ok: false, reason: "cannot remove active account" })
+  test("removeAccount allows removing the active openai account", () => {
+    expect(result.removeActive).toEqual({ ok: true, label: "O" })
   })
 })

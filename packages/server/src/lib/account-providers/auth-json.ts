@@ -13,6 +13,7 @@ export function createAuthJsonCredentialAdapter(entryKey: string): CredentialAda
     kind: "oauth",
     read: () => readAuthEntry(entryKey),
     write: (token) => writeAuthEntry(entryKey, token),
+    clear: () => removeAuthEntry(entryKey),
   }
 }
 

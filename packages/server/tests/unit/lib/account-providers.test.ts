@@ -16,7 +16,8 @@ describe("account provider registry", () => {
     }
     expect(typeof provider.refresh.isStale).toBe("function")
     expect(typeof provider.refresh.refresh).toBe("function")
-    expect(typeof provider.usage.fetch).toBe("function")
+    expect(provider.usage).toBeDefined()
+    if (provider.usage) expect(typeof provider.usage.fetch).toBe("function")
     expect(typeof provider.identity?.fetchProfile).toBe("function")
   })
 
@@ -35,8 +36,28 @@ describe("account provider registry", () => {
     expect(provider.identity).toBeUndefined()
   })
 
+  test("resolves the openai descriptor with the browser oauth callback login", () => {
+    const provider = getAccountProvider("openai")
+    expect(provider.id).toBe("openai")
+    expect(provider.label).toBe("OpenAI (ChatGPT)")
+    expect(provider.credentialAdapter.kind).toBe("oauth")
+    expect(typeof provider.credentialAdapter.clear).toBe("function")
+    expect(provider.login.kind).toBe("oauth-callback")
+    if (provider.login.kind === "oauth-callback") {
+      expect(typeof provider.login.start).toBe("function")
+      expect(typeof provider.login.poll).toBe("function")
+      expect(typeof provider.login.cancel).toBe("function")
+    }
+    expect(typeof provider.refresh.isStale).toBe("function")
+    expect(typeof provider.refresh.refresh).toBe("function")
+    expect(provider.usage).toBeUndefined()
+    expect(provider.identity).toBeUndefined()
+    expect(provider.refreshRuntimesOnSwitch).toBe(true)
+    expect(provider.removableWhenActive).toBe(true)
+  })
+
   test("lists registered providers", () => {
-    expect(listAccountProviders().map((p) => p.id)).toEqual(["anthropic", "opencode-go"])
+    expect(listAccountProviders().map((p) => p.id)).toEqual(["anthropic", "opencode-go", "openai"])
   })
 
   test("unknown provider ids fail loudly", () => {

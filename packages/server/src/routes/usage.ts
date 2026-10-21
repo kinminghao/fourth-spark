@@ -23,6 +23,9 @@ const AddAccountBody = z.object({
   provider: z.string().min(1),
   key: z.string().min(1),
 })
+const OAuthAuthorizeBody = z.object({
+  provider: z.string().min(1),
+})
 
 function isRegisteredAccountProvider(id: string): boolean {
   try {
@@ -107,6 +110,62 @@ usageRoutes.post("/accounts", async (c) => {
     return c.json(result, status)
   }
   return c.json(result)
+})
+
+usageRoutes.post("/oauth/authorize", async (c) => {
+  const [body, err] = await parseBody(c, OAuthAuthorizeBody)
+  if (err) return err
+  if (!isRegisteredAccountProvider(body.provider)) {
+    return c.json({ error: `unknown account provider: ${body.provider}` }, 400)
+  }
+  if (isWorkerMode() && body.provider === DEFAULT_ACCOUNT_PROVIDER) {
+    return c.json({ error: "account onboarding is not available in worker mode" }, 400)
+  }
+  const descriptor = getAccountProvider(body.provider)
+  if (descriptor.login.kind !== "oauth-callback") {
+    return c.json({ error: `provider ${body.provider} does not support browser oauth` }, 400)
+  }
+  try {
+    const result = await descriptor.login.start()
+    return c.json({ mode: "oauth-callback", ...result })
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 409)
+  }
+})
+
+usageRoutes.get("/oauth/:provider/logins/:pendingId", async (c) => {
+  const provider = c.req.param("provider")
+  if (!isRegisteredAccountProvider(provider)) {
+    return c.json({ error: `unknown account provider: ${provider}` }, 400)
+  }
+  if (isWorkerMode() && provider === DEFAULT_ACCOUNT_PROVIDER) {
+    return c.json({ error: "account onboarding is not available in worker mode" }, 400)
+  }
+  const descriptor = getAccountProvider(provider)
+  if (descriptor.login.kind !== "oauth-callback") {
+    return c.json({ error: `provider ${provider} does not support browser oauth` }, 400)
+  }
+  const state = await descriptor.login.poll(c.req.param("pendingId"))
+  if (!state) {
+    return c.json({ error: "unknown login session" }, 404)
+  }
+  return c.json(state)
+})
+
+usageRoutes.delete("/oauth/:provider/logins/:pendingId", async (c) => {
+  const provider = c.req.param("provider")
+  if (!isRegisteredAccountProvider(provider)) {
+    return c.json({ error: `unknown account provider: ${provider}` }, 400)
+  }
+  if (isWorkerMode() && provider === DEFAULT_ACCOUNT_PROVIDER) {
+    return c.json({ error: "account onboarding is not available in worker mode" }, 400)
+  }
+  const descriptor = getAccountProvider(provider)
+  if (descriptor.login.kind !== "oauth-callback") {
+    return c.json({ error: `provider ${provider} does not support browser oauth` }, 400)
+  }
+  await descriptor.login.cancel(c.req.param("pendingId"))
+  return c.body(null, 204)
 })
 
 usageRoutes.post("/exchange", async (c) => {

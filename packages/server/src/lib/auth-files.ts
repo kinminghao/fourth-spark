@@ -8,7 +8,7 @@ import { withFileLock } from "./lockfile"
 // (lib/account-providers/), which validates ids at lookup time.
 export type ProviderId = string
 
-export type AuthToken = { access?: string; refresh?: string; expires?: number }
+export type AuthToken = { access?: string; refresh?: string; expires?: number; accountId?: string }
 
 export type StoredAccount = {
   id: string
@@ -41,17 +41,25 @@ export function accountsOf(file: AccountsFile, provider: ProviderId): StoredAcco
 
 export function applyToken(
   record: StoredAccount,
-  token: { refresh: string; access?: string; expires?: number },
+  token: { refresh: string; access?: string; expires?: number; accountId?: string },
 ): StoredAccount {
   if (token.refresh !== SENTINEL_REFRESH && token.refresh !== record.refresh) record.refreshMintedAt = Date.now()
   record.refresh = token.refresh
   record.access = token.access
   record.expires = token.expires
+  if (token.accountId !== undefined) record.accountId = token.accountId
   delete record.needsReauth
   return record
 }
 
-type AuthJsonEntry = { type: string; access?: string; refresh?: string; expires?: number; key?: string }
+type AuthJsonEntry = {
+  type: string
+  access?: string
+  refresh?: string
+  expires?: number
+  accountId?: string
+  key?: string
+}
 type AuthJson = Record<string, AuthJsonEntry>
 
 const ACCOUNTS_PATH = join(homedir(), ".config", "opencode", "claude-accounts.json")
@@ -126,8 +134,10 @@ export async function readAuthEntry(entryKey: string): Promise<AuthToken | undef
   const path = await resolveAuthJsonPath()
   const auth = await readJson<AuthJson>(path)
   const entry = auth?.[entryKey]
-  if (entry?.type === "oauth") return { access: entry.access, refresh: entry.refresh, expires: entry.expires }
-  return undefined
+  if (entry?.type !== "oauth") return undefined
+  const token: AuthToken = { access: entry.access, refresh: entry.refresh, expires: entry.expires }
+  if (typeof entry.accountId === "string") token.accountId = entry.accountId
+  return token
 }
 
 export async function readApiKeyEntry(entryKey: string): Promise<string | undefined> {
@@ -139,18 +149,21 @@ export async function readApiKeyEntry(entryKey: string): Promise<string | undefi
 }
 
 export type TokenWrite =
-  | { kind: "full"; refresh: string; access?: string; expires?: number }
+  | { kind: "full"; refresh: string; access?: string; expires?: number; accountId?: string }
   | { kind: "lease"; access: string; expires: number }
 
-function resolveRefresh(write: TokenWrite | { refresh: string; access?: string; expires?: number }): {
+function resolveRefresh(
+  write: TokenWrite | { refresh: string; access?: string; expires?: number; accountId?: string },
+): {
   refresh: string
   access?: string
   expires?: number
+  accountId?: string
 } {
   if (!("kind" in write)) return write
   switch (write.kind) {
     case "full":
-      return { refresh: write.refresh, access: write.access, expires: write.expires }
+      return { refresh: write.refresh, access: write.access, expires: write.expires, accountId: write.accountId }
     case "lease":
       return { refresh: SENTINEL_REFRESH, access: write.access, expires: write.expires }
   }
@@ -174,11 +187,22 @@ async function updateAuthJson(mutate: (auth: AuthJson) => boolean): Promise<void
 
 export async function writeAuthEntry(
   entryKey: string,
-  write: TokenWrite | { refresh: string; access?: string; expires?: number },
+  write: TokenWrite | { refresh: string; access?: string; expires?: number; accountId?: string },
 ): Promise<void> {
   const token = resolveRefresh(write)
   await updateAuthJson((auth) => {
-    auth[entryKey] = { type: "oauth", access: token.access ?? "", refresh: token.refresh, expires: token.expires ?? 0 }
+    const existing = auth[entryKey]
+    const entry: AuthJsonEntry = {
+      type: "oauth",
+      access: token.access ?? "",
+      refresh: token.refresh,
+      expires: token.expires ?? 0,
+    }
+    const accountId =
+      token.accountId ??
+      (existing?.type === "oauth" && typeof existing.accountId === "string" ? existing.accountId : undefined)
+    if (accountId !== undefined) entry.accountId = accountId
+    auth[entryKey] = entry
     return true
   })
 }
@@ -203,7 +227,7 @@ export async function readAuthAnthropic(): Promise<AuthToken | undefined> {
 }
 
 export async function writeAuthAnthropic(
-  write: TokenWrite | { refresh: string; access?: string; expires?: number },
+  write: TokenWrite | { refresh: string; access?: string; expires?: number; accountId?: string },
 ): Promise<void> {
   await writeAuthEntry("anthropic", write)
 }

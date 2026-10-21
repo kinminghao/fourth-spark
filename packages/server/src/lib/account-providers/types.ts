@@ -6,7 +6,7 @@
 
 import type { AuthToken, ProviderId, TokenWrite } from "../auth-files"
 
-export type RefreshResult = { access: string; refresh: string; expires: number }
+export type RefreshResult = { access: string; refresh: string; expires: number; accountId?: string }
 
 export type AuthorizeResult = { url: string; pendingId: string; expiresAt: number }
 
@@ -50,6 +50,11 @@ export interface OAuthCredentialAdapter {
   readonly kind: "oauth"
   read(): Promise<AuthToken | undefined>
   write(token: TokenWrite): Promise<void>
+  /**
+   * Remove the stored credential (delete-account flow). Must not take the auth
+   * lock itself (callers hold it).
+   */
+  clear(): Promise<void>
 }
 
 export interface ApiKeyCredentialAdapter {
@@ -99,7 +104,22 @@ export interface ApiKeyLoginStrategy {
   verify(key: string): Promise<ApiKeyVerifyResult>
 }
 
-export type LoginStrategy = OAuthLoginStrategy | ApiKeyLoginStrategy
+export type CallbackLoginState = { state: "pending" } | { state: "complete"; result: ExchangeResult }
+
+/**
+ * Browser OAuth with a loopback callback listener. The provider owns the
+ * listener and performs the code exchange itself; callers only start the flow
+ * and poll the handle until it completes.
+ */
+export interface OAuthCallbackLoginStrategy {
+  readonly kind: "oauth-callback"
+  start(): Promise<AuthorizeResult>
+  poll(pendingId: string): Promise<CallbackLoginState | undefined>
+  /** Abandon a pending login and release its callback listener. */
+  cancel(pendingId: string): Promise<void>
+}
+
+export type LoginStrategy = OAuthLoginStrategy | ApiKeyLoginStrategy | OAuthCallbackLoginStrategy
 
 export interface IdentitySource {
   fetchProfile(access: string): Promise<ProfileResult>
@@ -111,7 +131,16 @@ export interface AccountProviderDescriptor {
   readonly credentialAdapter: CredentialAdapter
   readonly login: LoginStrategy
   readonly refresh: RefreshStrategy
-  readonly usage: UsageSource
-  /** Absent for providers with no profile endpoint (e.g. opencode-go). */
+  /** Absent for providers with no public usage endpoint (e.g. openai). */
+  readonly usage?: UsageSource
+  /** Absent for providers with no profile endpoint (e.g. opencode-go, openai). */
   readonly identity?: IdentitySource
+  /**
+   * Rebuild running instances after a switch even for OAuth credentials.
+   * opencode caches the resolved credential per instance, so providers it
+   * consumes directly need this; Anthropic keeps the existing live-token path.
+   */
+  readonly refreshRuntimesOnSwitch?: boolean
+  /** Allow deleting the active account (clears the shared credential too). */
+  readonly removableWhenActive?: boolean
 }

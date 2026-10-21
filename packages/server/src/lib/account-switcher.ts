@@ -140,7 +140,7 @@ function pickNext(file: AccountsFile, provider: ProviderId, activeId?: string): 
 }
 
 export async function switchToAccount(provider: ProviderId, targetId: string): Promise<StoredAccount> {
-  const { account, credentialKind } = await withAuthLock(async () => {
+  const { account, credentialKind, refreshRuntimesOnSwitch } = await withAuthLock(async () => {
     const file = await loadAccounts()
     const index = file.accounts.findIndex((a) => a.id === targetId)
     if (index < 0) throw new Error("account not found")
@@ -149,7 +149,8 @@ export async function switchToAccount(provider: ProviderId, targetId: string): P
     if (providerOf(account) !== provider) throw new Error("该账号与目标 provider 不一致,拒绝写入 Claude 登录态")
     if (account.needsReauth) throw new Error("account needs reauth")
 
-    const { credentialAdapter, refresh } = getAccountProvider(provider)
+    const descriptor = getAccountProvider(provider)
+    const { credentialAdapter, refresh } = descriptor
     const liveAuth = await credentialAdapter.read()
     const activeId = file.activeIds[provider]
     // Static api-key credentials never rotate; adopting the live key would
@@ -162,6 +163,7 @@ export async function switchToAccount(provider: ProviderId, targetId: string): P
           refresh: liveAuth.refresh,
           access: liveAuth.access,
           expires: liveAuth.expires,
+          accountId: liveAuth.accountId,
         })
       }
     }
@@ -176,7 +178,12 @@ export async function switchToAccount(provider: ProviderId, targetId: string): P
           const rec = latest.accounts.find((a) => a.id === targetId)
           if (rec && !rec.needsReauth && rec.refresh !== err.refresh) {
             logger.info({ id: targetId }, "adopted foreign rotation during switch")
-            applyToken(account, { refresh: rec.refresh, access: rec.access, expires: rec.expires })
+            applyToken(account, {
+              refresh: rec.refresh,
+              access: rec.access,
+              expires: rec.expires,
+              accountId: rec.accountId,
+            })
           } else {
             if (rec && !rec.needsReauth) {
               rec.needsReauth = true
@@ -199,19 +206,26 @@ export async function switchToAccount(provider: ProviderId, targetId: string): P
       refresh: account.refresh,
       access: account.access,
       expires: account.expires,
+      accountId: account.accountId,
     })
     await broadcastCredentialToRuntimes(provider, {
       kind: "full",
       refresh: account.refresh,
       access: account.access,
       expires: account.expires,
+      accountId: account.accountId,
     })
     logger.info({ id: targetId, label: account.label }, "switched active account")
-    return { account, credentialKind: credentialAdapter.kind }
+    return {
+      account,
+      credentialKind: credentialAdapter.kind,
+      refreshRuntimesOnSwitch: descriptor.refreshRuntimesOnSwitch === true,
+    }
   })
-  // Static api-key credentials are baked into runtime instance state at start;
-  // rebuild that state so the switched key applies to running sessions.
-  if (credentialKind === "api-key") {
+  // Static api-key credentials are baked into runtime instance state at start,
+  // and providers that opencode reads directly cache the credential per
+  // instance; rebuild that state so the switched credential applies live.
+  if (credentialKind === "api-key" || refreshRuntimesOnSwitch) {
     const { runtimeManager } = await import("./process-manager")
     await refreshAccountStoreRuntimes(runtimeManager.listProviders())
   }

@@ -1238,6 +1238,34 @@ export async function fetchUsage(provider?: string): Promise<UsageResult> {
   return apiFetch<UsageResult>(`/api/usage${provider ? `?provider=${encodeURIComponent(provider)}` : ""}`)
 }
 
+export interface OAuthCallbackLogin {
+  mode: "oauth-callback"
+  url: string
+  pendingId: string
+  expiresAt: number
+}
+
+export type OAuthLoginState = { state: "pending" } | { state: "complete"; result: ExchangeAccountResult }
+
+export async function startOAuthLogin(provider: string): Promise<OAuthCallbackLogin> {
+  return apiFetch<OAuthCallbackLogin>("/api/usage/oauth/authorize", {
+    method: "POST",
+    body: JSON.stringify({ provider }),
+  })
+}
+
+export async function getOAuthLoginState(provider: string, pendingId: string): Promise<OAuthLoginState> {
+  return apiFetch<OAuthLoginState>(
+    `/api/usage/oauth/${encodeURIComponent(provider)}/logins/${encodeURIComponent(pendingId)}`,
+  )
+}
+
+export async function cancelOAuthLogin(provider: string, pendingId: string): Promise<void> {
+  await apiFetch<void>(`/api/usage/oauth/${encodeURIComponent(provider)}/logins/${encodeURIComponent(pendingId)}`, {
+    method: "DELETE",
+  })
+}
+
 export async function switchUsageAccount(accountId: string, provider?: string): Promise<UsageResult> {
   return apiFetch<UsageResult>("/api/usage/switch", {
     method: "POST",

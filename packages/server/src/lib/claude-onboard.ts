@@ -12,7 +12,13 @@
 
 import { createHash, randomBytes } from "node:crypto"
 import { logger } from "../middleware/logger"
-import type { ApiKeyCredentialAdapter, AuthorizeResult, ExchangeResult, ProfileResult } from "./account-providers/types"
+import type {
+  AccountProviderDescriptor,
+  AuthorizeResult,
+  CredentialAdapter,
+  ExchangeResult,
+  ProfileResult,
+} from "./account-providers/types"
 import {
   type AccountsFile,
   applyToken,
@@ -266,19 +272,24 @@ export async function removeAccount(id: string): Promise<{ ok: true; label: stri
     if (provider === DEFAULT_ACCOUNT_PROVIDER && isWorkerMode()) {
       return notOk("account removal is not available in worker mode")
     }
-    let apiKeyAdapter: ApiKeyCredentialAdapter | undefined
+    let adapter: CredentialAdapter | undefined
+    let descriptor: AccountProviderDescriptor | undefined
     try {
-      const { credentialAdapter } = getAccountProvider(provider)
-      if (credentialAdapter.kind === "api-key") apiKeyAdapter = credentialAdapter
+      descriptor = getAccountProvider(provider)
+      adapter = descriptor.credentialAdapter
     } catch {
       // Unregistered provider (legacy record): nothing to clear or refresh.
     }
+    let removedActiveCredential = false
     if (file.activeIds[provider] === id) {
-      if (!apiKeyAdapter) return notOk("cannot remove active account")
-      // Clear the shared auth.json entry, otherwise the runtime keeps
-      // authenticating with a deleted account's key.
-      await apiKeyAdapter.clear()
+      if (adapter?.kind !== "api-key" && descriptor?.removableWhenActive !== true) {
+        return notOk("cannot remove active account")
+      }
+      // Clear the shared credential, otherwise the runtime keeps
+      // authenticating with a deleted account's credential.
+      if (adapter) await adapter.clear()
       file.activeIds[provider] = undefined
+      removedActiveCredential = true
     }
 
     const [removed] = file.accounts.splice(index, 1)
@@ -288,7 +299,11 @@ export async function removeAccount(id: string): Promise<{ ok: true; label: stri
     invalidateUsageCache(provider)
 
     logger.info({ id, label: removed.label }, "claude-onboard: account removed")
-    return { result: { ok: true as const, label: removed.label }, refreshRuntime: apiKeyAdapter !== undefined }
+    return {
+      result: { ok: true as const, label: removed.label },
+      refreshRuntime:
+        removedActiveCredential && (adapter?.kind === "api-key" || descriptor?.refreshRuntimesOnSwitch === true),
+    }
   })
   if (outcome.refreshRuntime) {
     const { runtimeManager } = await import("./process-manager")
@@ -332,7 +347,7 @@ export async function fetchProfile(access: string): Promise<ProfileResult> {
 // Upsert account into claude-accounts.json + credential store
 // ---------------------------------------------------------------------------
 
-type TokenSet = { refresh: string; access?: string; expires?: number }
+type TokenSet = { refresh: string; access?: string; expires?: number; accountId?: string }
 
 // Applies the upsert to an already-loaded accounts file. Callers hold the auth lock.
 function applyAccountUpsert(
@@ -354,6 +369,7 @@ function applyAccountUpsert(
     if (subscription) record.subscription = subscription
   } else {
     record = { id, label, refresh: token.refresh, access: token.access, expires: token.expires, subscription }
+    if (token.accountId !== undefined) record.accountId = token.accountId
     // Legacy anthropic records omit `provider` (providerOf() defaults to it);
     // other providers stamp their id so accountsOf() groups them correctly.
     if (stampProvider) record.provider = provider
@@ -374,7 +390,26 @@ export async function upsertAccountWithCredential(
 ): Promise<boolean> {
   return withAuthLock(async () => {
     const { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } = await import("./account-providers")
+    const descriptor = getAccountProvider(provider)
+    const adapter = descriptor.credentialAdapter
     const file = await loadAccounts()
+
+    const activeId = file.activeIds[provider]
+    if (adapter.kind === "oauth" && activeId && activeId !== id) {
+      const liveAuth = await adapter.read()
+      if (liveAuth?.refresh) {
+        const outIdx = file.accounts.findIndex((a) => a.id === activeId)
+        if (outIdx >= 0) {
+          applyToken(file.accounts[outIdx], {
+            refresh: liveAuth.refresh,
+            access: liveAuth.access,
+            expires: liveAuth.expires,
+            accountId: liveAuth.accountId,
+          })
+        }
+      }
+    }
+
     const existing = applyAccountUpsert(
       file,
       provider,
@@ -387,11 +422,12 @@ export async function upsertAccountWithCredential(
     await saveAccounts(file)
     // Share the lock with the account save so concurrent add/switch cycles
     // cannot interleave their auth.json read-modify-write sequences.
-    await getAccountProvider(provider).credentialAdapter.write({
+    await adapter.write({
       kind: "full",
       refresh: token.refresh,
       access: token.access,
       expires: token.expires,
+      accountId: token.accountId,
     })
     logger.info({ provider, id, label, existing }, "claude-onboard: account upserted")
     return existing

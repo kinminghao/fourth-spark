@@ -29,6 +29,7 @@ import {
   X,
   Zap,
 } from "lucide-react"
+import type { ReactNode } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { InlineConfirm } from "../components/InlineConfirm"
 import type { AccountUsage, GitHost, ModelInfo, UsageResult, UsageWindow } from "../lib/api-client"
@@ -130,6 +131,7 @@ function AccountCard({
   onDelete,
   deleting,
   mutedError,
+  usageUnavailable,
 }: {
   account: AccountUsage
   onSwitch?: (id: string) => void
@@ -137,6 +139,7 @@ function AccountCard({
   onDelete?: (id: string) => void
   deleting?: boolean
   mutedError?: boolean
+  usageUnavailable?: boolean
 }) {
   const active = account.active
   return (
@@ -206,7 +209,7 @@ function AccountCard({
         </div>
       )}
 
-      {mutedError && account.error && !account.usage ? (
+      {((mutedError && account.error) || (usageUnavailable && !account.error)) && !account.usage ? (
         <div className="mt-3 text-[11px] text-fg-5">用量暂不可用</div>
       ) : account.error && !account.usage ? (
         <div className="mt-3 flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
@@ -675,7 +678,27 @@ function ApiKeyLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucce
   )
 }
 
-function OpencodeGoSection({ localOnly = false }: { localOnly?: boolean }) {
+function ProviderAccountSection({
+  provider,
+  title,
+  description,
+  icon: Icon,
+  localOnly = false,
+  addLabel,
+  emptyText,
+  usageUnavailable = false,
+  renderLoginModal,
+}: {
+  provider: string
+  title: string
+  description: ReactNode
+  icon: typeof Sparkles
+  localOnly?: boolean
+  addLabel: string
+  emptyText: string
+  usageUnavailable?: boolean
+  renderLoginModal: (onClose: () => void, onSuccess: () => void) => ReactNode
+}) {
   const [data, setData] = useState<UsageResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -687,11 +710,11 @@ function OpencodeGoSection({ localOnly = false }: { localOnly?: boolean }) {
     setLoading(true)
     setError(null)
     api
-      .fetchUsage(OPENCODE_GO_PROVIDER)
+      .fetchUsage(provider)
       .then((result) => setData(result))
       .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
       .finally(() => setLoading(false))
-  }, [])
+  }, [provider])
 
   useEffect(() => {
     load()
@@ -702,7 +725,7 @@ function OpencodeGoSection({ localOnly = false }: { localOnly?: boolean }) {
   const handleSwitch = (id: string) => {
     setSwitchingId(id)
     api
-      .switchUsageAccount(id, OPENCODE_GO_PROVIDER)
+      .switchUsageAccount(id, provider)
       .then(setData)
       .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
       .finally(() => setSwitchingId(null))
@@ -722,34 +745,16 @@ function OpencodeGoSection({ localOnly = false }: { localOnly?: boolean }) {
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-500">
-            <Sparkles className="h-4 w-4" />
+            <Icon className="h-4 w-4" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <h2 className="text-sm font-semibold text-fg">OpenCode Go</h2>
+              <h2 className="text-sm font-semibold text-fg">{title}</h2>
               {localOnly && (
                 <span className="rounded-full bg-elevated px-1.5 py-0.5 text-[10px] font-medium text-fg-4">仅本地</span>
               )}
             </div>
-            <p className="mt-0.5 text-xs text-fg-4">
-              OpenCode Go 订阅账号，粘贴 API Key 接入开源编码模型。
-              <a
-                href={OPENCODE_GO_CONSOLE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-1 text-blue-500 hover:underline"
-              >
-                订阅 / 获取 API Key
-              </a>
-              <a
-                href={OPENCODE_GO_GUIDE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-2 text-blue-500 hover:underline"
-              >
-                接入指南
-              </a>
-            </p>
+            <div className="mt-0.5 text-xs text-fg-4">{description}</div>
           </div>
         </div>
         <button
@@ -779,9 +784,7 @@ function OpencodeGoSection({ localOnly = false }: { localOnly?: boolean }) {
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-elevated text-fg-4">
               <Users className="h-5 w-5" />
             </div>
-            <p className="max-w-xs text-center text-xs leading-relaxed">
-              尚未添加 OpenCode Go 账号，前往 OpenCode Console 订阅并复制 API Key。
-            </p>
+            <p className="max-w-xs text-center text-xs leading-relaxed">{emptyText}</p>
           </div>
         ) : data ? (
           data.accounts.map((account) => (
@@ -793,6 +796,7 @@ function OpencodeGoSection({ localOnly = false }: { localOnly?: boolean }) {
               onDelete={handleDelete}
               deleting={deletingId === account.id}
               mutedError
+              usageUnavailable={usageUnavailable}
             />
           ))
         ) : null}
@@ -801,19 +805,253 @@ function OpencodeGoSection({ localOnly = false }: { localOnly?: boolean }) {
           onClick={() => setShowLogin(true)}
           className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3"
         >
-          <Plus className="h-3.5 w-3.5" /> 添加 OpenCode Go 账号
+          <Plus className="h-3.5 w-3.5" /> {addLabel}
         </button>
       </div>
-      {showLogin && (
-        <ApiKeyLoginModal
-          onClose={() => setShowLogin(false)}
-          onSuccess={() => {
+      {error && data && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 break-words">{error}</span>
+        </div>
+      )}
+      {showLogin &&
+        renderLoginModal(
+          () => setShowLogin(false),
+          () => {
             setShowLogin(false)
             load()
-          }}
-        />
-      )}
+          },
+        )}
     </section>
+  )
+}
+
+function OpencodeGoSection({ localOnly = false }: { localOnly?: boolean }) {
+  return (
+    <ProviderAccountSection
+      provider={OPENCODE_GO_PROVIDER}
+      title="OpenCode Go"
+      icon={Sparkles}
+      localOnly={localOnly}
+      addLabel="添加 OpenCode Go 账号"
+      emptyText="尚未添加 OpenCode Go 账号，前往 OpenCode Console 订阅并复制 API Key。"
+      description={
+        <>
+          OpenCode Go 订阅账号，粘贴 API Key 接入开源编码模型。
+          <a
+            href={OPENCODE_GO_CONSOLE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-1 text-blue-500 hover:underline"
+          >
+            订阅 / 获取 API Key
+          </a>
+          <a
+            href={OPENCODE_GO_GUIDE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-2 text-blue-500 hover:underline"
+          >
+            接入指南
+          </a>
+        </>
+      }
+      renderLoginModal={(onClose, onSuccess) => <ApiKeyLoginModal onClose={onClose} onSuccess={onSuccess} />}
+    />
+  )
+}
+
+function OpenAiLoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const startPromise = useRef<ReturnType<typeof api.startOAuthLogin> | null>(null)
+  const openedUrl = useRef<string | null>(null)
+  const [login, setLogin] = useState<Awaited<ReturnType<typeof api.startOAuthLogin>> | null>(null)
+  const [starting, setStarting] = useState(true)
+  const [error, setError] = useState("")
+  const [complete, setComplete] = useState(false)
+
+  const start = useCallback(() => {
+    setStarting(true)
+    setLogin(null)
+    setError("")
+    openedUrl.current = null
+    const request = api.startOAuthLogin("openai")
+    startPromise.current = request
+    void request
+      .then(setLogin)
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : String(cause))
+      })
+      .finally(() => setStarting(false))
+  }, [])
+
+  useEffect(() => {
+    if (!login || openedUrl.current === login.url) return
+    openedUrl.current = login.url
+    window.open(login.url, "_blank", "noopener,noreferrer")
+  }, [login])
+
+  useEffect(() => {
+    if (!startPromise.current) {
+      const request = api.startOAuthLogin("openai")
+      startPromise.current = request
+      void request
+        .then(setLogin)
+        .catch((cause: unknown) => {
+          setError(cause instanceof Error ? cause.message : String(cause))
+        })
+        .finally(() => setStarting(false))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!login || error || complete) return
+    let active = true
+    const poll = async () => {
+      try {
+        const state = await api.getOAuthLoginState("openai", login.pendingId)
+        if (!active || state.state === "pending") return
+        if (state.result.ok) {
+          setComplete(true)
+          onSuccess()
+          return
+        }
+        const message =
+          {
+            unknown: "登录会话已失效，请重试",
+            expired: "登录会话已失效，请重试",
+            "exchange-failed": "授权完成，但换取凭证失败，请重试",
+            "profile-failed": "无法识别 ChatGPT 账号，请重试",
+          }[state.result.reason] ??
+          state.result.detail ??
+          state.result.reason
+        setError(message)
+      } catch (cause) {
+        if (!active) return
+        const message = cause instanceof Error ? cause.message : String(cause)
+        setError(message.includes("unknown login session") ? "登录会话已失效，请重试" : message)
+      }
+    }
+    const interval = setInterval(() => void poll(), 1_500)
+    void poll()
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [complete, error, login, onSuccess])
+
+  const close = useCallback(() => {
+    if (login && !complete) void api.cancelOAuthLogin("openai", login.pendingId).catch(() => {})
+    onClose()
+  }, [complete, login, onClose])
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close()
+    }
+    window.addEventListener("keydown", handleKey)
+    return () => window.removeEventListener("keydown", handleKey)
+  }, [close])
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="openai-login-title"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center"
+      onClick={close}
+    >
+      <div
+        className="flex w-full max-w-lg flex-col rounded-t-2xl border border-line bg-surface p-5 shadow-2xl sm:rounded-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 id="openai-login-title" className="text-sm font-semibold text-fg">
+            添加 ChatGPT 账号
+          </h2>
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-md p-1 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mt-4 space-y-4">
+          {starting ? (
+            <div className="flex items-center gap-2 text-xs text-fg-4">
+              <Loader2 className="h-4 w-4 fs-spin" />
+              正在发起登录…
+            </div>
+          ) : login ? (
+            <>
+              <p className="text-xs text-fg-3">
+                请在浏览器中完成 ChatGPT 授权。等待浏览器授权…若未自动打开，请点击下方链接。
+              </p>
+              <a
+                href={login.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex text-xs text-blue-500 hover:underline"
+              >
+                打开 ChatGPT 授权页面
+              </a>
+            </>
+          ) : null}
+          {error && (
+            <div className="flex items-start gap-1.5 rounded-md border border-red-400/30 bg-red-400/5 px-3 py-2">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
+              <span className="text-xs text-red-400">{error}</span>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            {error && (
+              <button
+                type="button"
+                onClick={start}
+                className="rounded-md border border-line px-3 py-2 text-xs font-medium text-fg-3 transition-colors hover:bg-elevated"
+              >
+                重新发起
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={close}
+              className="rounded-md border border-line px-3 py-2 text-xs font-medium text-fg-3 transition-colors hover:bg-elevated"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function OpenAiSection({ localOnly }: { localOnly: boolean }) {
+  return (
+    <ProviderAccountSection
+      provider="openai"
+      title="OpenAI (ChatGPT)"
+      description={
+        <>
+          使用 ChatGPT 账号登录，凭证写入本机 opencode，供 Codex/OpenAI 模型使用。{" "}
+          <a
+            href="https://chatgpt.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-500 hover:underline"
+          >
+            ChatGPT
+          </a>
+        </>
+      }
+      icon={Sparkles}
+      localOnly={localOnly}
+      addLabel="添加 ChatGPT 账号"
+      emptyText="尚未添加 ChatGPT 账号，点击下方按钮登录。"
+      usageUnavailable
+      renderLoginModal={(onClose, onSuccess) => <OpenAiLoginModal onClose={onClose} onSuccess={onSuccess} />}
+    />
   )
 }
 
@@ -1492,6 +1730,7 @@ function AccountSection() {
       {loaded && mode === "local" && <UsageSection />}
       {loaded && mode === "cloud" && <CloudPoolSection onStatusChange={handleStatusChange} />}
       {loaded && <OpencodeGoSection localOnly={isWorker} />}
+      {loaded && <OpenAiSection localOnly={isWorker} />}
     </div>
   )
 }

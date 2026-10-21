@@ -110,8 +110,24 @@ export async function collectUsage(provider: ProviderId): Promise<UsageResult> {
 
   const descriptor = getAccountProvider(provider)
   const file = await loadAccounts()
-  const auth = await descriptor.credentialAdapter.read()
   const pool = accountsOf(file, provider)
+
+  if (!descriptor.usage) {
+    const result: UsageResult = {
+      activeId: file.activeIds[provider],
+      accounts: pool.map((account) => ({
+        id: account.id,
+        label: account.label,
+        active: account.id === file.activeIds[provider],
+        excluded: account.excluded ?? false,
+        needsReauth: account.needsReauth || undefined,
+      })),
+    }
+    usageCaches.set(provider, { result, fetchedAt: Date.now() })
+    return result
+  }
+
+  const auth = await descriptor.credentialAdapter.read()
 
   const results: AccountUsage[] = []
 
