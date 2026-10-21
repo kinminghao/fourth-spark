@@ -27,7 +27,8 @@ OpenCode Go 订阅账号接入——粘贴 Console 签发的 API Key（`oc_sk_�
 ## 运行时感知
 
 - 写入 auth.json 条目后，opencode runtime 的 `/provider` 将 `opencode-go` 标记为 connected，模型 Tab 对应模型显示为已配置（`configured` 机制）
-- **运行期新增实时生效**；删除「runtime 启动时已连接」的 provider 需 runtime 重启后才从 connected 列表消失（opencode 启动时缓存连接态所致，磁盘状态始终正确）
+- **凭证变更后自动生效**：opencode 在实例创建时解析凭证并缓存 SDK/语言模型，因此添加/切换/删除账号后，服务端会对运行中的 account-store runtime 调用 `POST /instance/dispose` 重建实例状态——新 key 无需重启进程即用于后续会话，connected 状态与模型列表同步更新
+- 代价：重建发生在响应返回后，若当时有进行中的回合，该回合可能被中断（会话记录保留）
 
 ## API
 

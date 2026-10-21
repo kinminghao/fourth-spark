@@ -415,6 +415,18 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
       }
     },
 
+    async refreshCredentials(): Promise<void> {
+      await Promise.all(
+        [...managed.values()].map(async (entry) => {
+          try {
+            await entry.client.disposeInstance()
+          } catch (err) {
+            logger.warn({ err, repoId: entry.id }, "failed to refresh opencode instance credentials")
+          }
+        }),
+      )
+    },
+
     injectMcp(localPath: string, repoId: string, port: number, sessionId?: string): void {
       injectMcpConfig(localPath, repoId, port, sessionId)
     },

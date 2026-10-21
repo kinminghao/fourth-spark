@@ -25,6 +25,7 @@ import {
 } from "./auth-files"
 import { isWorkerMode } from "./config"
 import { broadcastCredentialToRuntimes } from "./credential-broadcast"
+import { refreshAccountStoreRuntimes } from "./credential-refresh"
 
 // ---------------------------------------------------------------------------
 // Constants — aligned with Claude Code CLI / claude-accounts-pool
@@ -253,26 +254,27 @@ export async function exchange(pendingId: string, code: string): Promise<Exchang
 // ---------------------------------------------------------------------------
 
 export async function removeAccount(id: string): Promise<{ ok: true; label: string } | { ok: false; reason: string }> {
-  return withAuthLock(async () => {
+  const outcome = await withAuthLock(async () => {
     const file = await loadAccounts()
     const index = file.accounts.findIndex((a) => a.id === id)
-    if (index < 0) return { ok: false, reason: "account not found" }
+    const notOk = (reason: string) => ({ result: { ok: false as const, reason }, refreshRuntime: false })
+    if (index < 0) return notOk("account not found")
     const provider = providerOf(file.accounts[index])
     const { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } = await import("./account-providers")
     // Worker mode manages the default provider's accounts from the cloud pool;
     // machine-local providers stay removable.
     if (provider === DEFAULT_ACCOUNT_PROVIDER && isWorkerMode()) {
-      return { ok: false, reason: "account removal is not available in worker mode" }
+      return notOk("account removal is not available in worker mode")
+    }
+    let apiKeyAdapter: ApiKeyCredentialAdapter | undefined
+    try {
+      const { credentialAdapter } = getAccountProvider(provider)
+      if (credentialAdapter.kind === "api-key") apiKeyAdapter = credentialAdapter
+    } catch {
+      // Unregistered provider (legacy record): nothing to clear or refresh.
     }
     if (file.activeIds[provider] === id) {
-      let apiKeyAdapter: ApiKeyCredentialAdapter | undefined
-      try {
-        const { credentialAdapter } = getAccountProvider(provider)
-        if (credentialAdapter.kind === "api-key") apiKeyAdapter = credentialAdapter
-      } catch {
-        // Unregistered provider (legacy record): nothing to clear, fall through to refusal.
-      }
-      if (!apiKeyAdapter) return { ok: false, reason: "cannot remove active account" }
+      if (!apiKeyAdapter) return notOk("cannot remove active account")
       // Clear the shared auth.json entry, otherwise the runtime keeps
       // authenticating with a deleted account's key.
       await apiKeyAdapter.clear()
@@ -286,8 +288,13 @@ export async function removeAccount(id: string): Promise<{ ok: true; label: stri
     invalidateUsageCache(provider)
 
     logger.info({ id, label: removed.label }, "claude-onboard: account removed")
-    return { ok: true, label: removed.label }
+    return { result: { ok: true as const, label: removed.label }, refreshRuntime: apiKeyAdapter !== undefined }
   })
+  if (outcome.refreshRuntime) {
+    const { runtimeManager } = await import("./process-manager")
+    await refreshAccountStoreRuntimes(runtimeManager.listProviders())
+  }
+  return outcome.result
 }
 
 // ---------------------------------------------------------------------------

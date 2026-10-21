@@ -24,6 +24,10 @@ export interface RuntimeProvider {
    */
   readonly accountProvider?: ProviderId
 
+  /** Re-read the shared credential store into live instance state. Only
+   *  account-store runtimes implement it; callers treat it as best-effort. */
+  refreshCredentials?(): Promise<void>
+
   initialize(repoId: string, localPath: string): Promise<void>
   teardown(repoId: string): Promise<void>
   isReady(repoId: string): boolean

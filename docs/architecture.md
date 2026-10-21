@@ -404,7 +404,7 @@ routes 依赖的统一会话操作接口，每个 repo 一个实例：
 - **凭证路由** — `lib/credential-broadcast.ts` 按 runtime 声明的 `credentialChannel`（`account-store` / `runtime-push`）与 `accountProvider` 绑定做 provider 限定的推送；account-store（opencode runtime）直读 auth.json，runtime-push（claude-code）只接收其绑定 provider 的凭证
 - **账号存储** — `claude-accounts.json` 的 `activeIds: Record<providerId, accountId>` 记录各 provider 的激活账号；旧 `activeId` / `openaiActiveId` 字段在加载时自动迁移；API Key 账号以 key 作为持久凭证
 - **HTTP 面** — `/api/usage`（`?provider=`）、`/api/usage/switch`（`provider` 可选）、`/api/usage/accounts`（POST 添加 API Key 账号 / DELETE 删除）；不带 provider 参数时保持 Anthropic 原契约；worker 模式只改变默认 provider 的账号来源，本地型 provider（opencode-go）照常走本地路径
-- **已知边界** — opencode runtime 启动时缓存 provider 连接态：运行期新增凭证实时生效，但删除「启动时已连接」的 provider 需 runtime 重启后才从 `/provider` connected 列表消失（磁盘状态始终正确）
+- **凭证生效** — opencode 在实例创建时解析 auth.json 并缓存 SDK/语言模型；凭证变更（添加/切换/删除）后经 `lib/credential-refresh.ts` 对运行中的 account-store runtime 调用 `POST /instance/dispose` 重建实例状态，新凭证无需重启进程即用于后续会话（进行中的回合可能被中断）
 
 ### SenseVoice (`lib/sensevoice-manager.ts`)
 

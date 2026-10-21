@@ -9,6 +9,7 @@ import { getAccountProvider } from "./account-providers"
 import type { ProviderId } from "./auth-files"
 import { upsertAccountWithCredential } from "./claude-onboard"
 import { invalidateUsageCache } from "./claude-usage"
+import { refreshAccountStoreRuntimes } from "./credential-refresh"
 
 export type AddApiKeyAccountResult =
   | { ok: true; id: string; label: string; existing: boolean }
@@ -27,6 +28,9 @@ export async function addApiKeyAccount(provider: ProviderId, key: string): Promi
     access: normalizedKey,
   })
   invalidateUsageCache(provider)
+
+  const { runtimeManager } = await import("./process-manager")
+  await refreshAccountStoreRuntimes(runtimeManager.listProviders())
 
   logger.info({ provider, id: verified.id, label: verified.label, existing }, "api-key account added")
   return { ok: true, id: verified.id, label: verified.label, existing }
