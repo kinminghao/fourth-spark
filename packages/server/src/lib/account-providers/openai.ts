@@ -1,6 +1,7 @@
 // ---------------------------------------------------------------------------
 // OpenAI (ChatGPT) account provider — browser OAuth with a fixed loopback
-// callback listener. The credential is the opencode `openai` auth.json entry:
+// callback listener, plus a headless device-code flow. The credential is the
+// opencode `openai` auth.json entry:
 // `{type:"oauth",access,refresh,expires,accountId}`. ChatGPT has no public
 // usage API, so the descriptor intentionally has no usage source.
 // ---------------------------------------------------------------------------
@@ -13,6 +14,7 @@ import type {
   AccountProviderDescriptor,
   AuthorizeResult,
   CallbackLoginState,
+  DeviceAuthorizeResult,
   ExchangeResult,
   RefreshResult,
 } from "./types"
@@ -23,6 +25,11 @@ const PROVIDER_LABEL = "OpenAI (ChatGPT)"
 const ISSUER = "https://auth.openai.com"
 const AUTHORIZE_URL = `${ISSUER}/oauth/authorize`
 const TOKEN_URL = `${ISSUER}/oauth/token`
+const DEVICE_REQUEST_URL = `${ISSUER}/api/accounts/deviceauth/usercode`
+const DEVICE_TOKEN_URL = `${ISSUER}/api/accounts/deviceauth/token`
+const DEVICE_VERIFICATION_URL = `${ISSUER}/codex/device`
+const DEVICE_REDIRECT_URI = `${ISSUER}/deviceauth/callback`
+const DEVICE_USER_AGENT = "fourth-spark"
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 
 const CALLBACK_PORT = 1455
@@ -32,6 +39,8 @@ const SCOPE = "openid profile email offline_access"
 const NETWORK_TIMEOUT_MS = 15_000
 const PENDING_TTL_MS = 10 * 60_000
 const COMPLETED_TTL_MS = 5 * 60_000
+const DEVICE_DEFAULT_TTL_MS = 15 * 60_000
+const DEVICE_POLL_GRACE_MS = 1_000
 const MAX_ACTIVE_LOGIN = 1
 
 const STALE_BUFFER_MS = 5 * 60_000
@@ -64,9 +73,35 @@ type Pending = {
   processing?: boolean
 }
 
+type DevicePending = {
+  pendingId: string
+  deviceAuthId: string
+  userCode: string
+  intervalMs: number
+  expiresAt: number
+  nextPollAt: number
+  status: "pending" | "complete"
+  result?: ExchangeResult
+  completedAt?: number
+  polling?: boolean
+}
+
+type DeviceAuthorizeResponse = {
+  device_auth_id?: string
+  user_code?: string
+  interval?: string
+  expires_at?: string
+}
+
+type DeviceTokenResponse = {
+  authorization_code?: string
+  code_verifier?: string
+}
+
 type Identity = { accountId: string; email?: string }
 
 const pendingLogins = new Map<string, Pending>()
+const devicePendingLogins = new Map<string, DevicePending>()
 
 function base64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
@@ -248,8 +283,7 @@ async function exchangeCode(code: string, verifier: string, redirectUri: string)
   }
 }
 
-async function exchangeAndUpsert(pending: Pending, code: string): Promise<ExchangeResult> {
-  const token = await exchangeCode(code, pending.verifier, pending.redirectUri)
+async function completeLogin(token: IssuedToken): Promise<ExchangeResult> {
   const identity = extractIdentity(token.idToken, token.access)
   if (!identity) {
     return { ok: false, reason: "profile-failed", detail: "token response missing account id" }
@@ -270,6 +304,11 @@ async function exchangeAndUpsert(pending: Pending, code: string): Promise<Exchan
   await refreshAccountStoreRuntimes(runtimeManager.listProviders())
 
   return { ok: true, id: identity.accountId, label, existing }
+}
+
+async function exchangeAndUpsert(pending: Pending, code: string): Promise<ExchangeResult> {
+  const token = await exchangeCode(code, pending.verifier, pending.redirectUri)
+  return completeLogin(token)
 }
 
 async function handleCallback(req: IncomingMessage, res: ServerResponse, pendingId: string): Promise<void> {
@@ -400,6 +439,189 @@ export async function pollOpenAiLogin(pendingId: string): Promise<CallbackLoginS
   return { state: "pending" }
 }
 
+function pruneDeviceSessions(): void {
+  const now = Date.now()
+  for (const [id, pending] of devicePendingLogins) {
+    if (pending.completedAt !== undefined && now - pending.completedAt >= COMPLETED_TTL_MS) {
+      devicePendingLogins.delete(id)
+    }
+  }
+}
+
+function deviceExpiresAt(raw: string | undefined): number {
+  if (raw) {
+    const parsed = Date.parse(raw)
+    if (Number.isFinite(parsed) && parsed > Date.now()) return parsed
+  }
+  return Date.now() + DEVICE_DEFAULT_TTL_MS
+}
+
+function completeDevice(pending: DevicePending, result: ExchangeResult): CallbackLoginState {
+  pending.status = "complete"
+  pending.result = result
+  pending.completedAt = Date.now()
+  return { state: "complete", result }
+}
+
+export async function startOpenAiDeviceLogin(): Promise<DeviceAuthorizeResult> {
+  pruneDeviceSessions()
+
+  const active = [...devicePendingLogins.values()].find((pending) => pending.status === "pending")
+  if (active) {
+    if (active.expiresAt > Date.now()) {
+      return {
+        url: DEVICE_VERIFICATION_URL,
+        userCode: active.userCode,
+        pendingId: active.pendingId,
+        expiresAt: active.expiresAt,
+        intervalMs: active.intervalMs,
+      }
+    }
+    devicePendingLogins.delete(active.pendingId)
+  }
+
+  let res: Response
+  try {
+    res = await fetch(DEVICE_REQUEST_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "User-Agent": DEVICE_USER_AGENT,
+      },
+      body: JSON.stringify({ client_id: CLIENT_ID }),
+      signal: AbortSignal.timeout(NETWORK_TIMEOUT_MS),
+    })
+  } catch (err) {
+    throw new Error(`device authorization request failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(`device authorization failed (HTTP ${res.status}): ${body.slice(0, 200)}`)
+  }
+
+  let json: DeviceAuthorizeResponse
+  try {
+    json = (await res.json()) as DeviceAuthorizeResponse
+  } catch {
+    throw new Error("device authorization response was not valid JSON")
+  }
+  if (!json.device_auth_id || !json.user_code) {
+    throw new Error("device authorization response missing device_auth_id or user_code")
+  }
+
+  const parsedInterval = Number.parseInt(json.interval ?? "5", 10)
+  const intervalMs = Math.max(Number.isFinite(parsedInterval) ? parsedInterval : 5, 1) * 1000
+  const expiresAt = deviceExpiresAt(json.expires_at)
+  const pendingId = base64url(randomBytes(16))
+  devicePendingLogins.set(pendingId, {
+    pendingId,
+    deviceAuthId: json.device_auth_id,
+    userCode: json.user_code,
+    intervalMs,
+    expiresAt,
+    nextPollAt: Date.now() + intervalMs + DEVICE_POLL_GRACE_MS,
+    status: "pending",
+  })
+
+  return {
+    url: DEVICE_VERIFICATION_URL,
+    userCode: json.user_code,
+    pendingId,
+    expiresAt,
+    intervalMs,
+  }
+}
+
+export async function cancelOpenAiDeviceLogin(pendingId: string): Promise<void> {
+  devicePendingLogins.delete(pendingId)
+}
+
+export async function pollOpenAiDeviceLogin(pendingId: string): Promise<CallbackLoginState | undefined> {
+  const pending = devicePendingLogins.get(pendingId)
+  if (!pending) return undefined
+
+  if (pending.status === "complete") {
+    if (pending.completedAt !== undefined && Date.now() - pending.completedAt >= COMPLETED_TTL_MS) {
+      devicePendingLogins.delete(pendingId)
+      return undefined
+    }
+    return pending.result ? { state: "complete", result: pending.result } : undefined
+  }
+
+  if (pending.expiresAt <= Date.now()) {
+    devicePendingLogins.delete(pendingId)
+    return { state: "complete", result: { ok: false, reason: "expired" } }
+  }
+
+  if (pending.polling || Date.now() < pending.nextPollAt) return { state: "pending" }
+
+  pending.polling = true
+  try {
+    let res: Response
+    try {
+      res = await fetch(DEVICE_TOKEN_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "User-Agent": DEVICE_USER_AGENT,
+        },
+        body: JSON.stringify({ device_auth_id: pending.deviceAuthId, user_code: pending.userCode }),
+        signal: AbortSignal.timeout(NETWORK_TIMEOUT_MS),
+      })
+    } catch (err) {
+      return completeDevice(pending, {
+        ok: false,
+        reason: "exchange-failed",
+        detail: err instanceof Error ? err.message : String(err),
+      })
+    }
+
+    if (res.status === 403 || res.status === 404) {
+      pending.nextPollAt = Date.now() + pending.intervalMs + DEVICE_POLL_GRACE_MS
+      return { state: "pending" }
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => "")
+      return completeDevice(pending, {
+        ok: false,
+        reason: "exchange-failed",
+        detail: `device authorization failed (HTTP ${res.status}): ${body.slice(0, 200)}`,
+      })
+    }
+
+    let json: DeviceTokenResponse
+    try {
+      json = (await res.json()) as DeviceTokenResponse
+    } catch {
+      return completeDevice(pending, {
+        ok: false,
+        reason: "exchange-failed",
+        detail: "device authorization response was not valid JSON",
+      })
+    }
+    if (!json.authorization_code || !json.code_verifier) {
+      return completeDevice(pending, {
+        ok: false,
+        reason: "exchange-failed",
+        detail: "device authorization response missing code or verifier",
+      })
+    }
+
+    const token = await exchangeCode(json.authorization_code, json.code_verifier, DEVICE_REDIRECT_URI)
+    return completeDevice(pending, await completeLogin(token))
+  } catch (err) {
+    return completeDevice(pending, {
+      ok: false,
+      reason: "exchange-failed",
+      detail: err instanceof Error ? err.message : String(err),
+    })
+  } finally {
+    pending.polling = false
+  }
+}
+
 export async function refreshOpenAiToken(refreshToken: string): Promise<RefreshResult> {
   const res = await fetch(TOKEN_URL, {
     method: "POST",
@@ -445,6 +667,14 @@ export const openAiAccountProvider: AccountProviderDescriptor = {
     poll: pollOpenAiLogin,
     cancel: cancelOpenAiLogin,
   },
+  alternateLogins: [
+    {
+      kind: "oauth-device",
+      start: startOpenAiDeviceLogin,
+      poll: pollOpenAiDeviceLogin,
+      cancel: cancelOpenAiDeviceLogin,
+    },
+  ],
   refresh: {
     isStale: isOpenAiTokenStale,
     refresh: refreshOpenAiToken,

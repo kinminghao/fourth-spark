@@ -8,7 +8,7 @@ import type { ProviderId } from "../auth-files"
 import { anthropicAccountProvider } from "./anthropic"
 import { openAiAccountProvider } from "./openai"
 import { openCodeGoAccountProvider } from "./opencode-go"
-import type { AccountProviderDescriptor } from "./types"
+import type { AccountProviderDescriptor, LoginStrategy } from "./types"
 
 const providers = new Map<ProviderId, AccountProviderDescriptor>([
   [anthropicAccountProvider.id, anthropicAccountProvider],
@@ -32,4 +32,12 @@ export function getAccountProvider(id: ProviderId): AccountProviderDescriptor {
 
 export function listAccountProviders(): AccountProviderDescriptor[] {
   return Array.from(providers.values())
+}
+
+export function findAccountLogin(
+  descriptor: AccountProviderDescriptor,
+  kind: LoginStrategy["kind"],
+): LoginStrategy | undefined {
+  if (descriptor.login.kind === kind) return descriptor.login
+  return descriptor.alternateLogins?.find((login) => login.kind === kind)
 }

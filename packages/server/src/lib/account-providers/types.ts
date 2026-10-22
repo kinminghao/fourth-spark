@@ -10,6 +10,8 @@ export type RefreshResult = { access: string; refresh: string; expires: number; 
 
 export type AuthorizeResult = { url: string; pendingId: string; expiresAt: number }
 
+export type DeviceAuthorizeResult = AuthorizeResult & { userCode: string; intervalMs: number }
+
 export type ExchangeResult =
   | { ok: true; id: string; label: string; existing: boolean }
   | {
@@ -119,7 +121,18 @@ export interface OAuthCallbackLoginStrategy {
   cancel(pendingId: string): Promise<void>
 }
 
-export type LoginStrategy = OAuthLoginStrategy | ApiKeyLoginStrategy | OAuthCallbackLoginStrategy
+export interface OAuthDeviceLoginStrategy {
+  readonly kind: "oauth-device"
+  start(): Promise<DeviceAuthorizeResult>
+  poll(pendingId: string): Promise<CallbackLoginState | undefined>
+  cancel(pendingId: string): Promise<void>
+}
+
+export type LoginStrategy =
+  | OAuthLoginStrategy
+  | ApiKeyLoginStrategy
+  | OAuthCallbackLoginStrategy
+  | OAuthDeviceLoginStrategy
 
 export interface IdentitySource {
   fetchProfile(access: string): Promise<ProfileResult>
@@ -130,6 +143,7 @@ export interface AccountProviderDescriptor {
   readonly label: string
   readonly credentialAdapter: CredentialAdapter
   readonly login: LoginStrategy
+  readonly alternateLogins?: readonly LoginStrategy[]
   readonly refresh: RefreshStrategy
   /** Absent for providers with no public usage endpoint (e.g. openai). */
   readonly usage?: UsageSource

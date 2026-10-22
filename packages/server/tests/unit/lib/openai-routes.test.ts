@@ -29,6 +29,22 @@ describe("OpenAI OAuth account routes", () => {
     expect(await res.json()).toEqual({ error: "provider anthropic does not support browser oauth" })
   })
 
+  test("rejects a provider without device-code login", async () => {
+    const res = await postAuthorize({ provider: "anthropic", method: "device" })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: "provider anthropic does not support device code login" })
+  })
+
+  test("rejects an unknown login method", async () => {
+    const res = await postAuthorize({ provider: "openai", method: "magic" })
+    expect(res.status).toBe(400)
+  })
+
+  test("validates the method on the poll endpoint", async () => {
+    const res = await usageRoutes.request("/oauth/openai/logins/pending-1?method=magic")
+    expect(res.status).toBe(400)
+  })
+
   test("validates the provider on the poll endpoint", async () => {
     const res = await usageRoutes.request("/oauth/nope/logins/pending-1")
     expect(res.status).toBe(400)

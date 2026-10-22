@@ -861,28 +861,53 @@ function OpencodeGoSection({ localOnly = false }: { localOnly?: boolean }) {
   )
 }
 
+type OpenAiLoginMethod = "callback" | "device"
+type ActiveOpenAiLogin = { method: OpenAiLoginMethod; login: api.OAuthLoginStart }
+
 function OpenAiLoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const startPromise = useRef<ReturnType<typeof api.startOAuthLogin> | null>(null)
+  const requestId = useRef(0)
+  const closed = useRef(false)
   const openedUrl = useRef<string | null>(null)
-  const [login, setLogin] = useState<Awaited<ReturnType<typeof api.startOAuthLogin>> | null>(null)
+  const started = useRef(false)
+  const [method, setMethod] = useState<OpenAiLoginMethod>("callback")
+  const [active, setActive] = useState<ActiveOpenAiLogin | null>(null)
   const [starting, setStarting] = useState(true)
   const [error, setError] = useState("")
   const [complete, setComplete] = useState(false)
 
-  const start = useCallback(() => {
+  const begin = useCallback((nextMethod: OpenAiLoginMethod) => {
+    const id = ++requestId.current
+    closed.current = false
+    setMethod(nextMethod)
     setStarting(true)
-    setLogin(null)
+    setActive(null)
     setError("")
+    setComplete(false)
     openedUrl.current = null
-    const request = api.startOAuthLogin("openai")
-    startPromise.current = request
-    void request
-      .then(setLogin)
-      .catch((cause: unknown) => {
-        setError(cause instanceof Error ? cause.message : String(cause))
+    void api
+      .startOAuthLogin("openai", nextMethod)
+      .then((login) => {
+        if (closed.current) {
+          void api.cancelOAuthLogin("openai", login.pendingId, nextMethod).catch(() => {})
+          return
+        }
+        if (id === requestId.current) setActive({ method: nextMethod, login })
       })
-      .finally(() => setStarting(false))
+      .catch((cause: unknown) => {
+        if (id === requestId.current) setError(cause instanceof Error ? cause.message : String(cause))
+      })
+      .finally(() => {
+        if (id === requestId.current) setStarting(false)
+      })
   }, [])
+
+  useEffect(() => {
+    if (started.current) return
+    started.current = true
+    begin("callback")
+  }, [begin])
+
+  const login = active?.login
 
   useEffect(() => {
     if (!login || openedUrl.current === login.url) return
@@ -891,25 +916,12 @@ function OpenAiLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucce
   }, [login])
 
   useEffect(() => {
-    if (!startPromise.current) {
-      const request = api.startOAuthLogin("openai")
-      startPromise.current = request
-      void request
-        .then(setLogin)
-        .catch((cause: unknown) => {
-          setError(cause instanceof Error ? cause.message : String(cause))
-        })
-        .finally(() => setStarting(false))
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!login || error || complete) return
-    let active = true
+    if (!active || error || complete) return
+    let cancelled = false
     const poll = async () => {
       try {
-        const state = await api.getOAuthLoginState("openai", login.pendingId)
-        if (!active || state.state === "pending") return
+        const state = await api.getOAuthLoginState("openai", active.login.pendingId, active.method)
+        if (cancelled || state.state === "pending") return
         if (state.result.ok) {
           setComplete(true)
           onSuccess()
@@ -926,7 +938,7 @@ function OpenAiLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucce
           state.result.reason
         setError(message)
       } catch (cause) {
-        if (!active) return
+        if (cancelled) return
         const message = cause instanceof Error ? cause.message : String(cause)
         setError(message.includes("unknown login session") ? "登录会话已失效，请重试" : message)
       }
@@ -934,15 +946,29 @@ function OpenAiLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucce
     const interval = setInterval(() => void poll(), 1_500)
     void poll()
     return () => {
-      active = false
+      cancelled = true
       clearInterval(interval)
     }
-  }, [complete, error, login, onSuccess])
+  }, [active, complete, error, onSuccess])
 
   const close = useCallback(() => {
-    if (login && !complete) void api.cancelOAuthLogin("openai", login.pendingId).catch(() => {})
+    closed.current = true
+    if (active && !complete) {
+      void api.cancelOAuthLogin("openai", active.login.pendingId, active.method).catch(() => {})
+    }
     onClose()
-  }, [complete, login, onClose])
+  }, [active, complete, onClose])
+
+  const changeMethod = useCallback(
+    (nextMethod: OpenAiLoginMethod) => {
+      if (nextMethod === method || starting) return
+      if (active && !complete) {
+        void api.cancelOAuthLogin("openai", active.login.pendingId, active.method).catch(() => {})
+      }
+      begin(nextMethod)
+    },
+    [active, begin, complete, method, starting],
+  )
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -951,6 +977,12 @@ function OpenAiLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucce
     window.addEventListener("keydown", handleKey)
     return () => window.removeEventListener("keydown", handleKey)
   }, [close])
+
+  const methodButtonClass = (value: OpenAiLoginMethod) =>
+    clsx(
+      "rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-40",
+      method === value ? "bg-surface text-fg shadow-sm" : "text-fg-4 hover:text-fg-3",
+    )
 
   return (
     <div
@@ -976,6 +1008,24 @@ function OpenAiLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucce
             <X className="h-4 w-4" />
           </button>
         </div>
+        <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg border border-line bg-base p-1">
+          <button
+            type="button"
+            onClick={() => changeMethod("callback")}
+            disabled={starting}
+            className={methodButtonClass("callback")}
+          >
+            浏览器授权
+          </button>
+          <button
+            type="button"
+            onClick={() => changeMethod("device")}
+            disabled={starting}
+            className={methodButtonClass("device")}
+          >
+            设备码（无头）
+          </button>
+        </div>
         <div className="mt-4 space-y-4">
           {starting ? (
             <div className="flex items-center gap-2 text-xs text-fg-4">
@@ -983,19 +1033,37 @@ function OpenAiLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucce
               正在发起登录…
             </div>
           ) : login ? (
-            <>
-              <p className="text-xs text-fg-3">
-                请在浏览器中完成 ChatGPT 授权。等待浏览器授权…若未自动打开，请点击下方链接。
-              </p>
-              <a
-                href={login.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex text-xs text-blue-500 hover:underline"
-              >
-                打开 ChatGPT 授权页面
-              </a>
-            </>
+            login.mode === "oauth-device" ? (
+              <>
+                <p className="text-xs text-fg-3">在浏览器打开下方页面，输入设备码完成授权：</p>
+                <div className="rounded-lg border border-line bg-base px-3 py-3 text-center font-mono text-lg tracking-[0.2em] text-fg">
+                  {login.userCode}
+                </div>
+                <a
+                  href={login.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex text-xs text-blue-500 hover:underline"
+                >
+                  打开 ChatGPT 设备授权页面
+                </a>
+                <p className="text-[11px] text-fg-5">适用于远程或容器环境。等待浏览器授权…</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-fg-3">
+                  请在浏览器中完成 ChatGPT 授权。等待浏览器授权…若未自动打开，请点击下方链接。
+                </p>
+                <a
+                  href={login.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex text-xs text-blue-500 hover:underline"
+                >
+                  打开 ChatGPT 授权页面
+                </a>
+              </>
+            )
           ) : null}
           {error && (
             <div className="flex items-start gap-1.5 rounded-md border border-red-400/30 bg-red-400/5 px-3 py-2">
@@ -1007,7 +1075,7 @@ function OpenAiLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucce
             {error && (
               <button
                 type="button"
-                onClick={start}
+                onClick={() => begin(method)}
                 className="rounded-md border border-line px-3 py-2 text-xs font-medium text-fg-3 transition-colors hover:bg-elevated"
               >
                 重新发起

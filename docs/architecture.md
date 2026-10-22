@@ -399,13 +399,13 @@ routes 依赖的统一会话操作接口，每个 repo 一个实例：
 
 多 provider 账号基础层——每个 provider 注册一个描述符：
 
-- **描述符** — `{ id, label, 凭证适配器, 登录方式, 刷新策略, 用量源?, 身份提取?, refreshRuntimesOnSwitch?, removableWhenActive? }`，接口见 `types.ts`；登录方式按 `kind` 判别（`oauth` 粘贴授权码 / `oauth-callback` 浏览器回调 / `api-key`），凭证适配器为 `oauth` / `api-key`
-- **已注册 provider** — `anthropic`（Claude，OAuth PKCE）；`opencode-go`（OpenCode Go 订阅，粘贴 API Key，经 models 端点校验、zen usage 采集用量，密钥不轮换）；`openai`（ChatGPT 浏览器 OAuth，凭证带 `accountId`，无公开用量端点）
+- **描述符** — `{ id, label, 凭证适配器, 登录方式, alternateLogins?, 刷新策略, 用量源?, 身份提取?, refreshRuntimesOnSwitch?, removableWhenActive? }`，接口见 `types.ts`；登录方式按 `kind` 判别（`oauth` 粘贴授权码 / `oauth-callback` 浏览器回调 / `oauth-device` 设备码 / `api-key`），`alternateLogins` 承载同一 provider 的额外登录方式，凭证适配器为 `oauth` / `api-key`
+- **已注册 provider** — `anthropic`（Claude，OAuth PKCE）；`opencode-go`（OpenCode Go 订阅，粘贴 API Key，经 models 端点校验、zen usage 采集用量，密钥不轮换）；`openai`（ChatGPT 浏览器 OAuth + 设备码无头登录，凭证带 `accountId`，无公开用量端点）
 - **凭证适配器** — v1 实现读写 OpenCode auth.json 条目（`auth-json.ts`：OAuth 条目 `{type:"oauth",access,refresh,expires,accountId?}`、API Key 条目 `{type:"api",key}`）；v2（SQLite 凭证库）以同一接口替换
 - **注册表** — `index.ts` 的 `getAccountProvider(id)` / `registerAccountProvider`；新增 provider 只需新增描述符模块并注册
 - **凭证路由** — `lib/credential-broadcast.ts` 按 runtime 声明的 `credentialChannel`（`account-store` / `runtime-push`）与 `accountProvider` 绑定做 provider 限定的推送；account-store（opencode runtime）直读 auth.json，runtime-push（claude-code）只接收其绑定 provider 的凭证
 - **账号存储** — `claude-accounts.json` 的 `activeIds: Record<providerId, accountId>` 记录各 provider 的激活账号；旧 `activeId` / `openaiActiveId` 字段在加载时自动迁移；OAuth 账号持久化 refresh/access/expires 与 `accountId`，API Key 账号以 key 作为持久凭证
-- **HTTP 面** — `/api/usage`（`?provider=`）、`/api/usage/switch`（`provider` 可选）、`/api/usage/accounts`（POST 添加 API Key 账号 / DELETE 删除）、`/api/usage/oauth/authorize`（发起回调式登录）、`/api/usage/oauth/:provider/logins/:pendingId`（GET 轮询 / DELETE 取消）；不带 provider 参数时保持 Anthropic 原契约；worker 模式只改变默认 provider 的账号来源，本地型 provider（opencode-go、openai）照常走本地路径
+- **HTTP 面** — `/api/usage`（`?provider=`）、`/api/usage/switch`（`provider` 可选）、`/api/usage/accounts`（POST 添加 API Key 账号 / DELETE 删除）、`/api/usage/oauth/authorize`（body 的 `method` 可选 `callback` / `device`，默认回调式）、`/api/usage/oauth/:provider/logins/:pendingId`（GET 轮询 / DELETE 取消，设备码追加 `?method=device`）；不带 provider 参数时保持 Anthropic 原契约；worker 模式只改变默认 provider 的账号来源，本地型 provider（opencode-go、openai）照常走本地路径
 - **凭证生效** — opencode 在实例创建时解析 auth.json 并缓存 SDK/语言模型；凭证变更（添加/切换/删除活跃账号）后经 `lib/credential-refresh.ts` 对运行中的 account-store runtime 调用 `POST /instance/dispose` 重建实例状态，新凭证无需重启进程即用于后续会话（进行中的回合可能被中断）。API Key 与声明 `refreshRuntimesOnSwitch` 的 provider（openai）在切换时同样重建；Anthropic 保持原有实时 token 路径
 
 ### SenseVoice (`lib/sensevoice-manager.ts`)

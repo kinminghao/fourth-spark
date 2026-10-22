@@ -14,7 +14,15 @@ const FIXTURE = `
 import { createServer } from "node:net"
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { cancelOpenAiLogin, startOpenAiLogin, pollOpenAiLogin, refreshOpenAiToken } from ${modulePath("account-providers/openai")}
+import {
+  cancelOpenAiDeviceLogin,
+  cancelOpenAiLogin,
+  pollOpenAiDeviceLogin,
+  pollOpenAiLogin,
+  refreshOpenAiToken,
+  startOpenAiDeviceLogin,
+  startOpenAiLogin,
+} from ${modulePath("account-providers/openai")}
 import { switchToAccount } from ${modulePath("account-switcher")}
 import { removeAccount } from ${modulePath("claude-onboard")}
 import { runtimeManager } from ${modulePath("process-manager")}
@@ -59,9 +67,31 @@ const claimsFor = (email, accountId) => ({
 })
 
 const TOKEN_URL = "https://auth.openai.com/oauth/token"
+const DEVICE_REQUEST_URL = "https://auth.openai.com/api/accounts/deviceauth/usercode"
+const DEVICE_TOKEN_URL = "https://auth.openai.com/api/accounts/deviceauth/token"
+let devicePolls = 0
 const realFetch = globalThis.fetch
 globalThis.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+  if (url === DEVICE_REQUEST_URL) {
+    return new Response(
+      JSON.stringify({
+        device_auth_id: "device-auth-1",
+        user_code: "TEST-CODE",
+        interval: "1",
+        expires_at: new Date(Date.now() + 600_000).toISOString(),
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )
+  }
+  if (url === DEVICE_TOKEN_URL) {
+    devicePolls += 1
+    if (devicePolls === 1) return new Response("pending", { status: 403 })
+    return new Response(
+      JSON.stringify({ authorization_code: "device-code", code_verifier: "device-verifier" }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )
+  }
   if (url !== TOKEN_URL) return realFetch(input, init)
 
   const body = new URLSearchParams(typeof init?.body === "string" ? init.body : "")
@@ -82,6 +112,13 @@ globalThis.fetch = async (input, init) => {
         refresh_token: "refresh-two",
         expires_in: 3600,
         id_token: fakeJwt(claimsFor("two@example.com", "acct-two")),
+      }
+    } else if (code === "device-code") {
+      token = {
+        access_token: "access-device",
+        refresh_token: "refresh-device",
+        expires_in: 3600,
+        id_token: fakeJwt(claimsFor("device@example.com", "acct-device")),
       }
     }
     if (!token) return new Response("unknown code", { status: 400 })
@@ -221,7 +258,38 @@ result.removeActive = {
   openAiAccountCount: accountsAfterActive.accounts.filter((account) => account.provider === "openai").length,
 }
 
-// I. OAuth error callback completes the pending login with exchange-failed
+// I. device-code login polls upstream on demand and persists accountId
+const deviceStart = await startOpenAiDeviceLogin()
+result.deviceAuthorize = {
+  url: deviceStart.url,
+  userCode: deviceStart.userCode,
+  intervalMs: deviceStart.intervalMs,
+  expiresIsFuture: deviceStart.expiresAt > Date.now(),
+}
+let deviceState = await pollOpenAiDeviceLogin(deviceStart.pendingId)
+const deviceDeadline = Date.now() + 10_000
+while (deviceState?.state === "pending" && Date.now() < deviceDeadline) {
+  await Bun.sleep(300)
+  deviceState = await pollOpenAiDeviceLogin(deviceStart.pendingId)
+}
+const authAfterDevice = readJson(authPath)
+const accountsAfterDevice = readJson(accountsPath)
+result.deviceLogin = {
+  poll: deviceState ?? null,
+  authAccountId: authAfterDevice.openai ? authAfterDevice.openai.accountId : null,
+  activeId: accountsAfterDevice.activeIds.openai ?? null,
+  accounts: accountsAfterDevice.accounts
+    .filter((account) => account.provider === "openai")
+    .map((account) => ({ provider: account.provider, accountId: account.accountId, label: account.label })),
+}
+
+const deviceCancel = await startOpenAiDeviceLogin()
+await cancelOpenAiDeviceLogin(deviceCancel.pendingId)
+result.deviceCancel = {
+  pollAfterCancel: (await pollOpenAiDeviceLogin(deviceCancel.pendingId)) ?? null,
+}
+
+// J. OAuth error callback completes the pending login with exchange-failed
 const errorStart = await startOpenAiLogin(0)
 const errorUrl = new URL(errorStart.url)
 const errorPort = Number(new URL(errorUrl.searchParams.get("redirect_uri")).port)
@@ -231,7 +299,7 @@ result.errorCallback = {
   poll: (await pollOpenAiLogin(errorStart.pendingId)) ?? null,
 }
 
-// J. cancelling a pending login releases its callback port for reuse
+// K. cancelling a pending login releases its callback port for reuse
 const cancelStart = await startOpenAiLogin(0)
 const cancelUrl = new URL(cancelStart.url)
 const cancelPort = Number(new URL(cancelUrl.searchParams.get("redirect_uri")).port)
@@ -242,7 +310,7 @@ const reusePort = Number(new URL(new URL(reuse.url).searchParams.get("redirect_u
 await cancelOpenAiLogin(reuse.pendingId)
 result.cancel = { pollAfterCancel: afterCancel ?? null, reusedSamePort: reusePort === cancelPort }
 
-// K. a busy callback port rejects with the requested port in the message
+// L. a busy callback port rejects with the requested port in the message
 const throwaway = createServer()
 await new Promise((resolve, reject) => {
   throwaway.once("error", reject)
@@ -330,6 +398,14 @@ type FixtureResult = {
     activeId: string | null
     openAiAccountCount: number
   }
+  deviceAuthorize: { url: string; userCode: string; intervalMs: number; expiresIsFuture: boolean }
+  deviceLogin: {
+    poll: LoginState | null
+    authAccountId: string | null
+    activeId: string | null
+    accounts: { provider?: string; accountId?: string; label: string }[]
+  }
+  deviceCancel: { pollAfterCancel: unknown }
   errorCallback: { status: number; poll: LoginState | null }
   busyPort: { port: number; error: string | null }
   cancel: { pollAfterCancel: unknown; reusedSamePort: boolean }
@@ -448,6 +524,26 @@ describe("OpenAI browser OAuth flow (isolated child process)", () => {
     expect(result.removeActive.hasOpenAiEntry).toBe(false)
     expect(result.removeActive.activeId).toBeNull()
     expect(result.removeActive.openAiAccountCount).toBe(0)
+  })
+
+  test("device-code login completes after pending polls and persists accountId", () => {
+    expect(result.deviceAuthorize.url).toBe("https://auth.openai.com/codex/device")
+    expect(result.deviceAuthorize.userCode).toBe("TEST-CODE")
+    expect(result.deviceAuthorize.intervalMs).toBe(1000)
+    expect(result.deviceAuthorize.expiresIsFuture).toBe(true)
+    expect(result.deviceLogin.poll).toEqual({
+      state: "complete",
+      result: { ok: true, id: "acct-device", label: "device@example.com", existing: false },
+    })
+    expect(result.deviceLogin.authAccountId).toBe("acct-device")
+    expect(result.deviceLogin.activeId).toBe("acct-device")
+    expect(result.deviceLogin.accounts).toEqual([
+      { provider: "openai", accountId: "acct-device", label: "device@example.com" },
+    ])
+  })
+
+  test("cancelling a device login discards the pending handle", () => {
+    expect(result.deviceCancel.pollAfterCancel).toBeNull()
   })
 
   test("an OAuth error callback completes the login as exchange-failed", () => {

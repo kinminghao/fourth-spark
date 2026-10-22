@@ -54,6 +54,13 @@ describe("account provider registry", () => {
     expect(provider.identity).toBeUndefined()
     expect(provider.refreshRuntimesOnSwitch).toBe(true)
     expect(provider.removableWhenActive).toBe(true)
+    const device = provider.alternateLogins?.find((login) => login.kind === "oauth-device")
+    expect(device).toBeDefined()
+    if (device?.kind === "oauth-device") {
+      expect(typeof device.start).toBe("function")
+      expect(typeof device.poll).toBe("function")
+      expect(typeof device.cancel).toBe("function")
+    }
   })
 
   test("lists registered providers", () => {

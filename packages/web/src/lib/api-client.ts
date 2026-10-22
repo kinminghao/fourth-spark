@@ -1238,32 +1238,60 @@ export async function fetchUsage(provider?: string): Promise<UsageResult> {
   return apiFetch<UsageResult>(`/api/usage${provider ? `?provider=${encodeURIComponent(provider)}` : ""}`)
 }
 
-export interface OAuthCallbackLogin {
-  mode: "oauth-callback"
+interface OAuthLoginHandle {
   url: string
   pendingId: string
   expiresAt: number
 }
 
+export interface OAuthCallbackLogin extends OAuthLoginHandle {
+  mode: "oauth-callback"
+}
+
+export interface OAuthDeviceLogin extends OAuthLoginHandle {
+  mode: "oauth-device"
+  userCode: string
+  intervalMs: number
+}
+
+export type OAuthLoginStart = OAuthCallbackLogin | OAuthDeviceLogin
+export type OAuthLoginMethod = "callback" | "device"
+
 export type OAuthLoginState = { state: "pending" } | { state: "complete"; result: ExchangeAccountResult }
 
-export async function startOAuthLogin(provider: string): Promise<OAuthCallbackLogin> {
-  return apiFetch<OAuthCallbackLogin>("/api/usage/oauth/authorize", {
+export async function startOAuthLogin(
+  provider: string,
+  method: OAuthLoginMethod = "callback",
+): Promise<OAuthLoginStart> {
+  return apiFetch<OAuthLoginStart>("/api/usage/oauth/authorize", {
     method: "POST",
-    body: JSON.stringify({ provider }),
+    body: JSON.stringify({ provider, method }),
   })
 }
 
-export async function getOAuthLoginState(provider: string, pendingId: string): Promise<OAuthLoginState> {
+export async function getOAuthLoginState(
+  provider: string,
+  pendingId: string,
+  method: OAuthLoginMethod = "callback",
+): Promise<OAuthLoginState> {
+  const query = method === "device" ? "?method=device" : ""
   return apiFetch<OAuthLoginState>(
-    `/api/usage/oauth/${encodeURIComponent(provider)}/logins/${encodeURIComponent(pendingId)}`,
+    `/api/usage/oauth/${encodeURIComponent(provider)}/logins/${encodeURIComponent(pendingId)}${query}`,
   )
 }
 
-export async function cancelOAuthLogin(provider: string, pendingId: string): Promise<void> {
-  await apiFetch<void>(`/api/usage/oauth/${encodeURIComponent(provider)}/logins/${encodeURIComponent(pendingId)}`, {
-    method: "DELETE",
-  })
+export async function cancelOAuthLogin(
+  provider: string,
+  pendingId: string,
+  method: OAuthLoginMethod = "callback",
+): Promise<void> {
+  const query = method === "device" ? "?method=device" : ""
+  await apiFetch<void>(
+    `/api/usage/oauth/${encodeURIComponent(provider)}/logins/${encodeURIComponent(pendingId)}${query}`,
+    {
+      method: "DELETE",
+    },
+  )
 }
 
 export async function switchUsageAccount(accountId: string, provider?: string): Promise<UsageResult> {

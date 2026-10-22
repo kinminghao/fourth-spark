@@ -1,6 +1,6 @@
 import { Hono } from "hono"
 import { z } from "zod"
-import { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } from "../lib/account-providers"
+import { DEFAULT_ACCOUNT_PROVIDER, findAccountLogin, getAccountProvider } from "../lib/account-providers"
 import { switchToAccount } from "../lib/account-switcher"
 import { addApiKeyAccount } from "../lib/api-key-onboard"
 import { authorize, exchange, removeAccount } from "../lib/claude-onboard"
@@ -25,6 +25,7 @@ const AddAccountBody = z.object({
 })
 const OAuthAuthorizeBody = z.object({
   provider: z.string().min(1),
+  method: z.enum(["callback", "device"]).optional(),
 })
 
 function isRegisteredAccountProvider(id: string): boolean {
@@ -112,6 +113,16 @@ usageRoutes.post("/accounts", async (c) => {
   return c.json(result)
 })
 
+function loginKind(method: string | undefined): "oauth-callback" | "oauth-device" | undefined {
+  if (method === undefined || method === "callback") return "oauth-callback"
+  if (method === "device") return "oauth-device"
+  return undefined
+}
+
+function loginLabel(kind: "oauth-callback" | "oauth-device"): string {
+  return kind === "oauth-device" ? "device code login" : "browser oauth"
+}
+
 usageRoutes.post("/oauth/authorize", async (c) => {
   const [body, err] = await parseBody(c, OAuthAuthorizeBody)
   if (err) return err
@@ -121,15 +132,21 @@ usageRoutes.post("/oauth/authorize", async (c) => {
   if (isWorkerMode() && body.provider === DEFAULT_ACCOUNT_PROVIDER) {
     return c.json({ error: "account onboarding is not available in worker mode" }, 400)
   }
+  const kind = loginKind(body.method)
+  if (!kind) {
+    return c.json({ error: `unknown login method: ${body.method}` }, 400)
+  }
   const descriptor = getAccountProvider(body.provider)
-  if (descriptor.login.kind !== "oauth-callback") {
-    return c.json({ error: `provider ${body.provider} does not support browser oauth` }, 400)
+  const login = findAccountLogin(descriptor, kind)
+  if (!login || (login.kind !== "oauth-callback" && login.kind !== "oauth-device")) {
+    return c.json({ error: `provider ${body.provider} does not support ${loginLabel(kind)}` }, 400)
   }
   try {
-    const result = await descriptor.login.start()
-    return c.json({ mode: "oauth-callback", ...result })
+    const result = await login.start()
+    return c.json({ mode: login.kind, ...result })
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : String(error) }, 409)
+    const status = kind === "oauth-device" ? 502 : 409
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, status)
   }
 })
 
@@ -141,11 +158,16 @@ usageRoutes.get("/oauth/:provider/logins/:pendingId", async (c) => {
   if (isWorkerMode() && provider === DEFAULT_ACCOUNT_PROVIDER) {
     return c.json({ error: "account onboarding is not available in worker mode" }, 400)
   }
-  const descriptor = getAccountProvider(provider)
-  if (descriptor.login.kind !== "oauth-callback") {
-    return c.json({ error: `provider ${provider} does not support browser oauth` }, 400)
+  const kind = loginKind(c.req.query("method"))
+  if (!kind) {
+    return c.json({ error: `unknown login method: ${c.req.query("method")}` }, 400)
   }
-  const state = await descriptor.login.poll(c.req.param("pendingId"))
+  const descriptor = getAccountProvider(provider)
+  const login = findAccountLogin(descriptor, kind)
+  if (!login || (login.kind !== "oauth-callback" && login.kind !== "oauth-device")) {
+    return c.json({ error: `provider ${provider} does not support ${loginLabel(kind)}` }, 400)
+  }
+  const state = await login.poll(c.req.param("pendingId"))
   if (!state) {
     return c.json({ error: "unknown login session" }, 404)
   }
@@ -160,11 +182,16 @@ usageRoutes.delete("/oauth/:provider/logins/:pendingId", async (c) => {
   if (isWorkerMode() && provider === DEFAULT_ACCOUNT_PROVIDER) {
     return c.json({ error: "account onboarding is not available in worker mode" }, 400)
   }
-  const descriptor = getAccountProvider(provider)
-  if (descriptor.login.kind !== "oauth-callback") {
-    return c.json({ error: `provider ${provider} does not support browser oauth` }, 400)
+  const kind = loginKind(c.req.query("method"))
+  if (!kind) {
+    return c.json({ error: `unknown login method: ${c.req.query("method")}` }, 400)
   }
-  await descriptor.login.cancel(c.req.param("pendingId"))
+  const descriptor = getAccountProvider(provider)
+  const login = findAccountLogin(descriptor, kind)
+  if (!login || (login.kind !== "oauth-callback" && login.kind !== "oauth-device")) {
+    return c.json({ error: `provider ${provider} does not support ${loginLabel(kind)}` }, 400)
+  }
+  await login.cancel(c.req.param("pendingId"))
   return c.body(null, 204)
 })
 

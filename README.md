@@ -61,7 +61,7 @@ fourth-spark start              # 拉起 PostgreSQL + 后台启动
 
 **[OpenCode Go 账号](docs/features/opencode-go-accounts.md)** — 支持 OpenCode Go 订阅账号：粘贴 API Key 接入开源编码模型，账号卡片展示 5 小时 / 每周 / 每月用量窗口，支持多 key 切换与删除
 
-**[OpenAI (ChatGPT) 账号](docs/features/openai-accounts.md)** — 使用 ChatGPT 账号浏览器 OAuth 登录，凭证（含 accountId）写入本机 opencode，支持多账号切换/删除并即时对运行实例生效；ChatGPT 无公开用量端点，卡片显示「用量暂不可用」
+**[OpenAI (ChatGPT) 账号](docs/features/openai-accounts.md)** — 使用 ChatGPT 账号浏览器 OAuth 或设备码（无头）登录，凭证（含 accountId）写入 opencode，支持多账号切换/删除并即时对运行实例生效；设备码可用于远程/容器环境，ChatGPT 无公开用量端点
 
 **语音输入** — 集成 SenseVoice 本地语音识别（~240 MB 模型，首次启动自动下载），支持离线语音转文字输入 Agent 对话
 
@@ -135,5 +135,5 @@ make dev      # 启动 Server (:3000) + Web (:5173)
 | [智能运维](docs/features/smart-ops.md) | 截断续写、空响应重试、账号轮换、通知系统、参数配置 |
 | [Cloud 账号池](docs/features/cloud-account-pool.md) | Lease 协议、LeaseKeeper、Rate Limit 上报、模式切换 |
 | [OpenCode Go 账号](docs/features/opencode-go-accounts.md) | API Key 接入、切号/删除、用量窗口、运行时感知 |
-| [OpenAI (ChatGPT) 账号](docs/features/openai-accounts.md) | 浏览器 OAuth、accountId 凭证、切号/删除、本机回调、运行时感知 |
+| [OpenAI (ChatGPT) 账号](docs/features/openai-accounts.md) | 浏览器 OAuth / 设备码无头、accountId 凭证、切号/删除、运行时感知 |
 | [数据持久化](docs/features/data-persistence.md) | 20 张表 Schema、同步机制、迁移流程、索引策略 |
