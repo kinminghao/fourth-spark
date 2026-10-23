@@ -4,7 +4,11 @@ import { dirname, join } from "node:path"
 import { SENTINEL_REFRESH } from "./lease-constants"
 import { withFileLock } from "./lockfile"
 
-export type ProviderId = "anthropic" | "openai"
+// Account provider id. The id space is owned by the descriptor registry
+// (lib/account-providers/), which validates ids at lookup time.
+export type ProviderId = string
+
+export type AuthToken = { access?: string; refresh?: string; expires?: number }
 
 export type StoredAccount = {
   id: string
@@ -23,8 +27,7 @@ export type StoredAccount = {
 
 export type AccountsFile = {
   version: number
-  activeId?: string
-  openaiActiveId?: string
+  activeIds: Partial<Record<ProviderId, string>>
   accounts: StoredAccount[]
 }
 
@@ -87,12 +90,27 @@ async function resolveAuthJsonPath(): Promise<string> {
   return resolvedAuthPath
 }
 
+// Legacy account-file shapes written before active ids became per-provider.
+type LegacyAccountsFile = Partial<AccountsFile> & { activeId?: string; openaiActiveId?: string }
+
+function migrateActiveIds(data: LegacyAccountsFile | undefined): Partial<Record<ProviderId, string>> {
+  const activeIds: Partial<Record<ProviderId, string>> = {}
+  const raw = data?.activeIds
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    for (const [key, value] of Object.entries(raw)) {
+      if (typeof value === "string") activeIds[key] = value
+    }
+  }
+  if (activeIds.anthropic === undefined && typeof data?.activeId === "string") activeIds.anthropic = data.activeId
+  if (activeIds.openai === undefined && typeof data?.openaiActiveId === "string") activeIds.openai = data.openaiActiveId
+  return activeIds
+}
+
 export async function loadAccounts(): Promise<AccountsFile> {
-  const data = await readJson<Partial<AccountsFile>>(ACCOUNTS_PATH)
+  const data = await readJson<LegacyAccountsFile>(ACCOUNTS_PATH)
   return {
     version: data?.version ?? 1,
-    activeId: data?.activeId,
-    openaiActiveId: data?.openaiActiveId,
+    activeIds: migrateActiveIds(data),
     accounts: Array.isArray(data?.accounts)
       ? (data?.accounts as StoredAccount[]).filter((a) => typeof a.id === "string" && a.id.length > 0)
       : [],
@@ -103,12 +121,10 @@ export async function saveAccounts(file: AccountsFile): Promise<void> {
   await atomicWrite(ACCOUNTS_PATH, file)
 }
 
-export async function readAuthAnthropic(): Promise<
-  { access?: string; refresh?: string; expires?: number } | undefined
-> {
+export async function readAuthEntry(entryKey: string): Promise<AuthToken | undefined> {
   const path = await resolveAuthJsonPath()
   const auth = await readJson<AuthJson>(path)
-  const entry = auth?.anthropic
+  const entry = auth?.[entryKey]
   if (entry?.type === "oauth") return { access: entry.access, refresh: entry.refresh, expires: entry.expires }
   return undefined
 }
@@ -131,7 +147,8 @@ function resolveRefresh(write: TokenWrite | { refresh: string; access?: string; 
   }
 }
 
-export async function writeAuthAnthropic(
+export async function writeAuthEntry(
+  entryKey: string,
   write: TokenWrite | { refresh: string; access?: string; expires?: number },
 ): Promise<void> {
   const token = resolveRefresh(write)
@@ -146,15 +163,25 @@ export async function writeAuthAnthropic(
       throw err
     }
   }
-  auth.anthropic = { type: "oauth", access: token.access ?? "", refresh: token.refresh, expires: token.expires ?? 0 }
+  auth[entryKey] = { type: "oauth", access: token.access ?? "", refresh: token.refresh, expires: token.expires ?? 0 }
   await atomicWrite(path, auth)
 }
 
-export async function recordLeasedActiveId(id: string): Promise<void> {
+export async function readAuthAnthropic(): Promise<AuthToken | undefined> {
+  return readAuthEntry("anthropic")
+}
+
+export async function writeAuthAnthropic(
+  write: TokenWrite | { refresh: string; access?: string; expires?: number },
+): Promise<void> {
+  await writeAuthEntry("anthropic", write)
+}
+
+export async function recordActiveId(provider: ProviderId, id: string): Promise<void> {
   await withAuthLock(async () => {
     const file = await loadAccounts()
-    if (file.activeId === id) return
-    file.activeId = id
+    if (file.activeIds[provider] === id) return
+    file.activeIds[provider] = id
     await saveAccounts(file)
   })
 }

@@ -18,7 +18,7 @@ import { sessionMonitor } from "../lib/session-monitor"
 import { logger } from "../middleware/logger"
 import { getRegistry } from "./registry"
 import type { RuntimeClient } from "./runtime-client"
-import type { RuntimeHealth, RuntimeProvider } from "./runtime-provider"
+import { needsCredentialPush, type RuntimeHealth, type RuntimeProvider } from "./runtime-provider"
 import type { AccountPool, AcquireResult } from "./types"
 
 export interface RuntimeManager {
@@ -133,10 +133,10 @@ export function createDefaultRuntimeManager(): RuntimeManager {
 
       await provider.initialize(repoId, localPath)
 
-      if (providerId !== "opencode") {
+      if (needsCredentialPush(provider)) {
         try {
-          const { readAuthAnthropic } = await import("../lib/auth-files")
-          const auth = await readAuthAnthropic()
+          const { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } = await import("../lib/account-providers")
+          const auth = await getAccountProvider(DEFAULT_ACCOUNT_PROVIDER).credentialAdapter.read()
           if (auth?.access) {
             if (auth.refresh) {
               await provider.credentialWriter.write({

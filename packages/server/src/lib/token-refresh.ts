@@ -1,4 +1,5 @@
 import { logger } from "../middleware/logger"
+import type { RefreshResult } from "./account-providers/types"
 import { isWorkerMode } from "./config"
 
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
@@ -7,8 +8,6 @@ const NETWORK_TIMEOUT_MS = 15_000
 const REFRESH_429_COOLDOWN_MS = 5 * 60_000
 
 export const TOKEN_EXPIRY_BUFFER_MS = 60_000
-
-export type RefreshResult = { access: string; refresh: string; expires: number }
 
 export class RefreshRevokedError extends Error {
   readonly revoked = true as const

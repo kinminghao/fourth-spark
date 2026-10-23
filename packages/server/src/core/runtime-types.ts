@@ -111,3 +111,10 @@ export interface CredentialWriter {
       | { kind: "lease"; access: string; expires: number },
   ): Promise<void>
 }
+
+// How a runtime receives account credentials:
+//   * "account-store" — the runtime reads the shared auth.json that auth-files
+//     writes directly; credentials must NOT be pushed to it.
+//   * "runtime-push" — the runtime owns a separate credential store and
+//     receives tokens through its CredentialWriter.
+export type RuntimeCredentialChannel = "account-store" | "runtime-push"

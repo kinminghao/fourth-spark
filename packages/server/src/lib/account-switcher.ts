@@ -1,39 +1,20 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { logger } from "../middleware/logger"
+import { getAccountProvider } from "./account-providers"
 import {
   type AccountsFile,
   accountsOf,
   applyToken,
   loadAccounts,
+  type ProviderId,
   providerOf,
-  readAuthAnthropic,
   type StoredAccount,
   saveAccounts,
   withAuthLock,
-  writeAuthAnthropic,
 } from "./auth-files"
-import { isStale as isTokenStale, RefreshRevokedError, refreshToken } from "./token-refresh"
-
-// Write credential to all non-OpenCode runtimes (OpenCode is handled by writeAuthAnthropic).
-async function broadcastCredentialToOtherRuntimes(token: {
-  kind: "full" | "lease"
-  refresh?: string
-  access?: string
-  expires?: number
-}): Promise<void> {
-  try {
-    const { getRegistry } = await import("../core/registry")
-    for (const provider of getRegistry().providers.values()) {
-      if (provider.id === "opencode") continue
-      await provider.credentialWriter
-        .write(token as Parameters<typeof provider.credentialWriter.write>[0])
-        .catch((err) => {
-          logger.warn({ err, runtimeId: provider.id }, "failed to broadcast credential to runtime")
-        })
-    }
-  } catch {}
-}
+import { broadcastCredentialToRuntimes } from "./credential-broadcast"
+import { RefreshRevokedError } from "./token-refresh"
 
 const COOLDOWN_FILE = join("/tmp", "fourth-spark", "cooldown.json")
 
@@ -143,8 +124,8 @@ function isCooled(id: string): boolean {
   return true
 }
 
-function pickNext(file: AccountsFile, activeId?: string): StoredAccount | undefined {
-  const pool = accountsOf(file, "anthropic")
+function pickNext(file: AccountsFile, provider: ProviderId, activeId?: string): StoredAccount | undefined {
+  const pool = accountsOf(file, provider)
   const candidates = pool.filter((a) => a.id !== activeId && !isCooled(a.id) && !a.excluded && !a.needsReauth)
   if (candidates.length === 0) return undefined
   const order = pool.map((a) => a.id)
@@ -157,32 +138,33 @@ function pickNext(file: AccountsFile, activeId?: string): StoredAccount | undefi
   return candidates[0]
 }
 
-export async function switchToAccount(targetId: string): Promise<StoredAccount> {
+export async function switchToAccount(provider: ProviderId, targetId: string): Promise<StoredAccount> {
   return withAuthLock(async () => {
     const file = await loadAccounts()
     const index = file.accounts.findIndex((a) => a.id === targetId)
     if (index < 0) throw new Error("account not found")
 
-    const provider = providerOf(file.accounts[index])
-    if (provider !== "anthropic") throw new Error("该账号与目标 provider 不一致,拒绝写入 Claude 登录态")
-    if (file.accounts[index].needsReauth) throw new Error("account needs reauth")
+    const account = file.accounts[index]
+    if (providerOf(account) !== provider) throw new Error("该账号与目标 provider 不一致,拒绝写入 Claude 登录态")
+    if (account.needsReauth) throw new Error("account needs reauth")
 
-    const outAuth = await readAuthAnthropic()
-    if (file.activeId && file.activeId !== targetId && outAuth?.refresh) {
-      const outIdx = file.accounts.findIndex((a) => a.id === file.activeId)
+    const { credentialAdapter, refresh } = getAccountProvider(provider)
+    const liveAuth = await credentialAdapter.read()
+    const activeId = file.activeIds[provider]
+    if (activeId && activeId !== targetId && liveAuth?.refresh) {
+      const outIdx = file.accounts.findIndex((a) => a.id === activeId)
       if (outIdx >= 0) {
         applyToken(file.accounts[outIdx], {
-          refresh: outAuth.refresh,
-          access: outAuth.access,
-          expires: outAuth.expires,
+          refresh: liveAuth.refresh,
+          access: liveAuth.access,
+          expires: liveAuth.expires,
         })
       }
     }
 
-    const account = file.accounts[index]
-    if (isTokenStale(account)) {
+    if (refresh.isStale(account)) {
       try {
-        const fresh = await refreshToken(account.refresh)
+        const fresh = await refresh.refresh(account.refresh)
         applyToken(account, fresh)
       } catch (err) {
         if (err instanceof RefreshRevokedError) {
@@ -206,10 +188,15 @@ export async function switchToAccount(targetId: string): Promise<StoredAccount> 
       }
     }
 
-    file.activeId = targetId
+    file.activeIds[provider] = targetId
     await saveAccounts(file)
-    await writeAuthAnthropic({ refresh: account.refresh, access: account.access, expires: account.expires })
-    await broadcastCredentialToOtherRuntimes({
+    await credentialAdapter.write({
+      kind: "full",
+      refresh: account.refresh,
+      access: account.access,
+      expires: account.expires,
+    })
+    await broadcastCredentialToRuntimes({
       kind: "full",
       refresh: account.refresh,
       access: account.access,
@@ -224,28 +211,28 @@ export type SwitchResult =
   | { switched: true; from?: string; to: string; label: string }
   | { switched: false; reason: string }
 
-export async function autoSwitch(currentActiveId?: string): Promise<SwitchResult> {
+export async function autoSwitch(provider: ProviderId, currentActiveId?: string): Promise<SwitchResult> {
   if (currentActiveId) markCooldown(currentActiveId)
 
   const file = await loadAccounts()
-  if (accountsOf(file, "anthropic").length <= 1) return { switched: false, reason: "only one account" }
+  if (accountsOf(file, provider).length <= 1) return { switched: false, reason: "only one account" }
 
-  const next = pickNext(file, currentActiveId)
+  const next = pickNext(file, provider, currentActiveId)
   if (!next) return { switched: false, reason: "no available accounts" }
 
   try {
-    const account = await switchToAccount(next.id)
+    const account = await switchToAccount(provider, next.id)
     return { switched: true, from: currentActiveId, to: account.id, label: account.label }
   } catch (err) {
     markCooldown(next.id)
     logger.warn({ err, id: next.id }, "switch candidate failed, trying next")
   }
 
-  const secondNext = pickNext(file, currentActiveId)
+  const secondNext = pickNext(file, provider, currentActiveId)
   if (!secondNext || secondNext.id === next.id) return { switched: false, reason: "all candidates failed" }
 
   try {
-    const account = await switchToAccount(secondNext.id)
+    const account = await switchToAccount(provider, secondNext.id)
     return { switched: true, from: currentActiveId, to: account.id, label: account.label }
   } catch {
     markCooldown(secondNext.id)
@@ -253,6 +240,6 @@ export async function autoSwitch(currentActiveId?: string): Promise<SwitchResult
   }
 }
 
-export async function getActiveId(): Promise<string | undefined> {
-  return (await loadAccounts()).activeId
+export async function getActiveId(provider: ProviderId): Promise<string | undefined> {
+  return (await loadAccounts()).activeIds[provider]
 }

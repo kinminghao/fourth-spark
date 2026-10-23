@@ -387,6 +387,7 @@ export function createOpenCodeProvider(serverPort: number): RuntimeProvider {
   return {
     id: RUNTIME_ID,
     credentialWriter: openCodeCredentialWriter,
+    credentialChannel: "account-store",
 
     async initialize(repoId: string, localPath: string): Promise<void> {
       await startRepo(repoId, localPath)

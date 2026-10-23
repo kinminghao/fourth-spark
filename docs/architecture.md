@@ -162,20 +162,25 @@ fourth-spark/
 │   │   │   │   ├── query.ts     # 通用查询辅助
 │   │   │   │   ├── sync.ts      # Runtime → PostgreSQL 数据同步
 │   │   │   │   └── migrate.ts   # 生产环境 migration 执行
-│   │   │   ├── lib/                             # 服务模块 (27 个)
+│   │   │   ├── lib/                             # 服务模块 (32 个)
 │   │   │   │   ├── process-manager.ts           # 薄包装：注册 Provider → 导出 runtimeManager
 │   │   │   │   ├── session-monitor.ts           # 会话状态监控与自动恢复
 │   │   │   │   ├── sync-scheduler.ts            # 每小时全量同步 Issue/PR/Comment/Tag
-│   │   │   │   ├── account-switcher.ts          # Claude 多账号切换
-│   │   │   │   ├── auth-files.ts                # Claude 认证文件读写
-│   │   │   │   ├── token-refresh.ts             # OAuth Token 刷新
-│   │   │   │   ├── claude-usage.ts              # 订阅用量采集
+│   │   │   │   ├── account-switcher.ts          # 账号切换/冷却（按 provider 参数化）
+│   │   │   │   ├── auth-files.ts                # 账号存储：auth.json 凭证条目 + claude-accounts.json
+│   │   │   │   ├── account-providers/           # 账号 Provider 描述符注册表
+│   │   │   │   │   ├── types.ts                 # 描述符与策略接口（凭证/登录/刷新/用量/身份）
+│   │   │   │   │   ├── auth-json.ts             # v1 凭证适配器（auth.json 条目）
+│   │   │   │   │   ├── anthropic.ts             # Anthropic (Claude) 描述符
+│   │   │   │   │   └── index.ts                 # 注册表 + DEFAULT_ACCOUNT_PROVIDER
+│   │   │   │   ├── credential-broadcast.ts      # 凭证广播（按 runtime 凭证通道路由）
+│   │   │   │   ├── token-refresh.ts             # Anthropic OAuth Token 刷新
+│   │   │   │   ├── claude-usage.ts              # 订阅用量采集（按 provider）
 │   │   │   │   ├── usage-client.ts              # 用量 API 客户端
 │   │   │   │   ├── local-account-pool.ts        # 本地多账号池
 │   │   │   │   ├── lease-client.ts              # Cloud 账号池客户端
 │   │   │   │   ├── lease-keeper.ts              # Lease 续约守护
 │   │   │   │   ├── lease-writer.ts              # Lease 凭证写入
-│   │   │   │   ├── lease-strategy.ts            # Lease 选择策略
 │   │   │   │   ├── lease-constants.ts           # Lease 常量
 │   │   │   │   ├── sensevoice-manager.ts        # SenseVoice 语音转文字模型管理
 │   │   │   │   ├── tls-manager.ts               # 自签 TLS 证书、LAN HTTPS
@@ -185,11 +190,14 @@ fourth-spark/
 │   │   │   │   ├── git-provider.ts              # GitHub/Gitea/GitLab 统一抽象
 │   │   │   │   ├── git-url.ts                   # Git URL 解析 (host/owner/repo)
 │   │   │   │   ├── git-runner.ts                # Git 命令执行器
+│   │   │   │   ├── git-utils.ts                 # Git 平台数据查询辅助
 │   │   │   │   ├── system-agents.ts             # 内置 Agent 初始化
-│   │   │   │   ├── opencode.ts                  # OpenCode REST API 辅助
 │   │   │   │   ├── memory-consolidation.ts      # Agent 记忆合并与归并
 │   │   │   │   ├── log-rotate.ts                # 运行时进程日志轮转
-│   │   │   │   ├── claude-onboard.ts            # Claude 初始化引导流程
+│   │   │   │   ├── claude-onboard.ts            # Claude OAuth 登录引导流程
+│   │   │   │   ├── child-env.ts                 # 子进程环境变量过滤（黑名单策略）
+│   │   │   │   ├── pagination.ts                # 列表接口分页辅助
+│   │   │   │   ├── validation.ts                # 请求体 Zod 校验辅助
 │   │   │   │   ├── lockfile.ts                  # 进程锁文件
 │   │   │   │   └── config.ts                    # 环境变量、端口、版本、Worker 配置
 │   │   │   ├── mcp/
@@ -376,12 +384,23 @@ routes 依赖的统一会话操作接口，每个 repo 一个实例：
 
 ### AccountSwitcher (`lib/account-switcher.ts`)
 
-Claude 订阅账号的自动轮换：
+账号自动轮换（按 provider 参数化，当前主要服务 Claude 订阅账号）：
 
-- **Token 刷新** — 通过 OAuth refresh_token 自动续期 access_token
+- **Token 刷新** — 通过 provider 描述的刷新策略续期 access_token
 - **冷却机制** — 触发限额的账号进入冷却期，避免反复切换
 - **轮换策略** — 按注册顺序环形选择下一个可用账号
-- **文件同步** — 切换后同步更新 Claude 认证文件
+- **文件同步** — 切换后经 provider 凭证适配器更新认证文件
+
+### AccountProviders (`lib/account-providers/`)
+
+多 provider 账号基础层——每个 provider 注册一个描述符：
+
+- **描述符** — `{ id, label, 凭证适配器, 登录方式, 刷新策略, 用量源, 身份提取 }`，接口见 `types.ts`
+- **凭证适配器** — v1 实现读写 OpenCode auth.json 条目（`auth-json.ts`）；v2（SQLite 凭证库）以同一接口替换
+- **注册表** — `index.ts` 的 `getAccountProvider(id)` / `registerAccountProvider`；新增 provider 只需新增描述符模块并注册
+- **凭证路由** — `lib/credential-broadcast.ts` 按 runtime 声明的 `credentialChannel`（`account-store` / `runtime-push`）决定是否推送凭证
+- **账号存储** — `claude-accounts.json` 的 `activeIds: Record<providerId, accountId>` 记录各 provider 的激活账号；旧 `activeId` / `openaiActiveId` 字段在加载时自动迁移
+- **现状** — HTTP 面（`/api/usage/*`）仍为 Anthropic 单 provider，直连 `claude-onboard` 登录流程；OpenCode Go / Codex 的接入在后续 issue 落地
 
 ### SenseVoice (`lib/sensevoice-manager.ts`)
 

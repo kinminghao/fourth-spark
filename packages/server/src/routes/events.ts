@@ -48,7 +48,12 @@ function parseBlock(block: string): { dataStr: string; parsed: RawEvent; eventNa
   }
 }
 
-function learnChildSession(resolvedType: string | undefined, event: RawEvent, parentId: string, childIds: Set<string>): void {
+function learnChildSession(
+  resolvedType: string | undefined,
+  event: RawEvent,
+  parentId: string,
+  childIds: Set<string>,
+): void {
   if (resolvedType !== "session.updated") return
   const props = event.properties
   if (!props?.id) return

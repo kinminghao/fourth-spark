@@ -1,5 +1,6 @@
 import { Hono } from "hono"
 import { z } from "zod"
+import { DEFAULT_ACCOUNT_PROVIDER } from "../lib/account-providers"
 import { switchToAccount } from "../lib/account-switcher"
 import { authorize, exchange, removeAccount } from "../lib/claude-onboard"
 import { collectUsage, retagActiveInCache } from "../lib/claude-usage"
@@ -20,7 +21,7 @@ const ExchangeBody = z.object({
 export const usageRoutes = new Hono()
 
 usageRoutes.get("/", async (c) => {
-  const result = await collectUsage()
+  const result = await collectUsage(DEFAULT_ACCOUNT_PROVIDER)
   return c.json(result)
 })
 
@@ -46,17 +47,20 @@ usageRoutes.post("/switch", async (c) => {
       accountId: outcome.lease.accountId,
     })
     runtimeManager.adoptHeldAccount(outcome.lease.accountId)
-    const result = retagActiveInCache(outcome.lease.accountId) ?? (await collectUsage())
+    const result =
+      retagActiveInCache(DEFAULT_ACCOUNT_PROVIDER, outcome.lease.accountId) ??
+      (await collectUsage(DEFAULT_ACCOUNT_PROVIDER))
     return c.json(result)
   }
 
   try {
-    await switchToAccount(body.accountId)
+    await switchToAccount(DEFAULT_ACCOUNT_PROVIDER, body.accountId)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return c.json({ error: msg }, 400)
   }
-  const result = retagActiveInCache(body.accountId) ?? (await collectUsage())
+  const result =
+    retagActiveInCache(DEFAULT_ACCOUNT_PROVIDER, body.accountId) ?? (await collectUsage(DEFAULT_ACCOUNT_PROVIDER))
   return c.json(result)
 })
 
