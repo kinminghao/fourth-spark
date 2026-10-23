@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, isNull, like, not } from "drizzle-orm"
+import { and, desc, eq, gt, inArray, isNotNull, isNull, like, lt, lte, not, or, sql } from "drizzle-orm"
 import { db } from "../db/index"
 import { getMessagesFromDB, getTodosFromDB } from "../db/query"
 import type { MemoryVersion } from "../db/schema"
@@ -20,6 +20,54 @@ const TOOL_SUMMARY_LIMIT = 200
 const MAX_EXTRACTION_CONTENT_LENGTH = 200
 export const MAX_CONSOLIDATION_CONTENT_LENGTH = 600
 const SENTINEL_PATTERNS = /\[\/?\s*AGENT\s*MEMORY\s*\]|<\|.*?\|>|^system\s*:/gim
+
+export const EXTRACTION_MAX_ATTEMPTS = 3
+export const EXTRACTION_RETRY_BACKOFF_MS = [4 * 60 * 60 * 1_000, 24 * 60 * 60 * 1_000]
+export const EXTRACTION_CLAIM_LEASE_MS = 15 * 60 * 1_000
+export const EXTRACTION_SKIP_STALE_DAYS = 7
+
+export interface ExtractionCandidate {
+  id: string
+  customAgentId: string
+  timeUpdated: number
+  lastExtractionAt: number | null
+  extractionAttempts: number
+  extractionRetryAt: number | null
+  latestMemoryAt: number | null
+}
+
+export type ExtractionClaimMode = "scheduled" | "manual"
+
+export interface ExtractionClaim {
+  attempts: number
+  claimedVersion: number
+  leaseUntil: number
+}
+
+export type ExtractionRunOutcome =
+  | { kind: "completed"; actionCount: number; rawCount: number; rejectedCount: number; applied: number }
+  | { kind: "failed"; error: string }
+
+export interface ExtractionScanCandidates {
+  due: Array<{ id: string; customAgentId: string }>
+  skippedStale: number
+}
+
+export function isStaleBacklog(candidate: ExtractionCandidate, now: number): boolean {
+  return (
+    candidate.lastExtractionAt === null &&
+    candidate.latestMemoryAt === null &&
+    candidate.timeUpdated < now - EXTRACTION_SKIP_STALE_DAYS * 86_400_000
+  )
+}
+
+export function isExtractionDue(candidate: ExtractionCandidate, now: number): boolean {
+  const gateOpen = candidate.extractionRetryAt === null || candidate.extractionRetryAt <= now
+  if (!gateOpen) return false
+  const watermark = candidate.lastExtractionAt ?? candidate.latestMemoryAt ?? 0
+  if (candidate.timeUpdated > watermark) return true
+  return candidate.extractionRetryAt !== null && candidate.extractionAttempts < EXTRACTION_MAX_ATTEMPTS
+}
 
 function newMemoryId(): string {
   return `mem_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`
@@ -144,36 +192,38 @@ export interface ParseOptions {
   skipForbiddenPatterns?: boolean
 }
 
-export function parseExtractionResult(text: string, opts: ParseOptions = {}): ExtractionAction[] {
-  try {
-    const parsed = JSON.parse(text)
-    if (Array.isArray(parsed)) return validateActions(parsed, opts)
-  } catch {
-    /* fallback */
-  }
+export type ExtractionOutput =
+  | { kind: "parsed"; actions: ExtractionAction[]; rawCount: number; rejectedCount: number }
+  | { kind: "invalid"; reason: string }
 
-  const match = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
-  if (match?.[1]) {
-    try {
-      const parsed = JSON.parse(match[1])
-      if (Array.isArray(parsed)) return validateActions(parsed, opts)
-    } catch {
-      /* ignore */
-    }
-  }
+export function parseExtractionOutput(text: string, opts: ParseOptions = {}): ExtractionOutput {
+  const candidates: string[] = [text]
+
+  const fenced = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
+  if (fenced?.[1]) candidates.push(fenced[1])
 
   const arrayMatch = text.match(/\[\s*\{[\s\S]*?\}\s*\]/)
-  if (arrayMatch) {
+  if (arrayMatch) candidates.push(arrayMatch[0])
+
+  for (const candidate of candidates) {
     try {
-      const parsed = JSON.parse(arrayMatch[0])
-      if (Array.isArray(parsed)) return validateActions(parsed, opts)
+      const parsed = JSON.parse(candidate)
+      if (Array.isArray(parsed)) {
+        const actions = validateActions(parsed, opts)
+        return { kind: "parsed", actions, rawCount: parsed.length, rejectedCount: parsed.length - actions.length }
+      }
     } catch {
-      /* ignore */
+      /* try next candidate */
     }
   }
 
   logger.warn({ text: text.slice(0, 200) }, "failed to parse extraction result as JSON")
-  return []
+  return { kind: "invalid", reason: "unparseable output" }
+}
+
+export function parseExtractionResult(text: string, opts: ParseOptions = {}): ExtractionAction[] {
+  const output = parseExtractionOutput(text, opts)
+  return output.kind === "parsed" ? output.actions : []
 }
 
 function validateActions(raw: unknown[], opts: ParseOptions = {}): ExtractionAction[] {
@@ -281,8 +331,10 @@ export async function executeActions(
   customAgentId: string,
   sessionId: string,
   actions: ExtractionAction[],
-): Promise<void> {
+): Promise<{ applied: number; failed: number }> {
   const now = Date.now()
+  let applied = 0
+  let failed = 0
 
   for (const action of actions) {
     try {
@@ -475,9 +527,51 @@ export async function executeActions(
           break
         }
       }
+      applied++
     } catch (err) {
+      failed++
       logger.error({ err, action: action.action, customAgentId, sessionId }, "failed to execute memory action")
     }
+  }
+
+  return { applied, failed }
+}
+
+export async function processExtractionOutput(
+  customAgentId: string,
+  sessionId: string,
+  resultText: string | null,
+): Promise<ExtractionRunOutcome> {
+  if (resultText === null || resultText.trim().length === 0) {
+    return { kind: "failed", error: "extraction output file missing or empty" }
+  }
+
+  const output = parseExtractionOutput(resultText)
+  if (output.kind === "invalid") {
+    return { kind: "failed", error: output.reason }
+  }
+
+  if (output.actions.length === 0) {
+    return {
+      kind: "completed",
+      actionCount: 0,
+      rawCount: output.rawCount,
+      rejectedCount: output.rejectedCount,
+      applied: 0,
+    }
+  }
+
+  const exec = await executeActions(customAgentId, sessionId, output.actions)
+  if (exec.failed > 0) {
+    return { kind: "failed", error: `${exec.failed} of ${output.actions.length} actions failed to persist` }
+  }
+
+  return {
+    kind: "completed",
+    actionCount: output.actions.length,
+    rawCount: output.rawCount,
+    rejectedCount: output.rejectedCount,
+    applied: exec.applied,
   }
 }
 
@@ -497,30 +591,95 @@ export async function getSessionCustomAgentId(sessionId: string): Promise<string
   return session.customAgentId
 }
 
-export async function sessionNeedsExtraction(sessionId: string): Promise<boolean> {
-  const [session] = await db
-    .select({ timeUpdated: sessionsTable.timeUpdated })
-    .from(sessionsTable)
-    .where(eq(sessionsTable.id, sessionId))
-  if (!session) return false
+export async function claimExtractionAttempt(
+  sessionId: string,
+  mode: ExtractionClaimMode = "scheduled",
+): Promise<ExtractionClaim | null> {
+  const now = Date.now()
+  const leaseUntil = now + EXTRACTION_CLAIM_LEASE_MS
 
-  const [latestMemory] = await db
-    .select({ createdAt: agentMemories.createdAt })
-    .from(agentMemories)
-    .where(eq(agentMemories.sessionId, sessionId))
-    .orderBy(desc(agentMemories.createdAt))
-    .limit(1)
+  const rows = await db
+    .update(sessionsTable)
+    .set(
+      mode === "manual"
+        ? {
+            extractionAttempts: 1,
+            lastExtractionAt: sql`${sessionsTable.timeUpdated}`,
+            extractionRetryAt: leaseUntil,
+          }
+        : {
+            extractionAttempts: sql`CASE WHEN ${sessionsTable.timeUpdated} > COALESCE(${sessionsTable.lastExtractionAt}, 0) THEN 1 ELSE ${sessionsTable.extractionAttempts} + 1 END`,
+            lastExtractionAt: sql`${sessionsTable.timeUpdated}`,
+            extractionRetryAt: leaseUntil,
+          },
+    )
+    .where(
+      mode === "manual"
+        ? and(
+            eq(sessionsTable.id, sessionId),
+            or(
+              isNull(sessionsTable.extractionRetryAt),
+              lte(sessionsTable.extractionRetryAt, now),
+              gt(sessionsTable.extractionRetryAt, now + EXTRACTION_CLAIM_LEASE_MS),
+            ),
+          )
+        : and(
+            eq(sessionsTable.id, sessionId),
+            or(isNull(sessionsTable.extractionRetryAt), lte(sessionsTable.extractionRetryAt, now)),
+            or(
+              sql`${sessionsTable.timeUpdated} > COALESCE(${sessionsTable.lastExtractionAt}, (SELECT max(agent_memories.created_at) FROM agent_memories WHERE agent_memories.session_id = ${sessionsTable.id}), 0)`,
+              and(
+                isNotNull(sessionsTable.extractionRetryAt),
+                lt(sessionsTable.extractionAttempts, EXTRACTION_MAX_ATTEMPTS),
+              ),
+            ),
+          ),
+    )
+    .returning({
+      attempts: sessionsTable.extractionAttempts,
+      claimedVersion: sessionsTable.lastExtractionAt,
+    })
 
-  if (!latestMemory) return true
-  return session.timeUpdated > latestMemory.createdAt
+  const row = rows[0]
+  if (!row) return null
+  return { attempts: row.attempts, claimedVersion: row.claimedVersion ?? 0, leaseUntil }
 }
 
-export async function listExtractableSessions(): Promise<Array<{ id: string; customAgentId: string }>> {
+export async function settleExtractionSuccess(sessionId: string, leaseUntil: number): Promise<boolean> {
+  const rows = await db
+    .update(sessionsTable)
+    .set({ extractionAttempts: 0, extractionRetryAt: null })
+    .where(and(eq(sessionsTable.id, sessionId), eq(sessionsTable.extractionRetryAt, leaseUntil)))
+    .returning({ id: sessionsTable.id })
+  return rows.length > 0
+}
+
+export async function settleExtractionFailure(
+  sessionId: string,
+  attempts: number,
+  leaseUntil: number,
+): Promise<boolean> {
+  const retryAt = attempts >= EXTRACTION_MAX_ATTEMPTS ? null : Date.now() + EXTRACTION_RETRY_BACKOFF_MS[attempts - 1]
+  const rows = await db
+    .update(sessionsTable)
+    .set({ extractionRetryAt: retryAt })
+    .where(and(eq(sessionsTable.id, sessionId), eq(sessionsTable.extractionRetryAt, leaseUntil)))
+    .returning({ id: sessionsTable.id })
+  return rows.length > 0
+}
+
+export async function listExtractableSessions(): Promise<ExtractionScanCandidates> {
   const rows = await db
     .select({
       id: sessionsTable.id,
       customAgentId: sessionsTable.customAgentId,
       timeUpdated: sessionsTable.timeUpdated,
+      lastExtractionAt: sessionsTable.lastExtractionAt,
+      extractionAttempts: sessionsTable.extractionAttempts,
+      extractionRetryAt: sessionsTable.extractionRetryAt,
+      latestMemoryAt: sql<
+        number | null
+      >`(SELECT max(created_at)::double precision FROM agent_memories WHERE session_id = ${sessionsTable.id})`,
     })
     .from(sessionsTable)
     .innerJoin(customAgents, eq(sessionsTable.customAgentId, customAgents.id))
@@ -532,11 +691,28 @@ export async function listExtractableSessions(): Promise<Array<{ id: string; cus
       ),
     )
 
-  const result: Array<{ id: string; customAgentId: string }> = []
+  const now = Date.now()
+  const candidates: ExtractionCandidate[] = []
+  let skippedStale = 0
   for (const row of rows) {
     if (!row.customAgentId) continue
-    const needs = await sessionNeedsExtraction(row.id)
-    if (needs) result.push({ id: row.id, customAgentId: row.customAgentId })
+    const candidate: ExtractionCandidate = {
+      id: row.id,
+      customAgentId: row.customAgentId,
+      timeUpdated: row.timeUpdated,
+      lastExtractionAt: row.lastExtractionAt,
+      extractionAttempts: row.extractionAttempts,
+      extractionRetryAt: row.extractionRetryAt,
+      latestMemoryAt: row.latestMemoryAt,
+    }
+    if (isStaleBacklog(candidate, now)) {
+      skippedStale++
+      continue
+    }
+    if (isExtractionDue(candidate, now)) candidates.push(candidate)
   }
-  return result
+
+  candidates.sort((a, b) => (a.lastExtractionAt ?? 0) - (b.lastExtractionAt ?? 0) || b.timeUpdated - a.timeUpdated)
+
+  return { due: candidates.map((c) => ({ id: c.id, customAgentId: c.customAgentId })), skippedStale }
 }
