@@ -51,7 +51,8 @@ export function applyToken(
   return record
 }
 
-type AuthJson = Record<string, { type: string; access?: string; refresh?: string; expires?: number }>
+type AuthJsonEntry = { type: string; access?: string; refresh?: string; expires?: number; key?: string }
+type AuthJson = Record<string, AuthJsonEntry>
 
 const ACCOUNTS_PATH = join(homedir(), ".config", "opencode", "claude-accounts.json")
 
@@ -129,6 +130,14 @@ export async function readAuthEntry(entryKey: string): Promise<AuthToken | undef
   return undefined
 }
 
+export async function readApiKeyEntry(entryKey: string): Promise<string | undefined> {
+  const path = await resolveAuthJsonPath()
+  const auth = await readJson<AuthJson>(path)
+  const entry = auth?.[entryKey]
+  if (entry?.type === "api" && typeof entry.key === "string" && entry.key.length > 0) return entry.key
+  return undefined
+}
+
 export type TokenWrite =
   | { kind: "full"; refresh: string; access?: string; expires?: number }
   | { kind: "lease"; access: string; expires: number }
@@ -147,11 +156,7 @@ function resolveRefresh(write: TokenWrite | { refresh: string; access?: string; 
   }
 }
 
-export async function writeAuthEntry(
-  entryKey: string,
-  write: TokenWrite | { refresh: string; access?: string; expires?: number },
-): Promise<void> {
-  const token = resolveRefresh(write)
+async function updateAuthJson(mutate: (auth: AuthJson) => boolean): Promise<void> {
   const path = await resolveAuthJsonPath()
   let auth: AuthJson
   try {
@@ -163,8 +168,34 @@ export async function writeAuthEntry(
       throw err
     }
   }
-  auth[entryKey] = { type: "oauth", access: token.access ?? "", refresh: token.refresh, expires: token.expires ?? 0 }
+  if (!mutate(auth)) return
   await atomicWrite(path, auth)
+}
+
+export async function writeAuthEntry(
+  entryKey: string,
+  write: TokenWrite | { refresh: string; access?: string; expires?: number },
+): Promise<void> {
+  const token = resolveRefresh(write)
+  await updateAuthJson((auth) => {
+    auth[entryKey] = { type: "oauth", access: token.access ?? "", refresh: token.refresh, expires: token.expires ?? 0 }
+    return true
+  })
+}
+
+export async function writeApiKeyEntry(entryKey: string, key: string): Promise<void> {
+  await updateAuthJson((auth) => {
+    auth[entryKey] = { type: "api", key }
+    return true
+  })
+}
+
+export async function removeAuthEntry(entryKey: string): Promise<void> {
+  await updateAuthJson((auth) => {
+    if (!(entryKey in auth)) return false
+    delete auth[entryKey]
+    return true
+  })
 }
 
 export async function readAuthAnthropic(): Promise<AuthToken | undefined> {

@@ -134,9 +134,14 @@ export function createDefaultRuntimeManager(): RuntimeManager {
       await provider.initialize(repoId, localPath)
 
       if (needsCredentialPush(provider)) {
+        const accountProvider = provider.accountProvider
+        if (!accountProvider) {
+          throw new Error(`runtime provider "${provider.id}" requires accountProvider for its runtime-push channel`)
+        }
+        const { getAccountProvider } = await import("../lib/account-providers")
+        const adapter = getAccountProvider(accountProvider).credentialAdapter
         try {
-          const { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } = await import("../lib/account-providers")
-          const auth = await getAccountProvider(DEFAULT_ACCOUNT_PROVIDER).credentialAdapter.read()
+          const auth = await adapter.read()
           if (auth?.access) {
             if (auth.refresh) {
               await provider.credentialWriter.write({

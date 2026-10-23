@@ -16,9 +16,12 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import {
   loadAccounts,
+  readApiKeyEntry,
   readAuthAnthropic,
   readAuthEntry,
+  removeAuthEntry,
   saveAccounts,
+  writeApiKeyEntry,
   writeAuthAnthropic,
   writeAuthEntry,
 } from ${JSON.stringify(join(SRC, "lib/auth-files"))}
@@ -44,6 +47,25 @@ result.wrapperBareByteEqual = readFileSync(authPath, "utf8") === expectedBytes
 result.entryRead = await readAuthEntry("anthropic")
 result.anthropicRead = await readAuthAnthropic()
 result.missingEntry = (await readAuthEntry("does-not-exist")) ?? null
+
+await writeApiKeyEntry("opencode-go", "oc_sk_key1")
+const expectedApiBytes = JSON.stringify(
+  {
+    anthropic: { type: "oauth", access: "a1", refresh: "r1", expires: 111 },
+    "opencode-go": { type: "api", key: "oc_sk_key1" },
+  },
+  null,
+  2,
+)
+result.apiKeyByteEqual = readFileSync(authPath, "utf8") === expectedApiBytes
+result.apiKeyRead = (await readApiKeyEntry("opencode-go")) ?? null
+result.apiKeyMissing = (await readApiKeyEntry("does-not-exist")) ?? null
+await removeAuthEntry("opencode-go")
+const afterRemoveAuth = readJson(authPath)
+result.removeAuthEntry = {
+  openCodeGoGone: afterRemoveAuth["opencode-go"] === undefined,
+  anthropicIntact: afterRemoveAuth.anthropic?.refresh === "r1",
+}
 
 mkdirSync(join(home, ".config", "opencode"), { recursive: true })
 writeFileSync(
@@ -137,6 +159,10 @@ type FixtureResult = {
   entryRead: { access?: string; refresh?: string; expires?: number } | null
   anthropicRead: { access?: string; refresh?: string; expires?: number } | null
   missingEntry: unknown
+  apiKeyByteEqual: boolean
+  apiKeyRead: string | null
+  apiKeyMissing: string | null
+  removeAuthEntry: { openCodeGoGone: boolean; anthropicIntact: boolean }
   migration: Record<string, string>
   newWins: Record<string, string>
   savedShape: { activeIds: Record<string, string>; hasActiveId: boolean; hasOpenaiActiveId: boolean }
@@ -188,6 +214,19 @@ describe("auth-files and account switching in an isolated process", () => {
     expect(result.entryRead).toEqual({ access: "a1", refresh: "r1", expires: 111 })
     expect(result.anthropicRead).toEqual({ access: "a1", refresh: "r1", expires: 111 })
     expect(result.missingEntry).toBeNull()
+  })
+
+  test("writeApiKeyEntry preserves existing entries and matches auth.json bytes", () => {
+    expect(result.apiKeyByteEqual).toBe(true)
+  })
+
+  test("readApiKeyEntry round-trips and returns null for missing keys", () => {
+    expect(result.apiKeyRead).toBe("oc_sk_key1")
+    expect(result.apiKeyMissing).toBeNull()
+  })
+
+  test("removeAuthEntry removes only the api-key entry", () => {
+    expect(result.removeAuthEntry).toEqual({ openCodeGoGone: true, anthropicIntact: true })
   })
 
   test("loadAccounts migrates legacy activeId fields into activeIds", () => {

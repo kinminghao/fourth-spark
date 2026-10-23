@@ -6,10 +6,12 @@
 
 import type { ProviderId } from "../auth-files"
 import { anthropicAccountProvider } from "./anthropic"
+import { openCodeGoAccountProvider } from "./opencode-go"
 import type { AccountProviderDescriptor } from "./types"
 
 const providers = new Map<ProviderId, AccountProviderDescriptor>([
   [anthropicAccountProvider.id, anthropicAccountProvider],
+  [openCodeGoAccountProvider.id, openCodeGoAccountProvider],
 ])
 
 // The account surface (usage page, local/cloud pools) currently operates on

@@ -57,7 +57,7 @@ export const anthropicAccountProvider: AccountProviderDescriptor = {
   id: PROVIDER_ID,
   label: "Claude",
   credentialAdapter: createAuthJsonCredentialAdapter(PROVIDER_ID),
-  login: { authorize, exchange },
+  login: { kind: "oauth", authorize, exchange },
   refresh: { isStale, refresh: refreshToken },
   usage: { fetch: fetchUsage },
   identity: { fetchProfile },

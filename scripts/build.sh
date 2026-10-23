@@ -42,6 +42,11 @@ bunx drizzle-kit generate
 echo "→ Copying runtime assets..."
 cp "$ROOT/docker-compose.yml" "$DIST/"
 cp -r "$ROOT/packages/server/drizzle" "$DIST/drizzle"
+# docker-compose.yml bind-mounts this script; without it Docker creates the
+# missing host path as a root-owned directory on first start, which breaks
+# later npm upgrades (EACCES while cleaning the package directory).
+mkdir -p "$DIST/scripts"
+cp "$ROOT/scripts/init-test-db.sh" "$DIST/scripts/"
 
 echo ""
 echo "=== Build complete ==="
@@ -63,6 +68,8 @@ if [ -z "$TARGET" ]; then
   cp -r "$DIST/public" "$NPM_DIST/public"
   cp -r "$DIST/drizzle" "$NPM_DIST/drizzle"
   cp "$ROOT/docker-compose.yml" "$NPM_DIST/"
+  mkdir -p "$NPM_DIST/scripts"
+  cp "$ROOT/scripts/init-test-db.sh" "$NPM_DIST/scripts/"
   echo "npm package: $NPM_DIST/"
   ls -lh "$NPM_DIST/"
 fi

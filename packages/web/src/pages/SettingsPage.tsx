@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Sparkles,
   Trash2,
   User,
   Users,
@@ -51,7 +52,7 @@ type Tab = "repos" | "usage" | "git" | "models" | "agents" | "general" | "server
 
 const BASE_TABS: { id: Tab; label: string; icon: typeof Zap }[] = [
   { id: "repos", label: "仓库", icon: Box },
-  { id: "usage", label: "Claude 账号", icon: Zap },
+  { id: "usage", label: "账号", icon: Zap },
   { id: "git", label: "Git 源站", icon: GitBranch },
   { id: "models", label: "模型", icon: Cpu },
   { id: "agents", label: "AGENTS.md", icon: FileText },
@@ -126,10 +127,16 @@ function AccountCard({
   account,
   onSwitch,
   switching,
+  onDelete,
+  deleting,
+  mutedError,
 }: {
   account: AccountUsage
   onSwitch?: (id: string) => void
   switching?: boolean
+  onDelete?: (id: string) => void
+  deleting?: boolean
+  mutedError?: boolean
 }) {
   const active = account.active
   return (
@@ -181,6 +188,15 @@ function AccountCard({
             需重新登录
           </span>
         )}
+        {onDelete && (
+          <InlineConfirm
+            onConfirm={() => onDelete(account.id)}
+            disabled={deleting}
+            size="sm"
+            title="删除账号"
+            triggerClassName="text-fg-5 transition-colors hover:text-red-400 disabled:opacity-40"
+          />
+        )}
       </div>
 
       {account.holders && account.holders.length > 0 && (
@@ -190,7 +206,9 @@ function AccountCard({
         </div>
       )}
 
-      {account.error && !account.usage ? (
+      {mutedError && account.error && !account.usage ? (
+        <div className="mt-3 text-[11px] text-fg-5">用量暂不可用</div>
+      ) : account.error && !account.usage ? (
         <div className="mt-3 flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0 break-words">{account.error}</span>
@@ -199,6 +217,7 @@ function AccountCard({
         <div className="mt-4 space-y-3">
           <UsageBar label="5 小时窗口" window={account.usage.five_hour} />
           <UsageBar label="7 天窗口" window={account.usage.seven_day} />
+          <UsageBar label="每月窗口" window={account.usage.monthly} />
           {account.usage.scoped?.map((s) => (
             <UsageBar key={s.label} label={s.label} window={s} />
           ))}
@@ -529,6 +548,264 @@ function UsageSection() {
 
       {showLogin && (
         <ClaudeLoginModal
+          onClose={() => setShowLogin(false)}
+          onSuccess={() => {
+            setShowLogin(false)
+            load()
+          }}
+        />
+      )}
+    </section>
+  )
+}
+
+const OPENCODE_GO_PROVIDER = "opencode-go"
+const OPENCODE_GO_CONSOLE_URL = "https://opencode.ai/console"
+const OPENCODE_GO_GUIDE_URL = "https://opencode.ai/v2/docs/console/go/"
+
+function ApiKeyLoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [key, setKey] = useState("")
+  const [step, setStep] = useState<"idle" | "loading" | "error">("idle")
+  const [error, setError] = useState("")
+
+  const submit = async () => {
+    if (!key.trim()) return
+    setStep("loading")
+    setError("")
+    try {
+      const result = await api.addApiKeyAccount(OPENCODE_GO_PROVIDER, key)
+      if (result.ok) {
+        onSuccess()
+        return
+      }
+      const message =
+        {
+          "invalid-key": "API Key 无效，请检查后重试。",
+          unreachable: "无法连接 opencode.ai，请检查网络后重试。",
+          "unsupported-provider": "该 provider 不支持 API Key 登录。",
+        }[result.reason] ?? "验证失败，请稍后重试。"
+      setError(message)
+      setStep("error")
+    } catch {
+      setError("验证失败，请稍后重试。")
+      setStep("error")
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="flex w-full max-w-lg flex-col rounded-t-2xl border border-line bg-surface p-5 shadow-2xl sm:rounded-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-fg">添加 OpenCode Go 账号</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-3"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mt-4 space-y-4">
+          <p className="text-xs text-fg-3">
+            在 OpenCode Console 订阅 Go，复制 API Key 并粘贴到下方。
+            <a
+              href={OPENCODE_GO_CONSOLE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-1 text-blue-500 hover:underline"
+            >
+              订阅 / 获取 API Key
+            </a>
+            <a
+              href={OPENCODE_GO_GUIDE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-2 text-blue-500 hover:underline"
+            >
+              接入指南
+            </a>
+          </p>
+          <label className="block">
+            <span className="text-xs font-medium text-fg-3">API Key</span>
+            <input
+              type="password"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void submit()
+              }}
+              placeholder="oc_sk_…"
+              autoFocus
+              className="mt-1 w-full rounded-md border border-line bg-base px-3 py-2 font-mono text-sm text-fg placeholder:text-fg-6 focus:border-blue-500 focus:outline-none"
+            />
+          </label>
+          {step === "error" && (
+            <div className="flex items-start gap-1.5 rounded-md border border-red-400/30 bg-red-400/5 px-3 py-2">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
+              <span className="text-xs text-red-400">{error}</span>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-line px-3 py-2 text-xs font-medium text-fg-3 transition-colors hover:bg-elevated"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={!key.trim() || step === "loading"}
+              className="flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
+            >
+              {step === "loading" && <Loader2 className="h-3 w-3 fs-spin" />}
+              {step === "loading" ? "添加中…" : "添加"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function OpencodeGoSection({ localOnly = false }: { localOnly?: boolean }) {
+  const [data, setData] = useState<UsageResult | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [switchingId, setSwitchingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [showLogin, setShowLogin] = useState(false)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    setError(null)
+    api
+      .fetchUsage(OPENCODE_GO_PROVIDER)
+      .then((result) => setData(result))
+      .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    load()
+    const interval = setInterval(load, 30_000)
+    return () => clearInterval(interval)
+  }, [load])
+
+  const handleSwitch = (id: string) => {
+    setSwitchingId(id)
+    api
+      .switchUsageAccount(id, OPENCODE_GO_PROVIDER)
+      .then(setData)
+      .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
+      .finally(() => setSwitchingId(null))
+  }
+
+  const handleDelete = (id: string) => {
+    setDeletingId(id)
+    api
+      .deleteUsageAccount(id)
+      .then(load)
+      .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
+      .finally(() => setDeletingId(null))
+  }
+
+  return (
+    <section className="rounded-xl border border-line bg-surface p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-500">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-sm font-semibold text-fg">OpenCode Go</h2>
+              {localOnly && (
+                <span className="rounded-full bg-elevated px-1.5 py-0.5 text-[10px] font-medium text-fg-4">仅本地</span>
+              )}
+            </div>
+            <p className="mt-0.5 text-xs text-fg-4">
+              OpenCode Go 订阅账号，粘贴 API Key 接入开源编码模型。
+              <a
+                href={OPENCODE_GO_CONSOLE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-1 text-blue-500 hover:underline"
+              >
+                订阅 / 获取 API Key
+              </a>
+              <a
+                href={OPENCODE_GO_GUIDE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 text-blue-500 hover:underline"
+              >
+                接入指南
+              </a>
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="rounded-md p-1.5 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 disabled:opacity-40"
+        >
+          <RefreshCw className={clsx("h-4 w-4", loading && "fs-spin")} />
+        </button>
+      </div>
+      <div className="mt-4 space-y-2.5">
+        {loading && !data ? (
+          <div className="flex flex-col items-center gap-2.5 py-10 text-fg-5">
+            <Loader2 className="h-5 w-5 fs-spin" />
+            <p className="text-xs">加载中…</p>
+          </div>
+        ) : error && !data ? (
+          <div className="flex flex-col items-center gap-2.5 py-10 text-red-400">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <p className="max-w-xs text-center text-xs leading-relaxed">{error}</p>
+          </div>
+        ) : data && data.accounts.length === 0 ? (
+          <div className="flex flex-col items-center gap-2.5 py-10 text-fg-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-elevated text-fg-4">
+              <Users className="h-5 w-5" />
+            </div>
+            <p className="max-w-xs text-center text-xs leading-relaxed">
+              尚未添加 OpenCode Go 账号，前往 OpenCode Console 订阅并复制 API Key。
+            </p>
+          </div>
+        ) : data ? (
+          data.accounts.map((account) => (
+            <AccountCard
+              key={account.id}
+              account={account}
+              onSwitch={handleSwitch}
+              switching={switchingId === account.id}
+              onDelete={handleDelete}
+              deleting={deletingId === account.id}
+              mutedError
+            />
+          ))
+        ) : null}
+        <button
+          type="button"
+          onClick={() => setShowLogin(true)}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2.5 text-xs text-fg-4 transition-colors hover:border-fg-5 hover:text-fg-3"
+        >
+          <Plus className="h-3.5 w-3.5" /> 添加 OpenCode Go 账号
+        </button>
+      </div>
+      {showLogin && (
+        <ApiKeyLoginModal
           onClose={() => setShowLogin(false)}
           onSuccess={() => {
             setShowLogin(false)
@@ -1214,6 +1491,7 @@ function AccountSection() {
       </div>
       {loaded && mode === "local" && <UsageSection />}
       {loaded && mode === "cloud" && <CloudPoolSection onStatusChange={handleStatusChange} />}
+      {loaded && <OpencodeGoSection localOnly={isWorker} />}
     </div>
   )
 }

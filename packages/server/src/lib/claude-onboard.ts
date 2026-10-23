@@ -12,14 +12,26 @@
 
 import { createHash, randomBytes } from "node:crypto"
 import { logger } from "../middleware/logger"
-import type { AuthorizeResult, ExchangeResult, ProfileResult } from "./account-providers/types"
-import { applyToken, loadAccounts, providerOf, type StoredAccount, saveAccounts, withAuthLock } from "./auth-files"
+import type { ApiKeyCredentialAdapter, AuthorizeResult, ExchangeResult, ProfileResult } from "./account-providers/types"
+import {
+  type AccountsFile,
+  applyToken,
+  loadAccounts,
+  type ProviderId,
+  providerOf,
+  type StoredAccount,
+  saveAccounts,
+  withAuthLock,
+} from "./auth-files"
+import { isWorkerMode } from "./config"
 import { broadcastCredentialToRuntimes } from "./credential-broadcast"
+import { refreshAccountStoreRuntimes } from "./credential-refresh"
 
 // ---------------------------------------------------------------------------
 // Constants — aligned with Claude Code CLI / claude-accounts-pool
 // ---------------------------------------------------------------------------
 
+const PROVIDER_ID: ProviderId = "anthropic"
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 const AUTHORIZE_URL = "https://claude.ai/oauth/authorize"
 const TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
@@ -206,8 +218,9 @@ export async function exchange(pendingId: string, code: string): Promise<Exchang
     return { ok: false, reason: "profile-failed", detail: msg }
   }
 
-  // Upsert into account pool + write auth.json
-  const existing = await upsertAccount(
+  // Upsert into account pool and write auth.json under one lock
+  const existing = await upsertAccountWithCredential(
+    PROVIDER_ID,
     profile.uuid,
     profile.email,
     {
@@ -218,17 +231,8 @@ export async function exchange(pendingId: string, code: string): Promise<Exchang
     profile.subscription,
   )
 
-  // Write the credential store (auth.json in v1) so the runtime picks it up immediately
-  const { getAccountProvider } = await import("./account-providers")
-  await getAccountProvider("anthropic").credentialAdapter.write({
-    kind: "full",
-    refresh: refreshToken,
-    access: accessToken,
-    expires: expiresAt,
-  })
-
   // Broadcast to other runtimes
-  await broadcastCredentialToRuntimes({
+  await broadcastCredentialToRuntimes(PROVIDER_ID, {
     kind: "full",
     refresh: refreshToken,
     access: accessToken,
@@ -250,20 +254,47 @@ export async function exchange(pendingId: string, code: string): Promise<Exchang
 // ---------------------------------------------------------------------------
 
 export async function removeAccount(id: string): Promise<{ ok: true; label: string } | { ok: false; reason: string }> {
-  return withAuthLock(async () => {
+  const outcome = await withAuthLock(async () => {
     const file = await loadAccounts()
     const index = file.accounts.findIndex((a) => a.id === id)
-    if (index < 0) return { ok: false, reason: "account not found" }
+    const notOk = (reason: string) => ({ result: { ok: false as const, reason }, refreshRuntime: false })
+    if (index < 0) return notOk("account not found")
     const provider = providerOf(file.accounts[index])
-    if (file.activeIds[provider] === id) return { ok: false, reason: "cannot remove active account" }
+    const { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } = await import("./account-providers")
+    // Worker mode manages the default provider's accounts from the cloud pool;
+    // machine-local providers stay removable.
+    if (provider === DEFAULT_ACCOUNT_PROVIDER && isWorkerMode()) {
+      return notOk("account removal is not available in worker mode")
+    }
+    let apiKeyAdapter: ApiKeyCredentialAdapter | undefined
+    try {
+      const { credentialAdapter } = getAccountProvider(provider)
+      if (credentialAdapter.kind === "api-key") apiKeyAdapter = credentialAdapter
+    } catch {
+      // Unregistered provider (legacy record): nothing to clear or refresh.
+    }
+    if (file.activeIds[provider] === id) {
+      if (!apiKeyAdapter) return notOk("cannot remove active account")
+      // Clear the shared auth.json entry, otherwise the runtime keeps
+      // authenticating with a deleted account's key.
+      await apiKeyAdapter.clear()
+      file.activeIds[provider] = undefined
+    }
 
     const [removed] = file.accounts.splice(index, 1)
-    if (file.activeIds[provider] === id) file.activeIds[provider] = undefined
     await saveAccounts(file)
 
+    const { invalidateUsageCache } = await import("./claude-usage")
+    invalidateUsageCache(provider)
+
     logger.info({ id, label: removed.label }, "claude-onboard: account removed")
-    return { ok: true, label: removed.label }
+    return { result: { ok: true as const, label: removed.label }, refreshRuntime: apiKeyAdapter !== undefined }
   })
+  if (outcome.refreshRuntime) {
+    const { runtimeManager } = await import("./process-manager")
+    await refreshAccountStoreRuntimes(runtimeManager.listProviders())
+  }
+  return outcome.result
 }
 
 // ---------------------------------------------------------------------------
@@ -298,35 +329,71 @@ export async function fetchProfile(access: string): Promise<ProfileResult> {
 }
 
 // ---------------------------------------------------------------------------
-// Upsert account into claude-accounts.json
+// Upsert account into claude-accounts.json + credential store
 // ---------------------------------------------------------------------------
 
-async function upsertAccount(
+type TokenSet = { refresh: string; access?: string; expires?: number }
+
+// Applies the upsert to an already-loaded accounts file. Callers hold the auth lock.
+function applyAccountUpsert(
+  file: AccountsFile,
+  provider: ProviderId,
   id: string,
   label: string,
-  token: { refresh: string; access?: string; expires?: number },
+  token: TokenSet,
+  subscription: Record<string, unknown> | undefined,
+  stampProvider: boolean,
+): boolean {
+  const index = file.accounts.findIndex((a) => a.id === id)
+  const existing = index >= 0
+
+  let record: StoredAccount
+  if (existing) {
+    record = file.accounts[index]
+    applyToken(record, token)
+    if (subscription) record.subscription = subscription
+  } else {
+    record = { id, label, refresh: token.refresh, access: token.access, expires: token.expires, subscription }
+    // Legacy anthropic records omit `provider` (providerOf() defaults to it);
+    // other providers stamp their id so accountsOf() groups them correctly.
+    if (stampProvider) record.provider = provider
+    file.accounts.push(record)
+  }
+
+  // Set as active
+  file.activeIds[providerOf(record)] = id
+  return existing
+}
+
+export async function upsertAccountWithCredential(
+  provider: ProviderId,
+  id: string,
+  label: string,
+  token: TokenSet,
   subscription?: Record<string, unknown>,
 ): Promise<boolean> {
   return withAuthLock(async () => {
+    const { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } = await import("./account-providers")
     const file = await loadAccounts()
-    const index = file.accounts.findIndex((a) => a.id === id)
-    const existing = index >= 0
-
-    let record: StoredAccount
-    if (existing) {
-      record = file.accounts[index]
-      applyToken(record, token)
-      if (subscription) record.subscription = subscription
-    } else {
-      record = { id, label, refresh: token.refresh, access: token.access, expires: token.expires, subscription }
-      file.accounts.push(record)
-    }
-
-    // Set as active
-    file.activeIds[providerOf(record)] = id
+    const existing = applyAccountUpsert(
+      file,
+      provider,
+      id,
+      label,
+      token,
+      subscription,
+      provider !== DEFAULT_ACCOUNT_PROVIDER,
+    )
     await saveAccounts(file)
-
-    logger.info({ id, label, existing }, "claude-onboard: account upserted")
+    // Share the lock with the account save so concurrent add/switch cycles
+    // cannot interleave their auth.json read-modify-write sequences.
+    await getAccountProvider(provider).credentialAdapter.write({
+      kind: "full",
+      refresh: token.refresh,
+      access: token.access,
+      expires: token.expires,
+    })
+    logger.info({ provider, id, label, existing }, "claude-onboard: account upserted")
     return existing
   })
 }

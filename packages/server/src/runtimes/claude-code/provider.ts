@@ -57,6 +57,7 @@ export function createClaudeCodeProvider(serverPort: number): RuntimeProvider {
     id: RUNTIME_ID,
     credentialWriter: claudeCodeCredentialWriter,
     credentialChannel: "runtime-push",
+    accountProvider: "anthropic",
 
     async initialize(repoId: string, localPath: string): Promise<void> {
       const existing = repos.get(repoId)

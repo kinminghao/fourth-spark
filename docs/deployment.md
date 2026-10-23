@@ -371,9 +371,10 @@ cd packages/server && bunx drizzle-kit generate
 # 5. 复制运行时资源
 cp docker-compose.yml → dist/
 cp -r packages/server/drizzle → dist/drizzle
+cp scripts/init-test-db.sh → dist/scripts/   # docker-compose 的 bind mount 源，缺失时 Docker 会创建 root 属主目录
 
 # 6. 组装 npm 包（仅本地构建）
-mkdir dist/npm && 复制 cli.js, postinstall.js, public/, drizzle/, docker-compose.yml
+mkdir dist/npm && 复制 cli.js, postinstall.js, public/, drizzle/, docker-compose.yml, scripts/init-test-db.sh
 sed 替换 package.json 中的版本号
 ```
 

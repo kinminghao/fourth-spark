@@ -16,7 +16,8 @@
     "drizzle/",
     "docker-compose.yml",
     "postinstall.js",
-    "README.md"
+    "README.md",
+    "scripts/init-test-db.sh"
   ],
   "scripts": {
     "postinstall": "node postinstall.js"

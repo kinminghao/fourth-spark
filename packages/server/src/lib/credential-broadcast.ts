@@ -4,25 +4,26 @@
 // "account-store" channel read the shared auth.json directly and are skipped.
 // ---------------------------------------------------------------------------
 
-import { needsCredentialPush, type RuntimeProvider } from "../core/runtime-provider"
+import { consumesCredentialProvider, type RuntimeProvider } from "../core/runtime-provider"
 import { logger } from "../middleware/logger"
-import type { TokenWrite } from "./auth-files"
+import type { ProviderId, TokenWrite } from "./auth-files"
 
 export async function pushCredentialToProviders(
   providers: Iterable<RuntimeProvider>,
+  accountProvider: ProviderId,
   token: TokenWrite,
 ): Promise<void> {
   for (const provider of providers) {
-    if (!needsCredentialPush(provider)) continue
+    if (!consumesCredentialProvider(provider, accountProvider)) continue
     await provider.credentialWriter.write(token).catch((err) => {
       logger.warn({ err, runtimeId: provider.id }, "failed to push credential to runtime")
     })
   }
 }
 
-export async function broadcastCredentialToRuntimes(token: TokenWrite): Promise<void> {
+export async function broadcastCredentialToRuntimes(accountProvider: ProviderId, token: TokenWrite): Promise<void> {
   try {
     const { getRegistry } = await import("../core/registry")
-    await pushCredentialToProviders(getRegistry().providers.values(), token)
+    await pushCredentialToProviders(getRegistry().providers.values(), accountProvider, token)
   } catch {}
 }

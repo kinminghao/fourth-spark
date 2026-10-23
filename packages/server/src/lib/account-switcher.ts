@@ -14,6 +14,7 @@ import {
   withAuthLock,
 } from "./auth-files"
 import { broadcastCredentialToRuntimes } from "./credential-broadcast"
+import { refreshAccountStoreRuntimes } from "./credential-refresh"
 import { RefreshRevokedError } from "./token-refresh"
 
 const COOLDOWN_FILE = join("/tmp", "fourth-spark", "cooldown.json")
@@ -139,7 +140,7 @@ function pickNext(file: AccountsFile, provider: ProviderId, activeId?: string): 
 }
 
 export async function switchToAccount(provider: ProviderId, targetId: string): Promise<StoredAccount> {
-  return withAuthLock(async () => {
+  const { account, credentialKind } = await withAuthLock(async () => {
     const file = await loadAccounts()
     const index = file.accounts.findIndex((a) => a.id === targetId)
     if (index < 0) throw new Error("account not found")
@@ -151,7 +152,10 @@ export async function switchToAccount(provider: ProviderId, targetId: string): P
     const { credentialAdapter, refresh } = getAccountProvider(provider)
     const liveAuth = await credentialAdapter.read()
     const activeId = file.activeIds[provider]
-    if (activeId && activeId !== targetId && liveAuth?.refresh) {
+    // Static api-key credentials never rotate; adopting the live key would
+    // corrupt the outgoing record's identity (hash id/label keep pointing at
+    // the original key while the secret becomes a foreign one).
+    if (credentialAdapter.kind === "oauth" && activeId && activeId !== targetId && liveAuth?.refresh) {
       const outIdx = file.accounts.findIndex((a) => a.id === activeId)
       if (outIdx >= 0) {
         applyToken(file.accounts[outIdx], {
@@ -196,15 +200,22 @@ export async function switchToAccount(provider: ProviderId, targetId: string): P
       access: account.access,
       expires: account.expires,
     })
-    await broadcastCredentialToRuntimes({
+    await broadcastCredentialToRuntimes(provider, {
       kind: "full",
       refresh: account.refresh,
       access: account.access,
       expires: account.expires,
     })
     logger.info({ id: targetId, label: account.label }, "switched active account")
-    return account
+    return { account, credentialKind: credentialAdapter.kind }
   })
+  // Static api-key credentials are baked into runtime instance state at start;
+  // rebuild that state so the switched key applies to running sessions.
+  if (credentialKind === "api-key") {
+    const { runtimeManager } = await import("./process-manager")
+    await refreshAccountStoreRuntimes(runtimeManager.listProviders())
+  }
+  return account
 }
 
 export type SwitchResult =

@@ -18,6 +18,7 @@ import {
 } from "../../core/runtime-types"
 
 const RUNTIME_ID = "opencode"
+const INSTANCE_DISPOSE_TIMEOUT_MS = 5_000
 
 type Query = Record<string, string | undefined>
 
@@ -170,6 +171,18 @@ export class HttpRuntimeClient implements RuntimeClient {
 
   getProviders(): Promise<ProviderListResponse> {
     return this.fetchers.getJson<ProviderListResponse>("/provider", { directory: this.directory })
+  }
+
+  /** Rebuild the instance's provider state. Account credentials are resolved
+   *  when the instance is created, so a running process needs this to pick up
+   *  auth.json changes; the process and its sessions stay alive. */
+  async disposeInstance(): Promise<void> {
+    const path = "/instance/dispose"
+    const res = await fetch(this.fetchers.buildUrl(path, { directory: this.directory }), {
+      method: "POST",
+      signal: AbortSignal.timeout(INSTANCE_DISPOSE_TIMEOUT_MS),
+    })
+    await this.fetchers.ensureOk(res, "POST", path)
   }
 
   revert(sessionId: string, messageID: string, partID?: string): Promise<Session> {
