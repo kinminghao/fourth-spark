@@ -17,6 +17,7 @@ export async function statusCommand(): Promise<void> {
 
   console.log(serverRunning ? `Server:     running (PID ${serverPid})` : "Server:     stopped")
 
+  let apiReachable = false
   try {
     const res = await fetch(`http://127.0.0.1:${PORT}/api/health`, {
       signal: AbortSignal.timeout(2000),
@@ -24,6 +25,7 @@ export async function statusCommand(): Promise<void> {
     if (res.ok) {
       const data = (await res.json()) as { status: string; version?: string }
       console.log(`API:        reachable (${data.version ?? "unknown"})`)
+      apiReachable = true
     } else {
       console.log("API:        unreachable")
     }
@@ -44,6 +46,18 @@ export async function statusCommand(): Promise<void> {
     console.log(`OpenCode:   ${count} process${count !== 1 ? "es" : ""}`)
   } catch {
     console.log("OpenCode:   no processes")
+  }
+
+  if (apiReachable) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${PORT}/api/auth/status`, {
+        signal: AbortSignal.timeout(2000),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as { authRequired: boolean }
+        console.log(`Auth:       ${data.authRequired ? "enabled" : "no devices registered"}`)
+      }
+    } catch {}
   }
 
   console.log("")

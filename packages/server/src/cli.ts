@@ -35,6 +35,11 @@ switch (command) {
     await upgradeCommand(args.slice(1))
     break
   }
+  case "pair": {
+    const { pairCommand } = await import("./cli/pair")
+    await pairCommand()
+    break
+  }
   case "serve":
   case undefined: {
     const { ensureDependencies } = await import("./cli/paths")
@@ -60,6 +65,7 @@ Commands:
   start     Start server in background (with PostgreSQL) [--port PORT]
   stop      Stop background server and all services
   status    Show server and service status
+  pair      Open a 60-second pairing window for new devices
   upgrade   Check for updates and upgrade to latest version [--canary] [--force]
 
 Options:

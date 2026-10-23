@@ -31,6 +31,20 @@ function createLogger() {
 
 export const logger = createLogger()
 
+/** Strip sensitive query params (token) from a URL path for logging. */
+function sanitizePath(raw: string, url: string): string {
+  try {
+    const u = new URL(url)
+    if (u.searchParams.has("token")) {
+      u.searchParams.set("token", "***")
+      return u.pathname + u.search
+    }
+  } catch {
+    // Malformed URL — fall through to raw path
+  }
+  return raw
+}
+
 // Logs method, path, status, and duration for every request as structured JSON.
 export const requestLogger: MiddlewareHandler = async (c, next) => {
   const start = Date.now()
@@ -38,7 +52,7 @@ export const requestLogger: MiddlewareHandler = async (c, next) => {
   logger.info(
     {
       method: c.req.method,
-      path: c.req.path,
+      path: sanitizePath(c.req.path, c.req.url),
       status: c.res.status,
       durationMs: Date.now() - start,
     },

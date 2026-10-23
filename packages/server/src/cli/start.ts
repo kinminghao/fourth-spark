@@ -1,4 +1,5 @@
-import { execSync, spawn } from "node:child_process"
+import { execSync, spawn, spawnSync } from "node:child_process"
+import { randomBytes } from "node:crypto"
 import { existsSync, openSync, readFileSync, statSync, truncateSync, writeFileSync } from "node:fs"
 import { createConnection, createServer } from "node:net"
 import {
@@ -11,6 +12,33 @@ import {
   MAX_LOG_BYTES,
   PID_FILE,
 } from "./paths"
+
+const TOKEN_CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+function generateCliToken(): string {
+  const bytes = randomBytes(8)
+  let token = ""
+  for (let i = 0; i < 8; i++) {
+    token += TOKEN_CHARSET[bytes[i] % TOKEN_CHARSET.length]
+  }
+  return token
+}
+
+function tryOpenBrowser(url: string): void {
+  const commands = [
+    { cmd: "open", args: [url] },
+    { cmd: "wslview", args: [url] },
+    { cmd: "xdg-open", args: [url] },
+  ]
+  for (const { cmd, args } of commands) {
+    try {
+      const result = spawnSync(cmd, args, { stdio: "ignore", timeout: 3000 })
+      if (result.status === 0) return
+    } catch {
+      // try next
+    }
+  }
+}
 
 const DEFAULT_PORT = 3000
 const DEFAULT_PG_PORT = 5460
@@ -162,6 +190,8 @@ export async function startCommand(args: string[]): Promise<void> {
     }
   }
 
+  const authToken = process.env.AUTH_TOKEN ?? generateCliToken()
+
   console.log("→ Starting fourth-spark server...")
   const binary = process.execPath
   try {
@@ -175,7 +205,7 @@ export async function startCommand(args: string[]): Promise<void> {
   const child = spawn(binary, ["serve"], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
-    env: { ...process.env, PORT: String(port) },
+    env: { ...process.env, PORT: String(port), AUTH_TOKEN: authToken },
   })
   child.unref()
 
@@ -189,15 +219,22 @@ export async function startCommand(args: string[]): Promise<void> {
 
   await new Promise((r) => setTimeout(r, 1000))
   if (isProcessRunning(pid)) {
+    const url = `http://localhost:${port}`
+    const authUrl = `${url}?token=${authToken}`
+
     console.log("")
     console.log("=== fourth-spark started ===")
-    console.log(`  PID:  ${pid}`)
-    console.log(`  URL:  http://localhost:${port}`)
-    console.log(`  DB:   localhost:${pgPort}`)
-    console.log(`  Logs: ${LOG_FILE}`)
+    console.log(`  PID:   ${pid}`)
+    console.log(`  URL:   ${url}`)
+    console.log(`  Token: ${authToken}`)
+    console.log(`  DB:    localhost:${pgPort}`)
+    console.log(`  Logs:  ${LOG_FILE}`)
     console.log("")
     console.log("  fourth-spark stop    — stop all services")
     console.log("  fourth-spark status  — check status")
+    console.log("  fourth-spark pair    — pair a new device")
+
+    tryOpenBrowser(authUrl)
   } else {
     console.error(`ERROR: Server failed to start. Check ${LOG_FILE}`)
     process.exit(1)
