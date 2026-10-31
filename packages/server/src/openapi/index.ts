@@ -1098,6 +1098,14 @@ registry.registerPath({
   responses: { 200: jsonResp(z.array(S.AgentInfo), "Agents") },
 })
 
+registry.registerPath({
+  method: "get",
+  path: "/api/base-agents",
+  tags: ["Agents"],
+  summary: "List built-in and local base agents",
+  responses: { 200: jsonResp(z.array(S.BaseAgentOption), "Base agents") },
+})
+
 // ---------------------------------------------------------------------------
 // Workspaces
 // ---------------------------------------------------------------------------

@@ -5,18 +5,19 @@ import { useNavigate, useParams } from "react-router-dom"
 import { GUIDE_AGENT_PREFIX, MOCK_MEMORIES } from "../components/guide-mock-data"
 import { InlineConfirm } from "../components/InlineConfirm"
 import { useAsyncData } from "../hooks/use-async-data"
-import type { AgentMemory, ConsolidationStats, CustomAgent, ModelInfo, PromptFragment } from "../lib/api-client"
+import type {
+  AgentMemory,
+  BaseAgentOption,
+  ConsolidationStats,
+  CustomAgent,
+  ModelInfo,
+  PromptFragment,
+} from "../lib/api-client"
 import * as api from "../lib/api-client"
 import { agentAvatar, COPY_FEEDBACK_MS } from "../lib/constants"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
 import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 
-const BASE_AGENTS = [
-  "Sisyphus - ultraworker",
-  "Prometheus - Plan Builder",
-  "Atlas - Plan Executor",
-  "Hephaestus - Deep Agent",
-]
 const PINNED_MODELS_KEY = "pinned_models"
 const SP_KEY = "__system_prompt__"
 
@@ -714,10 +715,12 @@ function SessionList({ agentId }: { agentId: string }) {
 function ConfigSection({
   agent,
   fragments,
+  baseAgents,
   onSave,
 }: {
   agent: CustomAgent
   fragments: PromptFragment[]
+  baseAgents: BaseAgentOption[]
   onSave: (data: {
     name: string
     description?: string
@@ -829,6 +832,9 @@ function ConfigSection({
   }
 
   const isSystem = agent.isSystem >= 1
+  const baseAgentOptions: BaseAgentOption[] = baseAgents.some((a) => a.name === baseAgent)
+    ? baseAgents
+    : [{ name: baseAgent, source: "local" }, ...baseAgents]
 
   if (!editing) {
     return (
@@ -908,9 +914,9 @@ function ConfigSection({
                 onChange={(e) => setBaseAgent(e.target.value)}
                 className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg focus:border-blue-500 focus:outline-none"
               >
-                {BASE_AGENTS.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
+                {baseAgentOptions.map((a) => (
+                  <option key={a.name} value={a.name}>
+                    {a.name}
                   </option>
                 ))}
               </select>
@@ -1124,6 +1130,9 @@ export function AgentDetailPage() {
   const { data: fragmentsData } = useAsyncData(() => api.listGlobalFragments(), [agentId], {
     errorMessage: "加载提示词片段失败",
   })
+  const { data: baseAgentsData } = useAsyncData(() => api.listBaseAgents(), [], {
+    errorMessage: "加载 Base Agent 列表失败",
+  })
   const fragments = fragmentsData ?? []
   const [copied, setCopied] = useState(false)
 
@@ -1256,7 +1265,7 @@ export function AgentDetailPage() {
         </div>
 
         {/* Config */}
-        <ConfigSection agent={agent} fragments={fragments} onSave={handleSave} />
+        <ConfigSection agent={agent} fragments={fragments} baseAgents={baseAgentsData ?? []} onSave={handleSave} />
 
         {/* Memory */}
         <MemorySection agentId={agentId} />
