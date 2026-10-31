@@ -506,6 +506,14 @@ export const AgentInfo = z
   .catchall(z.unknown())
   .meta({ id: "AgentInfo" })
 
+export const BaseAgentOption = z
+  .object({
+    name: z.string(),
+    description: z.string().optional(),
+    source: z.enum(["builtin", "local"]),
+  })
+  .meta({ id: "BaseAgentOption" })
+
 export const WorkspaceInfo = Workspace.extend({
   diskUsage: z.number().nullable().optional(),
   merged: z.boolean(),

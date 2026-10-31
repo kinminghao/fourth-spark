@@ -595,6 +595,20 @@ export async function listAgents(repoId: string): Promise<Agent[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Base Agent API — /api/base-agents
+// ---------------------------------------------------------------------------
+
+export interface BaseAgentOption {
+  name: string
+  description?: string
+  source: "builtin" | "local"
+}
+
+export async function listBaseAgents(): Promise<BaseAgentOption[]> {
+  return unwrapList<BaseAgentOption>(await apiFetch<unknown>("/api/base-agents"), "baseAgents")
+}
+
+// ---------------------------------------------------------------------------
 // Custom Agent API
 // ---------------------------------------------------------------------------
 

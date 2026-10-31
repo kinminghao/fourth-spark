@@ -11,7 +11,9 @@ Custom Agent = Base Agent + 模型覆盖 + [片段1, 片段2, ..., 补充指令,
 
 ## Base Agent
 
-自定义 Agent 必须基于一个内置 Agent：
+自定义 Agent 必须基于一个 Base Agent。可选项由两部分组成：
+
+**内置 Base Agent**
 
 | Base Agent | 用途 |
 |-----------|------|
@@ -20,7 +22,22 @@ Custom Agent = Base Agent + 模型覆盖 + [片段1, 片段2, ..., 补充指令,
 | Atlas - Plan Executor | 计划执行 |
 | Hephaestus - Deep Agent | 深度任务执行（仅支持 GPT 模型） |
 
-Base Agent 提供基础的工具权限和行为模式，Custom Agent 在其上叠加自定义指令。
+内置列表以 `packages/server/src/lib/base-agents.ts` 的 `BUILTIN_BASE_AGENTS` 为准。
+
+**本地自定义 Agent**
+
+服务端扫描 `~/.config/opencode/agents` 和 `~/.config/opencode/agent` 下的 Markdown 文件，把可作为 primary session 使用的 Agent 加入可选列表：
+
+- Agent 名称取文件名（去掉 `.md`），或 frontmatter 的 `name`
+- `description` 从 frontmatter 读取
+- `mode: subagent` 的条目会被排除
+- `disable: true` 的条目会被排除
+
+内置 Base Agent 提供基础的工具权限和行为模式，Custom Agent 在其上叠加自定义指令。本地 Agent 必须存在于 OpenCode 运行时；运行时找不到时 `resolveAgent` 会忽略并回退到默认 Agent。
+
+对应接口：`GET /api/base-agents`，返回 `name`、`description`、`source`。
+
+> 扫描目录与全局 AGENTS.md 使用同一个 OpenCode 配置根目录（`~/.config/opencode`）。新增本地 Agent 后刷新 Agents 页面即可看到。
 
 ## Prompt 片段
 
