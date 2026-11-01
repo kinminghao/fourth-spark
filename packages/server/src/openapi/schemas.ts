@@ -514,6 +514,24 @@ export const BaseAgentOption = z
   })
   .meta({ id: "BaseAgentOption" })
 
+export const BaseAgentPresetInfo = z
+  .object({
+    id: z.string(),
+    label: z.string(),
+    description: z.string(),
+    agentName: z.string(),
+    installed: z.boolean(),
+  })
+  .meta({ id: "BaseAgentPresetInfo" })
+
+export const InstallBaseAgentPresetResult = z
+  .object({
+    installed: z.boolean(),
+    alreadyExists: z.boolean(),
+    path: z.string(),
+  })
+  .meta({ id: "InstallBaseAgentPresetResult" })
+
 export const WorkspaceInfo = Workspace.extend({
   diskUsage: z.number().nullable().optional(),
   merged: z.boolean(),

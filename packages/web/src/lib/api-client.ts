@@ -608,6 +608,30 @@ export async function listBaseAgents(): Promise<BaseAgentOption[]> {
   return unwrapList<BaseAgentOption>(await apiFetch<unknown>("/api/base-agents"), "baseAgents")
 }
 
+export interface BaseAgentPresetInfo {
+  id: string
+  label: string
+  description: string
+  agentName: string
+  installed: boolean
+}
+
+export interface InstallBaseAgentPresetResult {
+  installed: boolean
+  alreadyExists: boolean
+  path: string
+}
+
+export async function listBaseAgentPresets(): Promise<BaseAgentPresetInfo[]> {
+  return unwrapList<BaseAgentPresetInfo>(await apiFetch<unknown>("/api/base-agents/presets"), "presets")
+}
+
+export async function installBaseAgentPreset(id: string): Promise<InstallBaseAgentPresetResult> {
+  return apiFetch<InstallBaseAgentPresetResult>(`/api/base-agents/presets/${encodeURIComponent(id)}/install`, {
+    method: "POST",
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Custom Agent API
 // ---------------------------------------------------------------------------

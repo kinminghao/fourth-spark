@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises"
-import { homedir } from "node:os"
 import { join, relative, sep } from "node:path"
+import { globalAgentDirs } from "./opencode-config"
 
 export type BaseAgentOption = {
   name: string
@@ -13,11 +13,6 @@ export const BUILTIN_BASE_AGENTS: ReadonlyArray<BaseAgentOption> = [
   { name: "Prometheus - Plan Builder", source: "builtin" },
   { name: "Atlas - Plan Executor", source: "builtin" },
   { name: "Hephaestus - Deep Agent", source: "builtin" },
-]
-
-const LOCAL_AGENT_DIRS = [
-  join(homedir(), ".config", "opencode", "agents"),
-  join(homedir(), ".config", "opencode", "agent"),
 ]
 
 function stripQuotes(value: string): string {
@@ -84,7 +79,7 @@ async function readLocalAgent(dir: string, file: string): Promise<BaseAgentOptio
   }
 }
 
-export async function scanLocalAgents(dirs: string[] = LOCAL_AGENT_DIRS): Promise<BaseAgentOption[]> {
+export async function scanLocalAgents(dirs: string[] = globalAgentDirs()): Promise<BaseAgentOption[]> {
   const seen = new Set<string>()
   const agents: BaseAgentOption[] = []
 
@@ -100,7 +95,7 @@ export async function scanLocalAgents(dirs: string[] = LOCAL_AGENT_DIRS): Promis
   return agents.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export async function listBaseAgents(dirs: string[] = LOCAL_AGENT_DIRS): Promise<BaseAgentOption[]> {
+export async function listBaseAgents(dirs: string[] = globalAgentDirs()): Promise<BaseAgentOption[]> {
   const local = await scanLocalAgents(dirs)
   const seen = new Set(BUILTIN_BASE_AGENTS.map((agent) => agent.name))
   return [...BUILTIN_BASE_AGENTS, ...local.filter((agent) => !seen.has(agent.name))]
