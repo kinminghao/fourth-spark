@@ -22,6 +22,15 @@
 | `tool-invocation` | 工具调用卡片，显示工具名、输入参数、输出结果、运行状态 |
 | `step-finish` | 步骤完成标记（不可见，用于截断检测） |
 
+## 语音朗读
+
+- Assistant 消息头部提供手动朗读按钮，User 消息不显示
+- 仅朗读 `text` part；`thinking` / 工具调用 / 文件附件 / 代码块 / 表格不朗读
+- 基于浏览器原生 Web Speech API（`speechSynthesis`），不需要服务端 TTS
+- 长回复按句切分后串行播放，支持停止与从头重播
+- 同一时刻只播放一条消息；切换消息或 Session 时停止
+- 消息流式输出期间按钮置灰，完成后可点击；环境不支持时隐藏按钮
+
 ## 工具调用可视化
 
 每种工具以独立卡片展示，包含状态指示（pending → running → completed / error）：

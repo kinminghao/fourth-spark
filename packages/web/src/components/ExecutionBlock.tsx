@@ -1,11 +1,13 @@
 import clsx from "clsx"
-import { AlertTriangle, Brain, ChevronDown, ChevronRight, Paperclip } from "lucide-react"
-import { useEffect, useState } from "react"
+import { AlertTriangle, Brain, ChevronDown, ChevronRight, Paperclip, Square, Volume2 } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import remarkGfm from "remark-gfm"
+import { useSpeechPlayback } from "../hooks/use-speech-playback"
 import type { Message, MessagePart } from "../lib/api-client"
 import { classifyPart, getPartText, isQuestionTool } from "../lib/message-parts"
+import { extractSpeakableMessageText } from "../lib/speech/speakable-text"
 import { PreviewableImage } from "./Attachments"
 import { MarkdownTable } from "./MarkdownTable"
 import { QuestionPanel } from "./QuestionPanel"
@@ -110,6 +112,31 @@ function PartView({ part, isStreaming }: { part: MessagePart; isStreaming?: bool
   }
 }
 
+function SpeechButton({ messageId, text, disabled }: { messageId: string; text: string; disabled?: boolean }) {
+  const { supported, playing, toggle } = useSpeechPlayback({ ownerId: messageId, text, enabled: !disabled })
+  if (!supported || !text.trim()) {
+    return null
+  }
+  return (
+    <button
+      type="button"
+      aria-label={playing ? "停止朗读" : "朗读回复"}
+      aria-pressed={playing}
+      title={disabled ? "回复完成后可朗读" : playing ? "停止朗读" : "朗读回复"}
+      disabled={disabled}
+      onClick={toggle}
+      className={clsx(
+        "ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors",
+        playing ? "text-emerald-400 hover:text-emerald-300" : "text-fg-5 hover:bg-elevated hover:text-fg-2",
+        disabled && "cursor-not-allowed opacity-40 hover:bg-transparent",
+      )}
+    >
+      {playing ? <Square className="h-3 w-3 fill-current" /> : <Volume2 className="h-3 w-3" />}
+      <span>{playing ? "停止" : "朗读"}</span>
+    </button>
+  )
+}
+
 export function ExecutionBlock({
   message,
   isStreaming,
@@ -121,6 +148,7 @@ export function ExecutionBlock({
 }) {
   const isUser = message.role === "user"
   const parts = message.parts ?? []
+  const speakable = useMemo(() => extractSpeakableMessageText(parts), [parts])
   const renderable = parts.filter((part) => classifyPart(part) !== "other")
 
   if (isUser) {
@@ -169,11 +197,12 @@ export function ExecutionBlock({
 
   return (
     <div className="fs-fade-in font-mono">
-      {(agent || model) && (
+      {(agent || model || speakable) && (
         <div className="mb-1 flex items-center gap-2 text-xs">
           {agent && <span className="text-fg-3">{agent}</span>}
           {agent && model && <span className="text-fg-6">·</span>}
           {model && <span className="text-fg-5">{model}</span>}
+          <SpeechButton messageId={message.id} text={speakable} disabled={isStreaming} />
         </div>
       )}
       {msgError && (

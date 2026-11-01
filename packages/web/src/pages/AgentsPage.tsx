@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { InlineConfirm } from "../components/InlineConfirm"
 import { useAsyncData } from "../hooks/use-async-data"
-import type { CustomAgent, CustomAgentExport, ModelInfo, PromptFragment } from "../lib/api-client"
+import type { BaseAgentOption, CustomAgent, CustomAgentExport, ModelInfo, PromptFragment } from "../lib/api-client"
 import * as api from "../lib/api-client"
 import { agentAvatar } from "../lib/constants"
 import { useCustomAgentStore } from "../stores/custom-agent-store"
@@ -19,12 +19,6 @@ import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 // Constants
 // ---------------------------------------------------------------------------
 
-const BASE_AGENTS = [
-  "Sisyphus - ultraworker",
-  "Prometheus - Plan Builder",
-  "Atlas - Plan Executor",
-  "Hephaestus - Deep Agent",
-]
 const PINNED_MODELS_KEY = "pinned_models"
 const SP_KEY = "__system_prompt__"
 
@@ -132,11 +126,13 @@ function SortableAgentCard({
 function CustomAgentForm({
   initial,
   availableFragments,
+  baseAgents,
   onSave,
   onCancel,
 }: {
   initial?: CustomAgent
   availableFragments: PromptFragment[]
+  baseAgents: BaseAgentOption[]
   onSave: (data: {
     name: string
     description?: string
@@ -152,13 +148,17 @@ function CustomAgentForm({
   const activeRepoId = useRepoStore((s) => s.activeRepoId)
   const [name, setName] = useState(initial?.name ?? "")
   const [description, setDescription] = useState(initial?.description ?? "")
-  const [baseAgent, setBaseAgent] = useState(initial?.baseAgent ?? "Sisyphus - ultraworker")
+  const [baseAgent, setBaseAgent] = useState(initial?.baseAgent ?? "")
   const [model, setModel] = useState(initial?.model ?? "")
   const [variant, setVariant] = useState(initial?.variant ?? "")
   const [systemPrompt, setSystemPrompt] = useState(initial?.systemPrompt ?? "")
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
   const [pinnedModels, setPinnedModels] = useState<ModelInfo[]>([])
+
+  useEffect(() => {
+    if (!baseAgent && baseAgents.length > 0) setBaseAgent(baseAgents[0].name)
+  }, [baseAgent, baseAgents])
 
   useEffect(() => {
     if (!activeRepoId) {
@@ -242,6 +242,15 @@ function CustomAgentForm({
     }
   }
 
+  const baseAgentOptions: BaseAgentOption[] =
+    baseAgents.length === 0
+      ? baseAgent
+        ? [{ name: baseAgent, source: "local" }]
+        : []
+      : baseAgent && !baseAgents.some((a) => a.name === baseAgent)
+        ? [{ name: baseAgent, source: "local" }, ...baseAgents]
+        : baseAgents
+
   return (
     <div className="space-y-3 rounded-xl border border-line bg-surface p-5">
       <div className="flex gap-3">
@@ -262,9 +271,9 @@ function CustomAgentForm({
             onChange={(e) => setBaseAgent(e.target.value)}
             className="mt-1 w-full rounded-md border border-line bg-base px-3 py-1.5 text-sm text-fg focus:border-blue-500 focus:outline-none"
           >
-            {BASE_AGENTS.map((a) => (
-              <option key={a} value={a}>
-                {a}
+            {baseAgentOptions.map((a) => (
+              <option key={a.name} value={a.name}>
+                {a.name}
               </option>
             ))}
           </select>
@@ -658,8 +667,8 @@ export function AgentsPage() {
   } = useAsyncData(
     async () => {
       const agentsP = activeRepoId ? api.listRepoCustomAgents(activeRepoId) : api.listGlobalCustomAgents()
-      const [a, f] = await Promise.all([agentsP, api.listGlobalFragments()])
-      return { agents: a, fragments: f }
+      const [a, f, b] = await Promise.all([agentsP, api.listGlobalFragments(), api.listBaseAgents().catch(() => [])])
+      return { agents: a, fragments: f, baseAgents: b }
     },
     [activeRepoId],
     { errorMessage: "加载 Agent 列表失败" },
@@ -667,6 +676,7 @@ export function AgentsPage() {
 
   const agents = agentsData?.agents ?? []
   const fragments = agentsData?.fragments ?? []
+  const baseAgents = agentsData?.baseAgents ?? []
 
   // Load stats for each agent
   useEffect(() => {
@@ -811,6 +821,7 @@ export function AgentsPage() {
         {showAgentForm && (
           <CustomAgentForm
             availableFragments={fragments}
+            baseAgents={baseAgents}
             onSave={handleCreateAgent}
             onCancel={() => setShowAgentForm(false)}
           />

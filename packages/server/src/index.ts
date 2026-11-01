@@ -19,6 +19,7 @@ import { agentMemoryRoutes, agentSessionRoutes } from "./routes/agent-memories"
 import { agents } from "./routes/agents"
 import { globalAgentsMd, repoAgentsMd } from "./routes/agents-md"
 import { analyticsRoutes } from "./routes/analytics"
+import { baseAgents } from "./routes/base-agents"
 import { cloudRoutes } from "./routes/cloud"
 import { globalCustomAgents, repoCustomAgents } from "./routes/custom-agents"
 import { events, globalEvents } from "./routes/events"
@@ -76,6 +77,7 @@ app.route("/api/cloud", cloudRoutes)
 app.route("/api/analytics", analyticsRoutes)
 app.route("/api/transcribe", transcribeRoute)
 app.route("/api/agents-md", globalAgentsMd)
+app.route("/api/base-agents", baseAgents)
 app.route("/api/custom-agents", globalCustomAgents)
 app.route("/api/custom-agents/:agentId/memories", agentMemoryRoutes)
 app.route("/api/custom-agents/:agentId/sessions", agentSessionRoutes)
