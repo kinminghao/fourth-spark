@@ -1106,6 +1106,27 @@ registry.registerPath({
   responses: { 200: jsonResp(z.array(S.BaseAgentOption), "Base agents") },
 })
 
+registry.registerPath({
+  method: "get",
+  path: "/api/base-agents/presets",
+  tags: ["Agents"],
+  summary: "List installable built-in base agent presets",
+  responses: { 200: jsonResp(z.array(S.BaseAgentPresetInfo), "Base agent presets") },
+})
+
+registry.registerPath({
+  method: "post",
+  path: "/api/base-agents/presets/{id}/install",
+  tags: ["Agents"],
+  summary: "Install a built-in base agent preset into the local OpenCode config",
+  request: { params: IdParam },
+  responses: {
+    200: jsonResp(S.InstallBaseAgentPresetResult, "Install result"),
+    404: errorResp("Preset not found"),
+    500: errorResp("Install failed"),
+  },
+})
+
 // ---------------------------------------------------------------------------
 // Workspaces
 // ---------------------------------------------------------------------------

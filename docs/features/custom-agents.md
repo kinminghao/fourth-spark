@@ -39,6 +39,23 @@ Custom Agent = Base Agent + 模型覆盖 + [片段1, 片段2, ..., 补充指令,
 
 > 扫描目录与全局 AGENTS.md 使用同一个 OpenCode 配置根目录（`~/.config/opencode`）。新增本地 Agent 后刷新 Agents 页面即可看到。
 
+## Base Agent 预设
+
+Agents 页面的「新增基础配置」入口可以把内置的 Base Agent 配置写入本机 OpenCode 用户配置目录。当前内置：
+
+| 预设 | Agent 名称 | 用途 |
+|------|------------|------|
+| chat bot | `chat` | 对话式技术讨论，按需执行仓库改动 |
+
+安装会写入 `~/.config/opencode/agents/chat.md`；文件已存在时不会覆盖。安装后 `GET /api/base-agents` 会立即扫描到该 Agent，但 OpenCode 运行时需要重启对应仓库后才会加载它。多设备场景下，在每台设备的 Fourth Spark 页面分别点击安装即可。
+
+对应接口：
+
+- `GET /api/base-agents/presets`
+- `POST /api/base-agents/presets/:id/install`
+
+预设内容以 `packages/server/src/lib/base-agent-presets.ts` 的 `BASE_AGENT_PRESETS` 为准。
+
 ## Prompt 片段
 
 可复用的提示词模块，可在多个 Custom Agent 间共享。

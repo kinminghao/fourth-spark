@@ -3,7 +3,20 @@ import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import clsx from "clsx"
-import { AlertTriangle, Brain, ChevronDown, Clock, Edit3, GripVertical, Loader2, Plus, Upload, X } from "lucide-react"
+import {
+  AlertTriangle,
+  Brain,
+  Check,
+  ChevronDown,
+  Clock,
+  Edit3,
+  GripVertical,
+  Loader2,
+  Plus,
+  Sparkles,
+  Upload,
+  X,
+} from "lucide-react"
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
@@ -643,6 +656,146 @@ function ImportAgentForm({ onImported, onCancel }: { onImported: () => void; onC
 }
 
 // ---------------------------------------------------------------------------
+// BaseAgentPresetPanel
+// ---------------------------------------------------------------------------
+
+function BaseAgentPresetPanel({
+  activeRepoId,
+  onInstalled,
+  onCancel,
+}: {
+  activeRepoId: string
+  onInstalled: () => void
+  onCancel: () => void
+}) {
+  const { data, loading, error, reload } = useAsyncData(() => api.listBaseAgentPresets(), [], {
+    errorMessage: "加载基础配置失败",
+  })
+  const [installing, setInstalling] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null)
+  const [restarting, setRestarting] = useState(false)
+  const presets = data ?? []
+
+  const install = async (preset: api.BaseAgentPresetInfo) => {
+    setInstalling(preset.id)
+    setMessage(null)
+    try {
+      const result = await api.installBaseAgentPreset(preset.id)
+      setMessage({
+        kind: "success",
+        text: result.alreadyExists
+          ? `配置已存在，未覆盖：${result.path}`
+          : `已写入 ${result.path}；重启当前仓库运行时后生效。`,
+      })
+      reload()
+      onInstalled()
+    } catch (e) {
+      setMessage({ kind: "error", text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setInstalling(null)
+    }
+  }
+
+  const restartRuntime = async () => {
+    setRestarting(true)
+    setMessage(null)
+    try {
+      await api.stopRepo(activeRepoId)
+      await api.startRepo(activeRepoId)
+      setMessage({ kind: "success", text: "当前仓库运行时已重启。" })
+    } catch (e) {
+      setMessage({ kind: "error", text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setRestarting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-xl border border-line bg-surface p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <span className="text-xs font-medium text-fg-3">新增基础配置</span>
+          <p className="mt-0.5 text-[11px] text-fg-5">把内置的 Base Agent 配置写入本机 OpenCode 配置目录。</p>
+        </div>
+        <button type="button" onClick={onCancel} className="rounded p-1 text-fg-5 hover:text-fg-3">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-3 text-xs text-fg-4">
+          <Loader2 className="h-3.5 w-3.5 fs-spin" /> 加载中…
+        </div>
+      ) : error ? (
+        <div className="flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      ) : presets.length === 0 ? (
+        <p className="py-3 text-xs text-fg-5">当前没有可用的基础配置。</p>
+      ) : (
+        <div className="space-y-2">
+          {presets.map((preset) => (
+            <div key={preset.id} className="flex items-center gap-3 rounded-lg border border-line/60 px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-fg">{preset.label}</span>
+                  {preset.installed && (
+                    <span className="rounded bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-400">
+                      已安装
+                    </span>
+                  )}
+                </div>
+                <p className="mt-0.5 text-[11px] text-fg-5">{preset.description}</p>
+                <p className="mt-0.5 font-mono text-[10px] text-fg-6">agent: {preset.agentName}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void install(preset)}
+                disabled={preset.installed || installing !== null}
+                className="shrink-0 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-fg-3 transition-colors hover:bg-elevated disabled:opacity-40"
+              >
+                {installing === preset.id ? "添加中…" : preset.installed ? "已安装" : "添加"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {message && (
+        <div
+          className={clsx(
+            "flex items-start gap-2 rounded-lg px-3 py-2 text-xs",
+            message.kind === "success" ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400",
+          )}
+        >
+          {message.kind === "success" ? (
+            <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          ) : (
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          )}
+          <span>{message.text}</span>
+        </div>
+      )}
+
+      {presets.some((preset) => preset.installed) && (
+        <div className="flex items-center justify-between gap-3 border-t border-line/60 pt-3">
+          <p className="text-[11px] text-fg-5">运行时需要重启才会加载新 Agent；重启会中断当前仓库进行中的会话。</p>
+          <button
+            type="button"
+            onClick={() => void restartRuntime()}
+            disabled={restarting}
+            className="shrink-0 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-fg-3 transition-colors hover:bg-elevated disabled:opacity-40"
+          >
+            {restarting ? "重启中…" : "重启当前仓库运行时"}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // AgentsPage (main)
 // ---------------------------------------------------------------------------
 
@@ -654,6 +807,7 @@ export function AgentsPage() {
   const [showFragForm, setShowFragForm] = useState(false)
   const [editingFrag, setEditingFrag] = useState<PromptFragment | null>(null)
   const [showImport, setShowImport] = useState(false)
+  const [showBaseConfig, setShowBaseConfig] = useState(false)
   const [fragsOpen, setFragsOpen] = useState(false)
 
   // Stats caches
@@ -793,12 +947,24 @@ export function AgentsPage() {
             <h1 className="text-lg font-bold text-fg">Agents</h1>
             <p className="mt-0.5 text-xs text-fg-4">组合 base agent + 模型 + 提示词片段，创建 Session 时选择。</p>
           </div>
-          <div data-guide="agents-header" className="flex items-center gap-2">
+          <div data-guide="agents-header" className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowBaseConfig(true)
+                setShowAgentForm(false)
+                setShowImport(false)
+              }}
+              className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-fg-3 transition-colors hover:bg-elevated"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> 新增基础配置
+            </button>
             <button
               type="button"
               onClick={() => {
                 setShowImport(true)
                 setShowAgentForm(false)
+                setShowBaseConfig(false)
               }}
               className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-fg-3 transition-colors hover:bg-elevated"
             >
@@ -809,6 +975,7 @@ export function AgentsPage() {
               onClick={() => {
                 setShowAgentForm(true)
                 setShowImport(false)
+                setShowBaseConfig(false)
               }}
               className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500"
             >
@@ -834,6 +1001,16 @@ export function AgentsPage() {
               void useCustomAgentStore.getState().loadAgents(activeRepoId)
             }}
             onCancel={() => setShowImport(false)}
+          />
+        )}
+        {showBaseConfig && (
+          <BaseAgentPresetPanel
+            activeRepoId={activeRepoId}
+            onInstalled={() => {
+              load()
+              void useCustomAgentStore.getState().loadAgents(activeRepoId)
+            }}
+            onCancel={() => setShowBaseConfig(false)}
           />
         )}
 

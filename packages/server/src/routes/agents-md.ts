@@ -6,6 +6,7 @@ import { Hono } from "hono"
 import { z } from "zod"
 import { db } from "../db/index"
 import { repos } from "../db/schema"
+import { globalOpencodeConfigDir } from "../lib/opencode-config"
 import { parseBody } from "../lib/validation"
 
 async function safeRead(path: string): Promise<string> {
@@ -31,7 +32,7 @@ const UpdateRepoAgentsMdBody = z.object({
 })
 
 const INSTRUCTION_FILES: Record<string, { fileName: string; globalDir: string }> = {
-  opencode: { fileName: "AGENTS.md", globalDir: join(homedir(), ".config", "opencode") },
+  opencode: { fileName: "AGENTS.md", globalDir: globalOpencodeConfigDir() },
   "claude-code": { fileName: "CLAUDE.md", globalDir: join(homedir(), ".claude") },
 }
 
@@ -43,7 +44,7 @@ export function instructionFileName(runtimeType?: string | null): string {
   return instructionConfig(runtimeType).fileName
 }
 
-const DEFAULT_GLOBAL_PATH = join(homedir(), ".config", "opencode", "AGENTS.md")
+const DEFAULT_GLOBAL_PATH = join(globalOpencodeConfigDir(), "AGENTS.md")
 
 // ---------------------------------------------------------------------------
 // Global AGENTS.md — mount at /api/agents-md
