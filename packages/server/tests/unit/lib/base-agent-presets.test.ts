@@ -41,6 +41,7 @@ describe("base agent presets", () => {
 
       const content = await readFile(join(dir, "agents", "chat.md"), "utf-8")
       expect(content).toContain("mode: primary")
+      expect(content).toContain("Conversational Interaction Protocol")
       expect(content).toContain("You are a technical discussion partner")
 
       const presets = await listBaseAgentPresetInfos(dir)
