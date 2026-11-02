@@ -47,6 +47,8 @@ Agents 页面的「新增基础配置」入口可以把内置的 Base Agent 配�
 |------|------------|------|
 | chat bot | `chat` | 对话式技术讨论，按需执行仓库改动 |
 
+`chat bot` 预设采用会话优先的交互协议：默认讨论和推理，只有用户明确要求时才执行仓库改动。
+
 安装会写入 `~/.config/opencode/agents/chat.md`；文件已存在时不会覆盖。安装后 `GET /api/base-agents` 会立即扫描到该 Agent，但 OpenCode 运行时需要重启对应仓库后才会加载它。多设备场景下，在每台设备的 Fourth Spark 页面分别点击安装即可。
 
 对应接口：
