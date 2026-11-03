@@ -20,6 +20,8 @@ class FakeUtterance {
 const synth = {
   speak: mock(),
   cancel: mock(),
+  pause: mock(),
+  resume: mock(),
   getVoices: () => [],
   addEventListener: mock(),
   removeEventListener: mock(),
@@ -37,6 +39,7 @@ if (typeof window !== "undefined") {
 }
 
 const { ExecutionBlock } = await import("../../src/components/ExecutionBlock")
+const { speechController } = await import("../../src/lib/speech/speech-controller")
 
 type Mounted = { container: HTMLDivElement; root: Root }
 
@@ -61,6 +64,8 @@ function findButton(container: HTMLElement, label: string) {
 beforeEach(() => {
   synth.speak.mockClear()
   synth.cancel.mockClear()
+  synth.pause.mockClear()
+  synth.resume.mockClear()
   synth.addEventListener.mockClear()
   synth.removeEventListener.mockClear()
 })
@@ -72,10 +77,13 @@ afterEach(() => {
     })
     container.remove()
   }
+  act(() => {
+    speechController.stop()
+  })
 })
 
 describe("ExecutionBlock speech control", () => {
-  test("toggles playback for an assistant text message", () => {
+  test("supports play, pause, resume and stop for an assistant text message", () => {
     const message: Message = {
       id: "msg-speak",
       role: "assistant",
@@ -93,11 +101,29 @@ describe("ExecutionBlock speech control", () => {
     })
 
     expect(synth.speak).toHaveBeenCalledTimes(1)
+    expect(findButton(container, "朗读回复")).toBeNull()
+
+    const pauseButton = findButton(container, "暂停朗读")
     const stopButton = findButton(container, "停止朗读")
+    expect(pauseButton).not.toBeNull()
     expect(stopButton).not.toBeNull()
 
     act(() => {
-      stopButton?.click()
+      pauseButton?.click()
+    })
+
+    expect(synth.pause).toHaveBeenCalledTimes(1)
+    expect(findButton(container, "继续朗读")).not.toBeNull()
+
+    act(() => {
+      findButton(container, "继续朗读")?.click()
+    })
+
+    expect(synth.resume).toHaveBeenCalledTimes(1)
+    expect(findButton(container, "暂停朗读")).not.toBeNull()
+
+    act(() => {
+      findButton(container, "停止朗读")?.click()
     })
 
     expect(synth.cancel).toHaveBeenCalledTimes(1)
@@ -245,15 +271,15 @@ describe("ExecutionBlock speech control", () => {
       secondButton.click()
     })
     expect(container.querySelectorAll('button[aria-label="停止朗读"]')).toHaveLength(1)
-    expect(findButton(container, "朗读回复")).not.toBeNull()
+    expect(container.querySelectorAll('button[aria-label="朗读回复"]')).toHaveLength(1)
     expect(synth.cancel).toHaveBeenCalledTimes(1)
   })
 
-  test("stops playback when the message unmounts", () => {
+  test("keeps playing when the message unmounts", () => {
     const message: Message = {
       id: "msg-unmount",
       role: "assistant",
-      parts: [{ type: "text", content: "Stop when leaving the session." }],
+      parts: [{ type: "text", content: "Keep playing when leaving the session." }],
       info: { agent: "build" },
     }
 
@@ -261,7 +287,7 @@ describe("ExecutionBlock speech control", () => {
     act(() => {
       findButton(view.container, "朗读回复")?.click()
     })
-    expect(findButton(view.container, "停止朗读")).not.toBeNull()
+    expect(findButton(view.container, "暂停朗读")).not.toBeNull()
 
     act(() => {
       view.root.unmount()
@@ -269,6 +295,6 @@ describe("ExecutionBlock speech control", () => {
     view.container.remove()
     mounted.pop()
 
-    expect(synth.cancel).toHaveBeenCalledTimes(1)
+    expect(synth.cancel).not.toHaveBeenCalled()
   })
 })
