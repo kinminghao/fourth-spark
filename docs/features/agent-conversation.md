@@ -22,6 +22,8 @@
 | `tool-invocation` | 工具调用卡片，显示工具名、输入参数、输出结果、运行状态 |
 | `step-finish` | 步骤完成标记（不可见，用于截断检测） |
 
+Assistant 消息头部按 `agent · model · 相对时间` 展示，相对时间来自 `packages/web/src/lib/date-utils.ts` 的 `relativeTime`（`刚刚` / `N分钟前` / `N小时前` / `N天前`，超过 30 天显示日期），悬停显示绝对时间；消息缺少 `time.created` 时只展示 `agent · model`。
+
 ## 语音朗读
 
 - Assistant 消息头部提供手动朗读按钮，User 消息不显示

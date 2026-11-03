@@ -2,15 +2,18 @@
 /*  Shared date/time formatting helpers                                */
 /* ------------------------------------------------------------------ */
 
+/** Normalize an epoch timestamp given in seconds or milliseconds. */
+export function epochToDate(ts: number): Date {
+  return new Date(ts < 1_000_000_000_000 ? ts * 1000 : ts)
+}
+
 export function relativeTime(ts: number): string {
-  const ms = ts < 1_000_000_000_000 ? ts * 1000 : ts
-  const diff = Date.now() - ms
+  const diff = Date.now() - epochToDate(ts).getTime()
   if (diff < 60_000) return "刚刚"
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}分钟前`
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}小时前`
   if (diff < 2_592_000_000) return `${Math.floor(diff / 86_400_000)}天前`
-  const d = new Date(ms)
-  return d.toLocaleDateString("zh-CN", { month: "short", day: "numeric" })
+  return epochToDate(ts).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })
 }
 
 export function fmtDate(iso: string): string {
