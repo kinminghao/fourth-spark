@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readdir, readFile, unlink } from "node:fs/promises"
+import { readdir, readFile, unlink } from "node:fs/promises"
 import { join } from "node:path"
 import { and, desc, eq, gte, isNotNull, isNull, lt, sql } from "drizzle-orm"
 import { DATA_DIR } from "../cli/paths"
@@ -16,6 +16,7 @@ import {
   MAX_CONSOLIDATION_CONTENT_LENGTH,
   parseExtractionResult,
 } from "./memory-extractor"
+import { MEMORY_LOG_ROOT, writeMemoryLog } from "./memory-logs"
 import { MEMORY_CONSOLIDATOR_PROMPT } from "./system-agents"
 
 // ---------------------------------------------------------------------------
@@ -57,7 +58,6 @@ const DRY_RUN = process.env.CONSOLIDATION_DRY_RUN === "true"
 const DEBUG_KEEP_SESSIONS = process.env.MEMORY_DEBUG === "true"
 
 const POLL_INTERVAL_MS = 2_000
-const MEMORY_LOG_ROOT = join(DATA_DIR, "memory-logs")
 const PROMPT_OVERRIDE_DIR = join(DATA_DIR, "prompts")
 const CONSOLIDATION_SESSION_TITLE = "[internal] memory consolidation"
 const FORBIDDEN_CATEGORY_NAMES = new Set(["decision", "lesson", "preference", "pattern", "general"])
@@ -163,22 +163,6 @@ function validateConsolidationActions(actions: ExtractionAction[], activeIds: Se
   }
 
   return filtered
-}
-
-// ---------------------------------------------------------------------------
-// Persistent JSONL memory log (per agent, per day)
-// ---------------------------------------------------------------------------
-
-async function writeMemoryLog(agentId: string, entry: Record<string, unknown>): Promise<void> {
-  try {
-    const dir = join(MEMORY_LOG_ROOT, agentId)
-    await mkdir(dir, { recursive: true })
-    const filename = `consolidation-${new Date().toISOString().slice(0, 10)}.jsonl`
-    const line = `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`
-    await appendFile(join(dir, filename), line)
-  } catch (err) {
-    logger.warn({ err, agentId }, "failed to write memory consolidation log")
-  }
 }
 
 // ---------------------------------------------------------------------------

@@ -174,6 +174,13 @@ export const sessions = pgTable(
     pinnedAt: bigint("pinned_at", { mode: "number" }),
     timeCreated: bigint("time_created", { mode: "number" }).notNull(),
     timeUpdated: bigint("time_updated", { mode: "number" }).notNull(),
+    // Memory extraction cursor state. `lastExtractionAt` is a snapshot of `timeUpdated`
+    // taken at claim time (same runtime clock); `extractionAttempts` counts consecutive
+    // failed attempts for the current content version; `extractionRetryAt` is the next
+    // allowed run time and doubles as an in-flight lease (null = no pending retry).
+    lastExtractionAt: bigint("last_extraction_at", { mode: "number" }),
+    extractionAttempts: integer("extraction_attempts").notNull().default(0),
+    extractionRetryAt: bigint("extraction_retry_at", { mode: "number" }),
   },
   (t) => [
     index("sessions_user_idx").on(t.userId),
