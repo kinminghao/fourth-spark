@@ -236,13 +236,16 @@ export function ExecutionBlock({
   return (
     <div className="fs-fade-in font-mono">
       {(agent || model || createdAt || speakable) && (
-        <div className="mb-1 flex items-center gap-2 text-xs">
-          {agent && <span className="text-fg-3">{agent}</span>}
-          {agent && model && <span className="text-fg-6">·</span>}
-          {model && <span className="text-fg-5">{model}</span>}
-          {(agent || model) && createdAt && <span className="text-fg-6">·</span>}
+        <div className="mb-1 flex min-w-0 items-center gap-1.5 text-[11px] sm:gap-2 sm:text-xs">
+          {agent && <span className="min-w-0 truncate text-fg-3">{agent}</span>}
+          {agent && model && <span className="shrink-0 text-fg-6">·</span>}
+          {model && <span className="min-w-0 truncate text-fg-5">{model}</span>}
+          {(agent || model) && createdAt && <span className="shrink-0 text-fg-6">·</span>}
           {createdAt && (
-            <span className="text-fg-5" title={epochToDate(createdAt).toLocaleString("zh-CN")}>
+            <span
+              className="shrink-0 whitespace-nowrap text-fg-5"
+              title={epochToDate(createdAt).toLocaleString("zh-CN")}
+            >
               {relativeTime(createdAt)}
             </span>
           )}
