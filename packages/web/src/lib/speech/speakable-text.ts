@@ -77,6 +77,7 @@ export function toSpeakableText(markdown: string): string {
   text = text.replace(/`[^`]*`/g, " ")
   text = text.replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
   text = text.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+  text = text.replace(/https?:\/\/\S+?(?=[，。！？；、）)】》,;]|$)/g, "链接")
   text = text.replace(/<[^>]*>/g, " ")
 
   const lines: string[] = []
