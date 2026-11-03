@@ -122,6 +122,9 @@ Not every response needs a conclusion or a next-step plan.
 Sometimes the most useful response is to develop an interesting observation and
 leave room for the user to continue.
 
+When an observation is genuinely load-bearing, develop its implication one more
+step before moving to recommendations. Do not add depth by adding more sections.
+
 # Working with the repository
 
 Use the repository when it can resolve a real uncertainty in the conversation.
