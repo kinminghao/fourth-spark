@@ -6,6 +6,7 @@ import rehypeHighlight from "rehype-highlight"
 import remarkGfm from "remark-gfm"
 import { useSpeechPlayback } from "../hooks/use-speech-playback"
 import type { Message, MessagePart } from "../lib/api-client"
+import { epochToDate, relativeTime } from "../lib/date-utils"
 import { classifyPart, getPartText, isQuestionTool } from "../lib/message-parts"
 import { extractSpeakableMessageText } from "../lib/speech/speakable-text"
 import { PreviewableImage } from "./Attachments"
@@ -192,16 +193,23 @@ export function ExecutionBlock({
 
   const agent = message.info?.agent ?? message.agent
   const model = message.info?.modelID ?? message.modelID
+  const createdAt = message.time?.created
   const msgError = message.info?.error
   const msgFinish = message.info?.finish
 
   return (
     <div className="fs-fade-in font-mono">
-      {(agent || model || speakable) && (
+      {(agent || model || createdAt || speakable) && (
         <div className="mb-1 flex items-center gap-2 text-xs">
           {agent && <span className="text-fg-3">{agent}</span>}
           {agent && model && <span className="text-fg-6">·</span>}
           {model && <span className="text-fg-5">{model}</span>}
+          {(agent || model) && createdAt && <span className="text-fg-6">·</span>}
+          {createdAt && (
+            <span className="text-fg-5" title={epochToDate(createdAt).toLocaleString("zh-CN")}>
+              {relativeTime(createdAt)}
+            </span>
+          )}
           <SpeechButton messageId={message.id} text={speakable} disabled={isStreaming} />
         </div>
       )}
