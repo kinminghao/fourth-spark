@@ -29,6 +29,7 @@ import { selectActiveRepoName, useRepoStore } from "../stores/repo-store"
 import { useThemeStore } from "../stores/theme-store"
 import { GuideTour } from "./GuideTour"
 import { sectionFromPath } from "./guide-steps"
+import { SpeechPlayer } from "./SpeechPlayer"
 
 interface NavItem {
   segment: string
@@ -670,6 +671,7 @@ export function Layout() {
       </div>
       <BottomBar />
       <GuideTour />
+      <SpeechPlayer />
     </div>
   )
 }

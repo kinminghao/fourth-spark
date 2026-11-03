@@ -30,6 +30,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { InlineConfirm } from "../components/InlineConfirm"
+import { SpeechSettingsSection } from "../components/SpeechSettingsSection"
 import type { AccountUsage, GitHost, ModelInfo, UsageResult, UsageWindow } from "../lib/api-client"
 import * as api from "../lib/api-client"
 import { getServerUrl, isNativePlatform, setServerUrl } from "../lib/config"
@@ -1780,7 +1781,12 @@ export function SettingsPage() {
           {tab === "git" && <GitHostSection />}
           {tab === "models" && <ModelManagementSection />}
           {tab === "agents" && <AgentsMdSection />}
-          {tab === "general" && <QuickInputSection />}
+          {tab === "general" && (
+            <div className="space-y-4">
+              <QuickInputSection />
+              <SpeechSettingsSection />
+            </div>
+          )}
           {tab === "server" && <ServerSection />}
           {tab === "diagnostics" && <DiagnosticsSection />}
         </div>

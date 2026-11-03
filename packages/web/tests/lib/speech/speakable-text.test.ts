@@ -27,6 +27,12 @@ describe("toSpeakableText", () => {
     expect(toSpeakableText("前 ![alt](image.png) 后")).toBe("前 后")
   })
 
+  test("replaces bare URLs with a spoken placeholder", () => {
+    const result = toSpeakableText("PR 已开：https://github.com/a/b/pull/1。")
+    expect(result).toBe("PR 已开：链接。")
+    expect(result).not.toContain("http")
+  })
+
   test("removes HTML tags", () => {
     expect(toSpeakableText("<div>你好</div><br/>世界")).toBe("你好 世界")
   })

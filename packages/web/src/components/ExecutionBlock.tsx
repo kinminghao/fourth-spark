@@ -1,5 +1,5 @@
 import clsx from "clsx"
-import { AlertTriangle, Brain, ChevronDown, ChevronRight, Paperclip, Square, Volume2 } from "lucide-react"
+import { AlertTriangle, Brain, ChevronDown, ChevronRight, Paperclip, Pause, Play, Square, Volume2 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
@@ -112,27 +112,63 @@ function PartView({ part, isStreaming }: { part: MessagePart; isStreaming?: bool
   }
 }
 
+const SPEECH_CONTROL_CLASS = "flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors"
+
 function SpeechButton({ messageId, text, disabled }: { messageId: string; text: string; disabled?: boolean }) {
-  const { supported, playing, toggle } = useSpeechPlayback({ ownerId: messageId, text, enabled: !disabled })
+  const { supported, playing, paused, play, pause, resume, stop } = useSpeechPlayback({
+    ownerId: messageId,
+    text,
+    enabled: !disabled,
+  })
   if (!supported || !text.trim()) {
     return null
   }
+
+  if (playing || paused) {
+    return (
+      <div className="ml-auto flex items-center gap-1">
+        <button
+          type="button"
+          aria-label={paused ? "继续朗读" : "暂停朗读"}
+          aria-pressed={paused}
+          title={paused ? "继续朗读" : "暂停朗读"}
+          onClick={paused ? resume : pause}
+          className={clsx(SPEECH_CONTROL_CLASS, "text-emerald-400 hover:text-emerald-300")}
+        >
+          {paused ? <Play className="h-3 w-3 fill-current" /> : <Pause className="h-3 w-3 fill-current" />}
+          <span>{paused ? "继续" : "暂停"}</span>
+        </button>
+        <button
+          type="button"
+          aria-label="停止朗读"
+          title="停止朗读"
+          onClick={stop}
+          className={clsx(SPEECH_CONTROL_CLASS, "text-emerald-400 hover:text-emerald-300")}
+        >
+          <Square className="h-3 w-3 fill-current" />
+          <span>停止</span>
+        </button>
+      </div>
+    )
+  }
+
   return (
     <button
       type="button"
-      aria-label={playing ? "停止朗读" : "朗读回复"}
-      aria-pressed={playing}
-      title={disabled ? "回复完成后可朗读" : playing ? "停止朗读" : "朗读回复"}
+      aria-label="朗读回复"
+      aria-pressed={false}
+      title={disabled ? "回复完成后可朗读" : "朗读回复"}
       disabled={disabled}
-      onClick={toggle}
+      onClick={play}
       className={clsx(
-        "ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors",
-        playing ? "text-emerald-400 hover:text-emerald-300" : "text-fg-5 hover:bg-elevated hover:text-fg-2",
+        "ml-auto",
+        SPEECH_CONTROL_CLASS,
+        "text-fg-5 hover:bg-elevated hover:text-fg-2",
         disabled && "cursor-not-allowed opacity-40 hover:bg-transparent",
       )}
     >
-      {playing ? <Square className="h-3 w-3 fill-current" /> : <Volume2 className="h-3 w-3" />}
-      <span>{playing ? "停止" : "朗读"}</span>
+      <Volume2 className="h-3 w-3" />
+      <span>朗读</span>
     </button>
   )
 }

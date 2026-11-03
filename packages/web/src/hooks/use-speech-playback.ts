@@ -1,10 +1,16 @@
-import { useCallback, useEffect, useSyncExternalStore } from "react"
-import { speechController } from "../lib/speech/speech-controller"
+import { useCallback, useSyncExternalStore } from "react"
+import { type SpeechPlaybackStatus, speechController } from "../lib/speech/speech-controller"
+import { useSpeechSettingsStore } from "../stores/speech-settings-store"
 
 export interface SpeechPlayback {
   supported: boolean
+  status: SpeechPlaybackStatus
   playing: boolean
-  toggle: () => void
+  paused: boolean
+  play: () => void
+  pause: () => void
+  resume: () => void
+  stop: () => void
 }
 
 export function useSpeechPlayback(params: { ownerId: string; text: string; enabled?: boolean }): SpeechPlayback {
@@ -14,20 +20,30 @@ export function useSpeechPlayback(params: { ownerId: string; text: string; enabl
     speechController.getSnapshot,
     speechController.getSnapshot,
   )
+  const voiceURI = useSpeechSettingsStore((state) => state.voiceURI)
+  const rate = useSpeechSettingsStore((state) => state.rate)
   const supported = speechController.isSupported()
-  const playing = snapshot.status === "playing" && snapshot.ownerId === ownerId
+  const status: SpeechPlaybackStatus = snapshot.ownerId === ownerId ? snapshot.status : "idle"
+  const playing = status === "playing"
+  const paused = status === "paused"
 
-  const toggle = useCallback(() => {
-    if (playing) {
-      speechController.stop()
-      return
-    }
+  const play = useCallback(() => {
     if (enabled !== false && text.trim().length > 0) {
-      speechController.play(ownerId, text)
+      speechController.play(ownerId, text, { voiceURI, rate })
     }
-  }, [playing, enabled, text, ownerId])
+  }, [enabled, text, ownerId, voiceURI, rate])
 
-  useEffect(() => () => speechController.stopIfOwner(ownerId), [ownerId])
+  const pause = useCallback(() => {
+    speechController.pause()
+  }, [])
 
-  return { supported, playing, toggle }
+  const resume = useCallback(() => {
+    speechController.resume()
+  }, [])
+
+  const stop = useCallback(() => {
+    speechController.stop()
+  }, [])
+
+  return { supported, status, playing, paused, play, pause, resume, stop }
 }
