@@ -23,10 +23,10 @@ import { useNavigate } from "react-router-dom"
 import { AddRepoModal } from "../components/AddRepoModal"
 import { AgentsMdModal } from "../components/AgentsMdModal"
 import { useAsyncData } from "../hooks/use-async-data"
+import { usePullRepo } from "../hooks/use-pull-repo"
 import * as api from "../lib/api-client"
 import { extractHostFromGitUrl } from "../lib/git-url"
 import { useRepoStore } from "../stores/repo-store"
-import { useToastStore } from "../stores/toast-store"
 
 const BYTES_PER_KB = 1024
 const BYTES_PER_MB = BYTES_PER_KB * 1024
@@ -221,8 +221,7 @@ export function RepoListContent() {
   const [showAdd, setShowAdd] = useState(false)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
-  const [pullingId, setPullingId] = useState<string | null>(null)
-  const addToast = useToastStore((s) => s.addToast)
+  const { pull, pullingId } = usePullRepo()
   const [agentsMdRepo, setAgentsMdRepo] = useState<{ id: string; name: string } | null>(null)
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -267,28 +266,6 @@ export function RepoListContent() {
       await loadRepos()
     } catch {}
     setTogglingId(null)
-  }
-
-  const handlePull = async (repoId: string) => {
-    setPullingId(repoId)
-
-    try {
-      const result = await api.pullRepo(repoId)
-      await loadRepos()
-      const variant = result.alreadyUpToDate ? "info" : "success"
-      addToast(result.summary, variant, undefined, { persistent: true })
-    } catch (err) {
-      let message = "拉取失败"
-      if (err instanceof api.ApiError) {
-        try {
-          message = JSON.parse(err.message).error ?? err.message
-        } catch {
-          message = err.message
-        }
-      }
-      addToast(message, "error", undefined, { persistent: true })
-    }
-    setPullingId(null)
   }
 
   return (
@@ -419,7 +396,7 @@ export function RepoListContent() {
                 <div className="mt-3 flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => void handlePull(repo.id)}
+                    onClick={() => void pull(repo.id)}
                     disabled={pullingId === repo.id}
                     className="flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-blue-500/30 px-2.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/10 disabled:opacity-50"
                   >

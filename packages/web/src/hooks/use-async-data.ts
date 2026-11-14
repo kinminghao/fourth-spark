@@ -33,7 +33,7 @@ export interface AsyncDataResult<T> {
  * Extract a human-readable message from an API error.
  * Mirrors the pattern used in issue-store / pr-store for consistency.
  */
-function parseError(err: unknown, fallback: string): string {
+export function parseError(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
     try {
       const body = JSON.parse(err.message)
