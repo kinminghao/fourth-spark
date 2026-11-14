@@ -3,9 +3,12 @@ import { existsSync, realpathSync, unlinkSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { apiReference } from "@scalar/hono-api-reference"
 import { Hono } from "hono"
+import { accountPoolRoutes } from "./account/routes"
+import { accountPoolService } from "./account/service"
 import { initRegistry } from "./core/registry"
 import { runMigrations } from "./db/migrate"
-import { HTTPS_PORT, initWorkerConfig, PORT } from "./lib/config"
+import { BIND_HOST, HTTPS_PORT, initWorkerConfig, isAccountPoolMaster, PORT } from "./lib/config"
+import { acquireInstanceLock } from "./lib/instance-lock"
 import { runtimeManager } from "./lib/process-manager"
 import { ensureSenseVoice } from "./lib/sensevoice-manager"
 import { startSyncScheduler, stopSyncScheduler } from "./lib/sync-scheduler"
@@ -107,6 +110,11 @@ repoScoped.route("/workspaces", workspaceRoutes)
 
 app.route("/api/repos/:repoId", repoScoped)
 
+if (isAccountPoolMaster()) {
+  app.route("/", accountPoolRoutes)
+  logger.info("account pool master: /v1 routes enabled")
+}
+
 // ---------------------------------------------------------------------------
 // Static file serving (production build)
 // ---------------------------------------------------------------------------
@@ -157,6 +165,14 @@ if (existsSync(join(STATIC_DIR, "index.html"))) {
 // Startup — sync database schema, then spawn opencode for all repos
 // ---------------------------------------------------------------------------
 const _registry = initRegistry()
+const instanceLock = await acquireInstanceLock(isAccountPoolMaster() ? "account" : "serve", {
+  port: PORT,
+  ...(BIND_HOST ? { host: BIND_HOST } : {}),
+}).catch((err) => {
+  logger.fatal({ err }, "startup blocked by instance lock")
+  console.error(err instanceof Error ? err.message : String(err))
+  process.exit(1)
+})
 const localIPs = getLocalIPs()
 let httpsReady = false
 
@@ -215,10 +231,15 @@ async function startup() {
   }
 
   await initWorkerConfig(getSetting)
-  await runtimeManager.startAll()
-  logger.info("all repos initialized")
-
-  startSyncScheduler()
+  if (isAccountPoolMaster()) {
+    logger.info("account pool master mode: local runtimes and sync scheduler are disabled")
+    logger.info("account pool master: worker configuration (if present) is ignored")
+    await accountPoolService.start()
+  } else {
+    await runtimeManager.startAll()
+    logger.info("all repos initialized")
+    startSyncScheduler()
+  }
 
   // Start HTTP/HTTPS servers only after all initialization is complete.
   // This prevents clients from hitting 500s during the startup window.
@@ -227,6 +248,7 @@ async function startup() {
     try {
       Bun.serve({
         port: HTTPS_PORT,
+        ...(BIND_HOST ? { hostname: BIND_HOST } : {}),
         idleTimeout: 0,
         tls: {
           cert: Bun.file(tls.cert),
@@ -248,6 +270,7 @@ async function startup() {
 
   Bun.serve({
     port: PORT,
+    ...(BIND_HOST ? { hostname: BIND_HOST } : {}),
     idleTimeout: 0,
     fetch(req: Request, server: { requestIP(req: Request): { address: string } | null }) {
       const url = new URL(req.url)
@@ -270,8 +293,9 @@ async function startup() {
   logger.info({ port: PORT }, "HTTP server ready")
 }
 
-startup().catch((err) => {
+startup().catch(async (err) => {
   logger.fatal({ err }, "startup failed")
+  await instanceLock.release().catch(() => undefined)
   process.exit(1)
 })
 
@@ -281,7 +305,11 @@ startup().catch((err) => {
 async function gracefulShutdown(signal: string) {
   logger.info({ signal }, "shutting down — stopping all opencode processes")
   stopSyncScheduler()
+  if (isAccountPoolMaster()) {
+    await accountPoolService.stop().catch((err: unknown) => logger.warn({ err }, "account pool: failed to flush state"))
+  }
   await Promise.race([runtimeManager.stopAll(), new Promise<void>((resolve) => setTimeout(resolve, 10_000))])
+  await instanceLock.release().catch(() => undefined)
   process.exit(0)
 }
 
@@ -289,5 +317,5 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"))
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"))
 process.on("SIGHUP", () => {
   logger.info("SIGHUP received (bun --watch) — keeping opencode processes alive")
-  process.exit(0)
+  void instanceLock.release().finally(() => process.exit(0))
 })

@@ -2,7 +2,7 @@ import { logger } from "../middleware/logger"
 import { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } from "./account-providers"
 import type { RefreshStrategy, UsageResponse } from "./account-providers/types"
 import { accountsOf, loadAccounts, type ProviderId, type StoredAccount } from "./auth-files"
-import { getWorkerConfig, isWorkerMode } from "./config"
+import { getWorkerConfig, isAccountPoolMaster, isWorkerMode } from "./config"
 import { createUsageClient, type UsageSnapshotView } from "./usage-client"
 
 export interface AccountUsage {
@@ -26,6 +26,7 @@ async function resolveAccess(
   isActive: boolean,
   liveAuth: { access?: string; refresh?: string; expires?: number } | undefined,
   refresh: RefreshStrategy,
+  skipRefresh = false,
 ): Promise<{ access?: string; error?: string; needsReauth?: boolean }> {
   if (isActive && liveAuth?.access && liveAuth.expires && liveAuth.expires >= Date.now()) {
     return { access: liveAuth.access }
@@ -40,6 +41,13 @@ async function resolveAccess(
       return { access: account.access, needsReauth: true }
     }
     return { error: "需重新登录", needsReauth: true }
+  }
+
+  if (skipRefresh) {
+    if (account.access && account.expires && account.expires > Date.now()) {
+      return { access: account.access }
+    }
+    return { error: "credential expired" }
   }
 
   try {
@@ -85,7 +93,11 @@ function snapshotToUsageResult(view: UsageSnapshotView, activeId?: string): Usag
   return { activeId, accounts }
 }
 
-export async function collectUsage(provider: ProviderId): Promise<UsageResult> {
+export async function collectUsage(
+  provider: ProviderId,
+  options: { skipRefresh?: boolean } = {},
+): Promise<UsageResult> {
+  const skipRefresh = options.skipRefresh ?? isAccountPoolMaster()
   const cached = usageCaches.get(provider)
   if (cached && Date.now() - cached.fetchedAt < USAGE_CACHE_TTL_MS) {
     return cached.result
@@ -140,7 +152,7 @@ export async function collectUsage(provider: ProviderId): Promise<UsageResult> {
       excluded: account.excluded ?? false,
     }
 
-    const resolved = await resolveAccess(account, isActive, auth, descriptor.refresh)
+    const resolved = await resolveAccess(account, isActive, auth, descriptor.refresh, skipRefresh)
     if (resolved.needsReauth) base.needsReauth = true
 
     if (!resolved.access) {

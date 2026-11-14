@@ -32,6 +32,22 @@ export const EXTRA_ORIGINS: string[] = (process.env.EXTRA_ORIGINS ?? "")
 // The built-in web UI sends "max"; omitting it may cause a different default.
 export const DEFAULT_VARIANT = process.env.DEFAULT_VARIANT ?? "max"
 
+// Bind address for the HTTP/HTTPS listeners. Unset keeps Bun's default
+// (all interfaces) so existing LAN access is unchanged. `account serve` sets
+// this to 127.0.0.1 unless the operator explicitly opts into another address.
+export const BIND_HOST = process.env.FOURTH_SPARK_HOST?.trim() || undefined
+
+// ---------------------------------------------------------------------------
+// Account pool master mode (optional — this process HOSTS the account pool)
+// ---------------------------------------------------------------------------
+// A master owns the account files and serves lease/usage endpoints. It must
+// never behave as a worker: doing so would recurse into a remote master and
+// create a second refresher for the same refresh-token chain.
+
+export function isAccountPoolMaster(): boolean {
+  return process.env.ACCOUNT_POOL_MASTER === "1"
+}
+
 // ---------------------------------------------------------------------------
 // Cloud Worker mode (optional — connects to a claude-accounts-pool master)
 // ---------------------------------------------------------------------------
@@ -67,6 +83,10 @@ function resolveWorkerConfigFromEnv(): WorkerConfig | null {
 /** Called once at server startup to resolve DB-based config (async).
  *  Falls back to env vars if DB has no config. */
 export async function initWorkerConfig(getSetting: (key: string) => Promise<string | undefined>): Promise<void> {
+  if (isAccountPoolMaster()) {
+    workerConfigCache = null
+    return
+  }
   const dbUrl = await getSetting("cloud_master_url")
   const dbId = await getSetting("cloud_worker_id")
   if (dbUrl && isHttpUrl(dbUrl) && dbId && WORKER_ID_PATTERN.test(dbId)) {
@@ -77,7 +97,7 @@ export async function initWorkerConfig(getSetting: (key: string) => Promise<stri
 }
 
 export function isWorkerMode(): boolean {
-  return workerConfigCache != null
+  return !isAccountPoolMaster() && workerConfigCache != null
 }
 
 export function getWorkerConfig(): WorkerConfig | null {
@@ -86,6 +106,10 @@ export function getWorkerConfig(): WorkerConfig | null {
 
 /** Re-read cloud worker config from DB and update the in-memory cache. */
 export async function reloadWorkerConfig(getSetting: (key: string) => Promise<string | undefined>): Promise<void> {
+  if (isAccountPoolMaster()) {
+    workerConfigCache = null
+    return
+  }
   const dbUrl = await getSetting("cloud_master_url")
   const dbId = await getSetting("cloud_worker_id")
   if (dbUrl && isHttpUrl(dbUrl) && dbId && WORKER_ID_PATTERN.test(dbId)) {

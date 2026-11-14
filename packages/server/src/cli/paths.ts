@@ -2,14 +2,17 @@ import { execSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
+import { ACCOUNT_LOG_FILE, DATA_DIR, LOG_DIR } from "./log-path"
+
+export { ACCOUNT_LOG_FILE, DATA_DIR }
 
 const MIN_OPENCODE_VERSION = "1.4.0"
 
-export const DATA_DIR = join(homedir(), ".fourth-spark")
-const LOG_DIR = join(DATA_DIR, "logs")
-
 export const PID_FILE = join(DATA_DIR, "fourth-spark.pid")
-export const LOG_FILE = join(LOG_DIR, "server.log")
+export const LOG_FILE = process.env.FOURTH_SPARK_LOG_FILE ?? join(LOG_DIR, "server.log")
+
+export const ACCOUNT_PID_FILE = join(DATA_DIR, "account.pid")
+export const ACCOUNT_PORT_FILE = join(DATA_DIR, "account.port")
 
 /** Single log file size cap in bytes (5 MB). */
 export const MAX_LOG_BYTES = 5 * 1024 * 1024
@@ -57,7 +60,7 @@ export function getDockerComposeCmd(): string[] | null {
 // Exits with a clear error listing if any critical dependency is missing.
 // ---------------------------------------------------------------------------
 
-export function ensureDependencies(): void {
+export function ensureDependencies(options: { requireOpencode?: boolean } = {}): void {
   const errors: string[] = []
 
   try {
@@ -88,22 +91,26 @@ export function ensureDependencies(): void {
     }
   }
 
-  try {
-    const raw = execSync("opencode --version", { stdio: "pipe" }).toString().trim()
-    const parts = raw.split(".").map(Number)
-    const min = MIN_OPENCODE_VERSION.split(".").map(Number)
-    const tooOld =
-      parts[0] < min[0] ||
-      (parts[0] === min[0] && parts[1] < min[1]) ||
-      (parts[0] === min[0] && parts[1] === min[1] && (parts[2] ?? 0) < (min[2] ?? 0))
-    if (tooOld) {
+  if (options.requireOpencode !== false) {
+    try {
+      const raw = execSync("opencode --version", { stdio: "pipe" }).toString().trim()
+      const parts = raw.split(".").map(Number)
+      const min = MIN_OPENCODE_VERSION.split(".").map(Number)
+      const tooOld =
+        parts[0] < min[0] ||
+        (parts[0] === min[0] && parts[1] < min[1]) ||
+        (parts[0] === min[0] && parts[1] === min[1] && (parts[2] ?? 0) < (min[2] ?? 0))
+      if (tooOld) {
+        errors.push(
+          `OpenCode CLI version ${raw} is too old (requires >= ${MIN_OPENCODE_VERSION})\n` +
+            "  Upgrade: https://opencode.ai/docs",
+        )
+      }
+    } catch {
       errors.push(
-        `OpenCode CLI version ${raw} is too old (requires >= ${MIN_OPENCODE_VERSION})\n` +
-          "  Upgrade: https://opencode.ai/docs",
+        "OpenCode CLI is not installed (required for agent runtime)\n" + "  Install: https://opencode.ai/docs",
       )
     }
-  } catch {
-    errors.push("OpenCode CLI is not installed (required for agent runtime)\n" + "  Install: https://opencode.ai/docs")
   }
 
   if (errors.length > 0) {
@@ -115,19 +122,21 @@ export function ensureDependencies(): void {
     process.exit(1)
   }
 
-  try {
-    const configPath = join(homedir(), ".config", "opencode", "opencode.json")
-    if (existsSync(configPath)) {
-      const config = JSON.parse(readFileSync(configPath, "utf-8"))
-      const plugins: string[] = Array.isArray(config.plugin) ? config.plugin : []
-      const hasOmo = plugins.some((p) => p.startsWith("oh-my-openagent") || p.startsWith("oh-my-opencode"))
-      if (!hasOmo) {
-        console.info(
-          "\n  💡 Recommended: install oh-my-openagent for enhanced Agent capabilities\n" +
-            "     https://github.com/code-yeongyu/oh-my-openagent\n" +
-            "     Install: bunx oh-my-openagent install\n",
-        )
+  if (options.requireOpencode !== false) {
+    try {
+      const configPath = join(homedir(), ".config", "opencode", "opencode.json")
+      if (existsSync(configPath)) {
+        const config = JSON.parse(readFileSync(configPath, "utf-8"))
+        const plugins: string[] = Array.isArray(config.plugin) ? config.plugin : []
+        const hasOmo = plugins.some((p) => p.startsWith("oh-my-openagent") || p.startsWith("oh-my-opencode"))
+        if (!hasOmo) {
+          console.info(
+            "\n  💡 Recommended: install oh-my-openagent for enhanced Agent capabilities\n" +
+              "     https://github.com/code-yeongyu/oh-my-openagent\n" +
+              "     Install: bunx oh-my-openagent install\n",
+          )
+        }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 }

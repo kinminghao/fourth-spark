@@ -130,13 +130,21 @@ fourth-spark/
 │   ├── server/                  # 后端 API
 │   │   ├── src/
 │   │   │   ├── index.ts         # Hono 应用入口、路由挂载、静态文件、启动序列
-│   │   │   ├── cli.ts           # CLI 入口 (start/stop/status/upgrade/serve)
+│   │   │   ├── cli.ts           # CLI 入口 (start/stop/status/account/upgrade/serve)
 │   │   │   ├── cli/
 │   │   │   │   ├── start.ts     # 后台启动 (拉起 PostgreSQL + fork server)
 │   │   │   │   ├── stop.ts      # 停止所有服务
 │   │   │   │   ├── status.ts    # 检查运行状态
+│   │   │   │   ├── account.ts   # 账号池 Master 生命周期 (serve/start/stop/status)
 │   │   │   │   ├── upgrade.ts   # 自动更新二进制
-│   │   │   │   └── paths.ts     # 运行时路径 (PID file, log dir)
+│   │   │   │   └── paths.ts     # 运行时路径 (PID/端口/日志文件)
+│   │   │   ├── account/                 # 账号池 Master（服务端）
+│   │   │   │   ├── routes.ts            # /v1/* 协议路由（v1/v2）
+│   │   │   │   ├── service.ts           # Master 服务装配 + 用量快照
+│   │   │   │   ├── scheduler.ts         # 选号/续租/容量/冷却/亲和
+│   │   │   │   ├── refresh.ts           # 唯一刷新入口（withAuthLock 事务）
+│   │   │   │   ├── state.ts             # account-pool-state.json 持久化
+│   │   │   │   └── constants.ts         # 持有上限、租约参数、默认端口
 │   │   │   ├── core/                    # 运行时抽象层
 │   │   │   │   ├── runtime-manager.ts   # 顶层编排器，路由 repo 到 provider
 │   │   │   │   ├── runtime-client.ts    # 统一会话操作接口 (routes 依赖)
@@ -202,6 +210,7 @@ fourth-spark/
 │   │   │   │   ├── child-env.ts                 # 子进程环境变量过滤（黑名单策略）
 │   │   │   │   ├── pagination.ts                # 列表接口分页辅助
 │   │   │   │   ├── validation.ts                # 请求体 Zod 校验辅助
+│   │   │   │   ├── instance-lock.ts             # 单实例启动锁（serve/account 共用）
 │   │   │   │   ├── lockfile.ts                  # 进程锁文件
 │   │   │   │   └── config.ts                    # 环境变量、端口、版本、Worker 配置
 │   │   │   ├── mcp/
@@ -407,6 +416,19 @@ routes 依赖的统一会话操作接口，每个 repo 一个实例：
 - **账号存储** — `claude-accounts.json` 的 `activeIds: Record<providerId, accountId>` 记录各 provider 的激活账号；旧 `activeId` / `openaiActiveId` 字段在加载时自动迁移；OAuth 账号持久化 refresh/access/expires 与 `accountId`，API Key 账号以 key 作为持久凭证
 - **HTTP 面** — `/api/usage`（`?provider=`）、`/api/usage/switch`（`provider` 可选）、`/api/usage/accounts`（POST 添加 API Key 账号 / DELETE 删除）、`/api/usage/oauth/authorize`（body 的 `method` 可选 `callback` / `device`，默认回调式）、`/api/usage/oauth/:provider/logins/:pendingId`（GET 轮询 / DELETE 取消，设备码追加 `?method=device`）；不带 provider 参数时保持 Anthropic 原契约；worker 模式只改变默认 provider 的账号来源，本地型 provider（opencode-go、openai）照常走本地路径
 - **凭证生效** — opencode 在实例创建时解析 auth.json 并缓存 SDK/语言模型；凭证变更（添加/切换/删除活跃账号）后经 `lib/credential-refresh.ts` 对运行中的 account-store runtime 调用 `POST /instance/dispose` 重建实例状态，新凭证无需重启进程即用于后续会话（进行中的回合可能被中断）。API Key 与声明 `refreshRuntimesOnSwitch` 的 provider（openai）在切换时同样重建；Anthropic 保持原有实时 token 路径
+
+### AccountPool Master (`account/`)
+
+内置账号池服务端——`fourth-spark account serve` 启动完整 server，但停用本机 agent runtime 与 sync scheduler，只保留 DB/UI/账号管理并叠加 `/v1/*` 池端点：
+
+- **模式隔离** — `isAccountPoolMaster()` 为真时强制 `isWorkerMode()=false`，master 不会递归连接远端 Master，也不会成为第二个刷新者。
+- **路由** — `/v1/health`、`/v1/lease`、`/v1/ratelimit`、`/v1/usage`、`/v1/usage/refresh`；挂在 SPA fallback 之前，仅 master 模式启用。
+- **协议** — v1 保持 anthropic 旧契约；v2 增加显式 `provider`、`credential` 凭据包与 `leaseExpiresAt`，仅 v2 返回 `at-capacity`。
+- **调度** — 按 provider 维护租约簿、持有上限、冷却、亲和；`currentAccountId` 幂等续租，`preferredAccountIdPrefix` 点名；sentinel / needsReauth 账号不参与选号。
+- **刷新** — `refresh.ts` 是唯一 lease 刷新入口，`withAuthLock` 覆盖「读取 → 刷新 → 写回」；master 的用量采集跳过刷新。
+- **状态** — `~/.fourth-spark/account-pool-state.json` 持久化租约/冷却/亲和/Worker 名册；停止时 flush。
+- **生命周期** — `account start` 后台 spawn 并等待 `/v1/health` 就绪；`account stop` 校验进程身份后 SIGTERM/SIGKILL；`account status` 输出池健康与各 provider 账号/租用/需重认证数量。
+- **单实例** — `instance-lock.ts` 以心跳锁 + 45s 陈旧检测，普通 serve 与 account serve 共用 `~/.fourth-spark/server.lock`。
 
 ### SenseVoice (`lib/sensevoice-manager.ts`)
 

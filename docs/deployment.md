@@ -239,6 +239,22 @@ fourth-spark/
 - PostgreSQL 容器状态
 - Server HTTP 可达性
 
+### `fourth-spark account <serve|start|stop|status> [--port PORT] [--host HOST]`
+
+账号池 Master：启动完整 server（DB / Web UI / 账号管理）并在同一端口提供 `/v1/*` 池端点。master 模式停用本机 agent runtime 与 sync scheduler。
+
+- `serve` — 前台启动；默认 `127.0.0.1:8787`
+- `start` — 后台启动，等待 `/v1/health` 就绪后返回；使用独立的 `account.pid` / `account.port` / `account.log`
+- `stop` — 停止后台实例；也能通过启动锁定位并停止前台实例
+- `status` — 池健康、监听地址、各 provider 账号 / 租用 / 需重认证数量
+
+部署约束：
+
+- 默认只绑 `127.0.0.1`；跨机访问需显式 `--host 0.0.0.0` 或具体网卡地址，并放在 Tailscale / 内网 ACL / 反向代理之后（池协议没有应用层认证）。
+- master 与普通 server 共用 `~/.fourth-spark/server.lock`，同一数据目录只允许一个 fourth-spark server。
+- master 主机必须持有真实账号 refresh token；曾作为 Worker 运行的机器需要重新登录账号后才能发号。
+- 不要与外部 `claude-accounts-pool` 同时管理同一份账号文件。
+
 ### `fourth-spark upgrade`
 
 检查并更新到最新版本：
