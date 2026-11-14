@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import {
   getDefaultWorkerId,
   getWorkerConfig,
   initWorkerConfig,
+  isAccountPoolMaster,
   isWorkerMode,
   reloadWorkerConfig,
 } from "../../../src/lib/config"
@@ -17,6 +18,7 @@ describe("initWorkerConfig", () => {
     // Reset cache by initializing with empty DB and no env
     delete process.env.MASTER_URL
     delete process.env.WORKER_ID
+    delete process.env.ACCOUNT_POOL_MASTER
     await initWorkerConfig(mockGetSetting({}))
   })
 
@@ -107,6 +109,45 @@ describe("reloadWorkerConfig", () => {
     )
     expect(isWorkerMode()).toBe(true)
     expect(getWorkerConfig()?.masterUrl).toBe("https://new-pool.example.com")
+  })
+})
+
+describe("account pool master mode", () => {
+  afterEach(() => {
+    delete process.env.ACCOUNT_POOL_MASTER
+    delete process.env.MASTER_URL
+    delete process.env.WORKER_ID
+  })
+
+  test("forces worker mode off even when DB or env config exists", async () => {
+    process.env.ACCOUNT_POOL_MASTER = "1"
+    process.env.MASTER_URL = "https://env-pool.example.com"
+    process.env.WORKER_ID = "env-worker"
+
+    expect(isAccountPoolMaster()).toBe(true)
+    await initWorkerConfig(
+      mockGetSetting({
+        cloud_master_url: "https://pool.example.com",
+        cloud_worker_id: "worker-1",
+      }),
+    )
+
+    expect(isWorkerMode()).toBe(false)
+    expect(getWorkerConfig()).toBeNull()
+  })
+
+  test("reload also ignores worker configuration", async () => {
+    process.env.ACCOUNT_POOL_MASTER = "1"
+    await initWorkerConfig(mockGetSetting({}))
+    await reloadWorkerConfig(
+      mockGetSetting({
+        cloud_master_url: "https://pool.example.com",
+        cloud_worker_id: "worker-1",
+      }),
+    )
+
+    expect(isWorkerMode()).toBe(false)
+    expect(getWorkerConfig()).toBeNull()
   })
 })
 

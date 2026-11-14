@@ -40,6 +40,10 @@ fourth-spark stop
 | `fourth-spark start` | 后台启动（PostgreSQL + server） |
 | `fourth-spark stop` | 停止所有服务 |
 | `fourth-spark status` | 查看运行状态 |
+| `fourth-spark account serve` | 前台启动账号池 Master（默认 127.0.0.1:8787） |
+| `fourth-spark account start` | 后台启动账号池 Master |
+| `fourth-spark account stop` | 停止账号池 Master |
+| `fourth-spark account status` | 查看账号池状态 |
 | `fourth-spark upgrade` | 检查并更新到最新版本 |
 | `fourth-spark --version` | 查看版本号 |
 

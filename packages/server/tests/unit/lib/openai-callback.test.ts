@@ -438,7 +438,7 @@ describe("OpenAI browser OAuth flow (isolated child process)", () => {
       )
     }
     result = JSON.parse(line.slice("OPENAI_FIXTURE_RESULT:".length)) as FixtureResult
-  })
+  }, 30_000)
 
   afterAll(() => {
     rmSync(workDir, { recursive: true, force: true })

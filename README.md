@@ -93,6 +93,8 @@ fourth-spark serve              同上（显式子命令）
 fourth-spark start [--port N]   后台启动（含 PostgreSQL，默认端口 3000）
 fourth-spark stop               停止所有服务
 fourth-spark status             查看运行状态
+fourth-spark account serve|start|stop|status [--port N] [--host H]
+                                账号池 Master（默认 127.0.0.1:8787）
 fourth-spark upgrade [--canary] [--force]  检查并更新到最新版本
 ```
 

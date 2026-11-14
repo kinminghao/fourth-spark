@@ -15,6 +15,7 @@ import {
 } from "./auth-files"
 import { broadcastCredentialToRuntimes } from "./credential-broadcast"
 import { refreshAccountStoreRuntimes } from "./credential-refresh"
+import { SENTINEL_REFRESH } from "./lease-constants"
 import { RefreshRevokedError } from "./token-refresh"
 
 const COOLDOWN_FILE = join("/tmp", "fourth-spark", "cooldown.json")
@@ -156,7 +157,13 @@ export async function switchToAccount(provider: ProviderId, targetId: string): P
     // Static api-key credentials never rotate; adopting the live key would
     // corrupt the outgoing record's identity (hash id/label keep pointing at
     // the original key while the secret becomes a foreign one).
-    if (credentialAdapter.kind === "oauth" && activeId && activeId !== targetId && liveAuth?.refresh) {
+    if (
+      credentialAdapter.kind === "oauth" &&
+      activeId &&
+      activeId !== targetId &&
+      liveAuth?.refresh &&
+      liveAuth.refresh !== SENTINEL_REFRESH
+    ) {
       const outIdx = file.accounts.findIndex((a) => a.id === activeId)
       if (outIdx >= 0) {
         applyToken(file.accounts[outIdx], {

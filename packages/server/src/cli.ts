@@ -1,20 +1,28 @@
+import { ACCOUNT_LOG_FILE } from "./cli/log-path"
 import { APP_VERSION } from "./lib/config"
 
 const args = process.argv.slice(2)
-
-if (args.includes("--version") || args.includes("-v")) {
-  console.log(`fourth-spark ${APP_VERSION}`)
-  process.exit(0)
-}
-
-if (args.includes("--help") || args.includes("-h")) {
-  printUsage()
-  process.exit(0)
-}
-
 const command = args[0]
 
+if (command !== "account") {
+  if (args.includes("--version") || args.includes("-v")) {
+    console.log(`fourth-spark ${APP_VERSION}`)
+    process.exit(0)
+  }
+
+  if (args.includes("--help") || args.includes("-h")) {
+    printUsage()
+    process.exit(0)
+  }
+}
+
 switch (command) {
+  case "account": {
+    process.env.FOURTH_SPARK_LOG_FILE ??= ACCOUNT_LOG_FILE
+    const { accountCommand } = await import("./cli/account")
+    await accountCommand(args.slice(1))
+    break
+  }
   case "start": {
     const { startCommand } = await import("./cli/start")
     await startCommand(args.slice(1))
@@ -60,6 +68,7 @@ Commands:
   start     Start server in background (with PostgreSQL) [--port PORT]
   stop      Stop background server and all services
   status    Show server and service status
+  account   Account pool master: serve | start | stop | status
   upgrade   Check for updates and upgrade to latest version [--canary] [--force]
 
 Options:
