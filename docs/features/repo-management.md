@@ -65,7 +65,7 @@
 | 切换分支 | `POST /api/repos/:id/checkout` | 执行 `git checkout <branch>` |
 | 拉取代码 | `POST /api/repos/:id/pull` | 执行 `git pull --ff-only --autostash`，分叉时返回错误提示 |
 
-前端导航栏显示当前分支名，点击展开分支选择器。
+前端导航栏显示当前分支名，点击展开分支选择器；选择器旁提供「拉取」按钮，与仓库卡片共用同一拉取逻辑。
 
 ## 仓库状态
 
@@ -88,6 +88,8 @@
 - Workspace 列表和管理（磁盘用量、状态、删除、批量清理）
 - 删除仓库（确认后停止进程 + 删除数据库记录）
 - 直接访问 OpenCode 端口的链接
+
+顶部导航栏的项目选择器旁也提供「拉取」按钮，调用 `POST /api/repos/:id/pull`，成功或失败结果通过 Toast 提示。
 
 ## API 端点
 

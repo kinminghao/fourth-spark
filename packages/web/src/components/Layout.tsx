@@ -1,6 +1,7 @@
 import clsx from "clsx"
 import type { LucideIcon } from "lucide-react"
 import {
+  ArrowDownToLine,
   BarChart3,
   Bot,
   Box,
@@ -22,6 +23,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
+import { usePullRepo } from "../hooks/use-pull-repo"
 import { type BranchList, checkoutBranch, listBranches } from "../lib/api-client"
 import { VERSION_CHECK_INTERVAL_MS } from "../lib/constants"
 import { useLayoutStore } from "../stores/layout-store"
@@ -315,6 +317,25 @@ function BranchSwitcher({ repoId, currentBranch }: { repoId: string; currentBran
   )
 }
 
+function PullRepoButton({ repoId }: { repoId: string }) {
+  const { pull, pullingId } = usePullRepo()
+  const pulling = pullingId === repoId
+
+  return (
+    <button
+      type="button"
+      onClick={() => void pull(repoId)}
+      disabled={pulling}
+      aria-label="拉取代码"
+      title="拉取代码"
+      className="flex h-8 shrink-0 items-center justify-center gap-1 rounded-md bg-elevated px-2 text-xs text-fg-3 transition-colors hover:bg-blue-500/10 hover:text-blue-600 disabled:opacity-50"
+    >
+      {pulling ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowDownToLine className="h-3 w-3" />}
+      <span className="hidden sm:inline">拉取</span>
+    </button>
+  )
+}
+
 function useLatestVersion() {
   const [latest, setLatest] = useState<string | null>(null)
   useEffect(() => {
@@ -483,6 +504,7 @@ function Header() {
             <div className="flex items-center gap-2">
               <RepoSwitcher repos={repos} activeRepoId={activeRepoId} onRepoChange={handleRepoChange} />
               {activeRepo && activeRepoId && <BranchSwitcher repoId={activeRepoId} currentBranch={activeRepo.branch} />}
+              {activeRepo && <PullRepoButton repoId={activeRepo.id} />}
             </div>
           )}
           <div className="hidden items-center gap-1 md:flex">
