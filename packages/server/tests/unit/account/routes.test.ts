@@ -249,4 +249,27 @@ describe("account pool routes", () => {
     })
     expect(res.status).toBe(400)
   })
+
+  test("providers outside the allowlist are rejected", async () => {
+    const app = createAccountPoolRoutes(fakeService(), new Set(["anthropic"]))
+
+    const lease = await post(app, "/v1/lease", {
+      workerId: "w1",
+      reason: "prelease",
+      protocolVersion: 2,
+      provider: "openai",
+    })
+    expect(lease.status).toBe(400)
+
+    const usage = await app.request("/v1/usage?provider=openai")
+    expect(usage.status).toBe(400)
+
+    const ratelimit = await post(app, "/v1/ratelimit", {
+      workerId: "w1",
+      accountId: "acc1",
+      protocolVersion: 2,
+      provider: "openai",
+    })
+    expect(ratelimit.status).toBe(400)
+  })
 })

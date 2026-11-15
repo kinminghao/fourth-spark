@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } from "../lib/account-providers"
 import type { ProviderId } from "../lib/auth-files"
 import { logger } from "../middleware/logger"
+import { poolProviderIds } from "./providers"
 import { type AccountPoolService, accountPoolService } from "./service"
 import type { LeaseOutcome, LeaseRequest } from "./types"
 
@@ -177,7 +178,10 @@ function failureBody(outcome: Extract<LeaseOutcome, { ok: false }>, v2: boolean)
   return { error: failure.error }
 }
 
-export function createAccountPoolRoutes(service: AccountPoolRouteService): Hono {
+export function createAccountPoolRoutes(
+  service: AccountPoolRouteService,
+  allowedProviders: Set<ProviderId> = poolProviderIds(),
+): Hono {
   const app = new Hono()
 
   app.get("/v1/health", (c) => c.json({ ok: true }))
@@ -195,6 +199,9 @@ export function createAccountPoolRoutes(service: AccountPoolRouteService): Hono 
 
     const request = parsed.value
     const v2 = request.protocolVersion === 2
+    if (!allowedProviders.has(request.provider)) {
+      return c.json({ error: `provider not enabled: ${request.provider}` }, 400)
+    }
     try {
       const outcome = await service.acquire({
         workerId: request.workerId,
@@ -244,6 +251,9 @@ export function createAccountPoolRoutes(service: AccountPoolRouteService): Hono 
 
     const parsed = parseRateLimitRequest(raw)
     if (!parsed.ok) return c.json({ error: parsed.error }, 400)
+    if (!allowedProviders.has(parsed.value.provider)) {
+      return c.json({ error: `provider not enabled: ${parsed.value.provider}` }, 400)
+    }
 
     try {
       await service.reportLimit(parsed.value)
@@ -257,6 +267,7 @@ export function createAccountPoolRoutes(service: AccountPoolRouteService): Hono 
   app.get("/v1/usage", async (c) => {
     const provider = c.req.query("provider") ?? DEFAULT_ACCOUNT_PROVIDER
     if (!isRegisteredProvider(provider)) return c.json({ error: `unknown account provider: ${provider}` }, 400)
+    if (!allowedProviders.has(provider)) return c.json({ error: `provider not enabled: ${provider}` }, 400)
     try {
       c.header("Cache-Control", "no-store")
       return c.json(await service.snapshot(provider))
@@ -269,6 +280,7 @@ export function createAccountPoolRoutes(service: AccountPoolRouteService): Hono 
   app.post("/v1/usage/refresh", async (c) => {
     const provider = c.req.query("provider") ?? DEFAULT_ACCOUNT_PROVIDER
     if (!isRegisteredProvider(provider)) return c.json({ error: `unknown account provider: ${provider}` }, 400)
+    if (!allowedProviders.has(provider)) return c.json({ error: `provider not enabled: ${provider}` }, 400)
     try {
       const result = await service.refreshUsage(provider)
       c.header("Cache-Control", "no-store")

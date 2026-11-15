@@ -1,7 +1,16 @@
 import { logger } from "../middleware/logger"
 import { DEFAULT_ACCOUNT_PROVIDER, getAccountProvider } from "./account-providers"
 import type { RefreshStrategy, UsageResponse } from "./account-providers/types"
-import { accountsOf, loadAccounts, type ProviderId, type StoredAccount } from "./auth-files"
+import {
+  accountsOf,
+  applyToken,
+  loadAccounts,
+  type ProviderId,
+  providerOf,
+  type StoredAccount,
+  saveAccounts,
+  withAuthLock,
+} from "./auth-files"
 import { getWorkerConfig, isAccountPoolMaster, isWorkerMode } from "./config"
 import { createUsageClient, type UsageSnapshotView } from "./usage-client"
 
@@ -21,7 +30,25 @@ export interface UsageResult {
   accounts: AccountUsage[]
 }
 
+async function refreshUsageAccess(
+  provider: ProviderId,
+  accountId: string,
+  refresh: RefreshStrategy,
+): Promise<{ access: string }> {
+  return withAuthLock(async () => {
+    const file = await loadAccounts()
+    const account = file.accounts.find((candidate) => candidate.id === accountId && providerOf(candidate) === provider)
+    if (!account) throw new Error("account not found")
+    if (!refresh.isStale(account)) return { access: account.access ?? "" }
+    const fresh = await refresh.refresh(account.refresh)
+    applyToken(account, fresh)
+    await saveAccounts(file)
+    return { access: fresh.access }
+  })
+}
+
 async function resolveAccess(
+  provider: ProviderId,
   account: StoredAccount,
   isActive: boolean,
   liveAuth: { access?: string; refresh?: string; expires?: number } | undefined,
@@ -51,7 +78,7 @@ async function resolveAccess(
   }
 
   try {
-    const fresh = await refresh.refresh(account.refresh)
+    const fresh = await refreshUsageAccess(provider, account.id, refresh)
     return { access: fresh.access }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -152,7 +179,7 @@ export async function collectUsage(
       excluded: account.excluded ?? false,
     }
 
-    const resolved = await resolveAccess(account, isActive, auth, descriptor.refresh, skipRefresh)
+    const resolved = await resolveAccess(provider, account, isActive, auth, descriptor.refresh, skipRefresh)
     if (resolved.needsReauth) base.needsReauth = true
 
     if (!resolved.access) {
