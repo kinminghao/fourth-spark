@@ -241,7 +241,7 @@ fourth-spark/
 
 ### `fourth-spark account <serve|start|stop|status> [--port PORT] [--host HOST]`
 
-账号池 Master：启动完整 server（DB / Web UI / 账号管理）并在同一端口提供 `/v1/*` 池端点。master 模式停用本机 agent runtime 与 sync scheduler。
+pool-only 账号池 Master：只启动 `/v1/*` 监听器，不加载 DB、Web UI、agent runtime、TLS、migration 或 sync scheduler，因此可与主 fourth-spark server 同机并存。
 
 - `serve` — 前台启动；默认 `127.0.0.1:8787`
 - `start` — 后台启动，等待 `/v1/health` 就绪后返回；使用独立的 `account.pid` / `account.port` / `account.log`
@@ -251,9 +251,11 @@ fourth-spark/
 部署约束：
 
 - 默认只绑 `127.0.0.1`；跨机访问需显式 `--host 0.0.0.0` 或具体网卡地址，并放在 Tailscale / 内网 ACL / 反向代理之后（池协议没有应用层认证）。
-- master 与普通 server 共用 `~/.fourth-spark/server.lock`，同一数据目录只允许一个 fourth-spark server。
+- pool master 使用独立的 `~/.fourth-spark/account-pool.lock`，主 server 使用 `server.lock`，两者可以同时运行。
+- 同一个 provider 只能有一个本地刷新者：主 server 在本地使用某 provider 时，不要把它加入 `ACCOUNT_POOL_PROVIDERS`；或让主 server 以 Worker 模式租用该 provider。
 - master 主机必须持有真实账号 refresh token；曾作为 Worker 运行的机器需要重新登录账号后才能发号。
 - 不要与外部 `claude-accounts-pool` 同时管理同一份账号文件。
+- 账号管理仍由主 server 的 Web UI 负责（同一 HOME / 同一账号文件）；pool master 本身无 UI。
 
 ### `fourth-spark upgrade`
 
@@ -272,11 +274,22 @@ fourth-spark/
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `PORT` | `3000` | Server 监听端口 |
+| `FOURTH_SPARK_HOST` | (空) | 主 server 绑定地址；空表示所有网卡 |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | CORS 允许的前端来源 |
 | `EXTRA_ORIGINS` | (空) | 额外 CORS 来源，逗号分隔 |
 | `DEFAULT_VARIANT` | `max` | 默认模型变体 |
 | `STATIC_DIR` | `{二进制目录}/public` | 前端静态文件目录 |
 | `APP_VERSION` | git commit hash | 版本号（构建时注入） |
+
+### 账号池 Master
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `ACCOUNT_POOL_PORT` | `8787` | pool-only 监听端口（由 `account serve --port` 设置） |
+| `ACCOUNT_POOL_HOST` | `127.0.0.1` | pool-only 绑定地址（由 `account serve --host` 设置） |
+| `ACCOUNT_POOL_PROVIDERS` | 全部已注册 provider | 允许发号的 provider 白名单，逗号分隔 |
+| `ACCOUNT_POOL_STATE_PATH` | `~/.fourth-spark/account-pool-state.json` | 租约/冷却/亲和状态文件 |
+| `ACCOUNT_POOL_READY_TIMEOUT_MS` | `120000` | `account start` 等待就绪的超时 |
 
 ### 数据库
 

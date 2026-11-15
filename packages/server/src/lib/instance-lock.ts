@@ -21,9 +21,9 @@ export type InstanceLockInfo = {
 export class InstanceLockError extends Error {
   readonly holder: InstanceLockInfo
 
-  constructor(holder: InstanceLockInfo) {
+  constructor(holder: InstanceLockInfo, label = "fourth-spark server") {
     super(
-      `another fourth-spark server is already running (pid ${holder.pid}, role ${holder.role}${holder.port ? `, port ${holder.port}` : ""})`,
+      `another ${label} is already running (pid ${holder.pid}, role ${holder.role}${holder.port ? `, port ${holder.port}` : ""})`,
     )
     this.name = "InstanceLockError"
     this.holder = holder
@@ -71,7 +71,7 @@ export async function readInstanceLock(
 
 export async function acquireInstanceLock(
   role: InstanceLockInfo["role"],
-  opts: { port?: number; host?: string; path?: string } = {},
+  opts: { port?: number; host?: string; path?: string; label?: string } = {},
 ): Promise<InstanceLock> {
   const path = opts.path ?? DEFAULT_LOCK_PATH
   const token = randomUUID()
@@ -94,7 +94,7 @@ export async function acquireInstanceLock(
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err
       const { info: holder, fresh } = await readInstanceLock(path)
-      if (fresh && holder) throw new InstanceLockError(holder)
+      if (fresh && holder) throw new InstanceLockError(holder, opts.label)
       const stalePath = `${path}.stale-${process.pid}-${Date.now()}`
       try {
         await rename(path, stalePath)
@@ -103,7 +103,7 @@ export async function acquireInstanceLock(
       } catch {
         // Another process won the steal race; loop and retry.
       }
-      if (attempt === 2) throw new InstanceLockError(holder ?? info)
+      if (attempt === 2) throw new InstanceLockError(holder ?? info, opts.label)
     }
   }
 

@@ -1,10 +1,10 @@
-import { listAccountProviders } from "../lib/account-providers"
 import type { UsageResponse } from "../lib/account-providers/types"
 import { accountsOf, loadAccounts, type ProviderId } from "../lib/auth-files"
 import { collectUsage, invalidateUsageCache } from "../lib/claude-usage"
 import { SENTINEL_REFRESH } from "../lib/lease-constants"
 import { logger } from "../middleware/logger"
 import { ACCOUNT_POOL_USAGE_REFRESH_THROTTLE_MS, providerPoolLimits } from "./constants"
+import { poolProviderIds } from "./providers"
 import { createCredentialResolver } from "./refresh"
 import { createAccountPoolScheduler } from "./scheduler"
 import { PoolStateStore, prunePoolState } from "./state"
@@ -92,11 +92,18 @@ export function createAccountPoolService(opts: { store?: PoolStateStore } = {}) 
 
     async start(): Promise<void> {
       await store.mutate((state) => prunePoolState(state, Date.now()))
-      const limits = listAccountProviders().map((provider) => ({
-        provider: provider.id,
-        ...providerPoolLimits(provider.id),
+      const providers = [...poolProviderIds()]
+      const limits = providers.map((provider) => ({
+        provider,
+        ...providerPoolLimits(provider),
       }))
-      logger.info({ limits }, "account-pool: master service started")
+      logger.info({ providers, limits }, "account-pool: master service started")
+      if (providers.length === 0) {
+        logger.warn(
+          { env: "ACCOUNT_POOL_PROVIDERS" },
+          "account-pool: no providers enabled; all lease requests will fail",
+        )
+      }
 
       const file = await loadAccounts()
       const unusable = file.accounts.filter(
