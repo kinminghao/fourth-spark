@@ -135,15 +135,18 @@ fourth-spark/
 │   │   │   │   ├── start.ts     # 后台启动 (拉起 PostgreSQL + fork server)
 │   │   │   │   ├── stop.ts      # 停止所有服务
 │   │   │   │   ├── status.ts    # 检查运行状态
-│   │   │   │   ├── account.ts   # 账号池 Master 生命周期 (serve/start/stop/status)
+│   │   │   │   ├── account.ts   # 账号池生命周期 (serve/start/stop/status)
 │   │   │   │   ├── upgrade.ts   # 自动更新二进制
+│   │   │   │   ├── log-path.ts  # 数据/日志/账号池锁路径
 │   │   │   │   └── paths.ts     # 运行时路径 (PID/端口/日志文件)
-│   │   │   ├── account/                 # 账号池 Master（服务端）
+│   │   │   ├── account/                 # pool-only 账号池 Master
+│   │   │   │   ├── main.ts              # 独立监听器入口（无 DB/UI/runtime）
 │   │   │   │   ├── routes.ts            # /v1/* 协议路由（v1/v2）
 │   │   │   │   ├── service.ts           # Master 服务装配 + 用量快照
 │   │   │   │   ├── scheduler.ts         # 选号/续租/容量/冷却/亲和
 │   │   │   │   ├── refresh.ts           # 唯一刷新入口（withAuthLock 事务）
 │   │   │   │   ├── state.ts             # account-pool-state.json 持久化
+│   │   │   │   ├── providers.ts         # ACCOUNT_POOL_PROVIDERS 白名单
 │   │   │   │   └── constants.ts         # 持有上限、租约参数、默认端口
 │   │   │   ├── core/                    # 运行时抽象层
 │   │   │   │   ├── runtime-manager.ts   # 顶层编排器，路由 repo 到 provider
@@ -210,7 +213,7 @@ fourth-spark/
 │   │   │   │   ├── child-env.ts                 # 子进程环境变量过滤（黑名单策略）
 │   │   │   │   ├── pagination.ts                # 列表接口分页辅助
 │   │   │   │   ├── validation.ts                # 请求体 Zod 校验辅助
-│   │   │   │   ├── instance-lock.ts             # 单实例启动锁（serve/account 共用）
+│   │   │   │   ├── instance-lock.ts             # 心跳启动锁（server.lock / account-pool.lock）
 │   │   │   │   ├── lockfile.ts                  # 进程锁文件
 │   │   │   │   └── config.ts                    # 环境变量、端口、版本、Worker 配置
 │   │   │   ├── mcp/
@@ -419,16 +422,17 @@ routes 依赖的统一会话操作接口，每个 repo 一个实例：
 
 ### AccountPool Master (`account/`)
 
-内置账号池服务端——`fourth-spark account serve` 启动完整 server，但停用本机 agent runtime 与 sync scheduler，只保留 DB/UI/账号管理并叠加 `/v1/*` 池端点：
+pool-only 账号池服务端——`fourth-spark account serve` 只启动 `/v1/*` 监听器，不加载 DB、Web UI、agent runtime、TLS、migration 或 sync scheduler，因此可与主 server 同机并存：
 
-- **模式隔离** — `isAccountPoolMaster()` 为真时强制 `isWorkerMode()=false`，master 不会递归连接远端 Master，也不会成为第二个刷新者。
-- **路由** — `/v1/health`、`/v1/lease`、`/v1/ratelimit`、`/v1/usage`、`/v1/usage/refresh`；挂在 SPA fallback 之前，仅 master 模式启用。
+- **入口** — `account/main.ts` 创建独立 Hono app，挂载池路由与根诊断路由；不使用 `src/index.ts` 的全量启动序列。
+- **模式隔离** — 进程设置 `ACCOUNT_POOL_MASTER=1`，强制 `isWorkerMode()=false`，不会递归连接远端 Master。
+- **路由** — `/v1/health`、`/v1/lease`、`/v1/ratelimit`、`/v1/usage`、`/v1/usage/refresh`；provider 白名单由 `ACCOUNT_POOL_PROVIDERS` 控制（`account/providers.ts`）。
 - **协议** — v1 保持 anthropic 旧契约；v2 增加显式 `provider`、`credential` 凭据包与 `leaseExpiresAt`，仅 v2 返回 `at-capacity`。
 - **调度** — 按 provider 维护租约簿、持有上限、冷却、亲和；`currentAccountId` 幂等续租，`preferredAccountIdPrefix` 点名；sentinel / needsReauth 账号不参与选号。
-- **刷新** — `refresh.ts` 是唯一 lease 刷新入口，`withAuthLock` 覆盖「读取 → 刷新 → 写回」；master 的用量采集跳过刷新。
+- **刷新** — `refresh.ts` 是唯一 lease 刷新入口，`withAuthLock` 覆盖「读取 → 刷新 → 写回」；master 的用量采集跳过刷新；主 server 的用量刷新也走同一把锁并回写旋转后的 token。
 - **状态** — `~/.fourth-spark/account-pool-state.json` 持久化租约/冷却/亲和/Worker 名册；停止时 flush。
 - **生命周期** — `account start` 后台 spawn 并等待 `/v1/health` 就绪；`account stop` 校验进程身份后 SIGTERM/SIGKILL；`account status` 输出池健康与各 provider 账号/租用/需重认证数量。
-- **单实例** — `instance-lock.ts` 以心跳锁 + 45s 陈旧检测，普通 serve 与 account serve 共用 `~/.fourth-spark/server.lock`。
+- **锁** — pool master 使用独立的 `~/.fourth-spark/account-pool.lock`；主 server 继续使用 `server.lock`，两者互不阻塞。
 
 ### SenseVoice (`lib/sensevoice-manager.ts`)
 

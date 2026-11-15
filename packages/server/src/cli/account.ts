@@ -3,11 +3,11 @@ import { existsSync, openSync, readFileSync, statSync, truncateSync, unlinkSync,
 import { ACCOUNT_POOL_DEFAULT_HOST, ACCOUNT_POOL_DEFAULT_PORT } from "../account/constants"
 import { clearInstanceLock, readInstanceLock } from "../lib/instance-lock"
 import {
+  ACCOUNT_LOCK_FILE,
   ACCOUNT_LOG_FILE,
   ACCOUNT_PID_FILE,
   ACCOUNT_PORT_FILE,
   ensureDataDir,
-  ensureDependencies,
   isProcessRunning,
   MAX_LOG_BYTES,
 } from "./paths"
@@ -108,10 +108,13 @@ function printUsage(): void {
   console.log(`Usage: fourth-spark account <command> [options]
 
 Commands:
-  serve     Start the account pool master in the foreground [--port PORT] [--host HOST]
-  start     Start the account pool master in the background [--port PORT] [--host HOST]
+  serve     Start the pool-only account master in the foreground [--port PORT] [--host HOST]
+  start     Start the pool-only account master in the background [--port PORT] [--host HOST]
   stop      Stop the background account pool master
   status    Show account pool status
+
+The pool-only master serves /v1/* without DB, UI or local runtimes, so it can
+run alongside the main fourth-spark server.
 
 Defaults: host ${ACCOUNT_POOL_DEFAULT_HOST}, port ${ACCOUNT_POOL_DEFAULT_PORT}`)
 }
@@ -123,24 +126,22 @@ async function accountServe(args: string[]): Promise<void> {
     process.exit(1)
   }
 
-  const lock = await readInstanceLock()
+  const lock = await readInstanceLock(ACCOUNT_LOCK_FILE)
   if (lock.fresh && lock.info) {
     console.error(
-      `Cannot start: another fourth-spark server is running (pid ${lock.info.pid}, role ${lock.info.role}).`,
+      `Cannot start: another account pool master is already running (pid ${lock.info.pid}${lock.info.port ? `, port ${lock.info.port}` : ""}).`,
     )
     process.exit(1)
   }
 
-  console.log(`fourth-spark account pool master
-  UI:     http://${options.host === "0.0.0.0" ? "127.0.0.1" : options.host}:${options.port}
-  Pool:   http://${options.host}:${options.port}/v1/health
-  Log:    ${ACCOUNT_LOG_FILE}`)
+  console.log(`fourth-spark account pool master (pool-only)
+  Pool: http://${options.host === "0.0.0.0" ? "127.0.0.1" : options.host}:${options.port}/v1/health
+  Log:  ${ACCOUNT_LOG_FILE}`)
 
   process.env.ACCOUNT_POOL_MASTER = "1"
-  process.env.PORT = String(options.port)
-  process.env.FOURTH_SPARK_HOST = options.host
-  ensureDependencies({ requireOpencode: false })
-  await import("../index")
+  process.env.ACCOUNT_POOL_PORT = String(options.port)
+  process.env.ACCOUNT_POOL_HOST = options.host
+  await import("../account/main")
 }
 
 async function accountStart(args: string[]): Promise<void> {
@@ -156,10 +157,10 @@ async function accountStart(args: string[]): Promise<void> {
     return
   }
 
-  const lock = await readInstanceLock()
+  const lock = await readInstanceLock(ACCOUNT_LOCK_FILE)
   if (lock.fresh && lock.info) {
     console.error(
-      `Cannot start: another fourth-spark server is running (pid ${lock.info.pid}, role ${lock.info.role}).`,
+      `Cannot start: another account pool master is already running (pid ${lock.info.pid}${lock.info.port ? `, port ${lock.info.port}` : ""}).`,
     )
     process.exit(1)
   }
@@ -186,8 +187,8 @@ async function accountStart(args: string[]): Promise<void> {
     env: {
       ...process.env,
       ACCOUNT_POOL_MASTER: "1",
-      PORT: String(options.port),
-      FOURTH_SPARK_HOST: options.host,
+      ACCOUNT_POOL_PORT: String(options.port),
+      ACCOUNT_POOL_HOST: options.host,
     },
   })
   child.unref()
@@ -215,13 +216,12 @@ async function accountStart(args: string[]): Promise<void> {
 
   console.log(`Account pool started
   PID:    ${child.pid}
-  UI:     http://${options.host === "0.0.0.0" ? "127.0.0.1" : options.host}:${options.port}
-  Pool:   http://${options.host}:${options.port}/v1/health
+  Pool:   http://${options.host === "0.0.0.0" ? "127.0.0.1" : options.host}:${options.port}/v1/health
   Log:    ${ACCOUNT_LOG_FILE}`)
 }
 
 async function accountStop(): Promise<void> {
-  const lock = await readInstanceLock()
+  const lock = await readInstanceLock(ACCOUNT_LOCK_FILE)
   const pid =
     readNumberFile(ACCOUNT_PID_FILE) ?? (lock.fresh && lock.info?.role === "account" ? lock.info.pid : undefined)
 
@@ -235,7 +235,7 @@ async function accountStop(): Promise<void> {
     console.log(`Account pool is not running (stale PID ${pid})`)
     removeFile(ACCOUNT_PID_FILE)
     removeFile(ACCOUNT_PORT_FILE)
-    await clearInstanceLock(undefined, pid)
+    await clearInstanceLock(ACCOUNT_LOCK_FILE, pid)
     return
   }
 
@@ -256,12 +256,12 @@ async function accountStop(): Promise<void> {
 
   removeFile(ACCOUNT_PID_FILE)
   removeFile(ACCOUNT_PORT_FILE)
-  await clearInstanceLock(undefined, pid)
+  await clearInstanceLock(ACCOUNT_LOCK_FILE, pid)
   console.log(`Account pool stopped (PID ${pid})`)
 }
 
 async function accountStatus(): Promise<void> {
-  const lock = await readInstanceLock()
+  const lock = await readInstanceLock(ACCOUNT_LOCK_FILE)
   const pid =
     readNumberFile(ACCOUNT_PID_FILE) ?? (lock.fresh && lock.info?.role === "account" ? lock.info.pid : undefined)
   const port =
@@ -273,18 +273,17 @@ async function accountStatus(): Promise<void> {
   )
   const running = pid !== undefined && isProcessRunning(pid)
 
-  console.log(`Account pool: ${running ? `running (PID ${pid})` : "stopped"}`)
+  console.log(`Account pool: ${running ? `running (PID ${pid}, pool-only)` : "stopped"}`)
   if (!running) return
 
-  const [poolHealthy, uiHealthy] = await Promise.all([probe(host, port, "/v1/health"), probe(host, port, "/", 3_000)])
+  const poolHealthy = await probe(host, port, "/v1/health")
   console.log(`  Pool:     ${poolHealthy ? "healthy" : "not responding"} (http://${host}:${port}/v1/health)`)
-  console.log(`  UI:       ${uiHealthy ? "healthy" : "not responding"} (http://${host}:${port})`)
   console.log(`  Log:      ${ACCOUNT_LOG_FILE}`)
 
   for (const provider of ["anthropic", "openai", "opencode-go"]) {
     try {
       const res = await fetch(`http://${host}:${port}/v1/usage?provider=${provider}`, {
-        signal: AbortSignal.timeout(2_000),
+        signal: AbortSignal.timeout(5_000),
       })
       if (!res.ok) continue
       const snapshot = (await res.json()) as { accounts?: Array<{ holders?: string[]; needsReauth?: boolean }> }

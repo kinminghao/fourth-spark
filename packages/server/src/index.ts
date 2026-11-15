@@ -3,8 +3,6 @@ import { existsSync, realpathSync, unlinkSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { apiReference } from "@scalar/hono-api-reference"
 import { Hono } from "hono"
-import { accountPoolRoutes } from "./account/routes"
-import { accountPoolService } from "./account/service"
 import { initRegistry } from "./core/registry"
 import { runMigrations } from "./db/migrate"
 import { BIND_HOST, HTTPS_PORT, initWorkerConfig, isAccountPoolMaster, PORT } from "./lib/config"
@@ -49,6 +47,12 @@ const app = new Hono()
 app.use("*", corsMiddleware)
 app.use("*", requestLogger)
 app.onError(onError)
+
+if (isAccountPoolMaster()) {
+  logger.fatal("ACCOUNT_POOL_MASTER is reserved for `fourth-spark account serve`; refusing to start the full server")
+  console.error("Use `fourth-spark account serve` to run the pool-only account master.")
+  process.exit(1)
+}
 
 // ---------------------------------------------------------------------------
 // OpenAPI documentation
@@ -110,11 +114,6 @@ repoScoped.route("/workspaces", workspaceRoutes)
 
 app.route("/api/repos/:repoId", repoScoped)
 
-if (isAccountPoolMaster()) {
-  app.route("/", accountPoolRoutes)
-  logger.info("account pool master: /v1 routes enabled")
-}
-
 // ---------------------------------------------------------------------------
 // Static file serving (production build)
 // ---------------------------------------------------------------------------
@@ -165,7 +164,7 @@ if (existsSync(join(STATIC_DIR, "index.html"))) {
 // Startup — sync database schema, then spawn opencode for all repos
 // ---------------------------------------------------------------------------
 const _registry = initRegistry()
-const instanceLock = await acquireInstanceLock(isAccountPoolMaster() ? "account" : "serve", {
+const instanceLock = await acquireInstanceLock("serve", {
   port: PORT,
   ...(BIND_HOST ? { host: BIND_HOST } : {}),
 }).catch((err) => {
@@ -231,15 +230,10 @@ async function startup() {
   }
 
   await initWorkerConfig(getSetting)
-  if (isAccountPoolMaster()) {
-    logger.info("account pool master mode: local runtimes and sync scheduler are disabled")
-    logger.info("account pool master: worker configuration (if present) is ignored")
-    await accountPoolService.start()
-  } else {
-    await runtimeManager.startAll()
-    logger.info("all repos initialized")
-    startSyncScheduler()
-  }
+  await runtimeManager.startAll()
+  logger.info("all repos initialized")
+
+  startSyncScheduler()
 
   // Start HTTP/HTTPS servers only after all initialization is complete.
   // This prevents clients from hitting 500s during the startup window.
@@ -305,9 +299,6 @@ startup().catch(async (err) => {
 async function gracefulShutdown(signal: string) {
   logger.info({ signal }, "shutting down — stopping all opencode processes")
   stopSyncScheduler()
-  if (isAccountPoolMaster()) {
-    await accountPoolService.stop().catch((err: unknown) => logger.warn({ err }, "account pool: failed to flush state"))
-  }
   await Promise.race([runtimeManager.stopAll(), new Promise<void>((resolve) => setTimeout(resolve, 10_000))])
   await instanceLock.release().catch(() => undefined)
   process.exit(0)

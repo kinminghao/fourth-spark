@@ -2,9 +2,9 @@ import { execSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
-import { ACCOUNT_LOG_FILE, DATA_DIR, LOG_DIR } from "./log-path"
+import { ACCOUNT_LOCK_FILE, ACCOUNT_LOG_FILE, DATA_DIR, LOG_DIR } from "./log-path"
 
-export { ACCOUNT_LOG_FILE, DATA_DIR }
+export { ACCOUNT_LOCK_FILE, ACCOUNT_LOG_FILE, DATA_DIR }
 
 const MIN_OPENCODE_VERSION = "1.4.0"
 
@@ -60,7 +60,7 @@ export function getDockerComposeCmd(): string[] | null {
 // Exits with a clear error listing if any critical dependency is missing.
 // ---------------------------------------------------------------------------
 
-export function ensureDependencies(options: { requireOpencode?: boolean } = {}): void {
+export function ensureDependencies(): void {
   const errors: string[] = []
 
   try {
@@ -91,26 +91,22 @@ export function ensureDependencies(options: { requireOpencode?: boolean } = {}):
     }
   }
 
-  if (options.requireOpencode !== false) {
-    try {
-      const raw = execSync("opencode --version", { stdio: "pipe" }).toString().trim()
-      const parts = raw.split(".").map(Number)
-      const min = MIN_OPENCODE_VERSION.split(".").map(Number)
-      const tooOld =
-        parts[0] < min[0] ||
-        (parts[0] === min[0] && parts[1] < min[1]) ||
-        (parts[0] === min[0] && parts[1] === min[1] && (parts[2] ?? 0) < (min[2] ?? 0))
-      if (tooOld) {
-        errors.push(
-          `OpenCode CLI version ${raw} is too old (requires >= ${MIN_OPENCODE_VERSION})\n` +
-            "  Upgrade: https://opencode.ai/docs",
-        )
-      }
-    } catch {
+  try {
+    const raw = execSync("opencode --version", { stdio: "pipe" }).toString().trim()
+    const parts = raw.split(".").map(Number)
+    const min = MIN_OPENCODE_VERSION.split(".").map(Number)
+    const tooOld =
+      parts[0] < min[0] ||
+      (parts[0] === min[0] && parts[1] < min[1]) ||
+      (parts[0] === min[0] && parts[1] === min[1] && (parts[2] ?? 0) < (min[2] ?? 0))
+    if (tooOld) {
       errors.push(
-        "OpenCode CLI is not installed (required for agent runtime)\n" + "  Install: https://opencode.ai/docs",
+        `OpenCode CLI version ${raw} is too old (requires >= ${MIN_OPENCODE_VERSION})\n` +
+          "  Upgrade: https://opencode.ai/docs",
       )
     }
+  } catch {
+    errors.push("OpenCode CLI is not installed (required for agent runtime)\n" + "  Install: https://opencode.ai/docs")
   }
 
   if (errors.length > 0) {
@@ -122,21 +118,19 @@ export function ensureDependencies(options: { requireOpencode?: boolean } = {}):
     process.exit(1)
   }
 
-  if (options.requireOpencode !== false) {
-    try {
-      const configPath = join(homedir(), ".config", "opencode", "opencode.json")
-      if (existsSync(configPath)) {
-        const config = JSON.parse(readFileSync(configPath, "utf-8"))
-        const plugins: string[] = Array.isArray(config.plugin) ? config.plugin : []
-        const hasOmo = plugins.some((p) => p.startsWith("oh-my-openagent") || p.startsWith("oh-my-opencode"))
-        if (!hasOmo) {
-          console.info(
-            "\n  💡 Recommended: install oh-my-openagent for enhanced Agent capabilities\n" +
-              "     https://github.com/code-yeongyu/oh-my-openagent\n" +
-              "     Install: bunx oh-my-openagent install\n",
-          )
-        }
+  try {
+    const configPath = join(homedir(), ".config", "opencode", "opencode.json")
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, "utf-8"))
+      const plugins: string[] = Array.isArray(config.plugin) ? config.plugin : []
+      const hasOmo = plugins.some((p) => p.startsWith("oh-my-openagent") || p.startsWith("oh-my-opencode"))
+      if (!hasOmo) {
+        console.info(
+          "\n  💡 Recommended: install oh-my-openagent for enhanced Agent capabilities\n" +
+            "     https://github.com/code-yeongyu/oh-my-openagent\n" +
+            "     Install: bunx oh-my-openagent install\n",
+        )
       }
-    } catch {}
-  }
+    }
+  } catch {}
 }
