@@ -125,6 +125,7 @@ make dev      # 启动 Server (:3000) + Web (:5173)
 | [开发指南](docs/development.md) | 环境搭建、Makefile 命令、Schema 变更、调试 |
 | [数据库设计](docs/database.md) | 完整 Schema、表关系、设计说明 |
 | [部署运维](docs/deployment.md) | 环境准备（Node.js、Docker/OrbStack、OpenCode/Claude Code）、npm 安装、CLI、环境变量、CI/CD |
+| [OpenCode V1 → V2 差异评估](docs/opencode-v2-gap.md) | 版本现状、硬阻塞、端点/事件/凭证差异、代码影响面与迁移路径 |
 
 ### 功能详解
 
